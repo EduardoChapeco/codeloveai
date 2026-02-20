@@ -184,6 +184,45 @@ Deno.serve(async (req) => {
 
     console.log(`Subscription activated for user ${refData.user_id}, plan: ${refData.plan}`);
 
+    // Call external webhook for automatic token generation
+    const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
+    if (webhookSecret) {
+      try {
+        const planMap: Record<string, string> = {
+          "1_day": "test_1d",
+          "7_days": "days_15",
+          "1_month": "days_30",
+          "12_months": "days_90",
+        };
+        const externalPlan = planMap[refData.plan] || "days_30";
+
+        const webhookResponse = await fetch("https://codelove-fix-api.eusoueduoficial.workers.dev/webhook/purchase", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            webhookSecret,
+            email: refData.email || "",
+            name: refData.email?.split("@")[0] || "",
+            plan: externalPlan,
+          }),
+        });
+        const webhookData = await webhookResponse.json();
+        if (webhookData.token) {
+          // Auto-assign token to user
+          await supabaseAdmin.from("tokens").update({ is_active: false }).eq("user_id", refData.user_id);
+          await supabaseAdmin.from("tokens").insert({
+            user_id: refData.user_id,
+            token: webhookData.token,
+            is_active: true,
+          });
+          console.log(`Auto-generated token for user ${refData.user_id}: ${webhookData.token.substring(0, 8)}...`);
+        }
+      } catch (webhookErr) {
+        console.error("External webhook error:", webhookErr);
+        // Don't fail the main flow
+      }
+    }
+
     return new Response(JSON.stringify({ status: "activated" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
