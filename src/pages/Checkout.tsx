@@ -6,10 +6,28 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 const plans = [
-  { id: "1_day", name: "1 DIA", price: "R$9,99", originalPrice: "R$29,97", period: "por dia", description: "Teste rápido" },
-  { id: "7_days", name: "7 DIAS", price: "R$49,90", originalPrice: "R$149,70", period: "por semana", description: "Ideal para projetos curtos" },
-  { id: "1_month", name: "1 MÊS", price: "R$149,90", originalPrice: "R$449,70", period: "por mês", description: "Mais popular", popular: true },
-  { id: "12_months", name: "12 MESES", price: "R$499,00", originalPrice: "R$1.497,00", period: "ilimitado*", description: "Acesso enquanto ativo", highlight: true },
+  {
+    id: "1_day", name: "1 DIA", price: "R$9,99", originalPrice: "R$29,97", period: "por dia",
+    description: "Perfeito para testar a extensão antes de se comprometer.",
+    features: ["Envios ilimitados por 24h", "Sem descontar créditos", "Ativação imediata", "Suporte via chat"],
+  },
+  {
+    id: "7_days", name: "7 DIAS", price: "R$49,90", originalPrice: "R$149,70", period: "por semana",
+    description: "Ideal para sprints rápidos ou projetos de curta duração.",
+    features: ["Envios ilimitados por 7 dias", "Sem descontar créditos", "Ativação imediata", "Suporte prioritário"],
+  },
+  {
+    id: "1_month", name: "1 MÊS", price: "R$149,90", originalPrice: "R$449,70", period: "por mês",
+    description: "O plano mais escolhido. Ideal para projetos completos.",
+    popular: true,
+    features: ["Envios ilimitados por 30 dias", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte prioritário"],
+  },
+  {
+    id: "12_months", name: "12 MESES", price: "R$499,00", originalPrice: "R$1.497,00", period: "ilimitado*",
+    description: "Acesso completo enquanto a extensão estiver ativa.",
+    highlight: true,
+    features: ["Acesso enquanto ativo", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
+  },
 ];
 
 const terms = [
@@ -182,49 +200,55 @@ export default function Checkout() {
                   } ${selectedPlan === plan.id ? "ring-2 ring-foreground" : ""}`}
                   onClick={() => handleSelectPlan(plan.id)}
                 >
-                  <div>
-                    {plan.popular && (
-                      <span className="ep-badge ep-badge-live mb-4 inline-block">POPULAR</span>
-                    )}
+                  <div className="flex flex-col h-full">
+                    {/* Badge */}
+                    <div className="min-h-[32px] mb-4">
+                      {plan.popular && (
+                        <span className="ep-badge ep-badge-live inline-block">POPULAR</span>
+                      )}
+                      {plan.highlight && !countdown.expired && (
+                        <span className="ep-badge ep-badge-live inline-block">MELHOR CUSTO</span>
+                      )}
+                    </div>
+
+                    {/* Countdown for highlight plan */}
                     {plan.highlight && !countdown.expired && (
-                      <div className="mb-3">
-                        <span className="ep-badge ep-badge-live mb-3 inline-block">MELHOR CUSTO</span>
-                        <div className="bg-foreground/5 border border-foreground/20 rounded-[10px] p-3">
-                          <div className="flex items-center gap-1.5 justify-center mb-2">
-                            <Timer className="h-3.5 w-3.5 text-foreground" />
-                            <span className="text-[9px] font-bold text-foreground tracking-widest">OFERTA ENCERRA EM</span>
-                          </div>
-                          <div className="flex items-center justify-center gap-2">
-                            {[
-                              { value: countdown.days, label: "D" },
-                              { value: countdown.hours, label: "H" },
-                              { value: countdown.minutes, label: "M" },
-                              { value: countdown.seconds, label: "S" },
-                            ].map((t, i) => (
-                              <div key={i} className="flex items-baseline gap-0.5">
-                                <span className="text-lg font-black text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
-                                <span className="text-[8px] font-bold text-muted-foreground">{t.label}</span>
-                              </div>
-                            ))}
-                          </div>
+                      <div className="bg-foreground/5 border border-foreground/20 rounded-[10px] p-3 mb-4">
+                        <div className="flex items-center gap-1.5 justify-center mb-2">
+                          <Timer className="h-3.5 w-3.5 text-foreground" />
+                          <span className="text-[9px] font-bold text-foreground tracking-widest">OFERTA ENCERRA EM</span>
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          {[
+                            { value: countdown.days, label: "D" },
+                            { value: countdown.hours, label: "H" },
+                            { value: countdown.minutes, label: "M" },
+                            { value: countdown.seconds, label: "S" },
+                          ].map((t, i) => (
+                            <div key={i} className="flex items-baseline gap-0.5">
+                              <span className="text-lg font-black text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
+                              <span className="text-[8px] font-bold text-muted-foreground">{t.label}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
+
+                    {/* Price block */}
                     <p className="ep-subtitle mb-2">{plan.name}</p>
                     <p className="text-sm text-muted-foreground line-through font-medium">{plan.originalPrice}</p>
                     <p className="ep-value text-3xl mb-1">{plan.price}</p>
-                    <p className="text-xs text-muted-foreground font-medium mb-2">{plan.period}</p>
-                    {plan.highlight && (
-                      <p className="text-[10px] text-muted-foreground font-medium italic">
-                        *Acesso válido enquanto a extensão estiver ativa
-                      </p>
-                    )}
-                    <p className="text-sm text-muted-foreground font-medium mt-4">{plan.description}</p>
-                    <ul className="space-y-2 mt-4">
-                      {["Envios ilimitados", "Sem descontar créditos", "Suporte via chat", "Ativação imediata"].map((f) => (
-                        <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-                          <Check className="h-4 w-4 text-foreground" />
-                          {f}
+                    <p className="text-xs text-muted-foreground font-medium mb-4">{plan.period}</p>
+
+                    {/* Description */}
+                    <p className="text-sm text-muted-foreground font-medium mb-6">{plan.description}</p>
+
+                    {/* Features */}
+                    <ul className="space-y-2 flex-1">
+                      {plan.features.map((f) => (
+                        <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground font-medium">
+                          <Check className="h-4 w-4 text-foreground shrink-0 mt-0.5" />
+                          <span>{f}</span>
                         </li>
                       ))}
                     </ul>
@@ -237,6 +261,13 @@ export default function Checkout() {
                   </button>
                 </div>
               ))}
+            </div>
+
+            {/* Weekend grace note */}
+            <div className="mt-6 text-center">
+              <p className="text-[10px] text-muted-foreground font-medium italic">
+                *Tolerância de fim de semana: se seu plano expirar no sábado ou domingo, o acesso é estendido automaticamente até segunda-feira.
+              </p>
             </div>
           </div>
         )}
