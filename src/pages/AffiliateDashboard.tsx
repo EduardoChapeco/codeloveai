@@ -271,20 +271,6 @@ export default function AffiliateDashboard() {
                 ))}
               </div>
             </div>
-
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">TOKEN DE ATIVAÇÃO</p>
-              {tokens.length > 0 ? tokens.map((t) => (
-                <div key={t.id} className="flex items-center justify-between gap-4 mb-2">
-                  <code className="font-mono text-sm bg-muted px-4 py-3 rounded-[8px] flex-1 truncate">{t.token}</code>
-                  <button onClick={() => copyToClipboard(t.token)} className="ep-btn-icon h-12 w-12 rounded-[16px]">
-                    <Copy className="h-4 w-4" />
-                  </button>
-                </div>
-              )) : (
-                <p className="text-sm text-muted-foreground font-medium">Nenhum token ativo.</p>
-              )}
-            </div>
           </>
         )}
 
