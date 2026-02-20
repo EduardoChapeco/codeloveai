@@ -121,6 +121,38 @@
     @apply bg-background border-foreground ring-0;
   }
 
+  /* Sheet Inputs (larger, immersive) */
+  .ep-sheet-input {
+    @apply h-20 rounded-[32px] border-border bg-muted pl-20 pr-10 text-xl font-black italic uppercase tracking-tighter shadow-inner transition-all duration-700;
+  }
+  .ep-sheet-input:focus-visible {
+    @apply bg-background border-foreground ring-0;
+  }
+
+  /* Sheet Label */
+  .ep-sheet-label {
+    @apply text-[10px] font-black uppercase tracking-[0.5em] text-foreground ml-4 block mb-2;
+  }
+
+  /* Sheet Action Button */
+  .ep-sheet-btn {
+    @apply w-full h-24 rounded-[40px] bg-foreground text-background font-black uppercase tracking-[0.5em] text-[12px] transition-all duration-500 flex items-center justify-center gap-3 cursor-pointer;
+  }
+  .ep-sheet-btn:hover {
+    @apply bg-foreground/90;
+  }
+  .ep-sheet-btn:active {
+    @apply scale-95;
+  }
+  .ep-sheet-btn:disabled {
+    @apply opacity-30;
+  }
+
+  /* Sheet Footer Text */
+  .ep-sheet-footer {
+    @apply text-center text-[8px] font-black uppercase text-muted-foreground/40 tracking-[1em] pt-8;
+  }
+
   /* Badges */
   .ep-badge {
     @apply rounded-[12px] px-4 py-2 text-[9px] font-black uppercase tracking-[0.3em] border border-border;
