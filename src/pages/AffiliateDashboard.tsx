@@ -15,6 +15,18 @@ interface Referral {
   commission_amount?: number;
   sale_amount?: number;
   subscription_plan?: string;
+  referred_email?: string;
+  referred_name?: string;
+}
+
+interface InvoiceItem {
+  id: string;
+  client_email: string;
+  client_name: string;
+  plan: string;
+  sale_amount: number;
+  commission_amount: number;
+  created_at: string;
 }
 
 interface CoinTransaction {
@@ -58,6 +70,8 @@ export default function AffiliateDashboard() {
   const [weeklyCount, setWeeklyCount] = useState(0);
   const [subscription, setSubscription] = useState<any>(null);
   const [tokens, setTokens] = useState<any[]>([]);
+  const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
+  const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
 
   // Bank info
   const [pixKeyType, setPixKeyType] = useState("cpf");
@@ -316,31 +330,82 @@ export default function AffiliateDashboard() {
               ) : (
                 <div className="space-y-3">
                   {invoices.map((inv) => (
-                    <div key={inv.id} className={`ep-card-sm flex items-center justify-between ${
-                      inv.status === "cancelled" ? "opacity-50" : ""
-                    }`}>
-                      <div>
-                        <p className="text-sm font-bold text-foreground">
-                          Semana {inv.week_start} → {inv.week_end}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {inv.total_sales} venda(s) · R${Number(inv.total_commission).toFixed(2)}
-                        </p>
-                        {inv.paid_at && (
-                          <p className="text-xs text-green-600 mt-1">
-                            Pago em {format(new Date(inv.paid_at), "dd/MM/yyyy")}
-                            {inv.payment_notes ? ` — ${inv.payment_notes}` : ""}
+                    <div key={inv.id} className={`${inv.status === "cancelled" ? "opacity-50" : ""}`}>
+                      <div
+                        className="ep-card-sm flex items-center justify-between cursor-pointer"
+                        onClick={async () => {
+                          if (expandedInvoice === inv.id) {
+                            setExpandedInvoice(null);
+                            return;
+                          }
+                          setExpandedInvoice(inv.id);
+                          const { data } = await supabase
+                            .from("affiliate_invoice_items")
+                            .select("*")
+                            .eq("invoice_id", inv.id)
+                            .order("created_at", { ascending: false });
+                          setInvoiceItems((data || []) as InvoiceItem[]);
+                        }}
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-foreground">
+                            Semana {inv.week_start} → {inv.week_end}
                           </p>
-                        )}
+                          <p className="text-xs text-muted-foreground">
+                            {inv.total_sales} venda(s) · R${Number(inv.total_commission).toFixed(2)}
+                          </p>
+                          {inv.paid_at && (
+                            <p className="text-xs text-green-600 mt-1">
+                              Pago em {format(new Date(inv.paid_at), "dd/MM/yyyy")}
+                              {inv.payment_notes ? ` — ${inv.payment_notes}` : ""}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`ep-badge text-[8px] ${
+                            inv.status === "open" ? "ep-badge-live" :
+                            inv.status === "closed" ? "bg-yellow-500/20 text-yellow-700" :
+                            inv.status === "paid" ? "bg-green-500/20 text-green-700" :
+                            "ep-badge-offline"
+                          }`}>
+                            {invoiceStatusLabel[inv.status] || inv.status}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">{expandedInvoice === inv.id ? "▲" : "▼"}</span>
+                        </div>
                       </div>
-                      <span className={`ep-badge text-[8px] ${
-                        inv.status === "open" ? "ep-badge-live" :
-                        inv.status === "closed" ? "bg-yellow-500/20 text-yellow-700" :
-                        inv.status === "paid" ? "bg-green-500/20 text-green-700" :
-                        "ep-badge-offline"
-                      }`}>
-                        {invoiceStatusLabel[inv.status] || inv.status}
-                      </span>
+
+                      {/* Expanded invoice detail */}
+                      {expandedInvoice === inv.id && (
+                        <div className="mt-2 ml-4 space-y-2">
+                          <div className="ep-card-sm bg-muted/30">
+                            <p className="text-[10px] font-bold text-foreground mb-2 tracking-widest">DETALHES DA FATURA</p>
+                            {invoiceItems.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">Nenhum detalhe disponível (vendas anteriores à atualização).</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {invoiceItems.map((item) => (
+                                  <div key={item.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+                                    <div>
+                                      <p className="text-xs font-bold text-foreground">{item.client_email || "—"}</p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        {item.client_name && `${item.client_name} · `}
+                                        {planLabels[item.plan] || item.plan} · Venda: R${Number(item.sale_amount).toFixed(2)}
+                                      </p>
+                                    </div>
+                                    <span className="text-xs font-bold text-green-600">
+                                      +R${Number(item.commission_amount).toFixed(2)}
+                                    </span>
+                                  </div>
+                                ))}
+                                <div className="flex justify-between pt-2 border-t border-foreground/10">
+                                  <span className="text-xs font-bold text-foreground">TOTAL</span>
+                                  <span className="text-xs font-bold text-foreground">R${Number(inv.total_commission).toFixed(2)}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -359,11 +424,17 @@ export default function AffiliateDashboard() {
                   {referrals.map((r) => (
                     <div key={r.id} className="ep-card-sm flex items-center justify-between">
                       <div>
-                        <p className="text-xs text-muted-foreground font-medium font-mono">{r.referred_user_id.slice(0, 8)}...</p>
+                        <p className="text-sm font-bold text-foreground">
+                          {r.referred_email || r.referred_user_id.slice(0, 8) + "..."}
+                        </p>
+                        {r.referred_name && (
+                          <p className="text-xs text-muted-foreground font-medium">{r.referred_name}</p>
+                        )}
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(r.created_at), "dd/MM/yyyy")}
-                          {(r as any).subscription_plan && ` · ${planLabels[(r as any).subscription_plan] || (r as any).subscription_plan}`}
-                          {(r as any).commission_amount > 0 && ` · R$${Number((r as any).commission_amount).toFixed(2)}`}
+                          {format(new Date(r.created_at), "dd/MM/yyyy HH:mm")}
+                          {r.subscription_plan && ` · ${planLabels[r.subscription_plan] || r.subscription_plan}`}
+                          {r.sale_amount && r.sale_amount > 0 && ` · Venda: R$${Number(r.sale_amount).toFixed(2)}`}
+                          {r.commission_amount && r.commission_amount > 0 && ` · Comissão: R$${Number(r.commission_amount).toFixed(2)}`}
                         </p>
                       </div>
                       <span className={`ep-badge ${r.confirmed ? "ep-badge-live" : "ep-badge-offline"}`}>

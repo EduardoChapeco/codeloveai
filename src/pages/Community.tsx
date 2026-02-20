@@ -206,6 +206,17 @@ export default function Community() {
         }
       }
 
+      // Fetch link preview if URL provided
+      let linkPreview = { title: "", description: "", image: "" };
+      if (newProjectUrl.trim() && !newProjectUrl.includes("lovable.app")) {
+        try {
+          const { data: previewData } = await supabase.functions.invoke("link-preview", {
+            body: { url: newProjectUrl.trim() },
+          });
+          if (previewData) linkPreview = previewData;
+        } catch { /* ignore preview errors */ }
+      }
+
       const { data: postData, error: postError } = await supabase
         .from("community_posts")
         .insert({
@@ -216,6 +227,9 @@ export default function Community() {
           media_urls: mediaUrls,
           project_url: newProjectUrl.trim(),
           project_name: newType === "project" ? newTitle.trim() : "",
+          link_preview_title: linkPreview.title,
+          link_preview_description: linkPreview.description,
+          link_preview_image: linkPreview.image,
         })
         .select("id")
         .single();
@@ -505,16 +519,47 @@ export default function Community() {
                     </div>
                   )}
 
-                  {/* Project link */}
+                  {/* Project link with live preview */}
                   {post.project_url && (
-                    <a href={post.project_url} target="_blank" rel="noopener noreferrer"
-                      className="ep-card-sm flex items-center gap-3 mb-4 hover:border-foreground/30 transition-colors">
-                      <LinkIcon className="h-4 w-4 text-foreground shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-foreground truncate">{post.project_name || post.project_url}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{post.project_url}</p>
-                      </div>
-                    </a>
+                    <div className="mb-4">
+                      {post.project_url.includes("lovable.app") ? (
+                        <div className="rounded-[12px] overflow-hidden border border-border">
+                          <div className="bg-muted px-3 py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Eye className="h-3.5 w-3.5 text-foreground shrink-0" />
+                              <span className="text-xs font-bold text-foreground truncate">{post.project_name || "Preview ao vivo"}</span>
+                            </div>
+                            <a href={post.project_url} target="_blank" rel="noopener noreferrer"
+                              className="text-[9px] font-bold text-muted-foreground hover:text-foreground">
+                              ABRIR ↗
+                            </a>
+                          </div>
+                          <iframe
+                            src={post.project_url}
+                            className="w-full h-[300px] border-0"
+                            sandbox="allow-scripts allow-same-origin"
+                            loading="lazy"
+                            title={post.project_name || "Project preview"}
+                          />
+                        </div>
+                      ) : (
+                        <a href={post.project_url} target="_blank" rel="noopener noreferrer"
+                          className="ep-card-sm flex items-center gap-3 hover:border-foreground/30 transition-colors">
+                          {post.link_preview_image && (
+                            <img src={post.link_preview_image} alt="" className="h-16 w-24 rounded-[8px] object-cover shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-foreground truncate">
+                              {post.link_preview_title || post.project_name || post.project_url}
+                            </p>
+                            {post.link_preview_description && (
+                              <p className="text-[10px] text-muted-foreground truncate">{post.link_preview_description}</p>
+                            )}
+                            <p className="text-[9px] text-muted-foreground/60 truncate mt-0.5">{post.project_url}</p>
+                          </div>
+                        </a>
+                      )}
+                    </div>
                   )}
 
                   {/* Actions */}
