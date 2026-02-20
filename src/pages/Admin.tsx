@@ -565,9 +565,16 @@ export default function Admin() {
                       </div>
                     )}
                     {m.token && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Token: <code className="font-mono bg-muted px-2 py-0.5 rounded-[8px]">{m.token}</code>
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-muted-foreground">Token:</span>
+                        <code className="font-mono text-xs bg-muted px-2 py-0.5 rounded-[8px]">
+                          {m.token.substring(0, 10)}••••{m.token.substring(m.token.length - 4)}
+                        </code>
+                        <button onClick={() => { navigator.clipboard.writeText(m.token!); toast.success("Token copiado!"); }}
+                          className="ep-btn-icon h-6 w-6 rounded-[6px]">
+                          <Copy className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-col gap-3">
@@ -982,10 +989,14 @@ export default function Admin() {
                 <div className="mt-4 ep-card-sm border-green-500/30">
                   <p className="text-xs font-bold text-green-600 mb-1">Token gerado!</p>
                   <div className="flex items-center gap-2">
-                    <code className="font-mono text-xs bg-muted px-3 py-2 rounded-[8px] flex-1 truncate">{workerResult.token}</code>
+                    <div className="flex-1 min-w-0 bg-muted px-3 py-2 rounded-[8px]">
+                      <code className="font-mono text-xs text-muted-foreground">
+                        {workerResult.token.substring(0, 12)}••••••••{workerResult.token.substring(workerResult.token.length - 6)}
+                      </code>
+                    </div>
                     <button onClick={() => { navigator.clipboard.writeText(workerResult.token); toast.success("Copiado!"); }}
-                      className="ep-btn-icon h-8 w-8 rounded-[10px]">
-                      <Copy className="h-3 w-3" />
+                      className="ep-btn-secondary h-8 px-3 text-[8px] flex items-center gap-1 shrink-0">
+                      <Copy className="h-3 w-3" /> COPIAR
                     </button>
                   </div>
                   {workerResult.expires && (
