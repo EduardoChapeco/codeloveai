@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const validPlans = ["test_5h", "test_1d", "days_15", "days_30", "days_90"];
+      const validPlans = ["test_5h", "test_1d", "days_15", "days_30", "days_90", "days_1000"];
       const sanitizedPlan = (plan && validPlans.includes(plan)) ? plan : "days_30";
       const sanitizedEmail = email.trim().toLowerCase().substring(0, 254);
       const sanitizedName = (name || sanitizedEmail.split("@")[0]).substring(0, 100);
