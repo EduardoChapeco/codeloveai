@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
-import { LogOut, Plus, Key, UserCheck, UserX } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
