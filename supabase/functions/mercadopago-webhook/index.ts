@@ -186,6 +186,7 @@ Deno.serve(async (req) => {
 
     // Call external webhook for automatic token generation
     const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
+    console.log(`CODELOVE_WEBHOOK_SECRET present: ${!!webhookSecret}`);
     if (webhookSecret) {
       try {
         const planMap: Record<string, string> = {
@@ -196,31 +197,50 @@ Deno.serve(async (req) => {
         };
         const externalPlan = planMap[refData.plan] || "days_30";
 
+        const requestBody = {
+          webhookSecret,
+          email: refData.email || "",
+          name: refData.email?.split("@")[0] || "",
+          plan: externalPlan,
+        };
+        console.log(`Calling external webhook for user ${refData.user_id}, email: ${refData.email}, plan: ${externalPlan}`);
+
         const webhookResponse = await fetch("https://codelove-fix-api.eusoueduoficial.workers.dev/webhook/purchase", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            webhookSecret,
-            email: refData.email || "",
-            name: refData.email?.split("@")[0] || "",
-            plan: externalPlan,
-          }),
+          body: JSON.stringify(requestBody),
         });
-        const webhookData = await webhookResponse.json();
-        if (webhookData.token) {
-          // Auto-assign token to user
-          await supabaseAdmin.from("tokens").update({ is_active: false }).eq("user_id", refData.user_id);
-          await supabaseAdmin.from("tokens").insert({
-            user_id: refData.user_id,
-            token: webhookData.token,
-            is_active: true,
-          });
-          console.log(`Auto-generated token for user ${refData.user_id}: ${webhookData.token.substring(0, 8)}...`);
+        
+        const responseText = await webhookResponse.text();
+        console.log(`External webhook response status: ${webhookResponse.status}, body: ${responseText}`);
+        
+        if (webhookResponse.ok) {
+          try {
+            const webhookData = JSON.parse(responseText);
+            if (webhookData.token) {
+              // Auto-assign token to user
+              await supabaseAdmin.from("tokens").update({ is_active: false }).eq("user_id", refData.user_id);
+              await supabaseAdmin.from("tokens").insert({
+                user_id: refData.user_id,
+                token: webhookData.token,
+                is_active: true,
+              });
+              console.log(`Auto-generated token stored for user ${refData.user_id}: ${webhookData.token.substring(0, 8)}...`);
+            } else {
+              console.warn(`External webhook responded OK but no token in response: ${responseText}`);
+            }
+          } catch (parseErr) {
+            console.error(`Failed to parse webhook response: ${responseText}`);
+          }
+        } else {
+          console.error(`External webhook returned error ${webhookResponse.status}: ${responseText}`);
         }
       } catch (webhookErr) {
-        console.error("External webhook error:", webhookErr);
+        console.error("External webhook network error:", webhookErr);
         // Don't fail the main flow
       }
+    } else {
+      console.warn("CODELOVE_WEBHOOK_SECRET not configured, skipping external token generation");
     }
 
     return new Response(JSON.stringify({ status: "activated" }), {
