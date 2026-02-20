@@ -1,29 +1,29 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer } from "lucide-react";
+import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer, Percent } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
-const plans = [
+const basePlans = [
   {
-    id: "1_day", name: "1 DIA", price: "R$9,99", originalPrice: "R$29,97", period: "por dia",
+    id: "1_day", name: "1 DIA", price: 9.99, originalPrice: "R$29,97", period: "por dia",
     description: "Perfeito para testar a extensão antes de se comprometer.",
     features: ["Envios ilimitados por 24h", "Sem descontar créditos", "Ativação imediata", "Suporte via chat"],
   },
   {
-    id: "7_days", name: "7 DIAS", price: "R$49,90", originalPrice: "R$149,70", period: "por semana",
+    id: "7_days", name: "7 DIAS", price: 49.90, originalPrice: "R$149,70", period: "por semana",
     description: "Ideal para sprints rápidos ou projetos de curta duração.",
     features: ["Envios ilimitados por 7 dias", "Sem descontar créditos", "Ativação imediata", "Suporte prioritário"],
   },
   {
-    id: "1_month", name: "1 MÊS", price: "R$149,90", originalPrice: "R$449,70", period: "por mês",
+    id: "1_month", name: "1 MÊS", price: 149.90, originalPrice: "R$449,70", period: "por mês",
     description: "O plano mais escolhido. Ideal para projetos completos.",
     popular: true,
     features: ["Envios ilimitados por 30 dias", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte prioritário"],
   },
   {
-    id: "12_months", name: "12 MESES", price: "R$499,00", originalPrice: "R$1.497,00", period: "ilimitado*",
+    id: "12_months", name: "12 MESES", price: 499.00, originalPrice: "R$1.497,00", period: "ilimitado*",
     description: "Acesso completo enquanto a extensão estiver ativa.",
     highlight: true,
     features: ["Acesso enquanto ativo", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
@@ -68,6 +68,10 @@ function useCountdown(deadline: number) {
   return { days, hours, minutes, seconds, expired: timeLeft <= 0 };
 }
 
+function formatBRL(value: number) {
+  return `R$${value.toFixed(2).replace(".", ",")}`;
+}
+
 export default function Checkout() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -80,12 +84,38 @@ export default function Checkout() {
   const [step, setStep] = useState<"plan" | "terms" | "processing">("plan");
   const countdown = useCountdown(UNLIMITED_DEADLINE);
 
-  // If not logged in, redirect to login with returnTo
+  // Affiliate discount state
+  const [affiliateDiscount, setAffiliateDiscount] = useState(0);
+  const [loadingDiscount, setLoadingDiscount] = useState(true);
+
+  // Check if user is an affiliate and get their discount
+  useEffect(() => {
+    if (!user) { setLoadingDiscount(false); return; }
+    const checkAffiliate = async () => {
+      try {
+        const { data } = await supabase
+          .from("affiliates")
+          .select("discount_percent")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (data) setAffiliateDiscount(data.discount_percent);
+      } catch {}
+      finally { setLoadingDiscount(false); }
+    };
+    checkAffiliate();
+  }, [user]);
+
+  // Build plans with discount applied
+  const plans = basePlans.map(p => ({
+    ...p,
+    discountedPrice: affiliateDiscount > 0
+      ? Math.round(p.price * (1 - affiliateDiscount / 100) * 100) / 100
+      : p.price,
+  }));
+
   useEffect(() => {
     if (!authLoading && !user) {
-      const returnPath = selectedPlan
-        ? `/checkout?plan=${selectedPlan}`
-        : "/checkout";
+      const returnPath = selectedPlan ? `/checkout?plan=${selectedPlan}` : "/checkout";
       navigate(`/login?returnTo=${encodeURIComponent(returnPath)}`);
     }
   }, [user, authLoading, navigate, selectedPlan]);
@@ -127,7 +157,7 @@ export default function Checkout() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || loadingDiscount) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -165,17 +195,26 @@ export default function Checkout() {
             { key: "processing", label: "3. PAGAMENTO" },
           ].map((s, i) => (
             <div key={s.key} className="flex items-center gap-2">
-              <span
-                className={`ep-badge ${
-                  step === s.key ? "ep-badge-live" : "ep-badge-offline"
-                }`}
-              >
+              <span className={`ep-badge ${step === s.key ? "ep-badge-live" : "ep-badge-offline"}`}>
                 {s.label}
               </span>
               {i < 2 && <ChevronDown className="h-3 w-3 text-muted-foreground -rotate-90" />}
             </div>
           ))}
         </div>
+
+        {/* Affiliate discount banner */}
+        {affiliateDiscount > 0 && step === "plan" && (
+          <div className="ep-card-sm border-green-500/30 bg-green-500/10 flex items-center gap-3 mb-8">
+            <Percent className="h-5 w-5 text-green-500 shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-foreground tracking-widest">DESCONTO DE AFILIADO — {affiliateDiscount}% OFF</p>
+              <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                Como afiliado, seu desconto de {affiliateDiscount}% é aplicado automaticamente em todos os planos.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Step 1: Plan selection */}
         {step === "plan" && (
@@ -202,12 +241,17 @@ export default function Checkout() {
                 >
                   <div className="flex flex-col h-full">
                     {/* Badge */}
-                    <div className="min-h-[32px] mb-4">
+                    <div className="min-h-[32px] mb-4 flex gap-2">
                       {plan.popular && (
                         <span className="ep-badge ep-badge-live inline-block">POPULAR</span>
                       )}
                       {plan.highlight && !countdown.expired && (
                         <span className="ep-badge ep-badge-live inline-block">MELHOR CUSTO</span>
+                      )}
+                      {affiliateDiscount > 0 && (
+                        <span className="ep-badge inline-block bg-green-500/20 text-green-500 border-green-500/30">
+                          -{affiliateDiscount}%
+                        </span>
                       )}
                     </div>
 
@@ -237,7 +281,14 @@ export default function Checkout() {
                     {/* Price block */}
                     <p className="ep-subtitle mb-2">{plan.name}</p>
                     <p className="text-sm text-muted-foreground line-through font-medium">{plan.originalPrice}</p>
-                    <p className="ep-value text-3xl mb-1">{plan.price}</p>
+                    {affiliateDiscount > 0 ? (
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-sm text-muted-foreground line-through font-medium">{formatBRL(plan.price)}</p>
+                        <p className="ep-value text-3xl text-green-500">{formatBRL(plan.discountedPrice)}</p>
+                      </div>
+                    ) : (
+                      <p className="ep-value text-3xl mb-1">{formatBRL(plan.price)}</p>
+                    )}
                     <p className="text-xs text-muted-foreground font-medium mb-4">{plan.period}</p>
 
                     {/* Description */}
@@ -284,7 +335,17 @@ export default function Checkout() {
                 <p className="text-sm font-bold text-foreground">Plano selecionado: {selectedPlanData.name}</p>
                 <p className="text-xs text-muted-foreground">{selectedPlanData.description}</p>
               </div>
-              <p className="ep-value text-2xl">{selectedPlanData.price}</p>
+              <div className="text-right">
+                {affiliateDiscount > 0 ? (
+                  <div>
+                    <p className="text-xs text-muted-foreground line-through">{formatBRL(selectedPlanData.price)}</p>
+                    <p className="ep-value text-2xl text-green-500">{formatBRL(selectedPlanData.discountedPrice)}</p>
+                    <p className="text-[9px] font-bold text-green-500">-{affiliateDiscount}% AFILIADO</p>
+                  </div>
+                ) : (
+                  <p className="ep-value text-2xl">{formatBRL(selectedPlanData.price)}</p>
+                )}
+              </div>
             </div>
 
             <div className="ep-card space-y-4">
