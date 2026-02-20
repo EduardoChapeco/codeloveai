@@ -8,12 +8,20 @@ import { format } from "date-fns";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import AppNav from "@/components/AppNav";
 
+interface MemberToken {
+  id: string;
+  token: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 interface Member {
   user_id: string;
   name: string;
   email: string;
   subscription?: { plan: string; status: string; expires_at: string };
   token?: string;
+  tokens: MemberToken[];
   isAffiliate?: boolean;
 }
 
@@ -92,6 +100,7 @@ export default function Admin() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [unbindToken, setUnbindToken] = useState("");
   const [unbindLoading, setUnbindLoading] = useState(false);
+  const [expandedTokens, setExpandedTokens] = useState<string | null>(null);
 
   // Chat state
   const [chatUsers, setChatUsers] = useState<{ user_id: string; name: string; email: string; unread: number }[]>([]);
@@ -131,13 +140,19 @@ export default function Admin() {
     for (const p of profiles) {
       const { data: subs } = await supabase.from("subscriptions").select("*")
         .eq("user_id", p.user_id).order("created_at", { ascending: false }).limit(1);
-      const { data: toks } = await supabase.from("tokens").select("token")
-        .eq("user_id", p.user_id).eq("is_active", true).limit(1);
+      const { data: toks } = await supabase.from("tokens").select("*")
+        .eq("user_id", p.user_id).order("created_at", { ascending: false });
+
+      const allTokens: MemberToken[] = (toks || []).map(t => ({
+        id: t.id, token: t.token, is_active: t.is_active, created_at: t.created_at,
+      }));
+      const activeToken = allTokens.find(t => t.is_active);
 
       memberList.push({
         user_id: p.user_id, name: p.name, email: p.email,
         subscription: subs?.[0] ? { plan: subs[0].plan, status: subs[0].status, expires_at: subs[0].expires_at } : undefined,
-        token: toks?.[0]?.token,
+        token: activeToken?.token,
+        tokens: allTokens,
         isAffiliate: affUserIds.has(p.user_id),
       });
     }
@@ -615,7 +630,7 @@ export default function Admin() {
                     )}
                     {m.token && (
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-muted-foreground">Token:</span>
+                        <span className="text-xs text-muted-foreground">Token ativo:</span>
                         <code className="font-mono text-xs bg-muted px-2 py-0.5 rounded-[8px]">
                           {m.token.substring(0, 10)}••••{m.token.substring(m.token.length - 4)}
                         </code>
@@ -623,6 +638,33 @@ export default function Admin() {
                           className="ep-btn-icon h-6 w-6 rounded-[6px]">
                           <Copy className="h-2.5 w-2.5" />
                         </button>
+                        {m.tokens.length > 1 && (
+                          <button onClick={() => setExpandedTokens(expandedTokens === m.user_id ? null : m.user_id)}
+                            className="text-[9px] font-bold text-muted-foreground hover:text-foreground transition-colors">
+                            {m.tokens.length} TOKENS {expandedTokens === m.user_id ? "▲" : "▼"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {expandedTokens === m.user_id && m.tokens.length > 0 && (
+                      <div className="mt-2 space-y-1.5 pl-4 border-l-2 border-border">
+                        {m.tokens.map(t => (
+                          <div key={t.id} className="flex items-center gap-2">
+                            <span className={`ep-badge text-[7px] ${t.is_active ? "ep-badge-live" : "ep-badge-offline"}`}>
+                              {t.is_active ? "ATIVO" : "INATIVO"}
+                            </span>
+                            <code className="font-mono text-[10px] text-muted-foreground">
+                              {t.token.substring(0, 10)}••••{t.token.substring(t.token.length - 4)}
+                            </code>
+                            <button onClick={() => { navigator.clipboard.writeText(t.token); toast.success("Token copiado!"); }}
+                              className="ep-btn-icon h-5 w-5 rounded-[4px]">
+                              <Copy className="h-2 w-2" />
+                            </button>
+                            <span className="text-[9px] text-muted-foreground">
+                              {format(new Date(t.created_at), "dd/MM/yy HH:mm")}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
