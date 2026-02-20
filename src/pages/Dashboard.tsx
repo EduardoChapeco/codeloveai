@@ -453,6 +453,21 @@ export default function Dashboard() {
             <p className="text-sm text-muted-foreground font-medium">Nenhum plano adquirido.</p>
           )}
         </div>
+
+        {/* Become Affiliate CTA */}
+        {!isAffiliate && activeSubscription && (
+          <div className="ep-card flex items-center justify-between">
+            <div>
+              <p className="ep-subtitle mb-1">PROGRAMA DE AFILIADOS</p>
+              <p className="text-sm text-muted-foreground font-medium">
+                Ganhe 30% de comissão indicando o CodeLove AI + 20% de desconto nos seus planos.
+              </p>
+            </div>
+            <Link to="/affiliates" className="ep-btn-primary h-10 px-6 text-[9px] shrink-0">
+              QUERO SER AFILIADO
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Chat FAB */}
