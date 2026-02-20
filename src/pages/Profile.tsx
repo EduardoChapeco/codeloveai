@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,7 +9,7 @@ import { ptBR } from "date-fns/locale";
 import {
   Users, Heart, MessageCircle, Share2, Edit, Camera,
   Globe, Github, Twitter, Linkedin, LogOut, Loader2,
-  Folder, Eye, Hash
+  Folder, Eye, Hash, Send, X, MessageSquare
 } from "lucide-react";
 
 interface UserProfile {
@@ -42,6 +42,22 @@ interface Post {
   created_at: string;
 }
 
+interface FollowUser {
+  user_id: string;
+  display_name: string;
+  username: string;
+  avatar_url: string;
+}
+
+interface ChatMessage {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+}
+
 export default function Profile() {
   const { userId } = useParams<{ userId: string }>();
   const { user, loading: authLoading, signOut } = useAuth();
@@ -62,6 +78,20 @@ export default function Profile() {
   const [editGithub, setEditGithub] = useState("");
   const [editTwitter, setEditTwitter] = useState("");
   const [editLinkedin, setEditLinkedin] = useState("");
+
+  // Followers/Following modal
+  const [showFollowers, setShowFollowers] = useState(false);
+  const [showFollowing, setShowFollowing] = useState(false);
+  const [followersList, setFollowersList] = useState<FollowUser[]>([]);
+  const [followingList, setFollowingList] = useState<FollowUser[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
+
+  // Chat
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -98,12 +128,13 @@ export default function Profile() {
         setEditLinkedin(data.social_linkedin || "");
       }
 
-      // Fetch posts
+      // Fetch posts (exclude deleted and archived)
       const { data: postsData } = await supabase
         .from("community_posts")
         .select("*")
         .eq("user_id", userId)
         .eq("is_deleted", false)
+        .eq("is_archived", false)
         .order("created_at", { ascending: false })
         .limit(30);
       setPosts((postsData || []) as Post[]);
@@ -129,14 +160,104 @@ export default function Profile() {
     if (!user || !userId) return toast.error("Faça login para seguir.");
     if (isFollowing) {
       await supabase.from("user_followers").delete().eq("follower_id", user.id).eq("following_id", userId);
+      // Update counts in DB
+      if (profile) {
+        const newCount = Math.max(0, profile.followers_count - 1);
+        await supabase.from("user_profiles").update({ followers_count: newCount }).eq("user_id", userId);
+        await supabase.from("user_profiles").update({ following_count: Math.max(0, (await supabase.from("user_profiles").select("following_count").eq("user_id", user.id).single()).data?.following_count || 1) - 1 }).eq("user_id", user.id);
+        setProfile({ ...profile, followers_count: newCount });
+      }
       setIsFollowing(false);
-      if (profile) setProfile({ ...profile, followers_count: Math.max(0, profile.followers_count - 1) });
     } else {
       await supabase.from("user_followers").insert({ follower_id: user.id, following_id: userId });
+      // Update counts in DB
+      if (profile) {
+        const newCount = profile.followers_count + 1;
+        await supabase.from("user_profiles").update({ followers_count: newCount }).eq("user_id", userId);
+        const { data: myProfile } = await supabase.from("user_profiles").select("following_count").eq("user_id", user.id).single();
+        await supabase.from("user_profiles").update({ following_count: (myProfile?.following_count || 0) + 1 }).eq("user_id", user.id);
+        setProfile({ ...profile, followers_count: newCount });
+      }
       setIsFollowing(true);
-      if (profile) setProfile({ ...profile, followers_count: profile.followers_count + 1 });
     }
   };
+
+  const loadFollowers = async () => {
+    if (!userId) return;
+    setShowFollowers(true);
+    setShowFollowing(false);
+    setLoadingList(true);
+    const { data: follows } = await supabase.from("user_followers").select("follower_id").eq("following_id", userId);
+    if (follows && follows.length > 0) {
+      const ids = follows.map(f => f.follower_id);
+      const { data: profiles } = await supabase.from("user_profiles").select("user_id, display_name, username, avatar_url").in("user_id", ids);
+      setFollowersList(profiles || []);
+    } else {
+      setFollowersList([]);
+    }
+    setLoadingList(false);
+  };
+
+  const loadFollowing = async () => {
+    if (!userId) return;
+    setShowFollowing(true);
+    setShowFollowers(false);
+    setLoadingList(true);
+    const { data: follows } = await supabase.from("user_followers").select("following_id").eq("follower_id", userId);
+    if (follows && follows.length > 0) {
+      const ids = follows.map(f => f.following_id);
+      const { data: profiles } = await supabase.from("user_profiles").select("user_id, display_name, username, avatar_url").in("user_id", ids);
+      setFollowingList(profiles || []);
+    } else {
+      setFollowingList([]);
+    }
+    setLoadingList(false);
+  };
+
+  // Chat functions
+  const fetchChatMessages = async () => {
+    if (!user || !userId) return;
+    const { data } = await supabase.from("messages").select("*")
+      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
+      .order("created_at", { ascending: true });
+    setChatMessages(data || []);
+    // Mark as read
+    await supabase.from("messages").update({ is_read: true }).eq("receiver_id", user.id).eq("sender_id", userId).eq("is_read", false);
+  };
+
+  const sendChatMessage = async () => {
+    if (!user || !userId || !newMessage.trim()) return;
+    setSendingMessage(true);
+    await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: userId,
+      content: newMessage.trim(),
+    });
+    setNewMessage("");
+    setSendingMessage(false);
+    fetchChatMessages();
+  };
+
+  useEffect(() => {
+    if (chatOpen && user && userId) {
+      fetchChatMessages();
+      const channel = supabase.channel(`dm-${userId}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+          const msg = payload.new as ChatMessage;
+          if ((msg.sender_id === user.id && msg.receiver_id === userId) || (msg.sender_id === userId && msg.receiver_id === user.id)) {
+            setChatMessages(prev => [...prev, msg]);
+            if (msg.receiver_id === user.id) {
+              supabase.from("messages").update({ is_read: true }).eq("id", msg.id).then(() => {});
+            }
+          }
+        }).subscribe();
+      return () => { supabase.removeChannel(channel); };
+    }
+  }, [chatOpen, user, userId]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
   const handleSaveProfile = async () => {
     if (!user || !profile) return;
@@ -192,6 +313,10 @@ export default function Profile() {
     </div>;
   }
 
+  const followListData = showFollowers ? followersList : followingList;
+  const followListTitle = showFollowers ? "SEGUIDORES" : "SEGUINDO";
+  const showListModal = showFollowers || showFollowing;
+
   return (
     <div className="min-h-screen bg-background">
       {user ? (
@@ -246,10 +371,18 @@ export default function Profile() {
                 <Edit className="h-3 w-3" /> EDITAR
               </button>
             ) : (
-              <button onClick={handleFollow}
-                className={`h-10 px-6 text-[9px] ${isFollowing ? "ep-btn-secondary" : "ep-btn-primary"}`}>
-                {isFollowing ? "SEGUINDO" : "SEGUIR"}
-              </button>
+              <>
+                <button onClick={handleFollow}
+                  className={`h-10 px-6 text-[9px] ${isFollowing ? "ep-btn-secondary" : "ep-btn-primary"}`}>
+                  {isFollowing ? "SEGUINDO" : "SEGUIR"}
+                </button>
+                {user && (
+                  <button onClick={() => setChatOpen(!chatOpen)}
+                    className="ep-btn-secondary h-10 px-4 text-[9px] flex items-center gap-1">
+                    <MessageSquare className="h-3 w-3" /> MENSAGEM
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -260,15 +393,53 @@ export default function Profile() {
             <p className="ep-value text-lg">{profile.posts_count}</p>
             <p className="text-[10px] text-muted-foreground font-bold">POSTS</p>
           </div>
-          <div className="text-center">
+          <button onClick={loadFollowers} className="text-center hover:opacity-80 transition-opacity">
             <p className="ep-value text-lg">{profile.followers_count}</p>
             <p className="text-[10px] text-muted-foreground font-bold">SEGUIDORES</p>
-          </div>
-          <div className="text-center">
+          </button>
+          <button onClick={loadFollowing} className="text-center hover:opacity-80 transition-opacity">
             <p className="ep-value text-lg">{profile.following_count}</p>
             <p className="text-[10px] text-muted-foreground font-bold">SEGUINDO</p>
-          </div>
+          </button>
         </div>
+
+        {/* Followers/Following Modal */}
+        {showListModal && (
+          <div className="ep-card mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <p className="ep-subtitle">{followListTitle} ({followListData.length})</p>
+              <button onClick={() => { setShowFollowers(false); setShowFollowing(false); }}
+                className="h-7 w-7 rounded-[8px] flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {loadingList ? (
+              <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+            ) : followListData.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">Nenhum resultado.</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {followListData.map(u => (
+                  <Link key={u.user_id} to={`/profile/${u.user_id}`}
+                    onClick={() => { setShowFollowers(false); setShowFollowing(false); }}
+                    className="flex items-center gap-3 px-3 py-2 rounded-[10px] hover:bg-muted transition-colors">
+                    {u.avatar_url ? (
+                      <img src={u.avatar_url} className="h-8 w-8 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                        {(u.display_name || "U")[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-bold text-foreground">{u.display_name}</p>
+                      {u.username && <p className="text-[10px] text-muted-foreground">@{u.username}</p>}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Bio & socials */}
         {profile.bio && <p className="text-sm text-muted-foreground font-medium mb-4">{profile.bio}</p>}
@@ -355,32 +526,79 @@ export default function Profile() {
           {posts.length === 0 ? (
             <p className="text-sm text-muted-foreground font-medium">Nenhuma publicação ainda.</p>
           ) : posts.map(post => (
-            <div key={post.id} className="ep-card">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="ep-badge text-[7px]">{post.post_type.toUpperCase()}</span>
-                <span className="text-[10px] text-muted-foreground">
-                  {format(new Date(post.created_at), "dd MMM yyyy", { locale: ptBR })}
-                </span>
-              </div>
-              {post.title && <h3 className="text-sm font-bold text-foreground mb-1">{post.title}</h3>}
-              <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-3">{post.content}</p>
-
-              {post.media_urls && post.media_urls.length > 0 && (
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  {post.media_urls.map((url, i) => (
-                    <img key={i} src={url} alt="" className="rounded-[8px] w-full max-h-48 object-cover" />
-                  ))}
+            <Link key={post.id} to={`/community?post=${post.id}`} className="block">
+              <div className="ep-card hover:border-foreground/20 transition-colors">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="ep-badge text-[7px]">{post.post_type.toUpperCase()}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {format(new Date(post.created_at), "dd MMM yyyy", { locale: ptBR })}
+                  </span>
                 </div>
-              )}
+                {post.title && <h3 className="text-sm font-bold text-foreground mb-1">{post.title}</h3>}
+                <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-3 line-clamp-3">{post.content}</p>
 
-              <div className="flex items-center gap-4 text-xs text-muted-foreground font-bold">
-                <span className="flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {post.likes_count}</span>
-                <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {post.comments_count}</span>
+                {post.media_urls && post.media_urls.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {post.media_urls.slice(0, 4).map((url, i) => (
+                      <img key={i} src={url} alt="" className="rounded-[8px] w-full max-h-48 object-cover" />
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 text-xs text-muted-foreground font-bold">
+                  <span className="flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {post.likes_count}</span>
+                  <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {post.comments_count}</span>
+                </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
+
+      {/* Chat panel for DM */}
+      {chatOpen && !isOwner && user && (
+        <div className="fixed bottom-6 right-6 z-30 w-[360px] max-h-[500px] bg-background border border-border rounded-[20px] shadow-2xl flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div>
+              <p className="ep-label text-[10px]">MENSAGEM</p>
+              <p className="text-xs text-muted-foreground">{profile.display_name}</p>
+            </div>
+            <button onClick={() => setChatOpen(false)} className="h-7 w-7 rounded-[8px] flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[350px]">
+            {chatMessages.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-8">
+                Envie uma mensagem para iniciar a conversa.
+              </p>
+            )}
+            {chatMessages.map(msg => (
+              <div key={msg.id} className={`flex ${msg.sender_id === user.id ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] px-3 py-2 rounded-[12px] text-xs ${
+                  msg.sender_id === user.id ? "bg-foreground text-background" : "bg-muted text-foreground"
+                }`}>
+                  <p className="font-medium">{msg.content}</p>
+                  <p className={`text-[9px] mt-1 ${msg.sender_id === user.id ? "text-background/60" : "text-muted-foreground"}`}>
+                    {format(new Date(msg.created_at), "HH:mm")}
+                  </p>
+                </div>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+            <input value={newMessage} onChange={e => setNewMessage(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChatMessage()}
+              placeholder="Digite..."
+              className="ep-input h-10 rounded-[12px] text-xs px-3 border border-border flex-1" />
+            <button onClick={sendChatMessage} disabled={sendingMessage || !newMessage.trim()}
+              className="ep-btn-primary h-10 w-10 rounded-[12px] flex items-center justify-center">
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
