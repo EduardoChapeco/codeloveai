@@ -1,8 +1,6 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 const plans = [
   { id: "1_day", name: "1 DIA", price: "R$9,99", period: "por dia", description: "Teste rápido" },
@@ -29,79 +27,8 @@ const faqs = [
   { q: "O que significa 'ilimitado' no plano de 12 meses?", a: "Significa que o acesso é válido enquanto a extensão estiver ativa e funcional. Caso a extensão seja descontinuada, limitada ou pare de funcionar, não haverá reembolso proporcional ou integral." },
 ];
 
-const terms = [
-  "Estamos vendendo acesso à extensão CodeLove AI, e não acesso à plataforma Lovable.",
-  "A extensão NÃO é oficial e não possui nenhum vínculo com a Lovable.",
-  "Não há reembolso caso a extensão pare de funcionar ou seja limitada, independentemente do tempo restante do plano.",
-  "O cancelamento ou paralisação temporária do serviço não gera direito a indenização de qualquer natureza.",
-  "O serviço é considerado entregue após o envio e ativação do token.",
-  "O cliente assume total responsabilidade pela utilização de uma extensão não oficial, podendo ter projetos, contas bloqueados, suspensos ou excluídos a qualquer momento.",
-  "Não nos responsabilizamos por quaisquer consequências do uso da extensão.",
-  "O plano '12 Meses — Ilimitado' refere-se ao acesso enquanto a extensão estiver ativa. A descontinuação do serviço não gera reembolso.",
-  "Nosso método é novo e utiliza a própria plataforma para se comunicar.",
-  "Não utilizamos créditos da conta Lovable — todos os projetos, mensagens e planos criados/enviados não descontam créditos.",
-];
-
 export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [agreedTerms, setAgreedTerms] = useState(() => {
-    return localStorage.getItem("codelove_terms_agreed") === "true";
-  });
-  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
-  const navigate = useNavigate();
-
-  const handleTermsChange = (checked: boolean) => {
-    setAgreedTerms(checked);
-    localStorage.setItem("codelove_terms_agreed", checked ? "true" : "false");
-  };
-
-  const handleSubscribe = async (planId: string) => {
-    if (!agreedTerms) {
-      toast.error("Você precisa concordar com os termos de uso antes de assinar.");
-      const termsSection = document.getElementById("terms");
-      termsSection?.scrollIntoView({ behavior: "smooth" });
-      return;
-    }
-
-    setLoadingPlan(planId);
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      toast.error("Faça login para assinar um plano.");
-      navigate("/login?returnTo=/?scrollTo=plans");
-      setLoadingPlan(null);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { plan: planId },
-      });
-
-      if (error) throw error;
-      if (data?.init_point) {
-        window.location.href = data.init_point;
-      } else {
-        toast.error("Erro ao criar checkout. Tente novamente.");
-      }
-    } catch (err: any) {
-      console.error("Checkout error:", err);
-      toast.error("Erro ao processar pagamento. Tente novamente.");
-    } finally {
-      setLoadingPlan(null);
-    }
-  };
-
-  const [searchParams] = useSearchParams();
-
-  useEffect(() => {
-    const scrollTo = searchParams.get("scrollTo");
-    if (scrollTo === "plans") {
-      setTimeout(() => {
-        document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" });
-      }, 300);
-    }
-  }, [searchParams]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -121,10 +48,10 @@ export default function Index() {
           A MELHOR PLATAFORMA DE ENVIOS INFINITOS
         </h1>
         <p className="text-base text-muted-foreground font-medium max-w-2xl mx-auto mb-12">
-          Crie quantos projetos quiser, envie quantas mensagens quiser. 24/7 sem parar. 
+          Crie quantos projetos quiser, envie quantas mensagens quiser. 24/7 sem parar.
           Sem descontar créditos da sua conta Lovable.
         </p>
-        <a href="#plans" className="ep-btn-primary inline-flex">VER PLANOS</a>
+        <Link to="/checkout" className="ep-btn-primary inline-flex">VER PLANOS</Link>
       </section>
 
       {/* Benefits */}
@@ -146,9 +73,9 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Plans */}
+      {/* Plans preview */}
       <section id="plans" className="px-8 pb-32 max-w-6xl mx-auto">
-        <p className="ep-subtitle text-center mb-4">ESCOLHA SEU PLANO</p>
+        <p className="ep-subtitle text-center mb-4">NOSSOS PLANOS</p>
         <h2 className="ep-section-title text-center mb-16">PLANOS E PREÇOS</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {plans.map((plan) => (
@@ -182,26 +109,23 @@ export default function Index() {
                   ))}
                 </ul>
               </div>
-              <button
-                onClick={() => handleSubscribe(plan.id)}
-                disabled={loadingPlan === plan.id}
-                className={`w-full ${plan.popular || plan.highlight ? "ep-btn-primary" : "ep-btn-secondary"}`}
+              <Link
+                to={`/checkout?plan=${plan.id}`}
+                className={`w-full text-center ${plan.popular || plan.highlight ? "ep-btn-primary" : "ep-btn-secondary"}`}
               >
-                {loadingPlan === plan.id ? "PROCESSANDO..." : "ASSINAR"}
-              </button>
+                ASSINAR
+              </Link>
             </div>
           ))}
         </div>
 
-        {/* Checkout disclaimer */}
         <div className="mt-8 max-w-2xl mx-auto">
           <div className="ep-card-sm flex items-start gap-4">
             <AlertTriangle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
             <div>
               <p className="text-xs text-muted-foreground font-medium">
-                <strong className="text-foreground">Importante:</strong> Ao contratar qualquer plano, você concorda que o serviço é considerado 
-                entregue após a ativação do token. O cancelamento ou paralisação temporária da extensão não gera direito a 
-                reembolso ou indenização. A extensão é um produto não oficial que pode ser descontinuado a qualquer momento.
+                <strong className="text-foreground">Importante:</strong> Ao contratar qualquer plano, você concorda que o serviço é considerado
+                entregue após a ativação do token. A extensão é um produto não oficial.
               </p>
             </div>
           </div>
@@ -232,34 +156,6 @@ export default function Index() {
               )}
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* Terms */}
-      <section id="terms" className="px-8 pb-32 max-w-3xl mx-auto">
-        <p className="ep-subtitle text-center mb-4">LEIA COM ATENÇÃO</p>
-        <h2 className="ep-section-title text-center mb-16">TERMOS DE USO</h2>
-        <div className="ep-card space-y-4">
-          {terms.map((term, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <span className="ep-label mt-1 shrink-0">{String(i + 1).padStart(2, "0")}.</span>
-              <p className="text-sm text-muted-foreground font-medium">{term}</p>
-            </div>
-          ))}
-          <div className="pt-8 border-t border-border">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={agreedTerms}
-                onChange={(e) => handleTermsChange(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded-[4px] border border-border accent-foreground"
-              />
-              <span className="text-sm font-bold text-foreground">
-                Li e concordo com todos os termos acima. Entendo que a extensão não é oficial, que o cancelamento 
-                ou paralisação não gera indenização, e assumo total responsabilidade pela sua utilização.
-              </span>
-            </label>
-          </div>
         </div>
       </section>
 
