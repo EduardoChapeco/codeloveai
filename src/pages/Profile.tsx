@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import AppNav from "@/components/AppNav";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -193,21 +194,14 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
-        <div className="flex items-center gap-4">
-          <Link to="/community" className="ep-btn-secondary h-10 px-4 text-[9px]">COMUNIDADE</Link>
-          {user ? (
-            <>
-              <Link to="/dashboard" className="ep-btn-secondary h-10 px-4 text-[9px]">DASHBOARD</Link>
-              <button onClick={signOut} className="ep-btn-icon h-10 w-10 rounded-[14px]"><LogOut className="h-4 w-4" /></button>
-            </>
-          ) : (
-            <Link to="/login" className="ep-btn-primary h-10 px-6 text-[9px]">ENTRAR</Link>
-          )}
-        </div>
-      </nav>
+      {user ? (
+        <AppNav />
+      ) : (
+        <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-4 flex items-center justify-between">
+          <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
+          <Link to="/login" className="ep-btn-primary h-10 px-6 text-[9px]">ENTRAR</Link>
+        </nav>
+      )}
 
       {/* Cover */}
       <div className="relative h-48 md:h-64 bg-muted overflow-hidden">

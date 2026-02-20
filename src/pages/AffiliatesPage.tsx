@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Users, DollarSign, Gift, Zap, Shield, Copy,
-  ArrowRight, Check, Coins, TrendingUp, Link as LinkIcon
+  ArrowRight, Check, Coins, TrendingUp, Link as LinkIcon, X
 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
 const steps = [
   {
@@ -280,59 +281,53 @@ export default function AffiliatesPage() {
         </div>
       </section>
 
-      {/* Enrollment Modal */}
-      {showEnrollForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-background rounded-[32px] border border-border p-12 max-w-md w-full shadow-2xl">
-            <p className="ep-subtitle mb-2">ATIVAÇÃO</p>
-            <h3 className="ep-section-title text-2xl mb-2">TORNAR-SE AFILIADO</h3>
-            <p className="text-sm text-muted-foreground font-medium mb-8">
+      {/* Enrollment Sheet */}
+      <Sheet open={showEnrollForm} onOpenChange={setShowEnrollForm}>
+        <SheetContent side="bottom" className="rounded-t-[40px] px-8 pb-10 pt-8 max-h-[85vh] overflow-y-auto">
+          <SheetHeader className="text-left mb-6">
+            <p className="ep-subtitle mb-1">ATIVAÇÃO</p>
+            <SheetTitle className="ep-section-title text-2xl">TORNAR-SE AFILIADO</SheetTitle>
+            <SheetDescription className="text-sm text-muted-foreground font-medium">
               Escolha um nome de exibição para seu perfil de afiliado. Ele aparecerá na sua página de indicação.
-            </p>
+            </SheetDescription>
+          </SheetHeader>
 
-            <div className="space-y-4">
-              <div>
-                <label className="ep-subtitle text-[9px] block mb-2 ml-1">NOME DE EXIBIÇÃO</label>
-                <input
-                  type="text"
-                  value={enrollName}
-                  onChange={(e) => setEnrollName(e.target.value)}
-                  placeholder="Ex: João Dev"
-                  className="ep-input w-full border border-border px-6"
-                  maxLength={50}
-                />
-              </div>
-
-              <div className="ep-card-sm bg-muted/30">
-                <p className="text-[10px] font-bold text-foreground mb-2 tracking-widest">VOCÊ RECEBERÁ:</p>
-                <ul className="space-y-1.5">
-                  {["Link exclusivo de indicação", "30% de comissão por venda", "20% de desconto nos seus planos", "Painel financeiro completo", "Programa CodeCoins"].map((item) => (
-                    <li key={item} className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
-                      <Check className="h-3 w-3 text-foreground shrink-0" /> {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <div className="space-y-6">
+            <div>
+              <label className="ep-sheet-label">NOME DE EXIBIÇÃO</label>
+              <input
+                type="text"
+                value={enrollName}
+                onChange={(e) => setEnrollName(e.target.value)}
+                placeholder="Ex: João Dev"
+                className="ep-sheet-input w-full border border-border pl-6"
+                maxLength={50}
+              />
             </div>
 
-            <div className="flex gap-3 mt-8">
-              <button
-                onClick={() => setShowEnrollForm(false)}
-                className="ep-btn-secondary flex-1 h-12 text-[9px]"
-              >
-                CANCELAR
-              </button>
-              <button
-                onClick={handleEnroll}
-                disabled={enrolling}
-                className="ep-btn-primary flex-1 h-12 text-[9px]"
-              >
-                {enrolling ? "ATIVANDO..." : "CONFIRMAR"}
-              </button>
+            <div className="ep-card-sm bg-muted/30">
+              <p className="text-[10px] font-bold text-foreground mb-3 tracking-widest">VOCÊ RECEBERÁ:</p>
+              <ul className="space-y-2">
+                {["Link exclusivo de indicação", "30% de comissão por venda", "20% de desconto nos seus planos", "Painel financeiro completo", "Programa CodeCoins"].map((item) => (
+                  <li key={item} className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
+                    <Check className="h-3 w-3 text-foreground shrink-0" /> {item}
+                  </li>
+                ))}
+              </ul>
             </div>
+
+            <button
+              onClick={handleEnroll}
+              disabled={enrolling}
+              className="ep-sheet-btn"
+            >
+              {enrolling ? "ATIVANDO..." : "CONFIRMAR ATIVAÇÃO"}
+            </button>
+
+            <p className="ep-sheet-footer">CODELOVE AI — PROGRAMA DE AFILIADOS</p>
           </div>
-        </div>
-      )}
+        </SheetContent>
+      </Sheet>
 
       <footer className="border-t border-border px-8 py-8 text-center">
         <p className="ep-subtitle">© 2025 CODELOVE AI — TODOS OS DIREITOS RESERVADOS</p>
