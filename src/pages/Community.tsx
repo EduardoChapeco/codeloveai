@@ -724,6 +724,10 @@ export default function Community() {
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const pageRef = useRef(0);
+  const PAGE_SIZE = 20;
   const [hashtags, setHashtags] = useState<{ id: string; name: string; slug: string; posts_count: number }[]>([]);
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -731,6 +735,8 @@ export default function Community() {
   const [posting, setPosting] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, { display_name: string; username: string; avatar_url: string }>>({});
   const postingRef = useRef(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const fetchingRef = useRef(false);
 
   // CRUD state
   const [editingPost, setEditingPost] = useState<string | null>(null);
@@ -763,26 +769,43 @@ export default function Community() {
     if (!authLoading && !user) navigate("/login?returnTo=/community");
   }, [user, authLoading, navigate]);
 
-  const fetchPosts = useCallback(async () => {
+  const fetchPosts = useCallback(async (reset = false) => {
     if (!user) {
-      console.log("[Community] fetchPosts skipped: no user");
       setLoading(false);
       return;
     }
-    console.log("[Community] fetchPosts starting, filterType:", filterType);
-    setLoading(true);
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
+    const page = reset ? 0 : pageRef.current;
+    if (reset) {
+      setLoading(true);
+      setHasMore(true);
+      pageRef.current = 0;
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
       let query = supabase.from("community_posts").select("*").eq("is_deleted", false).eq("is_archived", false)
-        .order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).limit(50);
+        .order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).range(from, to);
       if (filterType !== "all") query = query.eq("post_type", filterType);
       const { data, error } = await query;
-      console.log("[Community] posts query result:", { count: data?.length, error });
+
       if (error) {
         console.error("Error fetching posts:", error);
-        setPosts([]);
+        if (reset) setPosts([]);
         return;
       }
+
       const postsList = (data || []) as Post[];
+
+      if (postsList.length < PAGE_SIZE) {
+        setHasMore(false);
+      }
 
       const userIds = [...new Set(postsList.map(p => p.user_id))];
       if (userIds.length > 0) {
@@ -798,15 +821,39 @@ export default function Community() {
         const likedSet = new Set((likes || []).map(l => l.post_id));
         postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
       }
-      setPosts(postsList);
+
+      if (reset) {
+        setPosts(postsList);
+      } else {
+        setPosts(prev => [...prev, ...postsList]);
+      }
+      pageRef.current = page + 1;
     } catch (err) { console.error("Error fetching posts:", err); }
-    finally { setLoading(false); }
+    finally {
+      setLoading(false);
+      setLoadingMore(false);
+      fetchingRef.current = false;
+    }
   }, [filterType, user]);
 
-  // Only fetch when user is authenticated (RLS requires auth.uid())
+  // Reset on filter or user change
   useEffect(() => {
-    if (user) fetchPosts();
+    if (user) fetchPosts(true);
   }, [fetchPosts, user]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMore && !loading && !loadingMore && !fetchingRef.current) {
+        fetchPosts(false);
+      }
+    }, { threshold: 0.1 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, fetchPosts]);
+
   useEffect(() => { supabase.from("hashtags").select("*").order("posts_count", { ascending: false }).limit(20).then(({ data }) => setHashtags(data || [])); }, []);
 
   if (authLoading) return (<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>);
@@ -1013,7 +1060,7 @@ export default function Community() {
         console.error("[Community] reward-post catch:", rewardErr);
         toast.success("Publicado!");
       }
-      await fetchPosts();
+      await fetchPosts(true);
     } catch (err: any) {
       toast.error("Erro ao publicar: " + (err.message || ""));
     } finally { setPosting(false); postingRef.current = false; }
@@ -1341,6 +1388,28 @@ export default function Community() {
                 </PostViewObserver>
               );
             })
+          )}
+
+          {/* Infinite scroll trigger */}
+          <div ref={loadMoreRef} className="py-4">
+            {loadingMore && (
+              <div className="text-center">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+              </div>
+            )}
+          </div>
+
+          {/* End of feed */}
+          {!loading && !hasMore && posts.length > 0 && (
+            <div className="text-center py-12 space-y-3">
+              <div className="h-12 w-12 mx-auto rounded-[14px] bg-muted flex items-center justify-center">
+                <Check className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-foreground">Tudo por hoje! 🎉</p>
+                <p className="text-xs text-muted-foreground mt-1">Você viu todas as publicações. Volte mais tarde para novidades!</p>
+              </div>
+            </div>
           )}
         </main>
       </div>
