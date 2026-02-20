@@ -6,6 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Default deadline: Feb 20, 2026 18:00 BRT (21:00 UTC)
+const ONBOARD_DEADLINE = new Date("2026-02-20T21:00:00Z").getTime();
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -43,6 +46,28 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Check if onboarding is active: deadline not passed OR admin override exists
+    const now = Date.now();
+    let onboardActive = now < ONBOARD_DEADLINE;
+
+    if (!onboardActive) {
+      // Check for admin override: admin_notifications with type "onboard_override" and is_read=false
+      const { data: override } = await serviceClient
+        .from("admin_notifications")
+        .select("id")
+        .eq("type", "onboard_override")
+        .eq("is_read", false)
+        .limit(1);
+
+      onboardActive = !!(override && override.length > 0);
+    }
+
+    if (!onboardActive) {
+      return new Response(JSON.stringify({ status: "onboard_disabled" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Check if user already has ANY subscription (paid or trial)
     const { data: existingSubs } = await serviceClient
