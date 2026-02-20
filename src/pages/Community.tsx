@@ -11,7 +11,7 @@ import {
   Lightbulb, Eye, LogOut, Users, Loader2, Send, X,
   ChevronLeft, ChevronRight, Play, Gift, Copy, FileText,
   Code, Layout, Square, RectangleHorizontal, Columns, Check,
-  MoreHorizontal, Pencil, Archive, Trash2, Lock
+  MoreHorizontal, Pencil, Archive, Trash2, Lock, Search
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 
@@ -620,6 +620,21 @@ export default function Community() {
   const [editPrompt, setEditPrompt] = useState("");
   const [postMenuOpen, setPostMenuOpen] = useState<string | null>(null);
 
+  // User search
+  const [userSearch, setUserSearch] = useState("");
+  const [userResults, setUserResults] = useState<{ user_id: string; display_name: string; username: string; avatar_url: string }[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+
+  const searchUsers = useCallback(async (query: string) => {
+    if (!query.trim() || query.length < 2) { setUserResults([]); return; }
+    setSearchingUsers(true);
+    const q = query.trim().toLowerCase();
+    const { data } = await supabase.from("user_profiles").select("user_id, display_name, username, avatar_url")
+      .or(`display_name.ilike.%${q}%,username.ilike.%${q}%`).limit(10);
+    setUserResults(data || []);
+    setSearchingUsers(false);
+  }, []);
+
   const trackView = useViewTracker(user?.id);
 
   useEffect(() => {
@@ -888,6 +903,40 @@ export default function Community() {
               </button>
             ))}
             {hashtags.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma hashtag ainda.</p>}
+          </div>
+          {/* User search */}
+          <div className="ep-card">
+            <p className="ep-subtitle mb-3">ENCONTRAR PESSOAS</p>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <input value={userSearch} onChange={e => { setUserSearch(e.target.value); searchUsers(e.target.value); }}
+                placeholder="Buscar nome ou @usuario..."
+                className="w-full bg-muted border border-border/50 rounded-[10px] pl-9 pr-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/20" />
+            </div>
+            {searchingUsers && <Loader2 className="h-4 w-4 animate-spin mx-auto mt-3 text-muted-foreground" />}
+            {userResults.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {userResults.map(u => (
+                  <Link key={u.user_id} to={`/profile/${u.user_id}`}
+                    className="flex items-center gap-2.5 px-2 py-2 rounded-[8px] hover:bg-muted transition-colors">
+                    {u.avatar_url ? (
+                      <img src={u.avatar_url} className="h-7 w-7 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-7 w-7 rounded-full bg-muted-foreground/20 flex items-center justify-center text-[10px] font-bold">
+                        {(u.display_name || "U")[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">{u.display_name}</p>
+                      {u.username && <p className="text-[10px] text-muted-foreground">@{u.username}</p>}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {userSearch.length >= 2 && !searchingUsers && userResults.length === 0 && (
+              <p className="text-[10px] text-muted-foreground text-center mt-2">Nenhum resultado.</p>
+            )}
           </div>
           <div className="ep-card text-center">
             <Users className="h-5 w-5 mx-auto mb-2 text-foreground" />
