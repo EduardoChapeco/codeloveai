@@ -151,6 +151,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Create admin notification for new purchase
+    const planLabels: Record<string, string> = {
+      "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
+    };
+    await supabaseAdmin.from("admin_notifications").insert({
+      type: "purchase",
+      title: `Nova compra: ${planLabels[refData.plan] || refData.plan}`,
+      description: `Usuário ${refData.email || refData.user_id} adquiriu o plano ${planLabels[refData.plan] || refData.plan}. Pagamento #${sanitizedPaymentId}.`,
+      user_id: refData.user_id,
+      reference_id: newSub?.id || null,
+    });
+
     // If affiliate_code present, create referral record
     if (refData.affiliate_code && newSub) {
       const { data: aff } = await supabaseAdmin
