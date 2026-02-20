@@ -347,6 +347,7 @@ export type Database = {
           created_at: string
           id: string
           is_archived: boolean
+          is_blurred: boolean
           is_deleted: boolean
           is_pinned: boolean
           likes_count: number
@@ -373,6 +374,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_archived?: boolean
+          is_blurred?: boolean
           is_deleted?: boolean
           is_pinned?: boolean
           likes_count?: number
@@ -399,6 +401,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_archived?: boolean
+          is_blurred?: boolean
           is_deleted?: boolean
           is_pinned?: boolean
           likes_count?: number

@@ -11,7 +11,8 @@ import {
   Lightbulb, Eye, LogOut, Users, Loader2, Send, X,
   ChevronLeft, ChevronRight, Play, Gift, Copy, FileText,
   Code, Layout, Square, RectangleHorizontal, Columns, Check,
-  MoreHorizontal, Pencil, Archive, Trash2, Lock, Search
+  MoreHorizontal, Pencil, Archive, Trash2, Lock, Search,
+  EyeOff, Maximize2, Volume2, VolumeX
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 
@@ -36,6 +37,7 @@ interface Post {
   views_count: number;
   is_pinned: boolean;
   is_archived: boolean;
+  is_blurred: boolean;
   rewarded: boolean;
   created_at: string;
   profile?: { display_name: string; username: string; avatar_url: string };
@@ -65,8 +67,83 @@ const MEDIA_TEMPLATES = [
   { id: "card-16-9", label: "16:9", icon: RectangleHorizontal, desc: "Card horizontal" },
 ];
 
+/* ─── Fullscreen Media Viewer ─── */
+function FullscreenMediaViewer({ urls, initialIndex, onClose }: { urls: string[]; initialIndex: number; onClose: () => void }) {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const total = urls.length;
+  const url = urls[currentIndex];
+  const isVideoFile = /\.(mp4|webm|mov)$/i.test(url);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") setCurrentIndex(p => (p - 1 + total) % total);
+      if (e.key === "ArrowRight") setCurrentIndex(p => (p + 1) % total);
+    };
+    document.addEventListener("keydown", handleKey);
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", handleKey); document.body.style.overflow = ""; };
+  }, [total, onClose]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+      if (isPlaying) videoRef.current.play().catch(() => {});
+    }
+  }, [currentIndex, isPlaying, isMuted]);
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center" onClick={onClose}>
+      <div className="relative w-full h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-white/10 backdrop-blur flex items-center justify-center text-white hover:bg-white/20 transition-colors">
+          <X className="h-5 w-5" />
+        </button>
+        {total > 1 && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white/10 backdrop-blur rounded-full px-4 py-1.5">
+            <span className="text-sm font-bold text-white">{currentIndex + 1} / {total}</span>
+          </div>
+        )}
+        {total > 1 && (
+          <>
+            <button onClick={() => setCurrentIndex(p => (p - 1 + total) % total)} className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-white/10 backdrop-blur flex items-center justify-center text-white hover:bg-white/20 transition-colors">
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+            <button onClick={() => setCurrentIndex(p => (p + 1) % total)} className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-white/10 backdrop-blur flex items-center justify-center text-white hover:bg-white/20 transition-colors">
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          </>
+        )}
+        {isVideoFile ? (
+          <div className="relative max-w-[90vw] max-h-[90vh]">
+            <video ref={videoRef} src={url} autoPlay loop playsInline muted={isMuted}
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+              onClick={() => { if (videoRef.current) { if (videoRef.current.paused) { videoRef.current.play(); setIsPlaying(true); } else { videoRef.current.pause(); setIsPlaying(false); } } }} />
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+              <button onClick={() => setIsMuted(!isMuted)} className="h-10 w-10 rounded-full bg-white/10 backdrop-blur flex items-center justify-center text-white hover:bg-white/20">
+                {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+              </button>
+            </div>
+            {!isPlaying && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="h-16 w-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
+                  <Play className="h-8 w-8 text-white ml-1" />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <img src={url} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" />
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Media display by template ─── */
-function MediaCarousel({ urls, template = "threads" }: { urls: string[]; template?: string }) {
+function MediaCarousel({ urls, template = "threads", isBlurred = false, onOpenFullscreen }: { urls: string[]; template?: string; isBlurred?: boolean; onOpenFullscreen?: (index: number) => void }) {
   const [unmuted, setUnmuted] = useState<Set<number>>(new Set());
   const [playing, setPlaying] = useState<Set<number>>(new Set());
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -111,23 +188,38 @@ function MediaCarousel({ urls, template = "threads" }: { urls: string[]; templat
     const isMuted = !unmuted.has(idx);
     const isPlaying = playing.has(idx);
     return (
-      <div key={idx} className={`relative overflow-hidden bg-muted cursor-pointer ${className}`}
-        onClick={() => hasAudio ? togglePlayPause(idx) : undefined}>
+      <div key={idx} className={`relative overflow-hidden bg-muted cursor-pointer group ${className}`}
+        onClick={() => hasAudio ? togglePlayPause(idx) : onOpenFullscreen?.(idx)}>
         {hasAudio ? (
           <video ref={el => { if (el) videoRefs.current.set(idx, el); }} src={url} muted={isMuted} autoPlay={idx === 0} loop playsInline
-            className="w-full h-full object-cover" />
+            className={`w-full h-full object-cover ${isBlurred ? "blur-xl" : ""}`} />
         ) : (
-          <img src={url} alt="" className="w-full h-full object-cover" />
+          <img src={url} alt="" className={`w-full h-full object-cover ${isBlurred ? "blur-xl" : ""}`} />
         )}
-        {/* Audio toggle icon — top-right corner */}
+        {/* Blur overlay label */}
+        {isBlurred && (
+          <div className="absolute inset-0 flex items-center justify-center z-10">
+            <div className="bg-background/80 backdrop-blur rounded-[12px] px-4 py-2 flex items-center gap-2">
+              <EyeOff className="h-4 w-4 text-foreground" />
+              <span className="text-xs font-bold text-foreground">CONTEÚDO SENSÍVEL</span>
+            </div>
+          </div>
+        )}
+        {/* Fullscreen button */}
+        <button onClick={(e) => { e.stopPropagation(); onOpenFullscreen?.(idx); }}
+          className="absolute top-2 right-2 h-8 w-8 rounded-full bg-background/80 backdrop-blur flex items-center justify-center z-10 hover:bg-background/95 transition-colors opacity-0 group-hover:opacity-100"
+          title="Tela cheia">
+          <Maximize2 className="h-3.5 w-3.5 text-foreground" />
+        </button>
+        {/* Audio toggle icon */}
         {hasAudio && (
           <button onClick={(e) => toggleAudio(e, idx)}
             className="absolute top-2 left-2 h-8 w-8 rounded-full bg-background/80 backdrop-blur flex items-center justify-center z-10 hover:bg-background/95 transition-colors"
             title={isMuted ? "Ativar áudio" : "Desativar áudio"}>
             {isMuted ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+              <VolumeX className="h-3.5 w-3.5 text-foreground" />
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              <Volume2 className="h-3.5 w-3.5 text-foreground" />
             )}
           </button>
         )}
@@ -282,34 +374,52 @@ function PromptBlock({ text, postId, userId, copyCount: initialCopyCount }: { te
   );
 }
 
-/* ─── Static Project Preview (no live iframe) ─── */
+/* ─── Static Project Preview with iframe ─── */
 function StaticProjectPreview({ url, name }: { url: string; name?: string }) {
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   let hostname = url;
   try { hostname = new URL(url).hostname; } catch {}
   const isLovable = (() => { try { return new URL(url).hostname.endsWith(".lovable.app"); } catch { return false; } })();
 
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="block group mb-3">
+    <div className="block group mb-3">
       <div className="rounded-[14px] overflow-hidden border border-border hover:border-foreground/30 transition-colors">
-        <div className="relative bg-muted h-[200px] flex items-center justify-center">
+        <div className="relative bg-muted" style={{ height: isLovable ? "280px" : "200px" }}>
           {isLovable ? (
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-16 w-16 rounded-[18px] bg-foreground/10 flex items-center justify-center">
-                <Eye className="h-8 w-8 text-foreground/60" />
-              </div>
-              <p className="text-xs text-muted-foreground font-medium">Clique para ver o projeto ao vivo</p>
-            </div>
+            <>
+              {!iframeLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center z-10">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              <iframe
+                src={url}
+                title={name || "Preview"}
+                className="w-full h-full border-0 pointer-events-none"
+                style={{ transform: "scale(0.5)", transformOrigin: "top left", width: "200%", height: "200%" }}
+                sandbox="allow-scripts allow-same-origin"
+                onLoad={() => setIframeLoaded(true)}
+                loading="lazy"
+              />
+              {/* Protection overlay — click opens in new tab */}
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                className="absolute inset-0 z-20 bg-transparent hover:bg-black/5 transition-colors flex items-end justify-center pb-3">
+                <span className="bg-background/90 backdrop-blur rounded-full px-3 py-1.5 text-[9px] font-bold text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                  ABRIR PROJETO ↗
+                </span>
+              </a>
+            </>
           ) : (
-            <div className="flex flex-col items-center gap-3">
+            <a href={url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center h-full gap-3">
               <div className="h-16 w-16 rounded-[18px] bg-foreground/10 flex items-center justify-center">
                 <LinkIcon className="h-8 w-8 text-foreground/60" />
               </div>
               <p className="text-xs text-muted-foreground font-medium">Abrir link externo</p>
-            </div>
+            </a>
           )}
-          <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
         </div>
-        <div className="bg-muted/50 px-4 py-2.5 flex items-center justify-between border-t border-border">
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          className="bg-muted/50 px-4 py-2.5 flex items-center justify-between border-t border-border block">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-5 w-5 rounded-[6px] bg-foreground/10 flex items-center justify-center shrink-0">
               <Eye className="h-3 w-3 text-foreground" />
@@ -322,11 +432,12 @@ function StaticProjectPreview({ url, name }: { url: string; name?: string }) {
           <span className="text-[9px] font-bold text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2">
             ABRIR ↗
           </span>
-        </div>
+        </a>
       </div>
-    </a>
+    </div>
   );
 }
+
 
 /* ─── Link Preview Card ─── */
 function LinkPreviewCard({ post }: { post: Post }) {
@@ -364,7 +475,7 @@ function PostComposer({
 }: {
   user: any;
   profile: { display_name: string; username: string; avatar_url: string };
-  onSubmit: (data: { title: string; content: string; type: string; projectUrl: string; hashtags: string; files: File[]; promptText: string; mediaTemplate: string }) => void;
+  onSubmit: (data: { title: string; content: string; type: string; projectUrl: string; hashtags: string; files: File[]; promptText: string; mediaTemplate: string; isBlurred: boolean }) => void;
   posting: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -377,6 +488,7 @@ function PostComposer({
   const [previews, setPreviews] = useState<string[]>([]);
   const [promptText, setPromptText] = useState("");
   const [mediaTemplate, setMediaTemplate] = useState("threads");
+  const [isBlurred, setIsBlurred] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -401,9 +513,9 @@ function PostComposer({
 
   const handleSubmit = () => {
     if (posting) return;
-    onSubmit({ title, content, type, projectUrl, hashtags, files, promptText, mediaTemplate });
+    onSubmit({ title, content, type, projectUrl, hashtags, files, promptText, mediaTemplate, isBlurred });
     setContent(""); setTitle(""); setType("post"); setProjectUrl(""); setHashtags("");
-    setFiles([]); setPreviews([]); setPromptText(""); setMediaTemplate("threads"); setExpanded(false);
+    setFiles([]); setPreviews([]); setPromptText(""); setMediaTemplate("threads"); setIsBlurred(false); setExpanded(false);
   };
 
   useEffect(() => {
@@ -509,6 +621,13 @@ function PostComposer({
                         </button>
                       ))}
                     </div>
+                    {/* Blur toggle */}
+                    <button onClick={() => setIsBlurred(!isBlurred)}
+                      className={`flex items-center gap-1.5 h-7 px-3 rounded-[8px] text-[9px] font-bold tracking-wider transition-all ${
+                        isBlurred ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}>
+                      <EyeOff className="h-3 w-3" /> {isBlurred ? "BLUR ATIVO" : "ATIVAR BLUR"}
+                    </button>
                   </div>
                 )}
 
@@ -619,6 +738,9 @@ export default function Community() {
   const [editContent, setEditContent] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [postMenuOpen, setPostMenuOpen] = useState<string | null>(null);
+  
+  // Fullscreen media state
+  const [fullscreenMedia, setFullscreenMedia] = useState<{ urls: string[]; index: number } | null>(null);
 
   // User search
   const [userSearch, setUserSearch] = useState("");
@@ -790,7 +912,7 @@ export default function Community() {
     toast.success("Comentário excluído!");
   };
 
-  const submitPost = async (data: { title: string; content: string; type: string; projectUrl: string; hashtags: string; files: File[]; promptText: string; mediaTemplate: string }) => {
+  const submitPost = async (data: { title: string; content: string; type: string; projectUrl: string; hashtags: string; files: File[]; promptText: string; mediaTemplate: string; isBlurred: boolean }) => {
     if (!user) return toast.error("Faça login para publicar.");
     if (!data.content.trim() && !data.title.trim() && !data.promptText.trim()) return toast.error("Escreva algo para publicar.");
     if (postingRef.current) return;
@@ -836,7 +958,8 @@ export default function Community() {
         link_preview_description: linkPreview.description,
         link_preview_image: linkPreview.image,
         prompt_text: data.promptText.trim(),
-      }).select("id").single();
+        is_blurred: data.isBlurred,
+      } as any).select("id").single();
 
       if (postError) throw postError;
 
@@ -1084,7 +1207,7 @@ export default function Community() {
 
                         {/* Media */}
                         {!isEditing && post.media_urls && post.media_urls.length > 0 && (
-                          <MediaCarousel urls={post.media_urls} template="threads" />
+                          <MediaCarousel urls={post.media_urls} template="threads" isBlurred={post.is_blurred} onOpenFullscreen={(idx) => setFullscreenMedia({ urls: post.media_urls, index: idx })} />
                         )}
 
                         {/* Prompt/CMD block */}
@@ -1205,6 +1328,14 @@ export default function Community() {
           )}
         </main>
       </div>
+      {/* Fullscreen media viewer */}
+      {fullscreenMedia && (
+        <FullscreenMediaViewer
+          urls={fullscreenMedia.urls}
+          initialIndex={fullscreenMedia.index}
+          onClose={() => setFullscreenMedia(null)}
+        />
+      )}
     </div>
   );
 }
