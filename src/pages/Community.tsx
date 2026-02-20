@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,7 +8,8 @@ import { ptBR } from "date-fns/locale";
 import {
   Heart, MessageCircle, Share2, Plus, Hash, TrendingUp,
   Image as ImageIcon, Link as LinkIcon, Folder, HelpCircle,
-  Lightbulb, Eye, LogOut, Users, Loader2, Send, X
+  Lightbulb, Eye, LogOut, Users, Loader2, Send, X,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 
 interface Post {
@@ -50,6 +51,284 @@ const POST_TYPES = [
   { id: "showcase", label: "SHOWCASE", icon: Eye },
 ];
 
+/* ─── Media Carousel ─── */
+function MediaCarousel({ urls }: { urls: string[] }) {
+  const [current, setCurrent] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const total = urls.length;
+
+  const goTo = (idx: number) => {
+    setCurrent(Math.max(0, Math.min(idx, total - 1)));
+  };
+
+  if (total === 0) return null;
+
+  return (
+    <div className="relative rounded-[14px] overflow-hidden bg-muted mb-4 group">
+      {/* Slides */}
+      <div
+        ref={containerRef}
+        className="flex transition-transform duration-300 ease-out"
+        style={{ transform: `translateX(-${current * 100}%)` }}
+      >
+        {urls.map((url, i) =>
+          url.match(/\.(mp4|webm|mov)$/i) ? (
+            <div key={i} className="w-full shrink-0">
+              <video src={url} controls className="w-full max-h-[420px] object-contain bg-black" />
+            </div>
+          ) : (
+            <div key={i} className="w-full shrink-0">
+              <img
+                src={url}
+                alt=""
+                className="w-full max-h-[420px] object-cover cursor-pointer"
+                onClick={() => window.open(url, "_blank")}
+              />
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Navigation arrows */}
+      {total > 1 && (
+        <>
+          <button
+            onClick={() => goTo(current - 1)}
+            className={`absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-[10px] bg-background/80 backdrop-blur border border-border flex items-center justify-center transition-opacity ${
+              current === 0 ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"
+            }`}
+          >
+            <ChevronLeft className="h-4 w-4 text-foreground" />
+          </button>
+          <button
+            onClick={() => goTo(current + 1)}
+            className={`absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-[10px] bg-background/80 backdrop-blur border border-border flex items-center justify-center transition-opacity ${
+              current === total - 1 ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"
+            }`}
+          >
+            <ChevronRight className="h-4 w-4 text-foreground" />
+          </button>
+        </>
+      )}
+
+      {/* Dots indicator */}
+      {total > 1 && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+          {urls.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              className={`h-1.5 rounded-[3px] transition-all duration-200 ${
+                i === current ? "w-5 bg-foreground" : "w-1.5 bg-foreground/30"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Counter badge */}
+      {total > 1 && (
+        <div className="absolute top-3 right-3 bg-background/70 backdrop-blur rounded-[8px] px-2.5 py-1">
+          <span className="text-[10px] font-bold text-foreground">{current + 1}/{total}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Threads-style Post Composer ─── */
+function PostComposer({
+  user,
+  profile,
+  onSubmit,
+  posting,
+}: {
+  user: any;
+  profile: { display_name: string; username: string; avatar_url: string };
+  onSubmit: (data: { title: string; content: string; type: string; projectUrl: string; hashtags: string; files: File[] }) => void;
+  posting: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [content, setContent] = useState("");
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("post");
+  const [projectUrl, setProjectUrl] = useState("");
+  const [hashtags, setHashtags] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []).slice(0, 10);
+    setFiles(prev => [...prev, ...selected]);
+    selected.forEach(f => {
+      const reader = new FileReader();
+      reader.onload = () => setPreviews(prev => [...prev, reader.result as string]);
+      reader.readAsDataURL(f);
+    });
+  };
+
+  const removeFile = (idx: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
+    setPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSubmit = () => {
+    onSubmit({ title, content, type, projectUrl, hashtags, files });
+    setContent("");
+    setTitle("");
+    setType("post");
+    setProjectUrl("");
+    setHashtags("");
+    setFiles([]);
+    setPreviews([]);
+    setExpanded(false);
+  };
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textRef.current) {
+      textRef.current.style.height = "auto";
+      textRef.current.style.height = textRef.current.scrollHeight + "px";
+    }
+  }, [content]);
+
+  return (
+    <div className="ep-card border-border/50">
+      <div className="flex gap-3">
+        {/* Avatar with thread line */}
+        <div className="flex flex-col items-center">
+          {profile.avatar_url ? (
+            <img src={profile.avatar_url} alt="" className="h-10 w-10 rounded-[14px] object-cover border border-border" />
+          ) : (
+            <div className="h-10 w-10 rounded-[14px] bg-foreground flex items-center justify-center text-xs font-bold text-background">
+              {(profile.display_name || "U")[0].toUpperCase()}
+            </div>
+          )}
+          {expanded && <div className="w-[2px] flex-1 bg-border mt-2 rounded-full" />}
+        </div>
+
+        {/* Content area */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-bold text-foreground">{profile.display_name}</span>
+            {profile.username && <span className="text-xs text-muted-foreground">@{profile.username}</span>}
+          </div>
+
+          <textarea
+            ref={textRef}
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            onFocus={() => setExpanded(true)}
+            placeholder="O que está construindo?"
+            rows={1}
+            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 resize-none focus:outline-none font-medium leading-relaxed"
+          />
+
+          {/* Expanded options */}
+          {expanded && (
+            <div className="mt-3 space-y-3 animate-fade-in">
+              {/* Type pills */}
+              <div className="flex gap-1.5 flex-wrap">
+                {[["post", "Post"], ["project", "Projeto"], ["question", "Dúvida"], ["tip", "Dica"], ["showcase", "Showcase"]].map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setType(id)}
+                    className={`h-7 px-3 rounded-[8px] text-[9px] font-bold tracking-wider transition-all ${
+                      type === id
+                        ? "bg-foreground text-background"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              {/* Title */}
+              <input
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Título (opcional)"
+                className="w-full bg-muted/50 border border-border/50 rounded-[10px] px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/20"
+              />
+
+              {/* Project URL */}
+              {(type === "project" || type === "showcase") && (
+                <div className="flex items-center gap-2 bg-muted/50 border border-border/50 rounded-[10px] px-4 py-2">
+                  <LinkIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <input
+                    value={projectUrl}
+                    onChange={e => setProjectUrl(e.target.value)}
+                    placeholder="URL do projeto (ex: meuapp.lovable.app)"
+                    className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              {/* Hashtags */}
+              <div className="flex items-center gap-2 bg-muted/50 border border-border/50 rounded-[10px] px-4 py-2">
+                <Hash className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <input
+                  value={hashtags}
+                  onChange={e => setHashtags(e.target.value)}
+                  placeholder="react, lovable, dica"
+                  className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Media preview thumbnails */}
+              {previews.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {previews.map((src, i) => (
+                    <div key={i} className="relative h-20 w-20 rounded-[10px] overflow-hidden border border-border group">
+                      <img src={src} alt="" className="h-full w-full object-cover" />
+                      <button
+                        onClick={() => removeFile(i)}
+                        className="absolute top-1 right-1 h-5 w-5 rounded-[6px] bg-background/80 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3 text-foreground" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Bottom bar */}
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2">
+                  <label className="h-8 w-8 rounded-[10px] bg-muted hover:bg-muted/80 flex items-center justify-center cursor-pointer transition-colors">
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                    <input type="file" multiple accept="image/*,video/*,.gif" className="hidden" onChange={handleFileChange} />
+                  </label>
+                  {files.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground font-bold">{files.length} ARQUIVO(S)</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setExpanded(false); setContent(""); setTitle(""); setFiles([]); setPreviews([]); }}
+                    className="h-9 px-4 rounded-[10px] text-[9px] font-bold text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    CANCELAR
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={posting || (!content.trim() && !title.trim())}
+                    className="ep-btn-primary h-9 px-5 text-[9px] disabled:opacity-40"
+                  >
+                    {posting ? "PUBLICANDO..." : "PUBLICAR"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Community() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -60,22 +339,13 @@ export default function Community() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [hashtags, setHashtags] = useState<{ id: string; name: string; slug: string; posts_count: number }[]>([]);
-  const [showNewPost, setShowNewPost] = useState(false);
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
+  const [posting, setPosting] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, { display_name: string; username: string; avatar_url: string }>>({});
 
-  // New post form
-  const [newTitle, setNewTitle] = useState("");
-  const [newContent, setNewContent] = useState("");
-  const [newType, setNewType] = useState<string>("post");
-  const [newProjectUrl, setNewProjectUrl] = useState("");
-  const [newHashtags, setNewHashtags] = useState("");
-  const [newMediaFiles, setNewMediaFiles] = useState<File[]>([]);
-  const [posting, setPosting] = useState(false);
-
-  // Auth guard - redirect to login if not authenticated
+  // Auth guard
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/login?returnTo=/community");
@@ -99,7 +369,6 @@ export default function Community() {
     const { data } = await query;
     const postsList = data || [];
 
-    // Fetch profiles for all post authors
     const userIds = [...new Set(postsList.map(p => p.user_id))];
     if (userIds.length > 0) {
       const { data: profilesData } = await supabase
@@ -108,20 +377,16 @@ export default function Community() {
         .in("user_id", userIds);
 
       const profileMap: Record<string, any> = {};
-      (profilesData || []).forEach(p => {
-        profileMap[p.user_id] = p;
-      });
+      (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
       setProfiles(prev => ({ ...prev, ...profileMap }));
     }
 
-    // Check likes if logged in
     if (user) {
       const { data: likes } = await supabase
         .from("post_likes")
         .select("post_id")
         .eq("user_id", user.id)
         .in("post_id", postsList.map(p => p.id));
-
       const likedSet = new Set((likes || []).map(l => l.post_id));
       postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
     }
@@ -136,7 +401,7 @@ export default function Community() {
     supabase.from("hashtags").select("*").order("posts_count", { ascending: false }).limit(20)
       .then(({ data }) => setHashtags(data || []));
   }, []);
-  // Auth guard rendering
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -145,9 +410,7 @@ export default function Community() {
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   const handleLike = async (postId: string) => {
     if (!user) return toast.error("Faça login para curtir.");
@@ -189,7 +452,6 @@ export default function Community() {
       (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
       setProfiles(prev => ({ ...prev, ...profileMap }));
     }
-
     setComments(commentsList as Comment[]);
   };
 
@@ -207,15 +469,14 @@ export default function Community() {
     loadComments(postId);
   };
 
-  const submitPost = async () => {
+  const submitPost = async (data: { title: string; content: string; type: string; projectUrl: string; hashtags: string; files: File[] }) => {
     if (!user) return toast.error("Faça login para publicar.");
-    if (!newContent.trim() && !newTitle.trim()) return toast.error("Escreva algo para publicar.");
+    if (!data.content.trim() && !data.title.trim()) return toast.error("Escreva algo para publicar.");
     setPosting(true);
 
     try {
-      // Upload media files
       const mediaUrls: string[] = [];
-      for (const file of newMediaFiles) {
+      for (const file of data.files) {
         const ext = file.name.split(".").pop();
         const path = `${user.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
         const { error } = await supabase.storage.from("community").upload(path, file);
@@ -225,28 +486,27 @@ export default function Community() {
         }
       }
 
-      // Fetch link preview if URL provided
       let linkPreview = { title: "", description: "", image: "" };
-      const isLovableUrl = (() => { try { return new URL(newProjectUrl.trim()).hostname.endsWith(".lovable.app"); } catch { return false; } })();
-      if (newProjectUrl.trim() && !isLovableUrl) {
+      const isLovableUrl = (() => { try { return new URL(data.projectUrl.trim()).hostname.endsWith(".lovable.app"); } catch { return false; } })();
+      if (data.projectUrl.trim() && !isLovableUrl) {
         try {
           const { data: previewData } = await supabase.functions.invoke("link-preview", {
-            body: { url: newProjectUrl.trim() },
+            body: { url: data.projectUrl.trim() },
           });
           if (previewData) linkPreview = previewData;
-        } catch { /* ignore preview errors */ }
+        } catch { /* ignore */ }
       }
 
       const { data: postData, error: postError } = await supabase
         .from("community_posts")
         .insert({
           user_id: user.id,
-          post_type: newType,
-          title: newTitle.trim(),
-          content: newContent.trim(),
+          post_type: data.type,
+          title: data.title.trim(),
+          content: data.content.trim(),
           media_urls: mediaUrls,
-          project_url: newProjectUrl.trim(),
-          project_name: newType === "project" ? newTitle.trim() : "",
+          project_url: data.projectUrl.trim(),
+          project_name: data.type === "project" ? data.title.trim() : "",
           link_preview_title: linkPreview.title,
           link_preview_description: linkPreview.description,
           link_preview_image: linkPreview.image,
@@ -256,8 +516,7 @@ export default function Community() {
 
       if (postError) throw postError;
 
-      // Parse and create hashtags
-      const tags = newHashtags.split(/[,#\s]+/).filter(Boolean).map(t => t.toLowerCase().trim()).slice(0, 5);
+      const tags = data.hashtags.split(/[,#\s]+/).filter(Boolean).map(t => t.toLowerCase().trim()).slice(0, 5);
       for (const tag of tags) {
         const slug = tag.replace(/[^a-z0-9]/g, "");
         if (!slug) continue;
@@ -274,13 +533,8 @@ export default function Community() {
         await supabase.from("post_hashtags").insert({ post_id: postData.id, hashtag_id: hashtagId });
       }
 
-      // Ensure user has a profile
       const { data: existingProfile } = await supabase
-        .from("user_profiles")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
+        .from("user_profiles").select("id").eq("user_id", user.id).maybeSingle();
       if (!existingProfile) {
         await supabase.from("user_profiles").insert({
           user_id: user.id,
@@ -289,21 +543,12 @@ export default function Community() {
         });
       }
 
-      // Update profile post count
-      // Increment posts count
       const { data: currentProfile } = await supabase.from("user_profiles").select("posts_count").eq("user_id", user.id).maybeSingle();
       if (currentProfile) {
         await supabase.from("user_profiles").update({ posts_count: (currentProfile.posts_count || 0) + 1 }).eq("user_id", user.id);
       }
 
       toast.success("Publicado!");
-      setShowNewPost(false);
-      setNewTitle("");
-      setNewContent("");
-      setNewType("post");
-      setNewProjectUrl("");
-      setNewHashtags("");
-      setNewMediaFiles([]);
       fetchPosts();
     } catch (err: any) {
       toast.error("Erro ao publicar: " + (err.message || ""));
@@ -319,6 +564,8 @@ export default function Community() {
     const Icon = map[type] || Hash;
     return <Icon className="h-3 w-3" />;
   };
+
+  const myProfile = getProfile(user.id);
 
   return (
     <div className="min-h-screen bg-background">
@@ -336,7 +583,6 @@ export default function Community() {
       <div className="max-w-6xl mx-auto px-8 py-8 flex gap-8">
         {/* Sidebar */}
         <aside className="hidden lg:block w-64 shrink-0 space-y-6">
-          {/* Post type filter */}
           <div className="ep-card space-y-1">
             <p className="ep-subtitle mb-3">FILTRAR</p>
             {POST_TYPES.map(t => (
@@ -352,7 +598,6 @@ export default function Community() {
             ))}
           </div>
 
-          {/* Trending hashtags */}
           <div className="ep-card space-y-2">
             <p className="ep-subtitle mb-3">TRENDING</p>
             {hashtags.slice(0, 10).map(h => (
@@ -370,7 +615,6 @@ export default function Community() {
             )}
           </div>
 
-          {/* Stats */}
           <div className="ep-card text-center">
             <Users className="h-5 w-5 mx-auto mb-2 text-foreground" />
             <p className="ep-value text-xl">{posts.length}</p>
@@ -379,17 +623,12 @@ export default function Community() {
         </aside>
 
         {/* Main feed */}
-        <main className="flex-1 space-y-6 min-w-0">
-          <div className="flex items-center justify-between">
+        <main className="flex-1 space-y-4 min-w-0">
+          <div className="flex items-center justify-between mb-2">
             <div>
               <p className="ep-subtitle mb-1">COMUNIDADE</p>
               <h1 className="ep-section-title text-2xl">FEED</h1>
             </div>
-            {user && (
-              <button onClick={() => setShowNewPost(true)} className="ep-btn-primary h-10 px-6 text-[9px] flex items-center gap-2">
-                <Plus className="h-3.5 w-3.5" /> PUBLICAR
-              </button>
-            )}
           </div>
 
           {/* Mobile filters */}
@@ -405,70 +644,13 @@ export default function Community() {
             ))}
           </div>
 
-          {/* New post modal */}
-          {showNewPost && (
-            <div className="ep-card border-foreground/20">
-              <div className="flex items-center justify-between mb-4">
-                <p className="ep-subtitle">NOVA PUBLICAÇÃO</p>
-                <button onClick={() => setShowNewPost(false)}><X className="h-4 w-4 text-muted-foreground" /></button>
-              </div>
-
-              <div className="flex gap-2 mb-4 flex-wrap">
-                {[["post", "Post"], ["project", "Projeto"], ["question", "Dúvida"], ["tip", "Dica"], ["showcase", "Showcase"]].map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => setNewType(id)}
-                    className={`ep-btn-secondary h-8 px-3 text-[8px] ${newType === id ? "bg-foreground text-background" : ""}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <input
-                value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
-                placeholder="Título (opcional)"
-                className="w-full bg-muted border border-border rounded-[10px] px-4 py-2.5 text-sm mb-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground"
-              />
-
-              <textarea
-                value={newContent}
-                onChange={e => setNewContent(e.target.value)}
-                placeholder="Escreva sua publicação..."
-                rows={4}
-                className="w-full bg-muted border border-border rounded-[10px] px-4 py-2.5 text-sm mb-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground resize-none"
-              />
-
-              {(newType === "project" || newType === "showcase") && (
-                <input
-                  value={newProjectUrl}
-                  onChange={e => setNewProjectUrl(e.target.value)}
-                  placeholder="URL do projeto (ex: https://meuapp.lovable.app)"
-                  className="w-full bg-muted border border-border rounded-[10px] px-4 py-2.5 text-sm mb-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground"
-                />
-              )}
-
-              <input
-                value={newHashtags}
-                onChange={e => setNewHashtags(e.target.value)}
-                placeholder="Hashtags (ex: react, lovable, dica)"
-                className="w-full bg-muted border border-border rounded-[10px] px-4 py-2.5 text-sm mb-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground"
-              />
-
-              <div className="flex items-center justify-between">
-                <label className="ep-btn-secondary h-8 px-3 text-[8px] flex items-center gap-1 cursor-pointer">
-                  <ImageIcon className="h-3 w-3" /> MÍDIA
-                  <input type="file" multiple accept="image/*,video/*,.gif" className="hidden"
-                    onChange={e => setNewMediaFiles(Array.from(e.target.files || []))} />
-                </label>
-                {newMediaFiles.length > 0 && <span className="text-xs text-muted-foreground">{newMediaFiles.length} arquivo(s)</span>}
-                <button onClick={submitPost} disabled={posting} className="ep-btn-primary h-10 px-6 text-[9px]">
-                  {posting ? "PUBLICANDO..." : "PUBLICAR"}
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Threads-style inline composer */}
+          <PostComposer
+            user={user}
+            profile={myProfile}
+            onSubmit={submitPost}
+            posting={posting}
+          />
 
           {/* Posts */}
           {loading ? (
@@ -483,157 +665,176 @@ export default function Community() {
               const profile = getProfile(post.user_id);
               return (
                 <div key={post.id} className="ep-card">
-                  {/* Header */}
-                  <div className="flex items-start gap-3 mb-4">
-                    <Link to={`/profile/${post.user_id}`} className="shrink-0">
-                      {profile.avatar_url ? (
-                        <img src={profile.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
-                      ) : (
-                        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                          {(profile.display_name || "U")[0].toUpperCase()}
-                        </div>
-                      )}
-                    </Link>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Link to={`/profile/${post.user_id}`} className="text-sm font-bold text-foreground hover:underline">
-                          {profile.display_name || "Usuário"}
-                        </Link>
-                        {profile.username && (
-                          <span className="text-xs text-muted-foreground">@{profile.username}</span>
+                  {/* Threads-style header with avatar + thread line */}
+                  <div className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <Link to={`/profile/${post.user_id}`} className="shrink-0">
+                        {profile.avatar_url ? (
+                          <img src={profile.avatar_url} alt="" className="h-10 w-10 rounded-[14px] object-cover border border-border" />
+                        ) : (
+                          <div className="h-10 w-10 rounded-[14px] bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                            {(profile.display_name || "U")[0].toUpperCase()}
+                          </div>
                         )}
+                      </Link>
+                      {expandedComments === post.id && <div className="w-[2px] flex-1 bg-border mt-2 rounded-full" />}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      {/* User info row */}
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Link to={`/profile/${post.user_id}`} className="text-sm font-bold text-foreground hover:underline">
+                            {profile.display_name || "Usuário"}
+                          </Link>
+                          <span className="text-[10px] text-muted-foreground">
+                            {format(new Date(post.created_at), "dd MMM", { locale: ptBR })}
+                          </span>
+                        </div>
                         <span className="ep-badge text-[7px] flex items-center gap-1">
                           {typeIcon(post.post_type)} {post.post_type.toUpperCase()}
                         </span>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        {format(new Date(post.created_at), "dd MMM yyyy · HH:mm", { locale: ptBR })}
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* Content */}
-                  {post.title && <h3 className="text-base font-bold text-foreground mb-2">{post.title}</h3>}
-                  <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-4">{post.content}</p>
+                      {/* Content */}
+                      {post.title && <h3 className="text-base font-bold text-foreground mb-1">{post.title}</h3>}
+                      <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-3 leading-relaxed">{post.content}</p>
 
-                  {/* Media */}
-                  {post.media_urls && post.media_urls.length > 0 && (
-                    <div className={`grid gap-2 mb-4 ${post.media_urls.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-                      {post.media_urls.map((url, i) => (
-                        url.match(/\.(mp4|webm|mov)$/i) ? (
-                          <video key={i} src={url} controls className="rounded-[10px] w-full max-h-96 object-cover" />
-                        ) : (
-                          <img key={i} src={url} alt="" className="rounded-[10px] w-full max-h-96 object-cover cursor-pointer"
-                            onClick={() => window.open(url, "_blank")} />
-                        )
-                      ))}
-                    </div>
-                  )}
+                      {/* Media Carousel */}
+                      {post.media_urls && post.media_urls.length > 0 && (
+                        <MediaCarousel urls={post.media_urls} />
+                      )}
 
-                  {/* Project link with live preview */}
-                  {post.project_url && (
-                    <div className="mb-4">
-                      {(() => { try { return new URL(post.project_url).hostname.endsWith(".lovable.app"); } catch { return false; } })() ? (
-                        <a href={post.project_url} target="_blank" rel="noopener noreferrer" className="block group">
-                          <div className="rounded-[12px] overflow-hidden border border-border hover:border-foreground/30 transition-colors">
-                            <div className="relative">
-                              <iframe
-                                src={post.project_url}
-                                className="w-full h-[320px] border-0 pointer-events-none"
-                                sandbox="allow-scripts allow-same-origin"
-                                loading="lazy"
-                                title={post.project_name || "Project preview"}
-                              />
-                              <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
-                            </div>
-                            <div className="bg-muted/50 px-4 py-3 flex items-center justify-between border-t border-border">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="h-5 w-5 rounded bg-foreground/10 flex items-center justify-center shrink-0">
-                                  <Eye className="h-3 w-3 text-foreground" />
+                      {/* Project link with live preview */}
+                      {post.project_url && (
+                        <div className="mb-3">
+                          {(() => { try { return new URL(post.project_url).hostname.endsWith(".lovable.app"); } catch { return false; } })() ? (
+                            <a href={post.project_url} target="_blank" rel="noopener noreferrer" className="block group">
+                              <div className="rounded-[14px] overflow-hidden border border-border hover:border-foreground/30 transition-colors">
+                                <div className="relative">
+                                  <iframe
+                                    src={post.project_url}
+                                    className="w-full h-[280px] border-0 pointer-events-none"
+                                    sandbox="allow-scripts allow-same-origin"
+                                    loading="lazy"
+                                    title={post.project_name || "Project preview"}
+                                  />
+                                  <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
                                 </div>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-foreground truncate">{post.project_name || "Preview ao vivo"}</p>
-                                  <p className="text-[10px] text-muted-foreground truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
+                                <div className="bg-muted/50 px-4 py-2.5 flex items-center justify-between border-t border-border">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="h-5 w-5 rounded-[6px] bg-foreground/10 flex items-center justify-center shrink-0">
+                                      <Eye className="h-3 w-3 text-foreground" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold text-foreground truncate">{post.project_name || "Preview ao vivo"}</p>
+                                      <p className="text-[10px] text-muted-foreground truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[9px] font-bold text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2">
+                                    ABRIR ↗
+                                  </span>
                                 </div>
                               </div>
-                              <span className="text-[9px] font-bold text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2">
-                                ABRIR ↗
-                              </span>
-                            </div>
-                          </div>
-                        </a>
-                      ) : (
-                        <a href={post.project_url} target="_blank" rel="noopener noreferrer"
-                          className="block rounded-[12px] overflow-hidden border border-border hover:border-foreground/30 transition-colors group">
-                          {post.link_preview_image && (
-                            <div className="relative w-full h-[180px] bg-muted">
-                              <img src={post.link_preview_image} alt="" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
-                            </div>
+                            </a>
+                          ) : (
+                            <a href={post.project_url} target="_blank" rel="noopener noreferrer"
+                              className="block rounded-[14px] overflow-hidden border border-border hover:border-foreground/30 transition-colors group">
+                              {post.link_preview_image && (
+                                <div className="relative w-full h-[160px] bg-muted">
+                                  <img src={post.link_preview_image} alt="" className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
+                                </div>
+                              )}
+                              <div className="bg-muted/50 px-4 py-2.5 border-t border-border">
+                                <p className="text-sm font-bold text-foreground truncate mb-0.5">
+                                  {post.link_preview_title || post.project_name || post.project_url}
+                                </p>
+                                {post.link_preview_description && (
+                                  <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{post.link_preview_description}</p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground/60 truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
+                              </div>
+                            </a>
                           )}
-                          <div className="bg-muted/50 px-4 py-3 border-t border-border">
-                            <p className="text-sm font-bold text-foreground truncate mb-0.5">
-                              {post.link_preview_title || post.project_name || post.project_url}
-                            </p>
-                            {post.link_preview_description && (
-                              <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{post.link_preview_description}</p>
-                            )}
-                            <p className="text-[10px] text-muted-foreground/60 truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
-                          </div>
-                        </a>
+                        </div>
+                      )}
+
+                      {/* Actions - Threads style */}
+                      <div className="flex items-center gap-5">
+                        <button onClick={() => handleLike(post.id)}
+                          className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
+                            (post as any).liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
+                          }`}>
+                          <Heart className={`h-[18px] w-[18px] ${(post as any).liked ? "fill-red-500" : ""}`} />
+                          {post.likes_count > 0 && post.likes_count}
+                        </button>
+                        <button onClick={() => loadComments(post.id)}
+                          className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
+                          <MessageCircle className="h-[18px] w-[18px]" />
+                          {post.comments_count > 0 && post.comments_count}
+                        </button>
+                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/community?post=${post.id}`); toast.success("Link copiado!"); }}
+                          className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
+                          <Share2 className="h-[18px] w-[18px]" />
+                        </button>
+                      </div>
+
+                      {/* Reply count label */}
+                      {post.comments_count > 0 && expandedComments !== post.id && (
+                        <button
+                          onClick={() => loadComments(post.id)}
+                          className="text-xs text-muted-foreground/60 font-medium mt-2 hover:text-muted-foreground transition-colors"
+                        >
+                          {post.comments_count} {post.comments_count === 1 ? "resposta" : "respostas"}
+                        </button>
                       )}
                     </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-6 pt-3 border-t border-border">
-                    <button onClick={() => handleLike(post.id)}
-                      className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
-                        (post as any).liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
-                      }`}>
-                      <Heart className={`h-4 w-4 ${(post as any).liked ? "fill-red-500" : ""}`} />
-                      {post.likes_count}
-                    </button>
-                    <button onClick={() => loadComments(post.id)}
-                      className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
-                      <MessageCircle className="h-4 w-4" /> {post.comments_count}
-                    </button>
-                    <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/community?post=${post.id}`); toast.success("Link copiado!"); }}
-                      className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
-                      <Share2 className="h-4 w-4" /> COMPARTILHAR
-                    </button>
                   </div>
 
-                  {/* Comments */}
+                  {/* Comments - Threads style */}
                   {expandedComments === post.id && (
-                    <div className="mt-4 pt-4 border-t border-border space-y-3">
+                    <div className="ml-[52px] mt-3 space-y-3">
                       {comments.map(c => {
                         const cp = getProfile(c.user_id);
                         return (
-                          <div key={c.id} className="flex gap-2">
-                            <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
+                          <div key={c.id} className="flex gap-2.5">
+                            <Link to={`/profile/${c.user_id}`}>
                               {cp.avatar_url ? (
-                                <img src={cp.avatar_url} className="h-7 w-7 rounded-full object-cover" />
-                              ) : (cp.display_name || "U")[0].toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="text-xs">
-                                <span className="font-bold text-foreground">{cp.display_name || "Usuário"}</span>
-                                <span className="text-muted-foreground ml-2">{format(new Date(c.created_at), "dd/MM HH:mm")}</span>
-                              </p>
-                              <p className="text-sm text-muted-foreground font-medium">{c.content}</p>
+                                <img src={cp.avatar_url} className="h-7 w-7 rounded-[10px] object-cover border border-border" />
+                              ) : (
+                                <div className="h-7 w-7 rounded-[10px] bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
+                                  {(cp.display_name || "U")[0].toUpperCase()}
+                                </div>
+                              )}
+                            </Link>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-foreground">{cp.display_name || "Usuário"}</span>
+                                <span className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), "dd/MM HH:mm")}</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground font-medium leading-relaxed">{c.content}</p>
                             </div>
                           </div>
                         );
                       })}
                       {user && (
-                        <div className="flex gap-2">
+                        <div className="flex gap-2.5 items-center">
+                          <div className="h-7 w-7 rounded-[10px] bg-muted flex items-center justify-center shrink-0">
+                            {myProfile.avatar_url ? (
+                              <img src={myProfile.avatar_url} className="h-7 w-7 rounded-[10px] object-cover border border-border" />
+                            ) : (
+                              <span className="text-[10px] font-bold text-muted-foreground">
+                                {(myProfile.display_name || "U")[0].toUpperCase()}
+                              </span>
+                            )}
+                          </div>
                           <input value={newComment} onChange={e => setNewComment(e.target.value)}
-                            placeholder="Escreva um comentário..."
+                            placeholder="Responder..."
                             onKeyDown={e => e.key === "Enter" && submitComment(post.id)}
-                            className="flex-1 bg-muted border border-border rounded-[10px] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground" />
-                          <button onClick={() => submitComment(post.id)} className="ep-btn-primary h-9 w-9 p-0 flex items-center justify-center">
-                            <Send className="h-3.5 w-3.5" />
+                            className="flex-1 bg-transparent border-b border-border/50 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30" />
+                          <button onClick={() => submitComment(post.id)} className="h-7 w-7 rounded-[10px] bg-foreground flex items-center justify-center shrink-0">
+                            <Send className="h-3 w-3 text-background" />
                           </button>
                         </div>
                       )}
