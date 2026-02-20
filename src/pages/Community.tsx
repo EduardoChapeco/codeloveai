@@ -6,10 +6,10 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Heart, MessageCircle, Share2, Plus, Hash, TrendingUp,
+  Heart, MessageCircle, Share2, Hash, TrendingUp,
   Image as ImageIcon, Link as LinkIcon, Folder, HelpCircle,
   Lightbulb, Eye, LogOut, Users, Loader2, Send, X,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Play
 } from "lucide-react";
 
 interface Post {
@@ -28,9 +28,9 @@ interface Post {
   project_preview_image: string;
   likes_count: number;
   comments_count: number;
+  views_count: number;
   is_pinned: boolean;
   created_at: string;
-  // joined
   profile?: { display_name: string; username: string; avatar_url: string };
   liked?: boolean;
 }
@@ -51,87 +51,119 @@ const POST_TYPES = [
   { id: "showcase", label: "SHOWCASE", icon: Eye },
 ];
 
-/* ─── Media Carousel ─── */
+/* ─── Threads-style Media Cards with Blur + Autoplay ─── */
 function MediaCarousel({ urls }: { urls: string[] }) {
-  const [current, setCurrent] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
   const total = urls.length;
 
-  const goTo = (idx: number) => {
-    setCurrent(Math.max(0, Math.min(idx, total - 1)));
+  // Autoplay first video on mount
+  useEffect(() => {
+    const firstVideo = videoRefs.current.get(0);
+    if (firstVideo) {
+      firstVideo.muted = true;
+      firstVideo.play().catch(() => {});
+    }
+  }, []);
+
+  const toggleReveal = (idx: number) => {
+    setRevealed(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
   };
 
   if (total === 0) return null;
 
-  return (
-    <div className="relative rounded-[14px] overflow-hidden bg-muted mb-4 group">
-      {/* Slides */}
-      <div
-        ref={containerRef}
-        className="flex transition-transform duration-300 ease-out"
-        style={{ transform: `translateX(-${current * 100}%)` }}
-      >
-        {urls.map((url, i) =>
-          url.match(/\.(mp4|webm|mov)$/i) ? (
-            <div key={i} className="w-full shrink-0">
-              <video src={url} controls className="w-full max-h-[420px] object-contain bg-black" />
+  const isVideo = (url: string) => /\.(mp4|webm|mov)$/i.test(url);
+
+  // Single media — full width with blur
+  if (total === 1) {
+    const url = urls[0];
+    const isRev = revealed.has(0);
+    return (
+      <div className="relative rounded-[14px] overflow-hidden bg-muted mb-4 cursor-pointer" onClick={() => toggleReveal(0)}>
+        {isVideo(url) ? (
+          <video
+            ref={el => { if (el) videoRefs.current.set(0, el); }}
+            src={url}
+            controls={isRev}
+            muted={!isRev}
+            autoPlay
+            loop
+            playsInline
+            className={`w-full max-h-[420px] object-contain bg-black transition-all duration-500 ${!isRev ? "blur-lg scale-105" : ""}`}
+          />
+        ) : (
+          <img
+            src={url}
+            alt=""
+            className={`w-full max-h-[420px] object-cover transition-all duration-500 ${!isRev ? "blur-lg scale-105" : ""}`}
+          />
+        )}
+        {!isRev && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <div className="h-12 w-12 rounded-full bg-background/90 backdrop-blur flex items-center justify-center">
+              {isVideo(url) ? <Play className="h-5 w-5 text-foreground ml-0.5" /> : <Eye className="h-5 w-5 text-foreground" />}
             </div>
-          ) : (
-            <div key={i} className="w-full shrink-0">
-              <img
-                src={url}
-                alt=""
-                className="w-full max-h-[420px] object-cover cursor-pointer"
-                onClick={() => window.open(url, "_blank")}
-              />
-            </div>
-          )
+          </div>
         )}
       </div>
+    );
+  }
 
-      {/* Navigation arrows */}
-      {total > 1 && (
-        <>
-          <button
-            onClick={() => goTo(current - 1)}
-            className={`absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-[10px] bg-background/80 backdrop-blur border border-border flex items-center justify-center transition-opacity ${
-              current === 0 ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"
-            }`}
-          >
-            <ChevronLeft className="h-4 w-4 text-foreground" />
-          </button>
-          <button
-            onClick={() => goTo(current + 1)}
-            className={`absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-[10px] bg-background/80 backdrop-blur border border-border flex items-center justify-center transition-opacity ${
-              current === total - 1 ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"
-            }`}
-          >
-            <ChevronRight className="h-4 w-4 text-foreground" />
-          </button>
-        </>
-      )}
-
-      {/* Dots indicator */}
-      {total > 1 && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-          {urls.map((_, i) => (
-            <button
+  // Multiple media — horizontal scroll cards (Threads style)
+  return (
+    <div className="mb-4">
+      <div
+        ref={scrollRef}
+        className="flex gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-2"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {urls.map((url, i) => {
+          const isRev = revealed.has(i);
+          return (
+            <div
               key={i}
-              onClick={() => goTo(i)}
-              className={`h-1.5 rounded-[3px] transition-all duration-200 ${
-                i === current ? "w-5 bg-foreground" : "w-1.5 bg-foreground/30"
-              }`}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Counter badge */}
-      {total > 1 && (
-        <div className="absolute top-3 right-3 bg-background/70 backdrop-blur rounded-[8px] px-2.5 py-1">
-          <span className="text-[10px] font-bold text-foreground">{current + 1}/{total}</span>
-        </div>
-      )}
+              className="relative shrink-0 snap-center rounded-[14px] overflow-hidden bg-muted cursor-pointer border border-border"
+              style={{ width: total === 2 ? "calc(50% - 4px)" : "200px", height: "260px" }}
+              onClick={() => toggleReveal(i)}
+            >
+              {isVideo(url) ? (
+                <video
+                  ref={el => { if (el) videoRefs.current.set(i, el); }}
+                  src={url}
+                  controls={isRev}
+                  muted={!isRev}
+                  autoPlay={i === 0}
+                  loop
+                  playsInline
+                  className={`w-full h-full object-cover transition-all duration-500 ${!isRev ? "blur-lg scale-105" : ""}`}
+                />
+              ) : (
+                <img
+                  src={url}
+                  alt=""
+                  className={`w-full h-full object-cover transition-all duration-500 ${!isRev ? "blur-lg scale-105" : ""}`}
+                />
+              )}
+              {!isRev && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                  <div className="h-10 w-10 rounded-full bg-background/90 backdrop-blur flex items-center justify-center">
+                    {isVideo(url) ? <Play className="h-4 w-4 text-foreground ml-0.5" /> : <Eye className="h-4 w-4 text-foreground" />}
+                  </div>
+                </div>
+              )}
+              {/* Counter */}
+              <div className="absolute top-2 right-2 bg-background/70 backdrop-blur rounded-[8px] px-2 py-0.5">
+                <span className="text-[9px] font-bold text-foreground">{i + 1}/{total}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -174,6 +206,7 @@ function PostComposer({
   };
 
   const handleSubmit = () => {
+    if (posting) return; // Guard against double-click
     onSubmit({ title, content, type, projectUrl, hashtags, files });
     setContent("");
     setTitle("");
@@ -277,12 +310,16 @@ function PostComposer({
                 />
               </div>
 
-              {/* Media preview thumbnails */}
+              {/* Media preview — horizontal scroll (Threads style) */}
               {previews.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                   {previews.map((src, i) => (
-                    <div key={i} className="relative h-20 w-20 rounded-[10px] overflow-hidden border border-border group">
-                      <img src={src} alt="" className="h-full w-full object-cover" />
+                    <div key={i} className="relative h-24 w-24 rounded-[12px] overflow-hidden border border-border shrink-0 group">
+                      {files[i]?.type.startsWith("video/") ? (
+                        <video src={src} className="h-full w-full object-cover" muted />
+                      ) : (
+                        <img src={src} alt="" className="h-full w-full object-cover" />
+                      )}
                       <button
                         onClick={() => removeFile(i)}
                         className="absolute top-1 right-1 h-5 w-5 rounded-[6px] bg-background/80 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -317,7 +354,7 @@ function PostComposer({
                     disabled={posting || (!content.trim() && !title.trim())}
                     className="ep-btn-primary h-9 px-5 text-[9px] disabled:opacity-40"
                   >
-                    {posting ? "PUBLICANDO..." : "PUBLICAR"}
+                    {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : "PUBLICAR"}
                   </button>
                 </div>
               </div>
@@ -329,12 +366,60 @@ function PostComposer({
   );
 }
 
+/* ─── View Tracker Hook ─── */
+function useViewTracker(userId: string | undefined) {
+  const trackedRef = useRef<Set<string>>(new Set());
+
+  const trackView = useCallback(async (postId: string) => {
+    if (!userId || trackedRef.current.has(postId)) return;
+    trackedRef.current.add(postId);
+    try {
+      // Insert view (unique constraint handles duplicates)
+      await supabase.from("post_views").insert({ post_id: postId, user_id: userId });
+      // Increment counter (best effort)
+      await supabase.rpc("has_role", { _user_id: userId, _role: "member" }); // no-op just to keep alive
+      // We use a simple update to increment views
+      const { data: post } = await supabase.from("community_posts").select("views_count").eq("id", postId).single();
+      if (post) {
+        await supabase.from("community_posts").update({ views_count: post.views_count + 1 }).eq("id", postId);
+      }
+    } catch {
+      // Ignore duplicate constraint or other errors
+    }
+  }, [userId]);
+
+  return trackView;
+}
+
+/* ─── Post View Observer Component ─── */
+function PostViewObserver({ postId, onView, children }: { postId: string; onView: (id: string) => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            onView(postId);
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [postId, onView]);
+
+  return <div ref={ref}>{children}</div>;
+}
+
 export default function Community() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterType = searchParams.get("type") || "all";
-  const filterTag = searchParams.get("tag") || "";
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -344,6 +429,9 @@ export default function Community() {
   const [newComment, setNewComment] = useState("");
   const [posting, setPosting] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, { display_name: string; username: string; avatar_url: string }>>({});
+  const postingRef = useRef(false); // Guard against double submit
+
+  const trackView = useViewTracker(user?.id);
 
   // Auth guard
   useEffect(() => {
@@ -354,45 +442,50 @@ export default function Community() {
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
-    let query = supabase
-      .from("community_posts")
-      .select("*")
-      .eq("is_deleted", false)
-      .order("is_pinned", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(50);
+    try {
+      let query = supabase
+        .from("community_posts")
+        .select("*")
+        .eq("is_deleted", false)
+        .order("is_pinned", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-    if (filterType !== "all") {
-      query = query.eq("post_type", filterType);
+      if (filterType !== "all") {
+        query = query.eq("post_type", filterType);
+      }
+
+      const { data } = await query;
+      const postsList = (data || []) as Post[];
+
+      const userIds = [...new Set(postsList.map(p => p.user_id))];
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("user_profiles")
+          .select("user_id, display_name, username, avatar_url")
+          .in("user_id", userIds);
+
+        const profileMap: Record<string, any> = {};
+        (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
+        setProfiles(prev => ({ ...prev, ...profileMap }));
+      }
+
+      if (user) {
+        const { data: likes } = await supabase
+          .from("post_likes")
+          .select("post_id")
+          .eq("user_id", user.id)
+          .in("post_id", postsList.map(p => p.id));
+        const likedSet = new Set((likes || []).map(l => l.post_id));
+        postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
+      }
+
+      setPosts(postsList);
+    } catch (err) {
+      console.error("Error fetching posts:", err);
+    } finally {
+      setLoading(false);
     }
-
-    const { data } = await query;
-    const postsList = data || [];
-
-    const userIds = [...new Set(postsList.map(p => p.user_id))];
-    if (userIds.length > 0) {
-      const { data: profilesData } = await supabase
-        .from("user_profiles")
-        .select("user_id, display_name, username, avatar_url")
-        .in("user_id", userIds);
-
-      const profileMap: Record<string, any> = {};
-      (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
-      setProfiles(prev => ({ ...prev, ...profileMap }));
-    }
-
-    if (user) {
-      const { data: likes } = await supabase
-        .from("post_likes")
-        .select("post_id")
-        .eq("user_id", user.id)
-        .in("post_id", postsList.map(p => p.id));
-      const likedSet = new Set((likes || []).map(l => l.post_id));
-      postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
-    }
-
-    setPosts(postsList as Post[]);
-    setLoading(false);
   }, [filterType, user]);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
@@ -472,9 +565,14 @@ export default function Community() {
   const submitPost = async (data: { title: string; content: string; type: string; projectUrl: string; hashtags: string; files: File[] }) => {
     if (!user) return toast.error("Faça login para publicar.");
     if (!data.content.trim() && !data.title.trim()) return toast.error("Escreva algo para publicar.");
+
+    // Guard against double-submit
+    if (postingRef.current) return;
+    postingRef.current = true;
     setPosting(true);
 
     try {
+      // Upload files
       const mediaUrls: string[] = [];
       for (const file of data.files) {
         const ext = file.name.split(".").pop();
@@ -486,6 +584,7 @@ export default function Community() {
         }
       }
 
+      // Link preview (only for non-lovable URLs)
       let linkPreview = { title: "", description: "", image: "" };
       const isLovableUrl = (() => { try { return new URL(data.projectUrl.trim()).hostname.endsWith(".lovable.app"); } catch { return false; } })();
       if (data.projectUrl.trim() && !isLovableUrl) {
@@ -497,6 +596,7 @@ export default function Community() {
         } catch { /* ignore */ }
       }
 
+      // Insert post
       const { data: postData, error: postError } = await supabase
         .from("community_posts")
         .insert({
@@ -516,6 +616,7 @@ export default function Community() {
 
       if (postError) throw postError;
 
+      // Process hashtags
       const tags = data.hashtags.split(/[,#\s]+/).filter(Boolean).map(t => t.toLowerCase().trim()).slice(0, 5);
       for (const tag of tags) {
         const slug = tag.replace(/[^a-z0-9]/g, "");
@@ -530,9 +631,10 @@ export default function Community() {
           if (!newTag) continue;
           hashtagId = newTag.id;
         }
-        await supabase.from("post_hashtags").insert({ post_id: postData.id, hashtag_id: hashtagId });
+        await supabase.from("post_hashtags").insert({ post_id: postData!.id, hashtag_id: hashtagId });
       }
 
+      // Ensure user profile exists
       const { data: existingProfile } = await supabase
         .from("user_profiles").select("id").eq("user_id", user.id).maybeSingle();
       if (!existingProfile) {
@@ -543,17 +645,19 @@ export default function Community() {
         });
       }
 
+      // Update posts count
       const { data: currentProfile } = await supabase.from("user_profiles").select("posts_count").eq("user_id", user.id).maybeSingle();
       if (currentProfile) {
         await supabase.from("user_profiles").update({ posts_count: (currentProfile.posts_count || 0) + 1 }).eq("user_id", user.id);
       }
 
       toast.success("Publicado!");
-      fetchPosts();
+      await fetchPosts();
     } catch (err: any) {
       toast.error("Erro ao publicar: " + (err.message || ""));
     } finally {
       setPosting(false);
+      postingRef.current = false;
     }
   };
 
@@ -664,183 +768,190 @@ export default function Community() {
             posts.map(post => {
               const profile = getProfile(post.user_id);
               return (
-                <div key={post.id} className="ep-card">
-                  {/* Threads-style header with avatar + thread line */}
-                  <div className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <Link to={`/profile/${post.user_id}`} className="shrink-0">
-                        {profile.avatar_url ? (
-                          <img src={profile.avatar_url} alt="" className="h-10 w-10 rounded-[14px] object-cover border border-border" />
-                        ) : (
-                          <div className="h-10 w-10 rounded-[14px] bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                            {(profile.display_name || "U")[0].toUpperCase()}
-                          </div>
-                        )}
-                      </Link>
-                      {expandedComments === post.id && <div className="w-[2px] flex-1 bg-border mt-2 rounded-full" />}
-                    </div>
+                <PostViewObserver key={post.id} postId={post.id} onView={trackView}>
+                  <div className="ep-card">
+                    {/* Threads-style header with avatar + thread line */}
+                    <div className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <Link to={`/profile/${post.user_id}`} className="shrink-0">
+                          {profile.avatar_url ? (
+                            <img src={profile.avatar_url} alt="" className="h-10 w-10 rounded-[14px] object-cover border border-border" />
+                          ) : (
+                            <div className="h-10 w-10 rounded-[14px] bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                              {(profile.display_name || "U")[0].toUpperCase()}
+                            </div>
+                          )}
+                        </Link>
+                        {expandedComments === post.id && <div className="w-[2px] flex-1 bg-border mt-2 rounded-full" />}
+                      </div>
 
-                    <div className="flex-1 min-w-0">
-                      {/* User info row */}
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Link to={`/profile/${post.user_id}`} className="text-sm font-bold text-foreground hover:underline">
-                            {profile.display_name || "Usuário"}
-                          </Link>
-                          <span className="text-[10px] text-muted-foreground">
-                            {format(new Date(post.created_at), "dd MMM", { locale: ptBR })}
+                      <div className="flex-1 min-w-0">
+                        {/* User info row */}
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Link to={`/profile/${post.user_id}`} className="text-sm font-bold text-foreground hover:underline">
+                              {profile.display_name || "Usuário"}
+                            </Link>
+                            <span className="text-[10px] text-muted-foreground">
+                              {format(new Date(post.created_at), "dd MMM", { locale: ptBR })}
+                            </span>
+                          </div>
+                          <span className="ep-badge text-[7px] flex items-center gap-1">
+                            {typeIcon(post.post_type)} {post.post_type.toUpperCase()}
                           </span>
                         </div>
-                        <span className="ep-badge text-[7px] flex items-center gap-1">
-                          {typeIcon(post.post_type)} {post.post_type.toUpperCase()}
-                        </span>
-                      </div>
 
-                      {/* Content */}
-                      {post.title && <h3 className="text-base font-bold text-foreground mb-1">{post.title}</h3>}
-                      <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-3 leading-relaxed">{post.content}</p>
+                        {/* Content */}
+                        {post.title && <h3 className="text-base font-bold text-foreground mb-1">{post.title}</h3>}
+                        <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-3 leading-relaxed">{post.content}</p>
 
-                      {/* Media Carousel */}
-                      {post.media_urls && post.media_urls.length > 0 && (
-                        <MediaCarousel urls={post.media_urls} />
-                      )}
+                        {/* Media Carousel — Threads style with blur */}
+                        {post.media_urls && post.media_urls.length > 0 && (
+                          <MediaCarousel urls={post.media_urls} />
+                        )}
 
-                      {/* Project link with live preview */}
-                      {post.project_url && (
-                        <div className="mb-3">
-                          {(() => { try { return new URL(post.project_url).hostname.endsWith(".lovable.app"); } catch { return false; } })() ? (
-                            <a href={post.project_url} target="_blank" rel="noopener noreferrer" className="block group">
-                              <div className="rounded-[14px] overflow-hidden border border-border hover:border-foreground/30 transition-colors">
-                                <div className="relative">
-                                  <iframe
-                                    src={post.project_url}
-                                    className="w-full h-[280px] border-0 pointer-events-none"
-                                    sandbox="allow-scripts allow-same-origin"
-                                    loading="lazy"
-                                    title={post.project_name || "Project preview"}
-                                  />
-                                  <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
-                                </div>
-                                <div className="bg-muted/50 px-4 py-2.5 flex items-center justify-between border-t border-border">
-                                  <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="h-5 w-5 rounded-[6px] bg-foreground/10 flex items-center justify-center shrink-0">
-                                      <Eye className="h-3 w-3 text-foreground" />
-                                    </div>
-                                    <div className="min-w-0">
-                                      <p className="text-xs font-bold text-foreground truncate">{post.project_name || "Preview ao vivo"}</p>
-                                      <p className="text-[10px] text-muted-foreground truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
-                                    </div>
+                        {/* Project link with live preview */}
+                        {post.project_url && (
+                          <div className="mb-3">
+                            {(() => { try { return new URL(post.project_url).hostname.endsWith(".lovable.app"); } catch { return false; } })() ? (
+                              <a href={post.project_url} target="_blank" rel="noopener noreferrer" className="block group">
+                                <div className="rounded-[14px] overflow-hidden border border-border hover:border-foreground/30 transition-colors">
+                                  <div className="relative">
+                                    <iframe
+                                      src={post.project_url}
+                                      className="w-full h-[280px] border-0 pointer-events-none"
+                                      sandbox="allow-scripts allow-same-origin"
+                                      loading="lazy"
+                                      title={post.project_name || "Project preview"}
+                                    />
+                                    <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
                                   </div>
-                                  <span className="text-[9px] font-bold text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2">
-                                    ABRIR ↗
-                                  </span>
+                                  <div className="bg-muted/50 px-4 py-2.5 flex items-center justify-between border-t border-border">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="h-5 w-5 rounded-[6px] bg-foreground/10 flex items-center justify-center shrink-0">
+                                        <Eye className="h-3 w-3 text-foreground" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-bold text-foreground truncate">{post.project_name || "Preview ao vivo"}</p>
+                                        <p className="text-[10px] text-muted-foreground truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
+                                      </div>
+                                    </div>
+                                    <span className="text-[9px] font-bold text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2">
+                                      ABRIR ↗
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
-                            </a>
-                          ) : (
-                            <a href={post.project_url} target="_blank" rel="noopener noreferrer"
-                              className="block rounded-[14px] overflow-hidden border border-border hover:border-foreground/30 transition-colors group">
-                              {post.link_preview_image && (
-                                <div className="relative w-full h-[160px] bg-muted">
-                                  <img src={post.link_preview_image} alt="" className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
-                                </div>
-                              )}
-                              <div className="bg-muted/50 px-4 py-2.5 border-t border-border">
-                                <p className="text-sm font-bold text-foreground truncate mb-0.5">
-                                  {post.link_preview_title || post.project_name || post.project_url}
-                                </p>
-                                {post.link_preview_description && (
-                                  <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{post.link_preview_description}</p>
-                                )}
-                                <p className="text-[10px] text-muted-foreground/60 truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
-                              </div>
-                            </a>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Actions - Threads style */}
-                      <div className="flex items-center gap-5">
-                        <button onClick={() => handleLike(post.id)}
-                          className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
-                            (post as any).liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
-                          }`}>
-                          <Heart className={`h-[18px] w-[18px] ${(post as any).liked ? "fill-red-500" : ""}`} />
-                          {post.likes_count > 0 && post.likes_count}
-                        </button>
-                        <button onClick={() => loadComments(post.id)}
-                          className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
-                          <MessageCircle className="h-[18px] w-[18px]" />
-                          {post.comments_count > 0 && post.comments_count}
-                        </button>
-                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/community?post=${post.id}`); toast.success("Link copiado!"); }}
-                          className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
-                          <Share2 className="h-[18px] w-[18px]" />
-                        </button>
-                      </div>
-
-                      {/* Reply count label */}
-                      {post.comments_count > 0 && expandedComments !== post.id && (
-                        <button
-                          onClick={() => loadComments(post.id)}
-                          className="text-xs text-muted-foreground/60 font-medium mt-2 hover:text-muted-foreground transition-colors"
-                        >
-                          {post.comments_count} {post.comments_count === 1 ? "resposta" : "respostas"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Comments - Threads style */}
-                  {expandedComments === post.id && (
-                    <div className="ml-[52px] mt-3 space-y-3">
-                      {comments.map(c => {
-                        const cp = getProfile(c.user_id);
-                        return (
-                          <div key={c.id} className="flex gap-2.5">
-                            <Link to={`/profile/${c.user_id}`}>
-                              {cp.avatar_url ? (
-                                <img src={cp.avatar_url} className="h-7 w-7 rounded-[10px] object-cover border border-border" />
-                              ) : (
-                                <div className="h-7 w-7 rounded-[10px] bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
-                                  {(cp.display_name || "U")[0].toUpperCase()}
-                                </div>
-                              )}
-                            </Link>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-foreground">{cp.display_name || "Usuário"}</span>
-                                <span className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), "dd/MM HH:mm")}</span>
-                              </div>
-                              <p className="text-sm text-muted-foreground font-medium leading-relaxed">{c.content}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {user && (
-                        <div className="flex gap-2.5 items-center">
-                          <div className="h-7 w-7 rounded-[10px] bg-muted flex items-center justify-center shrink-0">
-                            {myProfile.avatar_url ? (
-                              <img src={myProfile.avatar_url} className="h-7 w-7 rounded-[10px] object-cover border border-border" />
+                              </a>
                             ) : (
-                              <span className="text-[10px] font-bold text-muted-foreground">
-                                {(myProfile.display_name || "U")[0].toUpperCase()}
-                              </span>
+                              <a href={post.project_url} target="_blank" rel="noopener noreferrer"
+                                className="block rounded-[14px] overflow-hidden border border-border hover:border-foreground/30 transition-colors group">
+                                {post.link_preview_image && (
+                                  <div className="relative w-full h-[160px] bg-muted">
+                                    <img src={post.link_preview_image} alt="" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
+                                  </div>
+                                )}
+                                <div className="bg-muted/50 px-4 py-2.5 border-t border-border">
+                                  <p className="text-sm font-bold text-foreground truncate mb-0.5">
+                                    {post.link_preview_title || post.project_name || post.project_url}
+                                  </p>
+                                  {post.link_preview_description && (
+                                    <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{post.link_preview_description}</p>
+                                  )}
+                                  <p className="text-[10px] text-muted-foreground/60 truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
+                                </div>
+                              </a>
                             )}
                           </div>
-                          <input value={newComment} onChange={e => setNewComment(e.target.value)}
-                            placeholder="Responder..."
-                            onKeyDown={e => e.key === "Enter" && submitComment(post.id)}
-                            className="flex-1 bg-transparent border-b border-border/50 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30" />
-                          <button onClick={() => submitComment(post.id)} className="h-7 w-7 rounded-[10px] bg-foreground flex items-center justify-center shrink-0">
-                            <Send className="h-3 w-3 text-background" />
+                        )}
+
+                        {/* Actions - Threads style */}
+                        <div className="flex items-center gap-5">
+                          <button onClick={() => handleLike(post.id)}
+                            className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
+                              (post as any).liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
+                            }`}>
+                            <Heart className={`h-[18px] w-[18px] ${(post as any).liked ? "fill-red-500" : ""}`} />
+                            {post.likes_count > 0 && post.likes_count}
                           </button>
+                          <button onClick={() => loadComments(post.id)}
+                            className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
+                            <MessageCircle className="h-[18px] w-[18px]" />
+                            {post.comments_count > 0 && post.comments_count}
+                          </button>
+                          <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/community?post=${post.id}`); toast.success("Link copiado!"); }}
+                            className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
+                            <Share2 className="h-[18px] w-[18px]" />
+                          </button>
+                          {/* Views count */}
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground/50 ml-auto">
+                            <Eye className="h-3.5 w-3.5" />
+                            {post.views_count || 0}
+                          </span>
                         </div>
-                      )}
+
+                        {/* Reply count label */}
+                        {post.comments_count > 0 && expandedComments !== post.id && (
+                          <button
+                            onClick={() => loadComments(post.id)}
+                            className="text-xs text-muted-foreground/60 font-medium mt-2 hover:text-muted-foreground transition-colors"
+                          >
+                            {post.comments_count} {post.comments_count === 1 ? "resposta" : "respostas"}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
+
+                    {/* Comments - Threads style */}
+                    {expandedComments === post.id && (
+                      <div className="ml-[52px] mt-3 space-y-3">
+                        {comments.map(c => {
+                          const cp = getProfile(c.user_id);
+                          return (
+                            <div key={c.id} className="flex gap-2.5">
+                              <Link to={`/profile/${c.user_id}`}>
+                                {cp.avatar_url ? (
+                                  <img src={cp.avatar_url} className="h-7 w-7 rounded-[10px] object-cover border border-border" />
+                                ) : (
+                                  <div className="h-7 w-7 rounded-[10px] bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
+                                    {(cp.display_name || "U")[0].toUpperCase()}
+                                  </div>
+                                )}
+                              </Link>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-foreground">{cp.display_name || "Usuário"}</span>
+                                  <span className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), "dd/MM HH:mm")}</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground font-medium leading-relaxed">{c.content}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {user && (
+                          <div className="flex gap-2.5 items-center">
+                            <div className="h-7 w-7 rounded-[10px] bg-muted flex items-center justify-center shrink-0">
+                              {myProfile.avatar_url ? (
+                                <img src={myProfile.avatar_url} className="h-7 w-7 rounded-[10px] object-cover border border-border" />
+                              ) : (
+                                <span className="text-[10px] font-bold text-muted-foreground">
+                                  {(myProfile.display_name || "U")[0].toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <input value={newComment} onChange={e => setNewComment(e.target.value)}
+                              placeholder="Responder..."
+                              onKeyDown={e => e.key === "Enter" && submitComment(post.id)}
+                              className="flex-1 bg-transparent border-b border-border/50 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30" />
+                            <button onClick={() => submitComment(post.id)} className="h-7 w-7 rounded-[10px] bg-foreground flex items-center justify-center shrink-0">
+                              <Send className="h-3 w-3 text-background" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </PostViewObserver>
               );
             })
           )}

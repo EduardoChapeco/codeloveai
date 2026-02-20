@@ -360,6 +360,7 @@ export type Database = {
           title: string | null
           updated_at: string
           user_id: string
+          views_count: number
         }
         Insert: {
           comments_count?: number
@@ -381,6 +382,7 @@ export type Database = {
           title?: string | null
           updated_at?: string
           user_id: string
+          views_count?: number
         }
         Update: {
           comments_count?: number
@@ -402,6 +404,7 @@ export type Database = {
           title?: string | null
           updated_at?: string
           user_id?: string
+          views_count?: number
         }
         Relationships: []
       }
@@ -603,6 +606,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "post_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "community_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_views: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_views_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "community_posts"
