@@ -21,10 +21,10 @@ const plans = [
     badge: "POPULAR",
   },
   {
-    id: "12_months", name: "12 MESES", price: "R$499,00", originalPrice: "R$1.497,00", period: "ilimitado*",
-    description: "Acesso completo enquanto a extensão estiver ativa.",
+    id: "12_months", name: "12 MESES", price: "R$499,00", originalPrice: "R$1.497,00", period: "por tempo indeterminado*",
+    description: "Plano por tempo indeterminado até 12 meses. Acesso completo enquanto a extensão estiver ativa.",
     highlight: true,
-    features: ["Acesso enquanto ativo", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
+    features: ["Acesso por tempo indeterminado (até 12 meses)", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
     badge: "MELHOR CUSTO",
   },
 ];
@@ -44,7 +44,7 @@ const faqs = [
   { q: "Posso ter minha conta bloqueada?", a: "Sim, existe o risco de bloqueio, suspensão ou exclusão da sua conta Lovable. A utilização da extensão é de sua total responsabilidade." },
   { q: "Como recebo o token?", a: "Após a confirmação do pagamento, o admin ativará seu token e ele estará disponível na sua área de membro." },
   { q: "Posso compartilhar meu token com outras pessoas?", a: "Não. Cada token possui validação de dispositivo, sendo vinculado ao navegador e máquina onde foi ativado pela primeira vez. O compartilhamento não é possível — tentativas de uso em outro dispositivo resultarão em bloqueio automático do token." },
-  { q: "O que significa 'ilimitado' no plano de 12 meses?", a: "Significa que o acesso é válido enquanto a extensão estiver ativa e funcional. Caso a extensão seja descontinuada, limitada ou pare de funcionar, não haverá reembolso proporcional ou integral." },
+  { q: "O que significa 'por tempo indeterminado' no plano de 12 meses?", a: "O plano de 12 meses oferece acesso por tempo indeterminado, com duração máxima de até 12 meses. O acesso permanece válido enquanto a extensão estiver ativa e funcional. Caso a extensão seja descontinuada, limitada ou pare de funcionar, não haverá reembolso proporcional ou integral." },
 ];
 
 // Countdown: unlimited plan disappears Feb 25, 2026 23:59:59 BRT
