@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
-import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, Gift } from "lucide-react";
+import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, Gift, ChevronRight, Zap, Monitor, Key, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -350,55 +350,90 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Token */}
+        {/* Quick Access: Token + Download unified */}
         <div className="ep-card">
-          <p className="ep-subtitle mb-4">TOKEN DE ATIVAÇÃO</p>
-          {tokens.filter((t) => t.is_active).length > 0 ? (
-            tokens.filter((t) => t.is_active).map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-3">
-                <div className="flex-1 min-w-0 bg-muted px-4 py-3 rounded-[8px]">
-                  <code className="font-mono text-sm text-muted-foreground">
-                    {t.token.substring(0, 12)}••••••••{t.token.substring(t.token.length - 6)}
+          <p className="ep-subtitle mb-4">ACESSO RÁPIDO</p>
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Token card */}
+            <div className="flex-1 bg-muted rounded-[16px] p-4 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-[14px] bg-foreground flex items-center justify-center shrink-0">
+                <Key className="h-5 w-5 text-background" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-muted-foreground tracking-widest mb-1">TOKEN</p>
+                {tokens.filter(t => t.is_active).length > 0 ? (
+                  <code className="font-mono text-xs text-foreground">
+                    {tokens.find(t => t.is_active)!.token.substring(0, 10)}••••{tokens.find(t => t.is_active)!.token.substring(tokens.find(t => t.is_active)!.token.length - 4)}
                   </code>
-                </div>
-                <button onClick={() => copyToken(t.token)} className="ep-btn-secondary h-10 px-4 text-[9px] flex items-center gap-1.5 shrink-0">
+                ) : (
+                  <p className="text-xs text-muted-foreground">Nenhum ativo</p>
+                )}
+              </div>
+              {tokens.filter(t => t.is_active).length > 0 && (
+                <button
+                  onClick={() => copyToken(tokens.find(t => t.is_active)!.token)}
+                  className="ep-btn-secondary h-10 px-4 text-[9px] flex items-center gap-1.5 shrink-0"
+                >
                   <Copy className="h-3 w-3" /> COPIAR
                 </button>
+              )}
+            </div>
+
+            {/* Download card */}
+            <div className="flex-1 bg-muted rounded-[16px] p-4 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-[14px] bg-foreground flex items-center justify-center shrink-0">
+                <Download className="h-5 w-5 text-background" />
               </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground font-medium">
-              Nenhum token ativo. Após o pagamento, seu token será gerado automaticamente em instantes.
-            </p>
-          )}
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-muted-foreground tracking-widest mb-1">EXTENSÃO {latestExt ? `V${latestExt.version}` : ""}</p>
+                <p className="text-xs text-muted-foreground">Instale no navegador</p>
+              </div>
+              <button
+                className="ep-btn-primary h-10 px-4 text-[9px] flex items-center gap-1.5 shrink-0"
+                disabled={!activeSubscription || !latestExt}
+                onClick={async () => {
+                  if (!latestExt) return;
+                  const { data } = await supabase.storage.from("extensions").createSignedUrl(latestExt.file_url, 300);
+                  if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                }}
+              >
+                <Download className="h-3 w-3" /> BAIXAR
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Download */}
-        <div className="ep-card">
-          <p className="ep-subtitle mb-4">EXTENSÃO {latestExt ? `v${latestExt.version}` : ""}</p>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-muted-foreground font-medium">
-              Baixe a extensão para instalar no navegador.
+        {/* SSO Status - only show when token is active */}
+        {tokens.some(t => t.is_active) && (
+          <div className="ep-card-sm bg-muted/30 flex items-center gap-3 py-3 px-4">
+            <Zap className="h-4 w-4 text-foreground shrink-0" />
+            <p className="text-[10px] text-muted-foreground font-medium flex-1">
+              <strong className="text-foreground">Login automático ativo</strong> — Seu token foi sincronizado com a extensão. Ao abrir o Lovable, a extensão será ativada automaticamente.
             </p>
-            <button
-              className="ep-btn-secondary h-10 px-6 text-[9px]"
-              disabled={!activeSubscription || !latestExt}
-              onClick={async () => {
-                if (!latestExt) return;
-                const { data } = await supabase.storage.from("extensions").createSignedUrl(latestExt.file_url, 300);
-                if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-              }}
-            >
-              <Download className="h-4 w-4" />
-              DOWNLOAD
-            </button>
+            <span className="ep-badge ep-badge-live shrink-0">SYNC</span>
           </div>
-          {latestExt?.instructions && (
-            <div className="bg-muted rounded-[12px] p-4">
-              <p className="ep-subtitle text-[9px] mb-2">COMO INSTALAR</p>
-              <pre className="text-xs text-muted-foreground font-medium whitespace-pre-wrap">{latestExt.instructions}</pre>
-            </div>
-          )}
+        )}
+
+        {/* Step-by-step guide - horizontal scroll cards */}
+        <div className="ep-card">
+          <p className="ep-subtitle mb-4">COMO USAR</p>
+          <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+            {[
+              { step: "01", title: "BAIXAR", desc: "Faça download da extensão acima", icon: Download },
+              { step: "02", title: "INSTALAR", desc: "Ative no Chrome em Gerenciar Extensões", icon: Monitor },
+              { step: "03", title: "TOKEN", desc: "Copie seu token e cole na extensão", icon: Key },
+              { step: "04", title: "PRONTO", desc: "Abra lovable.dev e a extensão ativa automaticamente", icon: Zap },
+            ].map((item) => (
+              <div key={item.step} className="shrink-0 w-[200px] bg-muted rounded-[16px] p-5 relative">
+                <span className="text-[40px] font-black text-foreground/5 absolute top-3 right-4 leading-none">{item.step}</span>
+                <div className="h-10 w-10 rounded-[12px] bg-foreground flex items-center justify-center mb-3">
+                  <item.icon className="h-4 w-4 text-background" />
+                </div>
+                <p className="text-[10px] font-bold text-foreground tracking-widest mb-1">{item.title}</p>
+                <p className="text-[10px] text-muted-foreground font-medium">{item.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* History */}
@@ -450,12 +485,23 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Chat FAB */}
+      {/* Chat FAB - CODELOVE badge that expands */}
       <button
         onClick={() => setChatOpen(!chatOpen)}
-        className="fixed bottom-6 right-6 z-30 ep-btn-primary h-14 w-14 rounded-full flex items-center justify-center shadow-lg"
+        className={`fixed bottom-6 right-6 z-30 flex items-center gap-2 shadow-lg transition-all duration-300 ${
+          chatOpen
+            ? "ep-btn-secondary h-12 w-12 rounded-[16px]"
+            : "ep-btn-primary h-12 px-5 rounded-[16px]"
+        }`}
       >
-        {chatOpen ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
+        {chatOpen ? (
+          <X className="h-5 w-5" />
+        ) : (
+          <>
+            <MessageSquare className="h-4 w-4" />
+            <span className="text-[9px] font-bold tracking-widest">CODELOVE</span>
+          </>
+        )}
       </button>
 
       {/* Chat panel */}

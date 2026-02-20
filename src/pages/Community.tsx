@@ -9,7 +9,7 @@ import {
   Heart, MessageCircle, Share2, Hash, TrendingUp,
   Image as ImageIcon, Link as LinkIcon, Folder, HelpCircle,
   Lightbulb, Eye, LogOut, Users, Loader2, Send, X,
-  ChevronLeft, ChevronRight, Play
+  ChevronLeft, ChevronRight, Play, Gift
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 
@@ -228,7 +228,19 @@ function PostComposer({
   }, [content]);
 
   return (
-    <div className="ep-card border-border/50">
+    <div className="space-y-2">
+      {/* Reward + Spam Warning Badge */}
+      <div className="ep-card-sm bg-muted/30 flex items-start gap-3 py-3 px-4">
+        <Gift className="h-4 w-4 text-foreground shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <p className="text-[10px] font-bold text-foreground tracking-widest">+1H DE TOKEN POR POST</p>
+          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+            Cada publicação adiciona 1 hora ao seu plano (máx. 5/dia). Posts sem conteúdo real (spam, em branco, duplicados) podem resultar em <strong className="text-foreground">suspensão ou banimento</strong>. Identificamos seu dispositivo.
+          </p>
+        </div>
+      </div>
+
+      <div className="ep-card border-border/50">
       <div className="flex gap-3">
         {/* Avatar with thread line */}
         <div className="flex flex-col items-center">
@@ -363,6 +375,7 @@ function PostComposer({
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }
@@ -652,7 +665,19 @@ export default function Community() {
         await supabase.from("user_profiles").update({ posts_count: (currentProfile.posts_count || 0) + 1 }).eq("user_id", user.id);
       }
 
-      toast.success("Publicado!");
+      // Reward: +1hr token for posting
+      try {
+        const { data: rewardData } = await supabase.functions.invoke("reward-post", {
+          body: { post_id: postData!.id },
+        });
+        if (rewardData?.rewarded) {
+          toast.success("Publicado! 🎉 +1h de token adicionada ao seu plano!");
+        } else {
+          toast.success("Publicado!");
+        }
+      } catch {
+        toast.success("Publicado!");
+      }
       await fetchPosts();
     } catch (err: any) {
       toast.error("Erro ao publicar: " + (err.message || ""));
