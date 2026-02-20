@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const plans = [
   { id: "1_day", name: "1 DIA", price: "R$9,99", period: "por dia", description: "Teste rápido" },
   { id: "7_days", name: "7 DIAS", price: "R$49,90", period: "por semana", description: "Ideal para projetos curtos" },
   { id: "1_month", name: "1 MÊS", price: "R$149,90", period: "por mês", description: "Mais popular", popular: true },
-  { id: "12_months", name: "12 MESES", price: "R$499,00", period: "por ano", description: "Melhor custo-benefício" },
+  { id: "12_months", name: "12 MESES", price: "R$499,00", period: "ilimitado*", description: "Acesso enquanto ativo", highlight: true },
 ];
 
 const benefits = [
@@ -23,15 +25,18 @@ const faqs = [
   { q: "E se a extensão parar de funcionar?", a: "Não há reembolso caso a extensão pare de funcionar ou seja limitada. O serviço é considerado entregue após o envio e ativação do token." },
   { q: "Posso ter minha conta bloqueada?", a: "Sim, existe o risco de bloqueio, suspensão ou exclusão da sua conta Lovable. A utilização da extensão é de sua total responsabilidade." },
   { q: "Como recebo o token?", a: "Após a confirmação do pagamento, o admin ativará seu token e ele estará disponível na sua área de membro." },
+  { q: "O que significa 'ilimitado' no plano de 12 meses?", a: "Significa que o acesso é válido enquanto a extensão estiver ativa e funcional. Caso a extensão seja descontinuada, limitada ou pare de funcionar, não haverá reembolso proporcional ou integral." },
 ];
 
 const terms = [
   "Estamos vendendo acesso à extensão CodeLove AI, e não acesso à plataforma Lovable.",
   "A extensão NÃO é oficial e não possui nenhum vínculo com a Lovable.",
-  "Não há reembolso caso a extensão pare de funcionar ou seja limitada.",
+  "Não há reembolso caso a extensão pare de funcionar ou seja limitada, independentemente do tempo restante do plano.",
+  "O cancelamento ou paralisação temporária do serviço não gera direito a indenização de qualquer natureza.",
   "O serviço é considerado entregue após o envio e ativação do token.",
   "O cliente assume total responsabilidade pela utilização de uma extensão não oficial, podendo ter projetos, contas bloqueados, suspensos ou excluídos a qualquer momento.",
   "Não nos responsabilizamos por quaisquer consequências do uso da extensão.",
+  "O plano '12 Meses — Ilimitado' refere-se ao acesso enquanto a extensão estiver ativa. A descontinuação do serviço não gera reembolso.",
   "Nosso método é novo e utiliza a própria plataforma para se comunicar.",
   "Não utilizamos créditos da conta Lovable — todos os projetos, mensagens e planos criados/enviados não descontam créditos.",
 ];
@@ -39,6 +44,45 @@ const terms = [
 export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [agreedTerms, setAgreedTerms] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  const handleSubscribe = async (planId: string) => {
+    if (!agreedTerms) {
+      toast.error("Você precisa concordar com os termos de uso antes de assinar.");
+      const termsSection = document.getElementById("terms");
+      termsSection?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+
+    setLoadingPlan(planId);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast.error("Faça login para assinar um plano.");
+      navigate("/login");
+      setLoadingPlan(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { plan: planId },
+      });
+
+      if (error) throw error;
+      if (data?.init_point) {
+        window.location.href = data.init_point;
+      } else {
+        toast.error("Erro ao criar checkout. Tente novamente.");
+      }
+    } catch (err: any) {
+      console.error("Checkout error:", err);
+      toast.error("Erro ao processar pagamento. Tente novamente.");
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -97,9 +141,18 @@ export default function Index() {
                 {plan.popular && (
                   <span className="ep-badge ep-badge-live mb-6 inline-block">POPULAR</span>
                 )}
+                {plan.highlight && (
+                  <span className="ep-badge ep-badge-live mb-6 inline-block">MELHOR CUSTO</span>
+                )}
                 <p className="ep-subtitle mb-2">{plan.name}</p>
                 <p className="ep-value text-4xl mb-1">{plan.price}</p>
-                <p className="text-xs text-muted-foreground font-medium mb-6">{plan.period}</p>
+                <p className="text-xs text-muted-foreground font-medium mb-2">{plan.period}</p>
+                {plan.highlight && (
+                  <p className="text-[10px] text-muted-foreground font-medium mb-6 italic">
+                    *Acesso válido enquanto a extensão estiver ativa
+                  </p>
+                )}
+                {!plan.highlight && <div className="mb-6" />}
                 <p className="text-sm text-muted-foreground font-medium mb-8">{plan.description}</p>
                 <ul className="space-y-3 mb-8">
                   {["Envios ilimitados", "Sem descontar créditos", "Suporte via chat", "Ativação imediata"].map((f) => (
@@ -110,14 +163,29 @@ export default function Index() {
                   ))}
                 </ul>
               </div>
-              <Link
-                to="/register"
-                className={`w-full ${plan.popular ? "ep-btn-primary" : "ep-btn-secondary"}`}
+              <button
+                onClick={() => handleSubscribe(plan.id)}
+                disabled={loadingPlan === plan.id}
+                className={`w-full ${plan.popular || plan.highlight ? "ep-btn-primary" : "ep-btn-secondary"}`}
               >
-                ASSINAR
-              </Link>
+                {loadingPlan === plan.id ? "PROCESSANDO..." : "ASSINAR"}
+              </button>
             </div>
           ))}
+        </div>
+
+        {/* Checkout disclaimer */}
+        <div className="mt-8 max-w-2xl mx-auto">
+          <div className="ep-card-sm flex items-start gap-4">
+            <AlertTriangle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">
+                <strong className="text-foreground">Importante:</strong> Ao contratar qualquer plano, você concorda que o serviço é considerado 
+                entregue após a ativação do token. O cancelamento ou paralisação temporária da extensão não gera direito a 
+                reembolso ou indenização. A extensão é um produto não oficial que pode ser descontinuado a qualquer momento.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -149,7 +217,7 @@ export default function Index() {
       </section>
 
       {/* Terms */}
-      <section className="px-8 pb-32 max-w-3xl mx-auto">
+      <section id="terms" className="px-8 pb-32 max-w-3xl mx-auto">
         <p className="ep-subtitle text-center mb-4">LEIA COM ATENÇÃO</p>
         <h2 className="ep-section-title text-center mb-16">TERMOS DE USO</h2>
         <div className="ep-card space-y-4">
@@ -168,8 +236,8 @@ export default function Index() {
                 className="mt-1 h-4 w-4 rounded-[4px] border border-border accent-foreground"
               />
               <span className="text-sm font-bold text-foreground">
-                Li e concordo com todos os termos acima. Entendo que a extensão não é oficial e assumo 
-                total responsabilidade pela sua utilização.
+                Li e concordo com todos os termos acima. Entendo que a extensão não é oficial, que o cancelamento 
+                ou paralisação não gera indenização, e assumo total responsabilidade pela sua utilização.
               </span>
             </label>
           </div>
