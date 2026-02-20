@@ -71,6 +71,10 @@ Deno.serve(async (req) => {
     const allowedOrigins = ["https://codeloveai.lovable.app", "https://id-preview--804f123e-068a-44af-90b4-2843ed8e7d2a.lovable.app"];
     const origin = rawOrigin && allowedOrigins.some(o => rawOrigin.startsWith(o)) ? rawOrigin : "https://codeloveai.lovable.app";
 
+    // Webhook URL for Mercado Pago notifications
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const webhookUrl = `${supabaseUrl}/functions/v1/mercadopago-webhook`;
+
     const preference = {
       items: [
         {
@@ -87,6 +91,7 @@ Deno.serve(async (req) => {
         pending: `${origin}/dashboard?payment=pending`,
       },
       auto_return: "approved",
+      notification_url: webhookUrl,
       statement_descriptor: "CODELOVE AI",
     };
 
