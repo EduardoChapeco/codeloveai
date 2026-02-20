@@ -764,13 +764,19 @@ export default function Community() {
   }, [user, authLoading, navigate]);
 
   const fetchPosts = useCallback(async () => {
-    if (!user) return; // RLS requires auth — skip if not logged in yet
+    if (!user) {
+      console.log("[Community] fetchPosts skipped: no user");
+      setLoading(false);
+      return;
+    }
+    console.log("[Community] fetchPosts starting, filterType:", filterType);
     setLoading(true);
     try {
       let query = supabase.from("community_posts").select("*").eq("is_deleted", false).eq("is_archived", false)
         .order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).limit(50);
       if (filterType !== "all") query = query.eq("post_type", filterType);
       const { data, error } = await query;
+      console.log("[Community] posts query result:", { count: data?.length, error });
       if (error) {
         console.error("Error fetching posts:", error);
         setPosts([]);
@@ -786,13 +792,11 @@ export default function Community() {
         setProfiles(prev => ({ ...prev, ...profileMap }));
       }
 
-      if (user) {
+      if (user && postsList.length > 0) {
         const postIds = postsList.map(p => p.id);
-        if (postIds.length > 0) {
-          const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", user.id).in("post_id", postIds);
-          const likedSet = new Set((likes || []).map(l => l.post_id));
-          postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
-        }
+        const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", user.id).in("post_id", postIds);
+        const likedSet = new Set((likes || []).map(l => l.post_id));
+        postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
       }
       setPosts(postsList);
     } catch (err) { console.error("Error fetching posts:", err); }
