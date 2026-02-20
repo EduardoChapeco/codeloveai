@@ -2,9 +2,10 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
-import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2 } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2, UserPlus, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
 interface Member {
   user_id: string;
@@ -97,6 +98,18 @@ export default function Admin() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [adminMessage, setAdminMessage] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Create user sheet state
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserPlan, setNewUserPlan] = useState("");
+  const [newUserRole, setNewUserRole] = useState("member");
+  const [newUserAutoToken, setNewUserAutoToken] = useState(true);
+  const [newUserLoading, setNewUserLoading] = useState(false);
+  const [newUserResult, setNewUserResult] = useState<any>(null);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !adminLoading) {
@@ -486,6 +499,45 @@ export default function Admin() {
     setUnbindLoading(false);
   };
 
+  // Create user via admin
+  const createUserAdmin = async () => {
+    if (!newUserEmail || !newUserPassword) return toast.error("Email e senha são obrigatórios.");
+    if (newUserPassword.length < 6) return toast.error("Senha deve ter pelo menos 6 caracteres.");
+    setNewUserLoading(true);
+    setNewUserResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-create-user", {
+        body: {
+          email: newUserEmail,
+          name: newUserName || newUserEmail.split("@")[0],
+          password: newUserPassword,
+          plan: newUserPlan || undefined,
+          role: newUserRole,
+          generate_token: newUserAutoToken,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setNewUserResult(data);
+      toast.success("Usuário criado com sucesso!");
+      fetchMembers();
+    } catch (err: any) {
+      toast.error("Erro: " + (err.message || "Falha ao criar usuário"));
+    }
+    setNewUserLoading(false);
+  };
+
+  const resetCreateUserForm = () => {
+    setNewUserEmail("");
+    setNewUserName("");
+    setNewUserPassword("");
+    setNewUserPlan("");
+    setNewUserRole("member");
+    setNewUserAutoToken(true);
+    setNewUserResult(null);
+    setShowNewPassword(false);
+  };
+
   if (authLoading || adminLoading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
       <p className="ep-subtitle">CARREGANDO...</p>
@@ -545,6 +597,10 @@ export default function Admin() {
         {/* Members Tab */}
         {tab === "members" && (
           <div className="space-y-4">
+            <button onClick={() => { resetCreateUserForm(); setCreateUserOpen(true); }}
+              className="ep-btn-secondary h-10 px-6 text-[9px] flex items-center gap-2">
+              <UserPlus className="h-3 w-3" /> CRIAR USUÁRIO
+            </button>
             {members.map((m) => (
               <div key={m.user_id} className="ep-card">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -1123,6 +1179,96 @@ export default function Admin() {
           </div>
         )}
       </div>
+
+      {/* Create User Sheet */}
+      <Sheet open={createUserOpen} onOpenChange={setCreateUserOpen}>
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-lg font-bold">CRIAR USUÁRIO</SheetTitle>
+            <SheetDescription>Crie uma conta com plano e token opcionais.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-5 mt-6">
+            <div>
+              <label className="ep-subtitle text-[9px] mb-1 block">EMAIL *</label>
+              <input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)}
+                placeholder="usuario@email.com" className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border w-full" />
+            </div>
+            <div>
+              <label className="ep-subtitle text-[9px] mb-1 block">NOME</label>
+              <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)}
+                placeholder="Nome do usuário" className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border w-full" />
+            </div>
+            <div>
+              <label className="ep-subtitle text-[9px] mb-1 block">SENHA *</label>
+              <div className="relative">
+                <input type={showNewPassword ? "text" : "password"} value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)} placeholder="Mínimo 6 caracteres"
+                  className="ep-input h-10 rounded-[14px] text-xs px-3 pr-10 border border-border w-full" />
+                <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showNewPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="ep-subtitle text-[9px] mb-1 block">PLANO</label>
+              <select value={newUserPlan} onChange={(e) => setNewUserPlan(e.target.value)}
+                className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border w-full">
+                <option value="">Sem plano</option>
+                {planOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="ep-subtitle text-[9px] mb-1 block">PAPEL</label>
+              <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}
+                className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border w-full">
+                <option value="member">Membro</option>
+                <option value="admin">Admin</option>
+                <option value="affiliate">Afiliado</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setNewUserAutoToken(!newUserAutoToken)}
+                className={`h-5 w-9 rounded-full transition-colors ${newUserAutoToken ? "bg-foreground" : "bg-muted border border-border"}`}>
+                <div className={`h-3.5 w-3.5 rounded-full bg-background transition-transform mx-0.5 ${newUserAutoToken ? "translate-x-4" : "translate-x-0"}`} />
+              </button>
+              <span className="text-xs text-muted-foreground">Gerar token automaticamente</span>
+            </div>
+
+            <button onClick={createUserAdmin} disabled={newUserLoading}
+              className="ep-btn-primary h-11 w-full rounded-[14px] text-[10px] flex items-center justify-center gap-2">
+              {newUserLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+              {newUserLoading ? "CRIANDO..." : "CRIAR USUÁRIO"}
+            </button>
+
+            {newUserResult && (
+              <div className="ep-card-sm border-green-500/30 space-y-2">
+                <p className="text-xs font-bold text-green-600">✓ Usuário criado!</p>
+                <p className="text-xs text-muted-foreground">Email: {newUserResult.email}</p>
+                <p className="text-xs text-muted-foreground">Papel: {newUserResult.role}</p>
+                {newUserResult.plan && <p className="text-xs text-muted-foreground">Plano: {planLabels[newUserResult.plan] || newUserResult.plan}</p>}
+                {newUserResult.token && (
+                  <div className="mt-2">
+                    <p className="text-xs font-bold text-foreground mb-1">Token:</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0 bg-muted px-3 py-2 rounded-[8px]">
+                        <code className="font-mono text-xs text-muted-foreground">
+                          {newUserResult.token.substring(0, 12)}••••••••{newUserResult.token.substring(newUserResult.token.length - 6)}
+                        </code>
+                      </div>
+                      <button onClick={() => { navigator.clipboard.writeText(newUserResult.token); toast.success("Token copiado!"); }}
+                        className="ep-btn-secondary h-8 px-3 text-[8px] flex items-center gap-1 shrink-0">
+                        <Copy className="h-3 w-3" /> COPIAR
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {newUserResult.token_error && <p className="text-xs text-destructive">{newUserResult.token_error}</p>}
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
