@@ -360,7 +360,9 @@ export default function Dashboard() {
                 <Key className="h-5 w-5 text-background" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold text-muted-foreground tracking-widest mb-1">TOKEN</p>
+                <p className="text-[10px] font-bold text-muted-foreground tracking-widest mb-1">
+                  TOKEN {tokens.filter(t => t.is_active).length > 1 ? `(${tokens.filter(t => t.is_active).length} ativos)` : ""}
+                </p>
                 {tokens.filter(t => t.is_active).length > 0 ? (
                   <code className="font-mono text-xs text-foreground">
                     {tokens.find(t => t.is_active)!.token.substring(0, 10)}••••{tokens.find(t => t.is_active)!.token.substring(tokens.find(t => t.is_active)!.token.length - 4)}
@@ -402,6 +404,34 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* All Tokens Log */}
+        {tokens.length > 1 && (
+          <div className="ep-card">
+            <p className="ep-subtitle mb-4">HISTÓRICO DE TOKENS ({tokens.length})</p>
+            <div className="space-y-2">
+              {tokens.map((t) => (
+                <div key={t.id} className="ep-card-sm flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Key className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <code className="font-mono text-xs text-foreground truncate">
+                      {t.token.substring(0, 10)}••••{t.token.substring(t.token.length - 4)}
+                    </code>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => copyToken(t.token)}
+                      className="ep-btn-icon h-7 w-7 rounded-[8px]">
+                      <Copy className="h-3 w-3" />
+                    </button>
+                    <span className={`ep-badge ${t.is_active ? "ep-badge-live" : "ep-badge-offline"}`}>
+                      {t.is_active ? "ATIVO" : "INATIVO"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* SSO Status - only show when token is active */}
         {tokens.some(t => t.is_active) && (
