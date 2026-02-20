@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
-import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -55,7 +55,7 @@ const planLabels: Record<string, string> = {
   "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
 };
 
-type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "free-links";
+type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "free-links" | "worker-tokens";
 
 export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -77,6 +77,19 @@ export default function Admin() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [freeLinks, setFreeLinks] = useState<string[]>([]);
   const [paymentNotes, setPaymentNotes] = useState<Record<string, string>>({});
+
+  // Worker token management
+  const [workerEmail, setWorkerEmail] = useState("");
+  const [workerName, setWorkerName] = useState("");
+  const [workerPlan, setWorkerPlan] = useState("days_30");
+  const [workerUserId, setWorkerUserId] = useState("");
+  const [workerLoading, setWorkerLoading] = useState(false);
+  const [workerResult, setWorkerResult] = useState<any>(null);
+  const [searchEmail, setSearchEmail] = useState("");
+  const [searchResult, setSearchResult] = useState<any>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [unbindToken, setUnbindToken] = useState("");
+  const [unbindLoading, setUnbindLoading] = useState(false);
 
   // Chat state
   const [chatUsers, setChatUsers] = useState<{ user_id: string; name: string; email: string; unread: number }[]>([]);
@@ -413,6 +426,66 @@ export default function Admin() {
     fetchExtensions();
   };
 
+  // Worker token actions
+  const generateTokenViaWorker = async () => {
+    if (!workerEmail) return toast.error("Email obrigatório.");
+    setWorkerLoading(true);
+    setWorkerResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-token-actions", {
+        body: {
+          action: "generate",
+          email: workerEmail,
+          name: workerName || workerEmail.split("@")[0],
+          plan: workerPlan,
+          user_id: workerUserId || undefined,
+        },
+      });
+      if (error) throw error;
+      setWorkerResult(data);
+      if (data?.token) {
+        toast.success("Token gerado com sucesso!");
+        if (workerUserId) fetchMembers();
+      }
+    } catch (err: any) {
+      toast.error("Erro: " + (err.message || "Falha ao gerar token"));
+    }
+    setWorkerLoading(false);
+  };
+
+  const searchTokensByEmail = async () => {
+    if (!searchEmail) return toast.error("Email obrigatório.");
+    setSearchLoading(true);
+    setSearchResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-token-actions", {
+        body: { action: "info", email: searchEmail },
+      });
+      if (error) throw error;
+      setSearchResult(data);
+    } catch (err: any) {
+      toast.error("Erro: " + (err.message || "Falha ao buscar"));
+    }
+    setSearchLoading(false);
+  };
+
+  const unbindDevice = async () => {
+    if (!unbindToken) return toast.error("Token obrigatório.");
+    if (!confirm("Desbloquear dispositivo deste token?")) return;
+    setUnbindLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-token-actions", {
+        body: { action: "unbind", token: unbindToken },
+      });
+      if (error) throw error;
+      toast.success("Dispositivo desbloqueado!");
+      setUnbindToken("");
+    } catch (err: any) {
+      toast.error("Erro: " + (err.message || "Falha ao desbloquear"));
+    }
+    setUnbindLoading(false);
+  };
+
   if (authLoading || adminLoading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
       <p className="ep-subtitle">CARREGANDO...</p>
@@ -446,7 +519,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <div className="flex gap-2 flex-wrap">
-          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["invoices", "FATURAS"], ["extension", "EXTENSÃO"], ["notifications", "NOTIFICAÇÕES"], ["messages", "MENSAGENS"], ["free-links", "LINKS GRÁTIS"]] as [Tab, string][]).map(([t, label]) => (
+          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["invoices", "FATURAS"], ["worker-tokens", "TOKENS API"], ["extension", "EXTENSÃO"], ["notifications", "NOTIFICAÇÕES"], ["messages", "MENSAGENS"], ["free-links", "LINKS GRÁTIS"]] as [Tab, string][]).map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
               className={`ep-btn-secondary h-10 px-6 text-[9px] relative ${tab === t ? "bg-foreground text-background" : ""}`}>
               {label}
@@ -864,6 +937,129 @@ export default function Admin() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Worker Tokens Tab */}
+        {tab === "worker-tokens" && (
+          <div className="space-y-6">
+            {/* Generate Token */}
+            <div className="ep-card">
+              <p className="ep-subtitle mb-4">GERAR TOKEN VIA API (WORKER)</p>
+              <p className="text-xs text-muted-foreground font-medium mb-4">
+                Gera um token de ativação diretamente no Worker externo. Opcionalmente vincula ao usuário no banco.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <input placeholder="Email do cliente *" value={workerEmail}
+                  onChange={(e) => setWorkerEmail(e.target.value)}
+                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
+                <input placeholder="Nome (opcional)" value={workerName}
+                  onChange={(e) => setWorkerName(e.target.value)}
+                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
+                <select value={workerPlan} onChange={(e) => setWorkerPlan(e.target.value)}
+                  className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border">
+                  <option value="test_5h">Teste 5h</option>
+                  <option value="test_1d">Teste 1 dia</option>
+                  <option value="days_15">15 Dias</option>
+                  <option value="days_30">30 Dias</option>
+                  <option value="days_90">90 Dias</option>
+                </select>
+                <select value={workerUserId} onChange={(e) => setWorkerUserId(e.target.value)}
+                  className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border">
+                  <option value="">Vincular ao usuário (opcional)</option>
+                  {members.map((m) => (
+                    <option key={m.user_id} value={m.user_id}>{m.name || m.email}</option>
+                  ))}
+                </select>
+              </div>
+              <button onClick={generateTokenViaWorker} disabled={workerLoading}
+                className="ep-btn-primary h-10 px-6 text-[9px]">
+                {workerLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Zap className="h-3 w-3 mr-1" />}
+                GERAR TOKEN
+              </button>
+              {workerResult?.token && (
+                <div className="mt-4 ep-card-sm border-green-500/30">
+                  <p className="text-xs font-bold text-green-600 mb-1">Token gerado!</p>
+                  <div className="flex items-center gap-2">
+                    <code className="font-mono text-xs bg-muted px-3 py-2 rounded-[8px] flex-1 truncate">{workerResult.token}</code>
+                    <button onClick={() => { navigator.clipboard.writeText(workerResult.token); toast.success("Copiado!"); }}
+                      className="ep-btn-icon h-8 w-8 rounded-[10px]">
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {workerResult.expires && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Expira: {new Date(workerResult.expires * 1000).toLocaleString("pt-BR")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Search Tokens by Email */}
+            <div className="ep-card">
+              <p className="ep-subtitle mb-4">BUSCAR TOKENS POR EMAIL</p>
+              <div className="flex items-center gap-3 mb-4">
+                <input placeholder="Email do cliente" value={searchEmail}
+                  onChange={(e) => setSearchEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && searchTokensByEmail()}
+                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
+                <button onClick={searchTokensByEmail} disabled={searchLoading}
+                  className="ep-btn-secondary h-10 px-4 text-[9px]">
+                  {searchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                </button>
+              </div>
+              {searchResult && (
+                <div className="space-y-2">
+                  {Array.isArray(searchResult) ? searchResult.map((item: any, i: number) => (
+                    <div key={i} className="ep-card-sm">
+                      <code className="font-mono text-xs text-muted-foreground break-all">{JSON.stringify(item, null, 2)}</code>
+                    </div>
+                  )) : (
+                    <div className="ep-card-sm">
+                      <pre className="font-mono text-xs text-muted-foreground whitespace-pre-wrap">{JSON.stringify(searchResult, null, 2)}</pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Unbind Device */}
+            <div className="ep-card">
+              <p className="ep-subtitle mb-4">DESBLOQUEAR DISPOSITIVO</p>
+              <p className="text-xs text-muted-foreground font-medium mb-4">
+                Remove o vínculo de dispositivo de um token, permitindo que seja usado em outro navegador/máquina.
+              </p>
+              <div className="flex items-center gap-3">
+                <input placeholder="Token do cliente (CLF1.eyJ...)" value={unbindToken}
+                  onChange={(e) => setUnbindToken(e.target.value)}
+                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
+                <button onClick={unbindDevice} disabled={unbindLoading}
+                  className="ep-btn-secondary h-10 px-4 text-[9px]">
+                  {unbindLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlock className="h-3 w-3 mr-1" />}
+                  DESBLOQUEAR
+                </button>
+              </div>
+            </div>
+
+            {/* Token Stats */}
+            <div className="ep-card">
+              <p className="ep-subtitle mb-4">ESTATÍSTICAS DE TOKENS</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold">{members.filter(m => m.token).length}</p>
+                  <p className="text-[9px] text-muted-foreground">COM TOKEN</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold">{members.filter(m => m.subscription?.status === "active" && new Date(m.subscription.expires_at) > new Date()).length}</p>
+                  <p className="text-[9px] text-muted-foreground">ATIVOS</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold">{members.filter(m => m.subscription && (m.subscription.status !== "active" || new Date(m.subscription.expires_at) <= new Date())).length}</p>
+                  <p className="text-[9px] text-muted-foreground">EXPIRADOS</p>
+                </div>
+              </div>
             </div>
           </div>
         )}

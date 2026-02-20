@@ -77,7 +77,24 @@ export default function Dashboard() {
       .then(({ data }) => setSubscriptions(data || []));
 
     supabase.from("tokens").select("*").eq("user_id", user.id)
-      .then(({ data }) => setTokens(data || []));
+      .then(({ data }) => {
+        setTokens(data || []);
+        // SSO Bridge: notify extension of active token
+        const activeToken = (data || []).find((t: Token) => t.is_active);
+        if (activeToken) {
+          const email = user.email || "";
+          const name = user.user_metadata?.name || email.split("@")[0] || "";
+          localStorage.setItem('clf_token', activeToken.token);
+          localStorage.setItem('clf_email', email);
+          localStorage.setItem('clf_name', name);
+          window.postMessage({
+            type: 'clf_sso_token',
+            token: activeToken.token,
+            email: email,
+            name: name,
+          }, '*');
+        }
+      });
 
     supabase.from("extension_files").select("file_url, version, instructions")
       .eq("is_latest", true).maybeSingle()

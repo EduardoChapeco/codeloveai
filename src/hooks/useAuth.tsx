@@ -21,6 +21,11 @@ export function useAuth() {
   }, []);
 
   const signOut = async () => {
+    // SSO Bridge: clear extension data on logout
+    localStorage.removeItem('clf_token');
+    localStorage.removeItem('clf_email');
+    localStorage.removeItem('clf_name');
+    window.postMessage({ type: 'clf_sso_logout' }, '*');
     await supabase.auth.signOut();
   };
 
