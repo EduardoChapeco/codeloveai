@@ -75,6 +75,13 @@ export default function Community() {
   const [newMediaFiles, setNewMediaFiles] = useState<File[]>([]);
   const [posting, setPosting] = useState(false);
 
+  // Auth guard - redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/login?returnTo=/community");
+    }
+  }, [user, authLoading, navigate]);
+
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     let query = supabase
@@ -129,6 +136,18 @@ export default function Community() {
     supabase.from("hashtags").select("*").order("posts_count", { ascending: false }).limit(20)
       .then(({ data }) => setHashtags(data || []));
   }, []);
+  // Auth guard rendering
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   const handleLike = async (postId: string) => {
     if (!user) return toast.error("Faça login para curtir.");
@@ -308,18 +327,9 @@ export default function Community() {
         <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
         <div className="flex items-center gap-4">
           <Link to="/community" className="ep-badge ep-badge-live">COMUNIDADE</Link>
-          {user ? (
-            <>
-              <Link to="/dashboard" className="ep-btn-secondary h-10 px-4 text-[9px]">DASHBOARD</Link>
-              <Link to={`/profile/${user.id}`} className="ep-btn-secondary h-10 px-4 text-[9px]">MEU PERFIL</Link>
-              <button onClick={signOut} className="ep-btn-icon h-10 w-10 rounded-[14px]"><LogOut className="h-4 w-4" /></button>
-            </>
-          ) : (
-            <>
-              <Link to="/login" className="ep-btn-secondary h-10 px-6 text-[9px]">ENTRAR</Link>
-              <Link to="/register" className="ep-btn-primary h-10 px-6 text-[9px]">CRIAR CONTA</Link>
-            </>
-          )}
+          <Link to="/dashboard" className="ep-btn-secondary h-10 px-4 text-[9px]">DASHBOARD</Link>
+          <Link to={`/profile/${user.id}`} className="ep-btn-secondary h-10 px-4 text-[9px]">MEU PERFIL</Link>
+          <button onClick={signOut} className="ep-btn-icon h-10 w-10 rounded-[14px]"><LogOut className="h-4 w-4" /></button>
         </div>
       </nav>
 
@@ -524,39 +534,51 @@ export default function Community() {
                   {post.project_url && (
                     <div className="mb-4">
                       {(() => { try { return new URL(post.project_url).hostname.endsWith(".lovable.app"); } catch { return false; } })() ? (
-                        <div className="rounded-[12px] overflow-hidden border border-border">
-                          <div className="bg-muted px-3 py-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Eye className="h-3.5 w-3.5 text-foreground shrink-0" />
-                              <span className="text-xs font-bold text-foreground truncate">{post.project_name || "Preview ao vivo"}</span>
+                        <a href={post.project_url} target="_blank" rel="noopener noreferrer" className="block group">
+                          <div className="rounded-[12px] overflow-hidden border border-border hover:border-foreground/30 transition-colors">
+                            <div className="relative">
+                              <iframe
+                                src={post.project_url}
+                                className="w-full h-[320px] border-0 pointer-events-none"
+                                sandbox="allow-scripts allow-same-origin"
+                                loading="lazy"
+                                title={post.project_name || "Project preview"}
+                              />
+                              <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
                             </div>
-                            <a href={post.project_url} target="_blank" rel="noopener noreferrer"
-                              className="text-[9px] font-bold text-muted-foreground hover:text-foreground">
-                              ABRIR ↗
-                            </a>
+                            <div className="bg-muted/50 px-4 py-3 flex items-center justify-between border-t border-border">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="h-5 w-5 rounded bg-foreground/10 flex items-center justify-center shrink-0">
+                                  <Eye className="h-3 w-3 text-foreground" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-foreground truncate">{post.project_name || "Preview ao vivo"}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
+                                </div>
+                              </div>
+                              <span className="text-[9px] font-bold text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2">
+                                ABRIR ↗
+                              </span>
+                            </div>
                           </div>
-                          <iframe
-                            src={post.project_url}
-                            className="w-full h-[300px] border-0"
-                            sandbox="allow-scripts allow-same-origin"
-                            loading="lazy"
-                            title={post.project_name || "Project preview"}
-                          />
-                        </div>
+                        </a>
                       ) : (
                         <a href={post.project_url} target="_blank" rel="noopener noreferrer"
-                          className="ep-card-sm flex items-center gap-3 hover:border-foreground/30 transition-colors">
+                          className="block rounded-[12px] overflow-hidden border border-border hover:border-foreground/30 transition-colors group">
                           {post.link_preview_image && (
-                            <img src={post.link_preview_image} alt="" className="h-16 w-24 rounded-[8px] object-cover shrink-0" />
+                            <div className="relative w-full h-[180px] bg-muted">
+                              <img src={post.link_preview_image} alt="" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors" />
+                            </div>
                           )}
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-foreground truncate">
+                          <div className="bg-muted/50 px-4 py-3 border-t border-border">
+                            <p className="text-sm font-bold text-foreground truncate mb-0.5">
                               {post.link_preview_title || post.project_name || post.project_url}
                             </p>
                             {post.link_preview_description && (
-                              <p className="text-[10px] text-muted-foreground truncate">{post.link_preview_description}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{post.link_preview_description}</p>
                             )}
-                            <p className="text-[9px] text-muted-foreground/60 truncate mt-0.5">{post.project_url}</p>
+                            <p className="text-[10px] text-muted-foreground/60 truncate">{(() => { try { return new URL(post.project_url).hostname; } catch { return post.project_url; } })()}</p>
                           </div>
                         </a>
                       )}
