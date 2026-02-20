@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
+import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -25,6 +25,31 @@ const terms = [
   "Não utilizamos créditos da conta Lovable — todos os projetos, mensagens e planos criados/enviados não descontam créditos.",
 ];
 
+const UNLIMITED_DEADLINE = new Date("2026-02-25T23:59:59-03:00").getTime();
+
+function useCountdown(deadline: number) {
+  const [timeLeft, setTimeLeft] = useState(() => {
+    const diff = deadline - Date.now();
+    return diff > 0 ? diff : 0;
+  });
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const interval = setInterval(() => {
+      const diff = deadline - Date.now();
+      setTimeLeft(diff > 0 ? diff : 0);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [deadline, timeLeft]);
+
+  const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+
+  return { days, hours, minutes, seconds, expired: timeLeft <= 0 };
+}
+
 export default function Checkout() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -35,6 +60,7 @@ export default function Checkout() {
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [loadingCheckout, setLoadingCheckout] = useState(false);
   const [step, setStep] = useState<"plan" | "terms" | "processing">("plan");
+  const countdown = useCountdown(UNLIMITED_DEADLINE);
 
   // If not logged in, redirect to login with returnTo
   useEffect(() => {
@@ -148,7 +174,7 @@ export default function Checkout() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {plans.map((plan) => (
+              {plans.filter(p => !(p.highlight && countdown.expired)).map((plan) => (
                 <div
                   key={plan.id}
                   className={`ep-card-interactive flex flex-col justify-between cursor-pointer transition-all ${
@@ -160,8 +186,29 @@ export default function Checkout() {
                     {plan.popular && (
                       <span className="ep-badge ep-badge-live mb-4 inline-block">POPULAR</span>
                     )}
-                    {plan.highlight && (
-                      <span className="ep-badge ep-badge-live mb-4 inline-block">MELHOR CUSTO</span>
+                    {plan.highlight && !countdown.expired && (
+                      <div className="mb-3">
+                        <span className="ep-badge ep-badge-live mb-3 inline-block">MELHOR CUSTO</span>
+                        <div className="bg-foreground/5 border border-foreground/20 rounded-[10px] p-3">
+                          <div className="flex items-center gap-1.5 justify-center mb-2">
+                            <Timer className="h-3.5 w-3.5 text-foreground" />
+                            <span className="text-[9px] font-bold text-foreground tracking-widest">OFERTA ENCERRA EM</span>
+                          </div>
+                          <div className="flex items-center justify-center gap-2">
+                            {[
+                              { value: countdown.days, label: "D" },
+                              { value: countdown.hours, label: "H" },
+                              { value: countdown.minutes, label: "M" },
+                              { value: countdown.seconds, label: "S" },
+                            ].map((t, i) => (
+                              <div key={i} className="flex items-baseline gap-0.5">
+                                <span className="text-lg font-black text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
+                                <span className="text-[8px] font-bold text-muted-foreground">{t.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     )}
                     <p className="ep-subtitle mb-2">{plan.name}</p>
                     <p className="text-sm text-muted-foreground line-through font-medium">{plan.originalPrice}</p>
