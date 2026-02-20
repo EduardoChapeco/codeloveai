@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -5,21 +6,22 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Dashboard from "./pages/Dashboard";
-import Admin from "./pages/Admin";
-import AffiliateDashboard from "./pages/AffiliateDashboard";
-import AffiliateRefPage from "./pages/AffiliateRefPage";
-import Checkout from "./pages/Checkout";
-import FreePlan from "./pages/FreePlan";
-import Community from "./pages/Community";
-import Profile from "./pages/Profile";
-import AffiliatesPage from "./pages/AffiliatesPage";
-import Install from "./pages/Install";
-import NotFound from "./pages/NotFound";
+
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Admin = lazy(() => import("./pages/Admin"));
+const AffiliateDashboard = lazy(() => import("./pages/AffiliateDashboard"));
+const AffiliateRefPage = lazy(() => import("./pages/AffiliateRefPage"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const FreePlan = lazy(() => import("./pages/FreePlan"));
+const Community = lazy(() => import("./pages/Community"));
+const Profile = lazy(() => import("./pages/Profile"));
+const AffiliatesPage = lazy(() => import("./pages/AffiliatesPage"));
+const Install = lazy(() => import("./pages/Install"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -30,24 +32,26 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/affiliate" element={<AffiliateDashboard />} />
-            <Route path="/ref/:code" element={<AffiliateRefPage />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/free" element={<FreePlan />} />
-            <Route path="/community" element={<Community />} />
-            <Route path="/profile/:userId" element={<Profile />} />
-            <Route path="/affiliates" element={<AffiliatesPage />} />
-            <Route path="/install" element={<Install />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <Suspense fallback={<div className="min-h-screen bg-background" />}>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/affiliate" element={<AffiliateDashboard />} />
+              <Route path="/ref/:code" element={<AffiliateRefPage />} />
+              <Route path="/checkout" element={<Checkout />} />
+              <Route path="/free" element={<FreePlan />} />
+              <Route path="/community" element={<Community />} />
+              <Route path="/profile/:userId" element={<Profile />} />
+              <Route path="/affiliates" element={<AffiliatesPage />} />
+              <Route path="/install" element={<Install />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
