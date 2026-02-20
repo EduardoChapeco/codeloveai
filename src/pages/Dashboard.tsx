@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
-import { Copy, Download, LogOut, Shield, Users } from "lucide-react";
+import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -21,19 +21,51 @@ interface Token {
   is_active: boolean;
 }
 
+interface Message {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  subscription_id: string | null;
+}
+
 export default function Dashboard() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
   const [latestExt, setLatestExt] = useState<{ file_url: string; version: string; instructions: string } | null>(null);
 
+  // Payment feedback
+  const paymentStatus = searchParams.get("payment");
+
+  // Chat
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [adminUserId, setAdminUserId] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
   }, [user, authLoading, navigate]);
+
+  // Clear payment param after showing
+  useEffect(() => {
+    if (paymentStatus) {
+      const timer = setTimeout(() => {
+        setSearchParams({}, { replace: true });
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [paymentStatus, setSearchParams]);
 
   useEffect(() => {
     if (!user) return;
@@ -50,7 +82,88 @@ export default function Dashboard() {
     supabase.from("extension_files").select("file_url, version, instructions")
       .eq("is_latest", true).maybeSingle()
       .then(({ data }) => setLatestExt(data));
+
+    // Find admin user for chat
+    supabase.from("user_roles").select("user_id").eq("role", "admin").limit(1)
+      .then(({ data }) => {
+        if (data?.[0]) setAdminUserId(data[0].user_id);
+      });
   }, [user]);
+
+  // Fetch chat messages
+  const fetchMessages = async () => {
+    if (!user || !adminUserId) return;
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${adminUserId}),and(sender_id.eq.${adminUserId},receiver_id.eq.${user.id})`)
+      .order("created_at", { ascending: true });
+    setMessages(data || []);
+  };
+
+  useEffect(() => {
+    if (chatOpen && adminUserId) {
+      fetchMessages();
+      // Mark unread messages as read
+      if (user) {
+        supabase.from("messages").update({ is_read: true })
+          .eq("receiver_id", user.id).eq("sender_id", adminUserId).eq("is_read", false)
+          .then(() => {});
+      }
+    }
+  }, [chatOpen, adminUserId, user]);
+
+  // Realtime messages
+  useEffect(() => {
+    if (!user || !chatOpen) return;
+    const channel = supabase
+      .channel("user-messages")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        const msg = payload.new as Message;
+        if (
+          (msg.sender_id === user.id || msg.receiver_id === user.id)
+        ) {
+          setMessages((prev) => [...prev, msg]);
+          if (msg.receiver_id === user.id) {
+            supabase.from("messages").update({ is_read: true }).eq("id", msg.id).then(() => {});
+          }
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, chatOpen]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !user || !adminUserId) return;
+    setSendingMessage(true);
+    const { error } = await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: adminUserId,
+      content: newMessage.trim(),
+    });
+    if (error) toast.error("Erro ao enviar mensagem.");
+    else setNewMessage("");
+    setSendingMessage(false);
+  };
+
+  const sendSupportMessage = async (subscriptionId: string, planName: string) => {
+    if (!user || !adminUserId) return;
+    setChatOpen(true);
+    const msg = `Olá! Preciso de suporte referente à minha compra do plano ${planName}. (ID: ${subscriptionId})`;
+    setSendingMessage(true);
+    await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: adminUserId,
+      content: msg,
+      subscription_id: subscriptionId,
+    });
+    setSendingMessage(false);
+    fetchMessages();
+  };
 
   const activeSubscription = subscriptions.find((s) => s.status === "active" && new Date(s.expires_at) > new Date());
 
@@ -102,6 +215,30 @@ export default function Dashboard() {
           <p className="ep-subtitle mb-2">ÁREA DO MEMBRO</p>
           <h1 className="ep-section-title">DASHBOARD</h1>
         </div>
+
+        {/* Payment feedback banner */}
+        {paymentStatus && (
+          <div className={`ep-card flex items-center gap-4 ${
+            paymentStatus === "success" ? "border-green-500/30" :
+            paymentStatus === "failure" ? "border-destructive/30" : "border-yellow-500/30"
+          }`}>
+            {paymentStatus === "success" && <CheckCircle className="h-6 w-6 text-green-500 shrink-0" />}
+            {paymentStatus === "failure" && <XCircle className="h-6 w-6 text-destructive shrink-0" />}
+            {paymentStatus === "pending" && <Clock className="h-6 w-6 text-yellow-500 shrink-0" />}
+            <div>
+              <p className="text-sm font-bold text-foreground">
+                {paymentStatus === "success" && "Pagamento aprovado! 🎉"}
+                {paymentStatus === "failure" && "Pagamento não aprovado."}
+                {paymentStatus === "pending" && "Pagamento pendente."}
+              </p>
+              <p className="text-xs text-muted-foreground font-medium">
+                {paymentStatus === "success" && "Seu plano será ativado em instantes. O admin irá gerar seu token de acesso."}
+                {paymentStatus === "failure" && "Houve um problema com o pagamento. Tente novamente ou entre em contato com o suporte."}
+                {paymentStatus === "pending" && "Estamos aguardando a confirmação do pagamento. Isso pode levar alguns minutos."}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Subscription Status */}
         <div className="ep-card">
@@ -186,9 +323,18 @@ export default function Dashboard() {
                       {format(new Date(s.starts_at), "dd/MM/yyyy")} — {format(new Date(s.expires_at), "dd/MM/yyyy")}
                     </p>
                   </div>
-                  <span className={`ep-badge ${s.status === "active" && new Date(s.expires_at) > new Date() ? "ep-badge-live" : "ep-badge-offline"}`}>
-                    {s.status === "active" && new Date(s.expires_at) > new Date() ? "ATIVO" : "EXPIRADO"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => sendSupportMessage(s.id, planLabels[s.plan] || s.plan)}
+                      className="ep-btn-icon h-8 w-8 rounded-[10px]"
+                      title="Suporte sobre esta compra"
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                    </button>
+                    <span className={`ep-badge ${s.status === "active" && new Date(s.expires_at) > new Date() ? "ep-badge-live" : "ep-badge-offline"}`}>
+                      {s.status === "active" && new Date(s.expires_at) > new Date() ? "ATIVO" : "EXPIRADO"}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -197,6 +343,71 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Chat FAB */}
+      <button
+        onClick={() => setChatOpen(!chatOpen)}
+        className="fixed bottom-6 right-6 z-30 ep-btn-primary h-14 w-14 rounded-full flex items-center justify-center shadow-lg"
+      >
+        {chatOpen ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
+      </button>
+
+      {/* Chat panel */}
+      {chatOpen && (
+        <div className="fixed bottom-24 right-6 z-30 w-[360px] max-h-[500px] bg-background border border-border rounded-[20px] shadow-2xl flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <p className="ep-label text-[10px]">SUPORTE</p>
+            <p className="text-xs text-muted-foreground">Chat com o administrador</p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[350px]">
+            {messages.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-8">
+                Envie uma mensagem para iniciar o chat.
+              </p>
+            )}
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.sender_id === user?.id ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[80%] px-3 py-2 rounded-[12px] text-xs ${
+                    msg.sender_id === user?.id
+                      ? "bg-foreground text-background"
+                      : "bg-muted text-foreground"
+                  }`}
+                >
+                  <p className="font-medium">{msg.content}</p>
+                  <p className={`text-[9px] mt-1 ${
+                    msg.sender_id === user?.id ? "text-background/60" : "text-muted-foreground"
+                  }`}>
+                    {format(new Date(msg.created_at), "HH:mm")}
+                  </p>
+                </div>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+
+          <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+            <input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+              placeholder="Digite sua mensagem..."
+              className="ep-input h-10 rounded-[12px] text-xs px-3 border border-border flex-1"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={sendingMessage || !newMessage.trim()}
+              className="ep-btn-primary h-10 w-10 rounded-[12px] flex items-center justify-center"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
-import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -38,7 +38,7 @@ const planLabels: Record<string, string> = {
   "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
 };
 
-type Tab = "members" | "affiliates" | "extension";
+type Tab = "members" | "affiliates" | "extension" | "notifications" | "messages";
 
 export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -56,6 +56,14 @@ export default function Admin() {
   const [extFile, setExtFile] = useState<File | null>(null);
   const [extInstructions, setExtInstructions] = useState("");
   const [extensions, setExtensions] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  // Chat state
+  const [chatUsers, setChatUsers] = useState<{ user_id: string; name: string; email: string; unread: number }[]>([]);
+  const [selectedChatUser, setSelectedChatUser] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [adminMessage, setAdminMessage] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!authLoading && !adminLoading) {
@@ -122,13 +130,102 @@ export default function Admin() {
     setExtensions(data || []);
   };
 
+  const fetchNotifications = async () => {
+    const { data } = await supabase.from("admin_notifications").select("*").order("created_at", { ascending: false }).limit(50);
+    setNotifications(data || []);
+  };
+
+  const fetchChatUsers = async () => {
+    if (!user) return;
+    // Get all messages where admin is sender or receiver
+    const { data: msgs } = await supabase
+      .from("messages")
+      .select("sender_id, receiver_id, is_read")
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+
+    if (!msgs) return;
+
+    // Build unique user list
+    const userIds = new Set<string>();
+    msgs.forEach((m) => {
+      if (m.sender_id !== user.id) userIds.add(m.sender_id);
+      if (m.receiver_id !== user.id) userIds.add(m.receiver_id);
+    });
+
+    if (userIds.size === 0) { setChatUsers([]); return; }
+
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, name, email")
+      .in("user_id", Array.from(userIds));
+
+    const chatList = (profiles || []).map((p) => ({
+      ...p,
+      unread: msgs.filter((m) => m.sender_id === p.user_id && m.receiver_id === user.id && !m.is_read).length,
+    }));
+    chatList.sort((a, b) => b.unread - a.unread);
+    setChatUsers(chatList);
+  };
+
+  const fetchChatMessages = async (otherUserId: string) => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
+      .order("created_at", { ascending: true });
+    setChatMessages(data || []);
+    // Mark as read
+    await supabase.from("messages").update({ is_read: true })
+      .eq("sender_id", otherUserId).eq("receiver_id", user.id).eq("is_read", false);
+    fetchChatUsers();
+  };
+
   useEffect(() => {
     if (isAdmin) {
       fetchMembers();
       fetchAffiliates();
       fetchExtensions();
+      fetchNotifications();
+      fetchChatUsers();
     }
   }, [isAdmin]);
+
+  // Realtime for messages
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    const channel = supabase
+      .channel("admin-messages")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => {
+        fetchChatUsers();
+        if (selectedChatUser) fetchChatMessages(selectedChatUser);
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_notifications" }, () => {
+        fetchNotifications();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, isAdmin, selectedChatUser]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
+  const sendAdminMessage = async () => {
+    if (!adminMessage.trim() || !user || !selectedChatUser) return;
+    await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: selectedChatUser,
+      content: adminMessage.trim(),
+    });
+    setAdminMessage("");
+    fetchChatMessages(selectedChatUser);
+  };
+
+  const markNotificationRead = async (id: string) => {
+    await supabase.from("admin_notifications").update({ is_read: true }).eq("id", id);
+    fetchNotifications();
+  };
 
   // Member actions
   const assignToken = async (userId: string) => {
@@ -277,11 +374,21 @@ export default function Admin() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2">
-          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["extension", "EXTENSÃO"]] as [Tab, string][]).map(([t, label]) => (
+        <div className="flex gap-2 flex-wrap">
+          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["extension", "EXTENSÃO"], ["notifications", "NOTIFICAÇÕES"], ["messages", "MENSAGENS"]] as [Tab, string][]).map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`ep-btn-secondary h-10 px-6 text-[9px] ${tab === t ? "bg-foreground text-background" : ""}`}>
+              className={`ep-btn-secondary h-10 px-6 text-[9px] relative ${tab === t ? "bg-foreground text-background" : ""}`}>
               {label}
+              {t === "notifications" && notifications.filter((n) => !n.is_read).length > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[8px] text-white flex items-center justify-center">
+                  {notifications.filter((n) => !n.is_read).length}
+                </span>
+              )}
+              {t === "messages" && chatUsers.reduce((sum, u) => sum + u.unread, 0) > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[8px] text-white flex items-center justify-center">
+                  {chatUsers.reduce((sum, u) => sum + u.unread, 0)}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -486,6 +593,121 @@ export default function Admin() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Notifications Tab */}
+        {tab === "notifications" && (
+          <div className="space-y-4">
+            {notifications.length === 0 && (
+              <div className="ep-empty">
+                <Bell className="h-10 w-10 mx-auto mb-4" />
+                <p className="ep-subtitle">NENHUMA NOTIFICAÇÃO</p>
+              </div>
+            )}
+            {notifications.map((n) => (
+              <div key={n.id} className={`ep-card flex items-start justify-between gap-4 ${!n.is_read ? "border-foreground/20" : ""}`}>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    {!n.is_read && <span className="h-2 w-2 rounded-full bg-foreground shrink-0" />}
+                    <p className="text-sm font-bold text-foreground">{n.title}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-medium">{n.description}</p>
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    {format(new Date(n.created_at), "dd/MM/yyyy HH:mm")}
+                  </p>
+                </div>
+                {!n.is_read && (
+                  <button onClick={() => markNotificationRead(n.id)} className="ep-btn-secondary h-8 px-3 text-[8px]">
+                    MARCAR LIDA
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Messages Tab */}
+        {tab === "messages" && (
+          <div className="flex gap-6 min-h-[500px]">
+            {/* User list */}
+            <div className="w-64 shrink-0 space-y-2">
+              <p className="ep-subtitle mb-3">CONVERSAS</p>
+              {chatUsers.length === 0 && (
+                <p className="text-xs text-muted-foreground">Nenhuma conversa.</p>
+              )}
+              {chatUsers.map((cu) => (
+                <button
+                  key={cu.user_id}
+                  onClick={() => { setSelectedChatUser(cu.user_id); fetchChatMessages(cu.user_id); }}
+                  className={`w-full text-left ep-card-sm flex items-center justify-between ${
+                    selectedChatUser === cu.user_id ? "border-foreground/30" : ""
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs font-bold text-foreground">{cu.name || cu.email}</p>
+                    <p className="text-[10px] text-muted-foreground">{cu.email}</p>
+                  </div>
+                  {cu.unread > 0 && (
+                    <span className="h-5 w-5 rounded-full bg-foreground text-background text-[9px] flex items-center justify-center font-bold">
+                      {cu.unread}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Chat area */}
+            <div className="flex-1 ep-card flex flex-col">
+              {!selectedChatUser ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <p className="text-sm text-muted-foreground">Selecione uma conversa</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[400px]">
+                    {chatMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`flex ${msg.sender_id === user?.id ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`max-w-[75%] px-3 py-2 rounded-[12px] text-xs ${
+                            msg.sender_id === user?.id
+                              ? "bg-foreground text-background"
+                              : "bg-muted text-foreground"
+                          }`}
+                        >
+                          <p className="font-medium">{msg.content}</p>
+                          <p className={`text-[9px] mt-1 ${
+                            msg.sender_id === user?.id ? "text-background/60" : "text-muted-foreground"
+                          }`}>
+                            {format(new Date(msg.created_at), "HH:mm dd/MM")}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={chatEndRef} />
+                  </div>
+                  <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+                    <input
+                      value={adminMessage}
+                      onChange={(e) => setAdminMessage(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendAdminMessage()}
+                      placeholder="Responder..."
+                      className="ep-input h-10 rounded-[12px] text-xs px-3 border border-border flex-1"
+                    />
+                    <button
+                      onClick={sendAdminMessage}
+                      disabled={!adminMessage.trim()}
+                      className="ep-btn-primary h-10 w-10 rounded-[12px] flex items-center justify-center"
+                    >
+                      <Send className="h-4 w-4" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>
