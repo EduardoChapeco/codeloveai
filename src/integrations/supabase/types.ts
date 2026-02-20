@@ -14,6 +14,159 @@ export type Database = {
   }
   public: {
     Tables: {
+      affiliate_referrals: {
+        Row: {
+          affiliate_id: string
+          confirmed: boolean
+          created_at: string
+          id: string
+          referred_user_id: string
+          subscription_id: string | null
+        }
+        Insert: {
+          affiliate_id: string
+          confirmed?: boolean
+          created_at?: string
+          id?: string
+          referred_user_id: string
+          subscription_id?: string | null
+        }
+        Update: {
+          affiliate_id?: string
+          confirmed?: boolean
+          created_at?: string
+          id?: string
+          referred_user_id?: string
+          subscription_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_referrals_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_referrals_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliates: {
+        Row: {
+          affiliate_code: string
+          created_at: string
+          discount_percent: number
+          display_name: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          affiliate_code: string
+          created_at?: string
+          discount_percent?: number
+          display_name?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          affiliate_code?: string
+          created_at?: string
+          discount_percent?: number
+          display_name?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      codecoin_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string
+          id: string
+          type: string
+          user_id: string
+          week_start: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string
+          id?: string
+          type: string
+          user_id: string
+          week_start?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string
+          id?: string
+          type?: string
+          user_id?: string
+          week_start?: string | null
+        }
+        Relationships: []
+      }
+      codecoins: {
+        Row: {
+          balance: number
+          id: string
+          total_earned: number
+          total_spent: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          id?: string
+          total_earned?: number
+          total_spent?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          id?: string
+          total_earned?: number
+          total_spent?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      extension_files: {
+        Row: {
+          created_at: string
+          file_url: string
+          id: string
+          is_latest: boolean
+          uploaded_by: string
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          file_url: string
+          id?: string
+          is_latest?: boolean
+          uploaded_by: string
+          version: string
+        }
+        Update: {
+          created_at?: string
+          file_url?: string
+          id?: string
+          is_latest?: boolean
+          uploaded_by?: string
+          version?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -43,6 +196,7 @@ export type Database = {
       }
       subscriptions: {
         Row: {
+          affiliate_code: string | null
           created_at: string
           expires_at: string
           id: string
@@ -53,6 +207,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          affiliate_code?: string | null
           created_at?: string
           expires_at: string
           id?: string
@@ -63,6 +218,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          affiliate_code?: string | null
           created_at?: string
           expires_at?: string
           id?: string
@@ -130,7 +286,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "member"
+      app_role: "admin" | "member" | "affiliate"
       subscription_plan: "1_day" | "7_days" | "1_month" | "12_months"
       subscription_status: "active" | "expired" | "cancelled"
     }
@@ -260,7 +416,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "member"],
+      app_role: ["admin", "member", "affiliate"],
       subscription_plan: ["1_day", "7_days", "1_month", "12_months"],
       subscription_status: ["active", "expired", "cancelled"],
     },
