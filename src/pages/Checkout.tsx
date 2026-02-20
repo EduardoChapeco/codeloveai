@@ -152,7 +152,14 @@ export default function Checkout() {
         body: { plan: selectedPlan, payment_method: paymentMethod },
       });
 
+      console.log("Checkout response:", { data, error });
+
       if (error) throw error;
+      if (data?.error) {
+        toast.error(data.error);
+        setStep("terms");
+        return;
+      }
 
       if (paymentMethod === "pix" && data?.pix_code) {
         setPixData({
@@ -167,6 +174,7 @@ export default function Checkout() {
       } else if (data?.init_point) {
         window.location.href = data.init_point;
       } else {
+        console.error("Unexpected checkout response:", data);
         toast.error("Erro ao criar checkout. Tente novamente.");
         setStep("terms");
       }

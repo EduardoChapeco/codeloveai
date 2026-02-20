@@ -33,17 +33,31 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Usuário não autenticado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Try getClaims first, fallback to getUser
+    let userId: string;
+    let userEmail: string;
 
-    const userId = claimsData.claims.sub;
-    const userEmail = claimsData.claims.email;
+    try {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+      if (!claimsError && claimsData?.claims) {
+        userId = claimsData.claims.sub;
+        userEmail = claimsData.claims.email;
+      } else {
+        throw new Error("getClaims failed");
+      }
+    } catch {
+      // Fallback to getUser
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: "Usuário não autenticado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
+      userEmail = user.email || "";
+    }
 
     const { plan, affiliate_code, payment_method } = await req.json();
 
@@ -164,8 +178,8 @@ Deno.serve(async (req) => {
       }
 
       if (!pixResponse.ok) {
-        console.error("MP PIX error:", JSON.stringify(pixData));
-        return new Response(JSON.stringify({ error: "Erro ao criar pagamento PIX" }), {
+        console.error("MP PIX error status:", pixResponse.status, "body:", JSON.stringify(pixData).substring(0, 500));
+        return new Response(JSON.stringify({ error: "Erro ao criar pagamento PIX", details: pixData?.message || pixData?.error || "unknown" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
