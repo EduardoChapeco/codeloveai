@@ -28,11 +28,16 @@ export function useAuth() {
 }
 
 export function useIsAdmin() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
     if (!user) {
       setIsAdmin(false);
       setLoading(false);
@@ -48,13 +53,13 @@ export function useIsAdmin() {
         setIsAdmin(!!data && data.length > 0);
         setLoading(false);
       });
-  }, [user]);
+  }, [user, authLoading]);
 
   return { isAdmin, loading };
 }
 
 export function useIsAffiliate() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [isAffiliate, setIsAffiliate] = useState(false);
   const [affiliateData, setAffiliateData] = useState<{
     id: string;
@@ -65,6 +70,11 @@ export function useIsAffiliate() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
     if (!user) {
       setIsAffiliate(false);
       setAffiliateData(null);
@@ -82,7 +92,7 @@ export function useIsAffiliate() {
         setAffiliateData(data);
         setLoading(false);
       });
-  }, [user]);
+  }, [user, authLoading]);
 
   return { isAffiliate, affiliateData, loading };
 }
