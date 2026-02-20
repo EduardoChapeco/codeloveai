@@ -119,7 +119,7 @@ export default function Dashboard() {
           ) : (
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground font-medium">Nenhuma assinatura ativa.</p>
-              <Link to="/#plans" className="ep-btn-primary h-10 px-6 text-[9px]">VER PLANOS</Link>
+              <Link to="/?scrollTo=plans" className="ep-btn-primary h-10 px-6 text-[9px]">VER PLANOS</Link>
             </div>
           )}
         </div>
