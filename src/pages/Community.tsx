@@ -64,7 +64,8 @@ const MEDIA_TEMPLATES = [
 
 /* ─── Media display by template ─── */
 function MediaCarousel({ urls, template = "threads" }: { urls: string[]; template?: string }) {
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const [unmuted, setUnmuted] = useState<Set<number>>(new Set());
+  const [playing, setPlaying] = useState<Set<number>>(new Set());
   const [currentSlide, setCurrentSlide] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
@@ -72,30 +73,66 @@ function MediaCarousel({ urls, template = "threads" }: { urls: string[]; templat
 
   useEffect(() => {
     const firstVideo = videoRefs.current.get(0);
-    if (firstVideo) { firstVideo.muted = true; firstVideo.play().catch(() => {}); }
+    if (firstVideo) { firstVideo.muted = true; firstVideo.play().catch(() => {}); setPlaying(new Set([0])); }
   }, []);
-
-  const toggleReveal = (idx: number) => {
-    setRevealed(prev => { const next = new Set(prev); if (next.has(idx)) next.delete(idx); else next.add(idx); return next; });
-  };
 
   if (total === 0) return null;
   const isVideo = (url: string) => /\.(mp4|webm|mov)$/i.test(url);
 
+  const toggleAudio = (e: React.MouseEvent, idx: number) => {
+    e.stopPropagation();
+    const video = videoRefs.current.get(idx);
+    if (!video) return;
+    setUnmuted(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) { next.delete(idx); video.muted = true; }
+      else { next.add(idx); video.muted = false; }
+      return next;
+    });
+  };
+
+  const togglePlayPause = (idx: number) => {
+    const video = videoRefs.current.get(idx);
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => {});
+      setPlaying(prev => { const n = new Set(prev); n.add(idx); return n; });
+    } else {
+      video.pause();
+      setPlaying(prev => { const n = new Set(prev); n.delete(idx); return n; });
+    }
+  };
+
   const renderMedia = (url: string, idx: number, className: string) => {
-    const isRev = revealed.has(idx);
+    const hasAudio = isVideo(url);
+    const isMuted = !unmuted.has(idx);
+    const isPlaying = playing.has(idx);
     return (
-      <div key={idx} className={`relative overflow-hidden bg-muted cursor-pointer ${className}`} onClick={() => toggleReveal(idx)}>
-        {isVideo(url) ? (
-          <video ref={el => { if (el) videoRefs.current.set(idx, el); }} src={url} controls={isRev} muted={!isRev} autoPlay={idx === 0} loop playsInline
-            className={`w-full h-full object-cover transition-all duration-500 ${!isRev ? "blur-lg scale-105" : ""}`} />
+      <div key={idx} className={`relative overflow-hidden bg-muted cursor-pointer ${className}`}
+        onClick={() => hasAudio ? togglePlayPause(idx) : undefined}>
+        {hasAudio ? (
+          <video ref={el => { if (el) videoRefs.current.set(idx, el); }} src={url} muted={isMuted} autoPlay={idx === 0} loop playsInline
+            className="w-full h-full object-cover" />
         ) : (
-          <img src={url} alt="" className={`w-full h-full object-cover transition-all duration-500 ${!isRev ? "blur-lg scale-105" : ""}`} />
+          <img src={url} alt="" className="w-full h-full object-cover" />
         )}
-        {!isRev && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+        {/* Audio toggle icon — top-right corner */}
+        {hasAudio && (
+          <button onClick={(e) => toggleAudio(e, idx)}
+            className="absolute top-2 left-2 h-8 w-8 rounded-full bg-background/80 backdrop-blur flex items-center justify-center z-10 hover:bg-background/95 transition-colors"
+            title={isMuted ? "Ativar áudio" : "Desativar áudio"}>
+            {isMuted ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            )}
+          </button>
+        )}
+        {/* Play/pause overlay for videos */}
+        {hasAudio && !isPlaying && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
             <div className="h-12 w-12 rounded-full bg-background/90 backdrop-blur flex items-center justify-center">
-              {isVideo(url) ? <Play className="h-5 w-5 text-foreground ml-0.5" /> : <Eye className="h-5 w-5 text-foreground" />}
+              <Play className="h-5 w-5 text-foreground ml-0.5" />
             </div>
           </div>
         )}
