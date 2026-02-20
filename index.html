@@ -26,5 +26,31 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      (function(){
+        function replaceBadge(){
+          var badge=document.getElementById('lovable-badge');
+          if(!badge)return false;
+          badge.style.cssText='position:fixed;bottom:16px;right:16px;z-index:9999;display:flex;align-items:center;background:#000;border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:8px 16px;font-family:Inter,system-ui,sans-serif;gap:8px;';
+          var cta=document.getElementById('lovable-badge-cta');
+          if(cta){
+            cta.href='/login';
+            cta.target='_self';
+            cta.removeAttribute('rel');
+            cta.style.cssText='display:flex;align-items:center;gap:6px;text-decoration:none;color:#fff;';
+            cta.innerHTML='<span style="font-size:10px;font-weight:900;letter-spacing:0.4em;text-transform:uppercase;color:#fff;">CODELOVE AI</span>';
+          }
+          var divider=document.getElementById('lovable-badge-divider');
+          if(divider)divider.style.display='none';
+          var close=document.getElementById('lovable-badge-close');
+          if(close)close.style.display='none';
+          return true;
+        }
+        if(!replaceBadge()){
+          var obs=new MutationObserver(function(m,o){if(replaceBadge())o.disconnect();});
+          obs.observe(document.body,{childList:true,subtree:true});
+        }
+      })();
+    </script>
   </body>
 </html>
