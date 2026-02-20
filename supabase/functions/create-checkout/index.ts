@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -33,19 +33,24 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Use getClaims for faster JWT validation
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Usuário não autenticado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const userId = claimsData.claims.sub;
+    const userEmail = claimsData.claims.email;
+
     const { plan } = await req.json();
 
-    // Validate plan
+    // Validate plan input
     const validPlans = ["1_day", "7_days", "1_month", "12_months"];
-    if (!plan || !validPlans.includes(plan)) {
+    if (!plan || typeof plan !== "string" || !validPlans.includes(plan)) {
       return new Response(JSON.stringify({ error: "Plano inválido" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -61,8 +66,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get origin for redirect URLs
-    const origin = req.headers.get("origin") || "https://codeloveai.lovable.app";
+    // Get origin for redirect URLs - validate it
+    const rawOrigin = req.headers.get("origin");
+    const allowedOrigins = ["https://codeloveai.lovable.app", "https://id-preview--804f123e-068a-44af-90b4-2843ed8e7d2a.lovable.app"];
+    const origin = rawOrigin && allowedOrigins.some(o => rawOrigin.startsWith(o)) ? rawOrigin : "https://codeloveai.lovable.app";
 
     const preference = {
       items: [
@@ -73,7 +80,7 @@ Deno.serve(async (req) => {
           currency_id: "BRL",
         },
       ],
-      external_reference: JSON.stringify({ user_id: user.id, plan, email: user.email }),
+      external_reference: JSON.stringify({ user_id: userId, plan, email: userEmail }),
       back_urls: {
         success: `${origin}/dashboard?payment=success`,
         failure: `${origin}/dashboard?payment=failure`,
@@ -93,8 +100,7 @@ Deno.serve(async (req) => {
     });
 
     if (!mpResponse.ok) {
-      const errorData = await mpResponse.text();
-      console.error("Mercado Pago error:", errorData);
+      console.error("Mercado Pago error:", await mpResponse.text());
       return new Response(JSON.stringify({ error: "Erro ao criar checkout" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
