@@ -1,0 +1,199 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const WORKER_URL = "https://codelove-fix-api.eusoueduoficial.workers.dev";
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const adminUserId = claimsData.claims.sub;
+
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Verify admin role
+    const { data: roleData } = await serviceClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", adminUserId)
+      .eq("role", "admin")
+      .limit(1);
+
+    if (!roleData || roleData.length === 0) {
+      return new Response(JSON.stringify({ error: "Acesso negado" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const body = await req.json();
+    const { email, name, password, plan, generate_token, role } = body;
+
+    // Validate inputs
+    if (!email || typeof email !== "string" || email.length > 254) {
+      return new Response(JSON.stringify({ error: "Email inválido" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return new Response(JSON.stringify({ error: "Formato de email inválido" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!password || typeof password !== "string" || password.length < 6 || password.length > 128) {
+      return new Response(JSON.stringify({ error: "Senha deve ter entre 6 e 128 caracteres" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const sanitizedEmail = email.trim().toLowerCase();
+    const sanitizedName = (name || sanitizedEmail.split("@")[0]).substring(0, 100);
+    const validRoles = ["member", "admin", "affiliate"];
+    const sanitizedRole = (role && validRoles.includes(role)) ? role : "member";
+
+    // Create user via Supabase Auth Admin API
+    const { data: newUser, error: createError } = await serviceClient.auth.admin.createUser({
+      email: sanitizedEmail,
+      password,
+      email_confirm: true,
+      user_metadata: { name: sanitizedName },
+    });
+
+    if (createError) {
+      return new Response(JSON.stringify({ error: createError.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const newUserId = newUser.user.id;
+
+    // The handle_new_user trigger should create profile and role automatically.
+    // But if admin selected a different role, update it.
+    if (sanitizedRole !== "member") {
+      // The trigger sets member by default (since there's already users).
+      // Update the role to the desired one.
+      await serviceClient
+        .from("user_roles")
+        .update({ role: sanitizedRole })
+        .eq("user_id", newUserId);
+    }
+
+    const result: any = {
+      success: true,
+      user_id: newUserId,
+      email: sanitizedEmail,
+      name: sanitizedName,
+      role: sanitizedRole,
+    };
+
+    // Assign plan if requested
+    if (plan) {
+      const planDays: Record<string, number> = {
+        "1_day": 1, "7_days": 7, "1_month": 30, "12_months": 365,
+      };
+      const days = planDays[plan];
+      if (days) {
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + days);
+        await serviceClient.from("subscriptions").insert({
+          user_id: newUserId,
+          plan,
+          status: "active",
+          starts_at: new Date().toISOString(),
+          expires_at: expiresAt.toISOString(),
+        });
+        result.plan = plan;
+      }
+    }
+
+    // Generate token via Worker if requested
+    if (generate_token) {
+      const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
+      if (webhookSecret) {
+        const workerPlan = plan === "1_day" ? "test_1d" :
+                           plan === "7_days" ? "days_15" :
+                           plan === "1_month" ? "days_30" :
+                           plan === "12_months" ? "days_1000" : "days_30";
+
+        try {
+          const resp = await fetch(`${WORKER_URL}/webhook/purchase`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              webhookSecret,
+              email: sanitizedEmail,
+              name: sanitizedName,
+              plan: workerPlan,
+            }),
+          });
+
+          if (resp.ok) {
+            const tokenData = await resp.json();
+            if (tokenData.token) {
+              await serviceClient.from("tokens").insert({
+                user_id: newUserId,
+                token: tokenData.token,
+                is_active: true,
+              });
+              result.token = tokenData.token;
+              result.token_expires = tokenData.expires;
+            }
+          }
+        } catch (e) {
+          console.error("Token generation error:", e);
+          result.token_error = "Falha ao gerar token automaticamente";
+        }
+      }
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("Admin create user error:", error);
+    return new Response(JSON.stringify({ error: "Erro interno" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
