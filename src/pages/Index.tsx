@@ -36,6 +36,7 @@ export default function Index() {
       <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
         <span className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</span>
         <div className="flex items-center gap-4">
+          <Link to="/community" className="ep-btn-secondary h-10 px-6 text-[9px]">COMUNIDADE</Link>
           <Link to="/login" className="ep-btn-secondary h-10 px-6 text-[9px]">ENTRAR</Link>
           <Link to="/register" className="ep-btn-primary h-10 px-6 text-[9px]">CRIAR CONTA</Link>
         </div>
