@@ -14,6 +14,8 @@ import AffiliateDashboard from "./pages/AffiliateDashboard";
 import AffiliateRefPage from "./pages/AffiliateRefPage";
 import Checkout from "./pages/Checkout";
 import FreePlan from "./pages/FreePlan";
+import Community from "./pages/Community";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +38,9 @@ const App = () => (
           <Route path="/ref/:code" element={<AffiliateRefPage />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/free" element={<FreePlan />} />
+          <Route path="/community" element={<Community />} />
+          <Route path="/profile/:userId" element={<Profile />} />
+          <Route path="*" element={<NotFound />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

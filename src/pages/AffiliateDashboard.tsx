@@ -234,7 +234,38 @@ export default function AffiliateDashboard() {
               </p>
             </div>
 
-            {/* Token */}
+            {/* WhatsApp Templates */}
+            <div className="ep-card">
+              <p className="ep-subtitle mb-4">MENSAGENS RÁPIDAS (WHATSAPP)</p>
+              <div className="space-y-3">
+                {[
+                  { label: "Convite Geral", text: `🚀 Quer enviar mensagens ilimitadas no Lovable sem gastar créditos? Conheça o CodeLove AI!\n\n✅ Sem descontar créditos\n✅ 24/7 sem parar\n✅ Ativação imediata\n\n🔗 Acesse: ${magicLink}` },
+                  { label: "Promoção", text: `⚡ PROMOÇÃO CODELOVE AI!\n\nA partir de R$9,99 você tem acesso ilimitado ao Lovable.\nSem gastar nenhum crédito da sua conta!\n\n👉 ${magicLink}` },
+                  { label: "Dev para Dev", text: `Fala dev! 👋\n\nTô usando uma extensão sensacional pro Lovable que permite envios ilimitados. Testei e tá funcionando muito bem.\n\nDá uma olhada: ${magicLink}` },
+                ].map((tmpl, i) => (
+                  <div key={i} className="ep-card-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-bold text-foreground">{tmpl.label}</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => copyToClipboard(tmpl.text)} className="ep-btn-secondary h-7 px-2 text-[8px]">
+                          <Copy className="h-3 w-3" />
+                        </button>
+                        <a
+                          href={`https://wa.me/?text=${encodeURIComponent(tmpl.text)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ep-btn-primary h-7 px-3 text-[8px] inline-flex items-center"
+                        >
+                          ENVIAR
+                        </a>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">{tmpl.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="ep-card">
               <p className="ep-subtitle mb-4">TOKEN DE ATIVAÇÃO</p>
               {tokens.length > 0 ? tokens.map((t) => (
