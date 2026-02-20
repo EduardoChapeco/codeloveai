@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
+  const [latestExt, setLatestExt] = useState<{ file_url: string; version: string; instructions: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
@@ -45,6 +46,10 @@ export default function Dashboard() {
 
     supabase.from("tokens").select("*").eq("user_id", user.id)
       .then(({ data }) => setTokens(data || []));
+
+    supabase.from("extension_files").select("file_url, version, instructions")
+      .eq("is_latest", true).maybeSingle()
+      .then(({ data }) => setLatestExt(data));
   }, [user]);
 
   const activeSubscription = subscriptions.find((s) => s.status === "active" && new Date(s.expires_at) > new Date());
@@ -142,16 +147,30 @@ export default function Dashboard() {
 
         {/* Download */}
         <div className="ep-card">
-          <p className="ep-subtitle mb-4">EXTENSÃO</p>
-          <div className="flex items-center justify-between">
+          <p className="ep-subtitle mb-4">EXTENSÃO {latestExt ? `v${latestExt.version}` : ""}</p>
+          <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground font-medium">
               Baixe a extensão para instalar no navegador.
             </p>
-            <button className="ep-btn-secondary h-10 px-6 text-[9px]" disabled={!activeSubscription}>
+            <button
+              className="ep-btn-secondary h-10 px-6 text-[9px]"
+              disabled={!activeSubscription || !latestExt}
+              onClick={async () => {
+                if (!latestExt) return;
+                const { data } = await supabase.storage.from("extensions").createSignedUrl(latestExt.file_url, 300);
+                if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+              }}
+            >
               <Download className="h-4 w-4" />
               DOWNLOAD
             </button>
           </div>
+          {latestExt?.instructions && (
+            <div className="bg-muted rounded-[12px] p-4">
+              <p className="ep-subtitle text-[9px] mb-2">COMO INSTALAR</p>
+              <pre className="text-xs text-muted-foreground font-medium whitespace-pre-wrap">{latestExt.instructions}</pre>
+            </div>
+          )}
         </div>
 
         {/* History */}
