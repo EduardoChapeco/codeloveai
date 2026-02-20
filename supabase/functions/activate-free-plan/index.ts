@@ -128,8 +128,8 @@ Deno.serve(async (req) => {
     // Notify admin
     await serviceClient.from("admin_notifications").insert({
       type: "free_plan",
-      title: "Plano gratuito ativado",
-      description: `Usuário ${userEmail || userId} ativou o plano gratuito de 1 dia. Código: ${sanitizedCode}`,
+      title: "Testdrive gratuito ativado",
+      description: `Usuário ${userEmail || userId} ativou o testdrive gratuito de 5 horas. Código: ${sanitizedCode}`,
       user_id: userId,
     });
 

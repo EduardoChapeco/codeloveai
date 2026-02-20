@@ -39,7 +39,7 @@ export default function FreePlan() {
         return;
       }
       setStatus("success");
-      toast.success("Plano gratuito ativado!");
+      toast.success("Testdrive de 5 horas ativado!");
     } catch (err: any) {
       console.error("Free plan error:", err);
       setErrorMsg(err?.message || "Erro ao ativar plano.");
@@ -67,15 +67,15 @@ export default function FreePlan() {
         {status === "idle" && (
           <>
             <Gift className="h-16 w-16 text-foreground mx-auto mb-6" />
-            <p className="ep-subtitle mb-2">PLANO GRATUITO</p>
-            <h1 className="ep-section-title mb-4">1 DIA GRÁTIS</h1>
+            <p className="ep-subtitle mb-2">TESTDRIVE GRATUITO</p>
+            <h1 className="ep-section-title mb-4">5 HORAS GRÁTIS</h1>
             <p className="text-sm text-muted-foreground font-medium mb-8">
-              Ative seu plano gratuito de 1 dia para testar a extensão CodeLove AI. 
+              Ative seu testdrive gratuito de 5 horas para testar a extensão CodeLove AI. 
               Sem custos, sem compromisso.
             </p>
             {code ? (
               <button onClick={activateFreePlan} className="ep-btn-primary h-12 px-8 text-[9px]">
-                ATIVAR PLANO GRATUITO
+                ATIVAR TESTDRIVE GRATUITO
               </button>
             ) : (
               <p className="text-sm text-destructive font-medium">Link inválido. Solicite um novo link ao administrador.</p>
@@ -94,9 +94,9 @@ export default function FreePlan() {
           <>
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-6" />
             <p className="ep-subtitle mb-2">ATIVADO!</p>
-            <h2 className="ep-section-title mb-4">PLANO GRATUITO ATIVO</h2>
+            <h2 className="ep-section-title mb-4">TESTDRIVE ATIVO</h2>
             <p className="text-sm text-muted-foreground font-medium mb-8">
-              Seu plano de 1 dia foi ativado com sucesso. Acesse seu dashboard para ver seu token de ativação.
+              Seu testdrive de 5 horas foi ativado com sucesso. Acesse seu dashboard para ver seu token de ativação.
             </p>
             <Link to="/dashboard" className="ep-btn-primary h-12 px-8 text-[9px]">
               IR PARA DASHBOARD
