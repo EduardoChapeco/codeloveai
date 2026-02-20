@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle } from "lucide-react";
+import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle, Timer } from "lucide-react";
 
 const plans = [
   { id: "1_day", name: "1 DIA", price: "R$9,99", originalPrice: "R$29,97", period: "por dia", description: "Teste rápido" },
@@ -27,8 +27,35 @@ const faqs = [
   { q: "O que significa 'ilimitado' no plano de 12 meses?", a: "Significa que o acesso é válido enquanto a extensão estiver ativa e funcional. Caso a extensão seja descontinuada, limitada ou pare de funcionar, não haverá reembolso proporcional ou integral." },
 ];
 
+// Countdown: unlimited plan disappears Feb 25, 2026 23:59:59 BRT
+const UNLIMITED_DEADLINE = new Date("2026-02-25T23:59:59-03:00").getTime();
+
+function useCountdown(deadline: number) {
+  const [timeLeft, setTimeLeft] = useState(() => {
+    const diff = deadline - Date.now();
+    return diff > 0 ? diff : 0;
+  });
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const interval = setInterval(() => {
+      const diff = deadline - Date.now();
+      setTimeLeft(diff > 0 ? diff : 0);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [deadline, timeLeft]);
+
+  const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+
+  return { days, hours, minutes, seconds, expired: timeLeft <= 0 };
+}
+
 export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const countdown = useCountdown(UNLIMITED_DEADLINE);
 
   return (
     <div className="min-h-screen bg-background">
@@ -97,8 +124,32 @@ export default function Index() {
                 {plan.popular && (
                   <span className="ep-badge ep-badge-live mb-6 inline-block">POPULAR</span>
                 )}
-                {plan.highlight && (
-                  <span className="ep-badge ep-badge-live mb-6 inline-block">MELHOR CUSTO</span>
+                {plan.highlight && !countdown.expired && (
+                  <div className="mb-4">
+                    <span className="ep-badge ep-badge-live mb-3 inline-block">MELHOR CUSTO</span>
+                    <div className="bg-foreground/5 border border-foreground/20 rounded-[10px] p-3">
+                      <div className="flex items-center gap-1.5 justify-center mb-2">
+                        <Timer className="h-3.5 w-3.5 text-foreground" />
+                        <span className="text-[9px] font-bold text-foreground tracking-widest">OFERTA ENCERRA EM</span>
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        {[
+                          { value: countdown.days, label: "D" },
+                          { value: countdown.hours, label: "H" },
+                          { value: countdown.minutes, label: "M" },
+                          { value: countdown.seconds, label: "S" },
+                        ].map((t, i) => (
+                          <div key={i} className="flex items-baseline gap-0.5">
+                            <span className="text-lg font-black text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
+                            <span className="text-[8px] font-bold text-muted-foreground">{t.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {plan.highlight && countdown.expired && (
+                  <span className="ep-badge ep-badge-offline mb-6 inline-block">ENCERRADO</span>
                 )}
                 <p className="ep-subtitle mb-2">{plan.name}</p>
                 <p className="text-sm text-muted-foreground line-through font-medium">{plan.originalPrice}</p>
@@ -121,10 +172,10 @@ export default function Index() {
                 </ul>
               </div>
               <Link
-                to={`/checkout?plan=${plan.id}`}
-                className={`w-full text-center ${plan.popular || plan.highlight ? "ep-btn-primary" : "ep-btn-secondary"}`}
+                to={plan.highlight && countdown.expired ? "#" : `/checkout?plan=${plan.id}`}
+                className={`w-full text-center ${plan.highlight && countdown.expired ? "ep-btn-secondary opacity-50 pointer-events-none" : plan.popular || plan.highlight ? "ep-btn-primary" : "ep-btn-secondary"}`}
               >
-                ASSINAR
+                {plan.highlight && countdown.expired ? "ENCERRADO" : "ASSINAR"}
               </Link>
             </div>
           ))}
