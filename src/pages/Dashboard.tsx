@@ -36,7 +36,7 @@ export default function Dashboard() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const [adminTokenGenerated, setAdminTokenGenerated] = useState(false);
-  const [onboardChecked, setOnboardChecked] = useState(false);
+  const onboardRef = useRef(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -144,11 +144,16 @@ export default function Dashboard() {
     generateAdminToken();
   }, [user, isAdmin, adminLoading, tokens, adminTokenGenerated]);
 
-  // Auto-onboard: give new users a 5-hour trial
+  // Auto-onboard: give new users a 5-hour trial (runs once only via ref guard)
   useEffect(() => {
-    if (!user || authLoading || adminLoading || onboardChecked) return;
-    if (isAdmin) { setOnboardChecked(true); return; } // Admins get their own token
-    if (subscriptions.length > 0 || tokens.length > 0) { setOnboardChecked(true); return; }
+    if (!user || authLoading || adminLoading) return;
+    if (onboardRef.current) return;
+    if (isAdmin) return; // Admins get their own token
+    // Wait until initial data is loaded before deciding
+    if (subscriptions.length > 0 || tokens.length > 0) return;
+
+    // Mark as running immediately to prevent duplicate calls
+    onboardRef.current = true;
 
     const runOnboard = async () => {
       try {
@@ -175,10 +180,9 @@ export default function Dashboard() {
       } catch (err) {
         console.error("Auto-onboard error:", err);
       }
-      setOnboardChecked(true);
     };
     runOnboard();
-  }, [user, authLoading, adminLoading, isAdmin, subscriptions, tokens, onboardChecked]);
+  }, [user, authLoading, adminLoading, isAdmin, subscriptions, tokens]);
 
   // Fetch chat messages
   const fetchMessages = async () => {
