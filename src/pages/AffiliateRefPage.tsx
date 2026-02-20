@@ -8,7 +8,7 @@ const plans = [
   { id: "1_day", name: "1 DIA", price: 9.99, priceLabel: "R$9,99", period: "por dia" },
   { id: "7_days", name: "7 DIAS", price: 49.90, priceLabel: "R$49,90", period: "por semana" },
   { id: "1_month", name: "1 MÊS", price: 149.90, priceLabel: "R$149,90", period: "por mês", popular: true },
-  { id: "12_months", name: "12 MESES", price: 499.00, priceLabel: "R$499,00", period: "ilimitado*", highlight: true },
+  { id: "12_months", name: "12 MESES", price: 499.00, priceLabel: "R$499,00", period: "por tempo indeterminado*", highlight: true },
 ];
 
 const benefits = [

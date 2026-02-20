@@ -23,10 +23,10 @@ const basePlans = [
     features: ["Envios ilimitados por 30 dias", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte prioritário"],
   },
   {
-    id: "12_months", name: "12 MESES", price: 499.00, originalPrice: "R$1.497,00", period: "ilimitado*",
-    description: "Acesso completo enquanto a extensão estiver ativa.",
+    id: "12_months", name: "12 MESES", price: 499.00, originalPrice: "R$1.497,00", period: "por tempo indeterminado*",
+    description: "Plano por tempo indeterminado até 12 meses. Acesso completo enquanto a extensão estiver ativa.",
     highlight: true,
-    features: ["Acesso enquanto ativo", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
+    features: ["Acesso por tempo indeterminado (até 12 meses)", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
   },
 ];
 
@@ -38,7 +38,7 @@ const terms = [
   "O serviço é considerado entregue após o envio e ativação do token.",
   "O cliente assume total responsabilidade pela utilização de uma extensão não oficial, podendo ter projetos, contas bloqueados, suspensos ou excluídos a qualquer momento.",
   "Não nos responsabilizamos por quaisquer consequências do uso da extensão.",
-  "O plano '12 Meses — Ilimitado' refere-se ao acesso enquanto a extensão estiver ativa. A descontinuação do serviço não gera reembolso.",
+  "O plano '12 Meses' oferece acesso por tempo indeterminado, com duração máxima de até 12 meses, enquanto a extensão estiver ativa. A descontinuação do serviço não gera reembolso.",
   "Nosso método é novo e utiliza a própria plataforma para se comunicar.",
   "Não utilizamos créditos da conta Lovable — todos os projetos, mensagens e planos criados/enviados não descontam créditos.",
 ];
