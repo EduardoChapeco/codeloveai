@@ -33,8 +33,9 @@ interface Message {
 
 export default function Dashboard() {
   const { user, loading: authLoading, signOut } = useAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
+  const [adminTokenGenerated, setAdminTokenGenerated] = useState(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -106,6 +107,40 @@ export default function Dashboard() {
         if (data?.[0]) setAdminUserId(data[0].user_id);
       });
   }, [user]);
+
+  // Auto-generate 1000-day token for admin if none exists
+  useEffect(() => {
+    if (!user || adminLoading || !isAdmin || adminTokenGenerated) return;
+    const hasActiveToken = tokens.some((t) => t.is_active);
+    if (hasActiveToken) return;
+
+    const generateAdminToken = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("admin-token-actions", {
+          body: {
+            action: "generate",
+            email: user.email,
+            name: user.user_metadata?.name || user.email?.split("@")[0] || "Admin",
+            plan: "days_1000",
+            user_id: user.id,
+          },
+        });
+        if (!error && data?.token) {
+          setTokens([{ id: "admin-auto", token: data.token, is_active: true }]);
+          // SSO Bridge
+          localStorage.setItem('clf_token', data.token);
+          localStorage.setItem('clf_email', user.email || '');
+          localStorage.setItem('clf_name', user.user_metadata?.name || '');
+          window.postMessage({ type: 'clf_sso_token', token: data.token, email: user.email, name: user.user_metadata?.name || '' }, '*');
+          toast.success("Token admin de 1000 dias gerado automaticamente!");
+        }
+        setAdminTokenGenerated(true);
+      } catch {
+        setAdminTokenGenerated(true);
+      }
+    };
+    generateAdminToken();
+  }, [user, isAdmin, adminLoading, tokens, adminTokenGenerated]);
 
   // Fetch chat messages
   const fetchMessages = async () => {
