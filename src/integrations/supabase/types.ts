@@ -343,6 +343,7 @@ export type Database = {
         Row: {
           comments_count: number
           content: string
+          copy_count: number
           created_at: string
           id: string
           is_deleted: boolean
@@ -357,6 +358,7 @@ export type Database = {
           project_name: string | null
           project_preview_image: string | null
           project_url: string | null
+          prompt_text: string | null
           title: string | null
           updated_at: string
           user_id: string
@@ -365,6 +367,7 @@ export type Database = {
         Insert: {
           comments_count?: number
           content?: string
+          copy_count?: number
           created_at?: string
           id?: string
           is_deleted?: boolean
@@ -379,6 +382,7 @@ export type Database = {
           project_name?: string | null
           project_preview_image?: string | null
           project_url?: string | null
+          prompt_text?: string | null
           title?: string | null
           updated_at?: string
           user_id: string
@@ -387,6 +391,7 @@ export type Database = {
         Update: {
           comments_count?: number
           content?: string
+          copy_count?: number
           created_at?: string
           id?: string
           is_deleted?: boolean
@@ -401,6 +406,7 @@ export type Database = {
           project_name?: string | null
           project_preview_image?: string | null
           project_url?: string | null
+          prompt_text?: string | null
           title?: string | null
           updated_at?: string
           user_id?: string
@@ -544,6 +550,35 @@ export type Database = {
           },
           {
             foreignKeyName: "post_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "community_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_copies: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_copies_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "community_posts"
