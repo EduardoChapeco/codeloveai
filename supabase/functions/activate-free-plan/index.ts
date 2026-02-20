@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isDisposableEmail } from "../_shared/disposable-emails.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,6 +38,14 @@ Deno.serve(async (req) => {
 
     const userId = claimsData.claims.sub;
     const userEmail = claimsData.claims.email;
+
+    // Block disposable/temporary emails
+    if (userEmail && isDisposableEmail(userEmail)) {
+      return new Response(JSON.stringify({ error: "Emails temporários não são permitidos" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const { code } = await req.json();
     if (!code || typeof code !== "string") {

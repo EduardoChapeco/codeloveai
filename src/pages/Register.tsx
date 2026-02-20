@@ -1,17 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { isDisposableEmail } from "@/lib/disposable-emails";
 
 export default function Register() {
+  const { user, loading: authLoading } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // Redirect already-authenticated users
+  useEffect(() => {
+    if (!authLoading && user) navigate("/dashboard", { replace: true });
+  }, [user, authLoading, navigate]);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Block disposable/temporary emails
+    if (isDisposableEmail(email)) {
+      toast.error("Emails temporários não são permitidos. Use um email permanente.");
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase.auth.signUp({
       email,
