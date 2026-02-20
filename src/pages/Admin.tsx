@@ -1182,90 +1182,111 @@ export default function Admin() {
 
       {/* Create User Sheet */}
       <Sheet open={createUserOpen} onOpenChange={setCreateUserOpen}>
-        <SheetContent className="overflow-y-auto">
+        <SheetContent>
           <SheetHeader>
-            <SheetTitle className="text-lg font-bold">CRIAR USUÁRIO</SheetTitle>
-            <SheetDescription>Crie uma conta com plano e token opcionais.</SheetDescription>
+            <div className="h-16 w-16 rounded-[24px] bg-foreground flex items-center justify-center mb-8">
+              <UserPlus className="h-7 w-7 text-background" />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.6em] text-muted-foreground">Protocol Start</p>
+            <SheetTitle>CRIAR USUÁRIO</SheetTitle>
+            <SheetDescription>Crie uma conta com plano e token opcionais vinculados ao sistema.</SheetDescription>
           </SheetHeader>
-          <div className="space-y-5 mt-6">
-            <div>
-              <label className="ep-subtitle text-[9px] mb-1 block">EMAIL *</label>
-              <input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)}
-                placeholder="usuario@email.com" className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border w-full" />
-            </div>
-            <div>
-              <label className="ep-subtitle text-[9px] mb-1 block">NOME</label>
-              <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)}
-                placeholder="Nome do usuário" className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border w-full" />
-            </div>
-            <div>
-              <label className="ep-subtitle text-[9px] mb-1 block">SENHA *</label>
+
+          <div className="p-12 lg:p-16 space-y-10 flex-1">
+            <div className="relative group/input">
+              <label className="ep-sheet-label">EMAIL *</label>
               <div className="relative">
+                <span className="absolute left-8 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground/40 group-focus-within/input:text-foreground transition-colors">@</span>
+                <input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)}
+                  placeholder="usuario@email.com" className="ep-sheet-input w-full" />
+                <div className="absolute inset-x-12 -bottom-3 h-1 bg-foreground scale-x-0 group-focus-within/input:scale-x-100 transition-transform duration-700 rounded-sm" />
+              </div>
+            </div>
+
+            <div className="relative group/input">
+              <label className="ep-sheet-label">NOME</label>
+              <div className="relative">
+                <Users className="absolute left-8 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground/40 group-focus-within/input:text-foreground transition-colors" />
+                <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)}
+                  placeholder="Nome do usuário" className="ep-sheet-input w-full" />
+              </div>
+            </div>
+
+            <div className="relative group/input">
+              <label className="ep-sheet-label">SENHA *</label>
+              <div className="relative">
+                <Key className="absolute left-8 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground/40 group-focus-within/input:text-foreground transition-colors" />
                 <input type={showNewPassword ? "text" : "password"} value={newUserPassword}
                   onChange={(e) => setNewUserPassword(e.target.value)} placeholder="Mínimo 6 caracteres"
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 pr-10 border border-border w-full" />
+                  className="ep-sheet-input w-full" />
                 <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showNewPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  className="absolute right-8 top-1/2 -translate-y-1/2 h-10 w-10 rounded-[12px] flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
+                  {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
-            <div>
-              <label className="ep-subtitle text-[9px] mb-1 block">PLANO</label>
+
+            <div className="relative group/input">
+              <label className="ep-sheet-label">PLANO</label>
               <select value={newUserPlan} onChange={(e) => setNewUserPlan(e.target.value)}
-                className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border w-full">
+                className="ep-sheet-input w-full pl-8 appearance-none cursor-pointer">
                 <option value="">Sem plano</option>
                 {planOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
             </div>
-            <div>
-              <label className="ep-subtitle text-[9px] mb-1 block">PAPEL</label>
+
+            <div className="relative group/input">
+              <label className="ep-sheet-label">PAPEL</label>
               <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}
-                className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border w-full">
+                className="ep-sheet-input w-full pl-8 appearance-none cursor-pointer">
                 <option value="member">Membro</option>
                 <option value="admin">Admin</option>
                 <option value="affiliate">Afiliado</option>
               </select>
             </div>
-            <div className="flex items-center gap-3">
+
+            <div className="flex items-center gap-4 p-6 rounded-[24px] border border-border">
               <button type="button" onClick={() => setNewUserAutoToken(!newUserAutoToken)}
-                className={`h-5 w-9 rounded-full transition-colors ${newUserAutoToken ? "bg-foreground" : "bg-muted border border-border"}`}>
-                <div className={`h-3.5 w-3.5 rounded-full bg-background transition-transform mx-0.5 ${newUserAutoToken ? "translate-x-4" : "translate-x-0"}`} />
+                className={`h-8 w-14 rounded-[10px] transition-colors duration-300 ${newUserAutoToken ? "bg-foreground" : "bg-muted border border-border"}`}>
+                <div className={`h-6 w-6 rounded-[8px] bg-background transition-transform mx-1 ${newUserAutoToken ? "translate-x-6" : "translate-x-0"}`} />
               </button>
-              <span className="text-xs text-muted-foreground">Gerar token automaticamente</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">Gerar token automaticamente</span>
             </div>
 
             <button onClick={createUserAdmin} disabled={newUserLoading}
-              className="ep-btn-primary h-11 w-full rounded-[14px] text-[10px] flex items-center justify-center gap-2">
-              {newUserLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              {newUserLoading ? "CRIANDO..." : "CRIAR USUÁRIO"}
+              className="ep-sheet-btn group">
+              {newUserLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UserPlus className="h-5 w-5" />}
+              {newUserLoading ? "DEPLOYING NODE..." : "AUTHORIZE ACTIVATION"}
+              {!newUserLoading && <span className="group-hover:translate-x-3 transition-transform">→</span>}
             </button>
 
             {newUserResult && (
-              <div className="ep-card-sm border-green-500/30 space-y-2">
-                <p className="text-xs font-bold text-green-600">✓ Usuário criado!</p>
-                <p className="text-xs text-muted-foreground">Email: {newUserResult.email}</p>
-                <p className="text-xs text-muted-foreground">Papel: {newUserResult.role}</p>
-                {newUserResult.plan && <p className="text-xs text-muted-foreground">Plano: {planLabels[newUserResult.plan] || newUserResult.plan}</p>}
+              <div className="rounded-[32px] border border-border p-8 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.5em] text-foreground">✓ NODE DEPLOYED</p>
+                <p className="text-sm font-medium text-muted-foreground">Email: {newUserResult.email}</p>
+                <p className="text-sm font-medium text-muted-foreground">Papel: {newUserResult.role}</p>
+                {newUserResult.plan && <p className="text-sm font-medium text-muted-foreground">Plano: {planLabels[newUserResult.plan] || newUserResult.plan}</p>}
                 {newUserResult.token && (
-                  <div className="mt-2">
-                    <p className="text-xs font-bold text-foreground mb-1">Token:</p>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 min-w-0 bg-muted px-3 py-2 rounded-[8px]">
-                        <code className="font-mono text-xs text-muted-foreground">
+                  <div className="mt-4">
+                    <p className="ep-sheet-label mb-2">TOKEN</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0 bg-muted px-6 py-4 rounded-[16px]">
+                        <code className="font-mono text-sm text-muted-foreground">
                           {newUserResult.token.substring(0, 12)}••••••••{newUserResult.token.substring(newUserResult.token.length - 6)}
                         </code>
                       </div>
                       <button onClick={() => { navigator.clipboard.writeText(newUserResult.token); toast.success("Token copiado!"); }}
-                        className="ep-btn-secondary h-8 px-3 text-[8px] flex items-center gap-1 shrink-0">
-                        <Copy className="h-3 w-3" /> COPIAR
+                        className="h-14 w-14 rounded-[20px] border border-border flex items-center justify-center text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-300">
+                        <Copy className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                 )}
-                {newUserResult.token_error && <p className="text-xs text-destructive">{newUserResult.token_error}</p>}
+                {newUserResult.token_error && <p className="text-sm text-destructive font-medium">{newUserResult.token_error}</p>}
               </div>
             )}
+
+            <p className="ep-sheet-footer">CODELOVE AI CORE SYSTEM v4.2</p>
           </div>
         </SheetContent>
       </Sheet>
