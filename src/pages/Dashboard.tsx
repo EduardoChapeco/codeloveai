@@ -318,12 +318,14 @@ export default function Dashboard() {
           <p className="ep-subtitle mb-4">TOKEN DE ATIVAÇÃO</p>
           {tokens.filter((t) => t.is_active).length > 0 ? (
             tokens.filter((t) => t.is_active).map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-4">
-                <code className="font-mono text-sm bg-muted px-4 py-3 rounded-[8px] flex-1 truncate">
-                  {t.token}
-                </code>
-                <button onClick={() => copyToken(t.token)} className="ep-btn-icon h-12 w-12 rounded-[16px]">
-                  <Copy className="h-4 w-4" />
+              <div key={t.id} className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0 bg-muted px-4 py-3 rounded-[8px]">
+                  <code className="font-mono text-sm text-muted-foreground">
+                    {t.token.substring(0, 12)}••••••••{t.token.substring(t.token.length - 6)}
+                  </code>
+                </div>
+                <button onClick={() => copyToken(t.token)} className="ep-btn-secondary h-10 px-4 text-[9px] flex items-center gap-1.5 shrink-0">
+                  <Copy className="h-3 w-3" /> COPIAR
                 </button>
               </div>
             ))
