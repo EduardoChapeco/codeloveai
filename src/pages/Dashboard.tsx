@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { Copy, Download, LogOut } from "lucide-react";
+import { useAuth, useIsAdmin } from "@/hooks/useAuth";
+import { Copy, Download, LogOut, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -23,6 +23,7 @@ interface Token {
 
 export default function Dashboard() {
   const { user, loading: authLoading, signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [tokens, setTokens] = useState<Token[]>([]);
@@ -72,6 +73,12 @@ export default function Dashboard() {
         <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground font-medium">{profile?.name || profile?.email}</span>
+          {isAdmin && (
+            <Link to="/admin" className="ep-btn-secondary h-10 px-4 text-[9px] flex items-center gap-1">
+              <Shield className="h-3 w-3" />
+              ADMIN
+            </Link>
+          )}
           <button onClick={signOut} className="ep-btn-icon h-10 w-10 rounded-[14px]">
             <LogOut className="h-4 w-4" />
           </button>
