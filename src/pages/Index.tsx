@@ -91,6 +91,18 @@ export default function Index() {
 
       {/* Hero */}
       <section className="px-8 py-32 lg:py-40 max-w-5xl mx-auto text-center">
+        {/* TestDrive Badge */}
+        <div className="inline-flex items-center gap-2 border border-foreground/20 bg-foreground/5 rounded-[48px] px-6 py-2.5 mb-8">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-[4px] bg-foreground opacity-40" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-[4px] bg-foreground" />
+          </span>
+          <span className="text-[10px] font-bold text-foreground tracking-[0.2em]">TESTDRIVE GRATUITO — 5H POR TEMPO LIMITADO</span>
+          <Link to="/free" className="text-[9px] font-bold text-foreground underline underline-offset-2 hover:opacity-70 transition-opacity tracking-widest ml-1">
+            ATIVAR →
+          </Link>
+        </div>
+
         <p className="ep-subtitle mb-6">EXTENSÃO NÃO OFICIAL PARA LOVABLE</p>
         <h1 className="ep-title mb-8">
           A MELHOR PLATAFORMA DE ENVIOS INFINITOS
@@ -99,7 +111,10 @@ export default function Index() {
           Crie quantos projetos quiser, envie quantas mensagens quiser. 24/7 sem parar.
           Sem descontar créditos da sua conta Lovable.
         </p>
-        <Link to="/checkout" className="ep-btn-primary inline-flex">VER PLANOS</Link>
+        <div className="flex items-center justify-center gap-4">
+          <Link to="/checkout" className="ep-btn-primary inline-flex">VER PLANOS</Link>
+          <Link to="/free" className="ep-btn-secondary inline-flex">TESTAR GRÁTIS</Link>
+        </div>
       </section>
 
       {/* Benefits */}
