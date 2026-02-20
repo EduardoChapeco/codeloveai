@@ -191,8 +191,11 @@ Deno.serve(async (req) => {
         const saleAmount = typeof paidAmount === "number" ? paidAmount : expectedPrice;
         const commissionAmount = Math.round(saleAmount * COMMISSION_PERCENT) / 100;
 
-        // Auto-confirm referral with commission
-        await supabaseAdmin.from("affiliate_referrals").insert({
+        // Auto-confirm referral with commission + client info
+        const clientEmail = refData.email || "";
+        const clientName = clientEmail.split("@")[0] || "";
+
+        const { data: referralData } = await supabaseAdmin.from("affiliate_referrals").insert({
           affiliate_id: aff.id,
           referred_user_id: refData.user_id,
           subscription_id: newSub.id,
@@ -200,7 +203,9 @@ Deno.serve(async (req) => {
           commission_amount: commissionAmount,
           sale_amount: saleAmount,
           subscription_plan: refData.plan,
-        });
+          referred_email: clientEmail,
+          referred_name: clientName,
+        }).select("id").single();
 
         // Add codecoin
         const { data: coins } = await supabaseAdmin
@@ -235,8 +240,19 @@ Deno.serve(async (req) => {
             total_sales: existingInvoice.total_sales + 1,
             total_commission: Number(existingInvoice.total_commission) + commissionAmount,
           }).eq("id", existingInvoice.id);
+
+          // Add invoice line item
+          await supabaseAdmin.from("affiliate_invoice_items").insert({
+            invoice_id: existingInvoice.id,
+            referral_id: referralData?.id || null,
+            client_email: clientEmail,
+            client_name: clientName,
+            plan: refData.plan,
+            sale_amount: saleAmount,
+            commission_amount: commissionAmount,
+          });
         } else {
-          await supabaseAdmin.from("affiliate_invoices").insert({
+          const { data: newInvoice } = await supabaseAdmin.from("affiliate_invoices").insert({
             affiliate_id: aff.id,
             user_id: aff.user_id,
             week_start: weekBounds.week_start,
@@ -244,7 +260,20 @@ Deno.serve(async (req) => {
             total_sales: 1,
             total_commission: commissionAmount,
             status: "open",
-          });
+          }).select("id").single();
+
+          // Add invoice line item
+          if (newInvoice) {
+            await supabaseAdmin.from("affiliate_invoice_items").insert({
+              invoice_id: newInvoice.id,
+              referral_id: referralData?.id || null,
+              client_email: clientEmail,
+              client_name: clientName,
+              plan: refData.plan,
+              sale_amount: saleAmount,
+              commission_amount: commissionAmount,
+            });
+          }
         }
 
         // Notify admin about commission

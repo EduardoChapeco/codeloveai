@@ -91,6 +91,57 @@ export type Database = {
           },
         ]
       }
+      affiliate_invoice_items: {
+        Row: {
+          client_email: string
+          client_name: string
+          commission_amount: number
+          created_at: string
+          id: string
+          invoice_id: string
+          plan: string
+          referral_id: string | null
+          sale_amount: number
+        }
+        Insert: {
+          client_email?: string
+          client_name?: string
+          commission_amount?: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          plan?: string
+          referral_id?: string | null
+          sale_amount?: number
+        }
+        Update: {
+          client_email?: string
+          client_name?: string
+          commission_amount?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          plan?: string
+          referral_id?: string | null
+          sale_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_invoice_items_referral_id_fkey"
+            columns: ["referral_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_referrals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       affiliate_invoices: {
         Row: {
           affiliate_id: string
@@ -154,6 +205,8 @@ export type Database = {
           confirmed: boolean
           created_at: string
           id: string
+          referred_email: string | null
+          referred_name: string | null
           referred_user_id: string
           sale_amount: number | null
           subscription_id: string | null
@@ -165,6 +218,8 @@ export type Database = {
           confirmed?: boolean
           created_at?: string
           id?: string
+          referred_email?: string | null
+          referred_name?: string | null
           referred_user_id: string
           sale_amount?: number | null
           subscription_id?: string | null
@@ -176,6 +231,8 @@ export type Database = {
           confirmed?: boolean
           created_at?: string
           id?: string
+          referred_email?: string | null
+          referred_name?: string | null
           referred_user_id?: string
           sale_amount?: number | null
           subscription_id?: string | null
