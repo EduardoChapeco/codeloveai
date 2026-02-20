@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -44,9 +44,16 @@ const terms = [
 
 export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [agreedTerms, setAgreedTerms] = useState(() => {
+    return localStorage.getItem("codelove_terms_agreed") === "true";
+  });
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const handleTermsChange = (checked: boolean) => {
+    setAgreedTerms(checked);
+    localStorage.setItem("codelove_terms_agreed", checked ? "true" : "false");
+  };
 
   const handleSubscribe = async (planId: string) => {
     if (!agreedTerms) {
@@ -61,7 +68,7 @@ export default function Index() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       toast.error("Faça login para assinar um plano.");
-      navigate("/login");
+      navigate("/login?returnTo=/?scrollTo=plans");
       setLoadingPlan(null);
       return;
     }
@@ -84,6 +91,17 @@ export default function Index() {
       setLoadingPlan(null);
     }
   };
+
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const scrollTo = searchParams.get("scrollTo");
+    if (scrollTo === "plans") {
+      setTimeout(() => {
+        document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" });
+      }, 300);
+    }
+  }, [searchParams]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -233,7 +251,7 @@ export default function Index() {
               <input
                 type="checkbox"
                 checked={agreedTerms}
-                onChange={(e) => setAgreedTerms(e.target.checked)}
+                onChange={(e) => handleTermsChange(e.target.checked)}
                 className="mt-1 h-4 w-4 rounded-[4px] border border-border accent-foreground"
               />
               <span className="text-sm font-bold text-foreground">
