@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer, Percent } from "lucide-react";
+import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer, Percent, Copy, QrCode, CreditCard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -81,8 +81,10 @@ export default function Checkout() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(preselectedPlan);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [loadingCheckout, setLoadingCheckout] = useState(false);
-  const [step, setStep] = useState<"plan" | "terms" | "processing">("plan");
+  const [step, setStep] = useState<"plan" | "terms" | "processing" | "pix">("plan");
   const countdown = useCountdown(UNLIMITED_DEADLINE);
+  const [pixData, setPixData] = useState<{ pix_code: string; pix_qr_base64?: string; ticket_url?: string; payment_id?: string } | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"redirect" | "pix">("pix");
 
   // Affiliate discount state
   const [affiliateDiscount, setAffiliateDiscount] = useState(0);
@@ -126,6 +128,15 @@ export default function Checkout() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleCopyPix = () => {
+    if (!pixData?.pix_code) return;
+    navigator.clipboard.writeText(pixData.pix_code).then(() => {
+      toast.success("Chave PIX copiada!");
+    }).catch(() => {
+      toast.error("Erro ao copiar. Copie manualmente.");
+    });
+  };
+
   const handleConfirmAndPay = async () => {
     if (!selectedPlan) return;
     if (!agreedTerms) {
@@ -138,11 +149,22 @@ export default function Checkout() {
 
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { plan: selectedPlan },
+        body: { plan: selectedPlan, payment_method: paymentMethod },
       });
 
       if (error) throw error;
-      if (data?.init_point) {
+
+      if (paymentMethod === "pix" && data?.pix_code) {
+        setPixData({
+          pix_code: data.pix_code,
+          pix_qr_base64: data.pix_qr_base64,
+          ticket_url: data.ticket_url,
+          payment_id: data.payment_id,
+        });
+        setStep("pix");
+      } else if (paymentMethod === "pix" && data?.ticket_url) {
+        window.location.href = data.ticket_url;
+      } else if (data?.init_point) {
         window.location.href = data.init_point;
       } else {
         toast.error("Erro ao criar checkout. Tente novamente.");
@@ -195,7 +217,7 @@ export default function Checkout() {
             { key: "processing", label: "3. PAGAMENTO" },
           ].map((s, i) => (
             <div key={s.key} className="flex items-center gap-2">
-              <span className={`ep-badge ${step === s.key ? "ep-badge-live" : "ep-badge-offline"}`}>
+              <span className={`ep-badge ${step === s.key || (step === "pix" && s.key === "processing") ? "ep-badge-live" : "ep-badge-offline"}`}>
                 {s.label}
               </span>
               {i < 2 && <ChevronDown className="h-3 w-3 text-muted-foreground -rotate-90" />}
@@ -372,7 +394,36 @@ export default function Checkout() {
               </div>
             </div>
 
-            <div className="mt-8 flex items-center justify-between">
+            {/* Payment method selector */}
+            <div className="mt-8">
+              <p className="ep-label text-xs mb-3">MÉTODO DE PAGAMENTO</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setPaymentMethod("pix")}
+                  className={`flex items-center gap-2 justify-center p-3 rounded-lg border transition-all text-sm font-bold ${
+                    paymentMethod === "pix"
+                      ? "border-foreground bg-foreground/10 text-foreground"
+                      : "border-border text-muted-foreground hover:border-foreground/50"
+                  }`}
+                >
+                  <QrCode className="h-4 w-4" />
+                  PIX
+                </button>
+                <button
+                  onClick={() => setPaymentMethod("redirect")}
+                  className={`flex items-center gap-2 justify-center p-3 rounded-lg border transition-all text-sm font-bold ${
+                    paymentMethod === "redirect"
+                      ? "border-foreground bg-foreground/10 text-foreground"
+                      : "border-border text-muted-foreground hover:border-foreground/50"
+                  }`}
+                >
+                  <CreditCard className="h-4 w-4" />
+                  CARTÃO / OUTROS
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-between">
               <button
                 onClick={() => { setStep("plan"); setAgreedTerms(false); }}
                 className="ep-btn-secondary h-12 px-8 text-[9px]"
@@ -384,7 +435,7 @@ export default function Checkout() {
                 disabled={!agreedTerms || loadingCheckout}
                 className="ep-btn-primary h-12 px-8 text-[9px]"
               >
-                {loadingCheckout ? "PROCESSANDO..." : "CONFIRMAR E PAGAR"}
+                {loadingCheckout ? "PROCESSANDO..." : paymentMethod === "pix" ? "GERAR PIX" : "CONFIRMAR E PAGAR"}
               </button>
             </div>
 
@@ -392,8 +443,10 @@ export default function Checkout() {
               <div className="ep-card-sm flex items-start gap-4">
                 <AlertTriangle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground font-medium">
-                  <strong className="text-foreground">Importante:</strong> Ao confirmar, você será redirecionado para
-                  o Mercado Pago para completar o pagamento de forma segura.
+                  <strong className="text-foreground">Importante:</strong>{" "}
+                  {paymentMethod === "pix"
+                    ? "Ao confirmar, será gerado um código PIX para pagamento. O acesso é ativado automaticamente após a confirmação."
+                    : "Ao confirmar, você será redirecionado para o Mercado Pago para completar o pagamento de forma segura."}
                 </p>
               </div>
             </div>
@@ -408,6 +461,90 @@ export default function Checkout() {
             <p className="text-sm text-muted-foreground font-medium">
               Redirecionando para o pagamento...
             </p>
+          </div>
+        )}
+
+        {/* Step 4: PIX Display */}
+        {step === "pix" && pixData && selectedPlanData && (
+          <div>
+            <p className="ep-subtitle text-center mb-4">PAGAMENTO VIA PIX</p>
+            <h1 className="ep-section-title text-center mb-8">ESCANEIE OU COPIE O CÓDIGO</h1>
+
+            {/* Plan summary */}
+            <div className="ep-card-sm flex items-center justify-between mb-8">
+              <div>
+                <p className="text-sm font-bold text-foreground">{selectedPlanData.name}</p>
+                <p className="text-xs text-muted-foreground">{selectedPlanData.description}</p>
+              </div>
+              <div className="text-right">
+                {affiliateDiscount > 0 ? (
+                  <p className="ep-value text-2xl text-green-500">{formatBRL(selectedPlanData.discountedPrice)}</p>
+                ) : (
+                  <p className="ep-value text-2xl">{formatBRL(selectedPlanData.price)}</p>
+                )}
+              </div>
+            </div>
+
+            {/* QR Code */}
+            {pixData.pix_qr_base64 && (
+              <div className="flex justify-center mb-8">
+                <div className="bg-white p-4 rounded-xl">
+                  <img
+                    src={`data:image/png;base64,${pixData.pix_qr_base64}`}
+                    alt="QR Code PIX"
+                    className="w-64 h-64"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* PIX Copy-Paste */}
+            <div className="ep-card">
+              <p className="ep-label text-xs mb-3">CÓDIGO PIX (COPIA E COLA)</p>
+              <div className="bg-muted/50 rounded-lg p-4 break-all text-xs text-muted-foreground font-mono mb-4 max-h-32 overflow-y-auto">
+                {pixData.pix_code}
+              </div>
+              <button
+                onClick={handleCopyPix}
+                className="ep-btn-primary w-full flex items-center justify-center gap-2"
+              >
+                <Copy className="h-4 w-4" />
+                COPIAR CÓDIGO PIX
+              </button>
+            </div>
+
+            <div className="mt-6 ep-card-sm flex items-start gap-4">
+              <AlertTriangle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">
+                  <strong className="text-foreground">Ativação automática:</strong> Após o pagamento ser confirmado,
+                  seu acesso será ativado automaticamente. Isso pode levar alguns minutos.
+                </p>
+              </div>
+            </div>
+
+            {pixData.ticket_url && (
+              <div className="mt-4 text-center">
+                <a
+                  href={pixData.ticket_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
+                >
+                  Abrir página de pagamento do Mercado Pago →
+                </a>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={() => { setStep("terms"); setPixData(null); }}
+                className="ep-btn-secondary h-10 px-6 text-[9px] flex items-center gap-2"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                VOLTAR
+              </button>
+            </div>
           </div>
         )}
       </div>

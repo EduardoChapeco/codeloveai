@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     const userId = claimsData.claims.sub;
     const userEmail = claimsData.claims.email;
 
-    const { plan, affiliate_code } = await req.json();
+    const { plan, affiliate_code, payment_method } = await req.json();
 
     // Validate plan input
     const validPlans = ["1_day", "7_days", "1_month", "12_months"];
@@ -75,7 +75,6 @@ Deno.serve(async (req) => {
     let validAffiliateCode: string | null = null;
 
     if (ownAffiliate) {
-      // User is an affiliate — auto-apply their discount
       discountApplied = ownAffiliate.discount_percent;
       finalPrice = Math.round(planData.price * (1 - discountApplied / 100) * 100) / 100;
       validAffiliateCode = ownAffiliate.affiliate_code;
@@ -93,7 +92,6 @@ Deno.serve(async (req) => {
 
       if (aff && aff.user_id !== userId) {
         validAffiliateCode = aff.affiliate_code;
-        // Referral affiliate codes don't give discount to buyer (only commission to affiliate)
       }
     }
 
@@ -112,6 +110,118 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const webhookUrl = `${supabaseUrl}/functions/v1/mercadopago-webhook`;
 
+    const externalReference = JSON.stringify({
+      user_id: userId, plan, email: userEmail,
+      affiliate_code: validAffiliateCode,
+    });
+
+    // ===== PIX DIRECT PAYMENT =====
+    if (payment_method === "pix") {
+      console.log(`Creating PIX payment for user ${userId}, plan: ${plan}, price: ${finalPrice}`);
+
+      const pixPayload = {
+        transaction_amount: finalPrice,
+        description: planData.title,
+        payment_method_id: "pix",
+        payer: {
+          email: userEmail || `user-${userId.substring(0, 8)}@codelove.ai`,
+        },
+        external_reference: externalReference,
+        notification_url: webhookUrl,
+      };
+
+      const pixResponse = await fetch("https://api.mercadopago.com/v1/payments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "X-Idempotency-Key": `${userId}-${plan}-${Date.now()}`,
+        },
+        body: JSON.stringify(pixPayload),
+        signal: AbortSignal.timeout(90000),
+      });
+
+      const contentType = pixResponse.headers.get("content-type");
+
+      if (!contentType?.includes("application/json")) {
+        const textResponse = await pixResponse.text();
+        console.error("MP PIX returned non-JSON:", textResponse.substring(0, 200));
+        return new Response(JSON.stringify({ error: "Erro ao gerar PIX. Tente novamente." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let pixData;
+      try {
+        pixData = await pixResponse.json();
+      } catch (parseError) {
+        console.error("Failed to parse PIX response:", parseError);
+        return new Response(JSON.stringify({ error: "Resposta inválida do gateway de pagamento" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!pixResponse.ok) {
+        console.error("MP PIX error:", JSON.stringify(pixData));
+        return new Response(JSON.stringify({ error: "Erro ao criar pagamento PIX" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Extract PIX code from response - check multiple possible locations
+      const transactionData = pixData.point_of_interaction?.transaction_data;
+      const pixCode = transactionData?.qr_code ||
+                      pixData.pix_copy_paste ||
+                      pixData.pix?.copy_paste ||
+                      pixData.pix?.code ||
+                      pixData.qr_code_text;
+
+      const pixQrBase64 = transactionData?.qr_code_base64 || null;
+      const ticketUrl = transactionData?.ticket_url || pixData.ticket_url || null;
+
+      if (!pixCode) {
+        console.error("PIX code not found in response:", JSON.stringify(pixData).substring(0, 500));
+        // Fallback to ticket_url if available
+        if (ticketUrl) {
+          return new Response(
+            JSON.stringify({
+              payment_method: "pix",
+              ticket_url: ticketUrl,
+              payment_id: pixData.id,
+              discount_applied: discountApplied,
+              final_price: finalPrice,
+              original_price: planData.price,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(JSON.stringify({ error: "Chave PIX não encontrada na resposta" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log(`PIX payment created: id=${pixData.id}, code_length=${pixCode.length}`);
+
+      return new Response(
+        JSON.stringify({
+          payment_method: "pix",
+          pix_code: pixCode,
+          pix_qr_base64: pixQrBase64,
+          ticket_url: ticketUrl,
+          payment_id: pixData.id,
+          discount_applied: discountApplied,
+          final_price: finalPrice,
+          original_price: planData.price,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ===== STANDARD CHECKOUT (redirect) =====
     const preference = {
       items: [
         {
@@ -121,10 +231,7 @@ Deno.serve(async (req) => {
           currency_id: "BRL",
         },
       ],
-      external_reference: JSON.stringify({
-        user_id: userId, plan, email: userEmail,
-        affiliate_code: validAffiliateCode,
-      }),
+      external_reference: externalReference,
       back_urls: {
         success: `${origin}/dashboard?payment=success`,
         failure: `${origin}/dashboard?payment=failure`,
