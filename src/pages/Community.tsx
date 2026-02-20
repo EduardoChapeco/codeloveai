@@ -642,12 +642,18 @@ export default function Community() {
   }, [user, authLoading, navigate]);
 
   const fetchPosts = useCallback(async () => {
+    if (!user) return; // RLS requires auth — skip if not logged in yet
     setLoading(true);
     try {
       let query = supabase.from("community_posts").select("*").eq("is_deleted", false).eq("is_archived", false)
         .order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).limit(50);
       if (filterType !== "all") query = query.eq("post_type", filterType);
-      const { data } = await query;
+      const { data, error } = await query;
+      if (error) {
+        console.error("Error fetching posts:", error);
+        setPosts([]);
+        return;
+      }
       const postsList = (data || []) as Post[];
 
       const userIds = [...new Set(postsList.map(p => p.user_id))];
@@ -659,16 +665,22 @@ export default function Community() {
       }
 
       if (user) {
-        const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", user.id).in("post_id", postsList.map(p => p.id));
-        const likedSet = new Set((likes || []).map(l => l.post_id));
-        postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
+        const postIds = postsList.map(p => p.id);
+        if (postIds.length > 0) {
+          const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", user.id).in("post_id", postIds);
+          const likedSet = new Set((likes || []).map(l => l.post_id));
+          postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
+        }
       }
       setPosts(postsList);
     } catch (err) { console.error("Error fetching posts:", err); }
     finally { setLoading(false); }
   }, [filterType, user]);
 
-  useEffect(() => { fetchPosts(); }, [fetchPosts]);
+  // Only fetch when user is authenticated (RLS requires auth.uid())
+  useEffect(() => {
+    if (user) fetchPosts();
+  }, [fetchPosts, user]);
   useEffect(() => { supabase.from("hashtags").select("*").order("posts_count", { ascending: false }).limit(20).then(({ data }) => setHashtags(data || [])); }, []);
 
   if (authLoading) return (<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>);
