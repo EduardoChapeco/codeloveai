@@ -20,6 +20,22 @@ const PLAN_PRICES: Record<string, number> = {
   "12_months": 499.0,
 };
 
+const COMMISSION_PERCENT = 30;
+
+function getWeekBounds() {
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return {
+    week_start: monday.toISOString().split("T")[0],
+    week_end: sunday.toISOString().split("T")[0],
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -101,7 +117,7 @@ Deno.serve(async (req) => {
     // Price validation - allow affiliate discount (up to 20% off)
     const paidAmount = payment.transaction_amount;
     const expectedPrice = PLAN_PRICES[refData.plan];
-    const minPrice = expectedPrice * 0.79; // 20% discount + rounding tolerance
+    const minPrice = expectedPrice * 0.79;
     if (typeof paidAmount === "number" && (paidAmount < minPrice || paidAmount > expectedPrice + 0.01)) {
       console.error(`Price mismatch: paid ${paidAmount}, expected ${expectedPrice} (min ${minPrice}) for plan ${refData.plan}`);
       return new Response(JSON.stringify({ error: "Price mismatch" }), {
@@ -129,7 +145,7 @@ Deno.serve(async (req) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + days);
 
-    // Insert subscription with affiliate_code
+    // Insert subscription
     const { data: newSub, error: insertError } = await supabaseAdmin
       .from("subscriptions")
       .insert({
@@ -151,7 +167,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create admin notification for new purchase
+    // Create admin notification
     const planLabels: Record<string, string> = {
       "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
     };
@@ -163,7 +179,7 @@ Deno.serve(async (req) => {
       reference_id: newSub?.id || null,
     });
 
-    // If affiliate_code present, create referral record
+    // ===== AFFILIATE COMMISSION (30%) =====
     if (refData.affiliate_code && newSub) {
       const { data: aff } = await supabaseAdmin
         .from("affiliates")
@@ -172,13 +188,74 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (aff && aff.user_id !== refData.user_id) {
+        const saleAmount = typeof paidAmount === "number" ? paidAmount : expectedPrice;
+        const commissionAmount = Math.round(saleAmount * COMMISSION_PERCENT) / 100;
+
+        // Auto-confirm referral with commission
         await supabaseAdmin.from("affiliate_referrals").insert({
           affiliate_id: aff.id,
           referred_user_id: refData.user_id,
           subscription_id: newSub.id,
-          confirmed: false,
+          confirmed: true,
+          commission_amount: commissionAmount,
+          sale_amount: saleAmount,
+          subscription_plan: refData.plan,
         });
-        console.log(`Referral created for affiliate ${refData.affiliate_code}`);
+
+        // Add codecoin
+        const { data: coins } = await supabaseAdmin
+          .from("codecoins").select("*").eq("user_id", aff.user_id).maybeSingle();
+        if (coins) {
+          await supabaseAdmin.from("codecoins").update({
+            balance: coins.balance + 1,
+            total_earned: coins.total_earned + 1,
+            updated_at: new Date().toISOString(),
+          }).eq("user_id", aff.user_id);
+        }
+
+        // Log codecoin transaction
+        const { week_start } = getWeekBounds();
+        await supabaseAdmin.from("codecoin_transactions").insert({
+          user_id: aff.user_id, amount: 1, type: "earned",
+          description: `Indicação confirmada (${planLabels[refData.plan]})`,
+          week_start,
+        });
+
+        // ===== WEEKLY INVOICE =====
+        const weekBounds = getWeekBounds();
+        const { data: existingInvoice } = await supabaseAdmin
+          .from("affiliate_invoices")
+          .select("id, total_sales, total_commission")
+          .eq("affiliate_id", aff.id)
+          .eq("week_start", weekBounds.week_start)
+          .maybeSingle();
+
+        if (existingInvoice) {
+          await supabaseAdmin.from("affiliate_invoices").update({
+            total_sales: existingInvoice.total_sales + 1,
+            total_commission: Number(existingInvoice.total_commission) + commissionAmount,
+          }).eq("id", existingInvoice.id);
+        } else {
+          await supabaseAdmin.from("affiliate_invoices").insert({
+            affiliate_id: aff.id,
+            user_id: aff.user_id,
+            week_start: weekBounds.week_start,
+            week_end: weekBounds.week_end,
+            total_sales: 1,
+            total_commission: commissionAmount,
+            status: "open",
+          });
+        }
+
+        // Notify admin about commission
+        await supabaseAdmin.from("admin_notifications").insert({
+          type: "commission",
+          title: `Comissão afiliado: R$${commissionAmount.toFixed(2)}`,
+          description: `Afiliado ${refData.affiliate_code} ganhou R$${commissionAmount.toFixed(2)} de comissão pela venda do plano ${planLabels[refData.plan]}.`,
+          user_id: aff.user_id,
+        });
+
+        console.log(`Referral + commission R$${commissionAmount.toFixed(2)} for affiliate ${refData.affiliate_code}`);
       }
     }
 
@@ -203,22 +280,21 @@ Deno.serve(async (req) => {
           name: refData.email?.split("@")[0] || "",
           plan: externalPlan,
         };
-        console.log(`Calling external webhook for user ${refData.user_id}, email: ${refData.email}, plan: ${externalPlan}`);
+        console.log(`Calling external webhook for user ${refData.user_id}, plan: ${externalPlan}`);
 
         const webhookResponse = await fetch("https://codelove-fix-api.eusoueduoficial.workers.dev/webhook/purchase", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),
         });
-        
+
         const responseText = await webhookResponse.text();
         console.log(`External webhook response status: ${webhookResponse.status}, body: ${responseText}`);
-        
+
         if (webhookResponse.ok) {
           try {
             const webhookData = JSON.parse(responseText);
             if (webhookData.token) {
-              // Auto-assign token to user
               await supabaseAdmin.from("tokens").update({ is_active: false }).eq("user_id", refData.user_id);
               await supabaseAdmin.from("tokens").insert({
                 user_id: refData.user_id,
@@ -227,20 +303,19 @@ Deno.serve(async (req) => {
               });
               console.log(`Auto-generated token stored for user ${refData.user_id}: ${webhookData.token.substring(0, 8)}...`);
             } else {
-              console.warn(`External webhook responded OK but no token in response: ${responseText}`);
+              console.warn(`External webhook responded OK but no token: ${responseText}`);
             }
           } catch (parseErr) {
             console.error(`Failed to parse webhook response: ${responseText}`);
           }
         } else {
-          console.error(`External webhook returned error ${webhookResponse.status}: ${responseText}`);
+          console.error(`External webhook error ${webhookResponse.status}: ${responseText}`);
         }
       } catch (webhookErr) {
         console.error("External webhook network error:", webhookErr);
-        // Don't fail the main flow
       }
     } else {
-      console.warn("CODELOVE_WEBHOOK_SECRET not configured, skipping external token generation");
+      console.warn("CODELOVE_WEBHOOK_SECRET not configured, skipping token generation");
     }
 
     return new Response(JSON.stringify({ status: "activated" }), {
