@@ -26,16 +26,28 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Não autenticado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Try getClaims first, fallback to getUser
+    let userId: string;
 
-    const userId = claimsData.claims.sub;
+    try {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+      if (!claimsError && claimsData?.claims) {
+        userId = claimsData.claims.sub;
+      } else {
+        throw new Error("getClaims failed");
+      }
+    } catch {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error("Auth failed:", userError);
+        return new Response(JSON.stringify({ error: "Não autenticado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
+    }
 
     const body = await req.json();
     const postId = body.post_id;
@@ -55,7 +67,7 @@ Deno.serve(async (req) => {
     // Verify the post exists and belongs to this user
     const { data: post } = await serviceClient
       .from("community_posts")
-      .select("id, user_id")
+      .select("id, user_id, rewarded")
       .eq("id", postId)
       .eq("user_id", userId)
       .maybeSingle();
@@ -67,7 +79,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Rate limit: max 5 rewards per day per user
+    // Already rewarded — skip
+    if (post.rewarded) {
+      console.log(`Post ${postId} already rewarded, skipping`);
+      return new Response(JSON.stringify({ rewarded: false, reason: "already_rewarded" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Rate limit: max 5 rewards per day per user (count rewarded posts today)
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -75,10 +95,11 @@ Deno.serve(async (req) => {
       .from("community_posts")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
-      .eq("is_deleted", false)
+      .eq("rewarded", true)
       .gte("created_at", todayStart.toISOString());
 
-    if ((count || 0) > 5) {
+    if ((count || 0) >= 5) {
+      console.log(`User ${userId} hit daily reward limit (${count} rewarded posts today)`);
       return new Response(JSON.stringify({ error: "Limite diário de recompensas atingido (5 posts/dia)", rewarded: false }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -96,6 +117,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!activeSub) {
+      console.log(`User ${userId} has no active subscription for reward`);
       return new Response(JSON.stringify({ error: "Sem assinatura ativa", rewarded: false }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -106,16 +128,26 @@ Deno.serve(async (req) => {
     const currentExpiry = new Date(activeSub.expires_at);
     const newExpiry = new Date(currentExpiry.getTime() + 60 * 60 * 1000); // +1 hour
 
-    await serviceClient
+    const { error: updateError } = await serviceClient
       .from("subscriptions")
       .update({ expires_at: newExpiry.toISOString() })
       .eq("id", activeSub.id);
+
+    if (updateError) {
+      console.error("Failed to extend subscription:", updateError);
+      return new Response(JSON.stringify({ error: "Erro ao estender plano", rewarded: false }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Mark the post as rewarded so it can't be deleted
     await serviceClient
       .from("community_posts")
       .update({ rewarded: true })
       .eq("id", postId);
+
+    console.log(`Rewarded user ${userId}: post ${postId}, extended ${currentExpiry.toISOString()} → ${newExpiry.toISOString()}`);
 
     return new Response(JSON.stringify({
       rewarded: true,

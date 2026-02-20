@@ -997,10 +997,22 @@ export default function Community() {
       if (currentProfile) await supabase.from("user_profiles").update({ posts_count: (currentProfile.posts_count || 0) + 1 }).eq("user_id", user.id);
 
       try {
-        const { data: rewardData } = await supabase.functions.invoke("reward-post", { body: { post_id: postData!.id } });
-        if (rewardData?.rewarded) toast.success("Publicado! 🎉 +1h de token adicionada ao seu plano!");
-        else toast.success("Publicado!");
-      } catch { toast.success("Publicado!"); }
+        const { data: rewardData, error: rewardError } = await supabase.functions.invoke("reward-post", { body: { post_id: postData!.id } });
+        console.log("[Community] reward-post response:", { rewardData, rewardError });
+        if (rewardError) {
+          console.error("[Community] reward-post error:", rewardError);
+          toast.success("Publicado!");
+        } else if (rewardData?.rewarded) {
+          toast.success("Publicado! 🎉 +1h de token adicionada ao seu plano!");
+        } else if (rewardData?.error) {
+          toast.success(`Publicado! (${rewardData.error})`);
+        } else {
+          toast.success("Publicado!");
+        }
+      } catch (rewardErr) {
+        console.error("[Community] reward-post catch:", rewardErr);
+        toast.success("Publicado!");
+      }
       await fetchPosts();
     } catch (err: any) {
       toast.error("Erro ao publicar: " + (err.message || ""));
