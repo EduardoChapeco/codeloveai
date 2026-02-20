@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.admin-create-user]
 verify_jwt = false
+
+[functions.auto-onboard]
+verify_jwt = false
