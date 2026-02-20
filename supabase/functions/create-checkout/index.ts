@@ -58,30 +58,42 @@ Deno.serve(async (req) => {
 
     const planData = PLANS[plan];
     let finalPrice = planData.price;
+    let discountApplied = 0;
 
-    // Validate affiliate_code if provided
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // 1. Auto-detect: check if user IS an affiliate and apply their own discount
+    const { data: ownAffiliate } = await serviceClient
+      .from("affiliates")
+      .select("affiliate_code, discount_percent")
+      .eq("user_id", userId)
+      .maybeSingle();
+
     let validAffiliateCode: string | null = null;
-    if (affiliate_code && typeof affiliate_code === "string") {
+
+    if (ownAffiliate) {
+      // User is an affiliate — auto-apply their discount
+      discountApplied = ownAffiliate.discount_percent;
+      finalPrice = Math.round(planData.price * (1 - discountApplied / 100) * 100) / 100;
+      validAffiliateCode = ownAffiliate.affiliate_code;
+    }
+
+    // 2. If an external affiliate_code is provided (referral), validate it
+    if (!ownAffiliate && affiliate_code && typeof affiliate_code === "string") {
       const sanitizedCode = affiliate_code.replace(/[^A-Za-z0-9]/g, "").substring(0, 20);
-      
-      // Use service role to check affiliate exists
-      const serviceClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-      
+
       const { data: aff } = await serviceClient
         .from("affiliates")
         .select("affiliate_code, user_id, discount_percent")
         .eq("affiliate_code", sanitizedCode)
         .maybeSingle();
 
-      if (aff) {
+      if (aff && aff.user_id !== userId) {
         validAffiliateCode = aff.affiliate_code;
-        // Check if buyer IS the affiliate — give them the discount
-        if (aff.user_id === userId) {
-          finalPrice = Math.round(planData.price * (1 - aff.discount_percent / 100) * 100) / 100;
-        }
+        // Referral affiliate codes don't give discount to buyer (only commission to affiliate)
       }
     }
 
@@ -143,7 +155,12 @@ Deno.serve(async (req) => {
     const mpData = await mpResponse.json();
 
     return new Response(
-      JSON.stringify({ init_point: mpData.init_point }),
+      JSON.stringify({ 
+        init_point: mpData.init_point,
+        discount_applied: discountApplied,
+        final_price: finalPrice,
+        original_price: planData.price,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
