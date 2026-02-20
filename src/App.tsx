@@ -10,6 +10,8 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import AffiliateDashboard from "./pages/AffiliateDashboard";
+import AffiliateRefPage from "./pages/AffiliateRefPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +30,8 @@ const App = () => (
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/affiliate" element={<AffiliateDashboard />} />
+          <Route path="/ref/:code" element={<AffiliateRefPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
