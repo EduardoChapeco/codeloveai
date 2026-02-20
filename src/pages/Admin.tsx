@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
-import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -38,7 +38,7 @@ const planLabels: Record<string, string> = {
   "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
 };
 
-type Tab = "members" | "affiliates" | "extension" | "notifications" | "messages";
+type Tab = "members" | "affiliates" | "extension" | "notifications" | "messages" | "free-links";
 
 export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -57,6 +57,7 @@ export default function Admin() {
   const [extInstructions, setExtInstructions] = useState("");
   const [extensions, setExtensions] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [freeLinks, setFreeLinks] = useState<string[]>([]);
 
   // Chat state
   const [chatUsers, setChatUsers] = useState<{ user_id: string; name: string; email: string; unread: number }[]>([]);
@@ -375,7 +376,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <div className="flex gap-2 flex-wrap">
-          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["extension", "EXTENSÃO"], ["notifications", "NOTIFICAÇÕES"], ["messages", "MENSAGENS"]] as [Tab, string][]).map(([t, label]) => (
+          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["extension", "EXTENSÃO"], ["notifications", "NOTIFICAÇÕES"], ["messages", "MENSAGENS"], ["free-links", "LINKS GRÁTIS"]] as [Tab, string][]).map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
               className={`ep-btn-secondary h-10 px-6 text-[9px] relative ${tab === t ? "bg-foreground text-background" : ""}`}>
               {label}
@@ -708,6 +709,54 @@ export default function Admin() {
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Free Links Tab */}
+        {tab === "free-links" && (
+          <div className="space-y-6">
+            <div className="ep-card">
+              <p className="ep-subtitle mb-4">GERAR LINK GRATUITO (1 DIA)</p>
+              <p className="text-sm text-muted-foreground font-medium mb-6">
+                Gere um link único para que um usuário possa ativar um plano gratuito de 1 dia. 
+                Cada usuário pode usar apenas 1 plano gratuito.
+              </p>
+              <button
+                onClick={() => {
+                  const code = `FREE_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+                  const origin = window.location.origin;
+                  const link = `${origin}/free?code=${code}`;
+                  setFreeLinks((prev) => [link, ...prev]);
+                  navigator.clipboard.writeText(link);
+                  toast.success("Link copiado para a área de transferência!");
+                }}
+                className="ep-btn-primary h-12 px-8 text-[9px]"
+              >
+                <Gift className="h-4 w-4 mr-2" /> GERAR NOVO LINK
+              </button>
+            </div>
+
+            {freeLinks.length > 0 && (
+              <div className="ep-card">
+                <p className="ep-subtitle mb-4">LINKS GERADOS</p>
+                <div className="space-y-3">
+                  {freeLinks.map((link, i) => (
+                    <div key={i} className="ep-card-sm flex items-center justify-between gap-4">
+                      <code className="text-xs font-mono text-muted-foreground truncate flex-1">{link}</code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(link);
+                          toast.success("Link copiado!");
+                        }}
+                        className="ep-btn-icon h-8 w-8 rounded-[10px] shrink-0"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

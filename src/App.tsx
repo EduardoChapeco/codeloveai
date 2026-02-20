@@ -13,6 +13,7 @@ import Admin from "./pages/Admin";
 import AffiliateDashboard from "./pages/AffiliateDashboard";
 import AffiliateRefPage from "./pages/AffiliateRefPage";
 import Checkout from "./pages/Checkout";
+import FreePlan from "./pages/FreePlan";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/affiliate" element={<AffiliateDashboard />} />
           <Route path="/ref/:code" element={<AffiliateRefPage />} />
           <Route path="/checkout" element={<Checkout />} />
+          <Route path="/free" element={<FreePlan />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

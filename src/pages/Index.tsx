@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle } from "lucide-react";
 
 const plans = [
-  { id: "1_day", name: "1 DIA", price: "R$9,99", period: "por dia", description: "Teste rápido" },
-  { id: "7_days", name: "7 DIAS", price: "R$49,90", period: "por semana", description: "Ideal para projetos curtos" },
-  { id: "1_month", name: "1 MÊS", price: "R$149,90", period: "por mês", description: "Mais popular", popular: true },
-  { id: "12_months", name: "12 MESES", price: "R$499,00", period: "ilimitado*", description: "Acesso enquanto ativo", highlight: true },
+  { id: "1_day", name: "1 DIA", price: "R$9,99", originalPrice: "R$29,97", period: "por dia", description: "Teste rápido" },
+  { id: "7_days", name: "7 DIAS", price: "R$49,90", originalPrice: "R$149,70", period: "por semana", description: "Ideal para projetos curtos" },
+  { id: "1_month", name: "1 MÊS", price: "R$149,90", originalPrice: "R$449,70", period: "por mês", description: "Mais popular", popular: true },
+  { id: "12_months", name: "12 MESES", price: "R$499,00", originalPrice: "R$1.497,00", period: "ilimitado*", description: "Acesso enquanto ativo", highlight: true },
 ];
 
 const benefits = [
@@ -76,7 +76,16 @@ export default function Index() {
       {/* Plans preview */}
       <section id="plans" className="px-8 pb-32 max-w-6xl mx-auto">
         <p className="ep-subtitle text-center mb-4">NOSSOS PLANOS</p>
-        <h2 className="ep-section-title text-center mb-16">PLANOS E PREÇOS</h2>
+        <h2 className="ep-section-title text-center mb-8">PLANOS E PREÇOS</h2>
+        
+        {/* Limited time banner */}
+        <div className="ep-card-sm border-foreground/20 bg-foreground/5 text-center mb-12">
+          <p className="text-xs font-bold text-foreground tracking-widest mb-1">⏰ PREÇOS POR TEMPO LIMITADO</p>
+          <p className="text-[11px] text-muted-foreground font-medium">
+            Aproveite os preços promocionais de lançamento. Em breve os valores serão reajustados para a tabela original.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {plans.map((plan) => (
             <div
@@ -91,6 +100,7 @@ export default function Index() {
                   <span className="ep-badge ep-badge-live mb-6 inline-block">MELHOR CUSTO</span>
                 )}
                 <p className="ep-subtitle mb-2">{plan.name}</p>
+                <p className="text-sm text-muted-foreground line-through font-medium">{plan.originalPrice}</p>
                 <p className="ep-value text-4xl mb-1">{plan.price}</p>
                 <p className="text-xs text-muted-foreground font-medium mb-2">{plan.period}</p>
                 {plan.highlight && (
