@@ -13,10 +13,16 @@ export default function Login() {
   const [searchParams] = useSearchParams();
 
   // Redirect already-authenticated users to dashboard
+  // Sanitize returnTo to prevent open redirects
+  const getSafeReturnTo = () => {
+    const returnTo = searchParams.get("returnTo");
+    if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//")) return "/dashboard";
+    return returnTo;
+  };
+
   useEffect(() => {
     if (!authLoading && user) {
-      const returnTo = searchParams.get("returnTo");
-      navigate(returnTo || "/dashboard", { replace: true });
+      navigate(getSafeReturnTo(), { replace: true });
     }
   }, [user, authLoading, navigate, searchParams]);
 
@@ -28,8 +34,7 @@ export default function Login() {
     if (error) {
       toast.error(error.message);
     } else {
-      const returnTo = searchParams.get("returnTo");
-      navigate(returnTo || "/dashboard");
+      navigate(getSafeReturnTo());
     }
   };
 
