@@ -29,8 +29,18 @@ Deno.serve(async (req) => {
     }
 
     const paymentId = body.data?.id;
-    if (!paymentId) {
-      return new Response(JSON.stringify({ error: "No payment ID" }), {
+    
+    // Sanitize paymentId - must be a number
+    if (!paymentId || (typeof paymentId !== "number" && typeof paymentId !== "string")) {
+      return new Response(JSON.stringify({ error: "Invalid payment ID" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const sanitizedPaymentId = String(paymentId).replace(/[^0-9]/g, "");
+    if (!sanitizedPaymentId || sanitizedPaymentId.length > 20) {
+      return new Response(JSON.stringify({ error: "Invalid payment ID format" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -44,14 +54,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch payment details from Mercado Pago API
+    // Fetch payment details from Mercado Pago API (server-side verification)
     const paymentResponse = await fetch(
-      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      `https://api.mercadopago.com/v1/payments/${sanitizedPaymentId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     if (!paymentResponse.ok) {
-      console.error("Failed to fetch payment:", await paymentResponse.text());
+      console.error("Failed to fetch payment:", paymentResponse.status);
       return new Response(JSON.stringify({ error: "Failed to verify payment" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -66,21 +76,52 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Parse external reference
+    // Parse and validate external reference
     let refData: { user_id: string; plan: string; email: string };
     try {
       refData = JSON.parse(payment.external_reference);
     } catch {
-      console.error("Invalid external_reference:", payment.external_reference);
+      console.error("Invalid external_reference");
       return new Response(JSON.stringify({ error: "Invalid reference" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Validate plan
-    if (!refData.user_id || !refData.plan || !PLAN_DAYS[refData.plan]) {
+    // Validate all fields
+    if (
+      !refData.user_id || typeof refData.user_id !== "string" ||
+      !refData.plan || typeof refData.plan !== "string" ||
+      !PLAN_DAYS[refData.plan]
+    ) {
       return new Response(JSON.stringify({ error: "Invalid plan data" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate UUID format for user_id
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(refData.user_id)) {
+      return new Response(JSON.stringify({ error: "Invalid user reference" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify price matches expected plan price (prevent price manipulation)
+    const expectedPrices: Record<string, number> = {
+      "1_day": 9.99,
+      "7_days": 49.9,
+      "1_month": 149.9,
+      "12_months": 499.0,
+    };
+    
+    const paidAmount = payment.transaction_amount;
+    const expectedPrice = expectedPrices[refData.plan];
+    if (typeof paidAmount === "number" && Math.abs(paidAmount - expectedPrice) > 0.01) {
+      console.error(`Price mismatch: paid ${paidAmount}, expected ${expectedPrice} for plan ${refData.plan}`);
+      return new Response(JSON.stringify({ error: "Price mismatch" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -101,7 +142,7 @@ Deno.serve(async (req) => {
     const { data: existing } = await supabaseAdmin
       .from("subscriptions")
       .select("id")
-      .eq("payment_id", String(paymentId))
+      .eq("payment_id", sanitizedPaymentId)
       .limit(1);
 
     if (existing && existing.length > 0) {
@@ -118,7 +159,7 @@ Deno.serve(async (req) => {
         status: "active",
         starts_at: startsAt.toISOString(),
         expires_at: expiresAt.toISOString(),
-        payment_id: String(paymentId),
+        payment_id: sanitizedPaymentId,
       });
 
     if (insertError) {
