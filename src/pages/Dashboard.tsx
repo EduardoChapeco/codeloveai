@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
-import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X } from "lucide-react";
+import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, Gift } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -36,12 +36,14 @@ export default function Dashboard() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const [adminTokenGenerated, setAdminTokenGenerated] = useState(false);
+  const [onboardChecked, setOnboardChecked] = useState(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
   const [latestExt, setLatestExt] = useState<{ file_url: string; version: string; instructions: string } | null>(null);
+  const [onboardingBanner, setOnboardingBanner] = useState<{ expires_at: string } | null>(null);
 
   // Payment feedback
   const paymentStatus = searchParams.get("payment");
@@ -141,6 +143,42 @@ export default function Dashboard() {
     };
     generateAdminToken();
   }, [user, isAdmin, adminLoading, tokens, adminTokenGenerated]);
+
+  // Auto-onboard: give new users a 5-hour trial
+  useEffect(() => {
+    if (!user || authLoading || adminLoading || onboardChecked) return;
+    if (isAdmin) { setOnboardChecked(true); return; } // Admins get their own token
+    if (subscriptions.length > 0 || tokens.length > 0) { setOnboardChecked(true); return; }
+
+    const runOnboard = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("auto-onboard");
+        if (!error && data?.status === "activated") {
+          setOnboardingBanner({ expires_at: data.expires_at });
+          toast.success("🎉 Trial de 5 horas ativado! Aproveite para testar.");
+          // Refresh subscriptions and tokens
+          const { data: subs } = await supabase.from("subscriptions").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+          setSubscriptions(subs || []);
+          const { data: toks } = await supabase.from("tokens").select("*").eq("user_id", user.id);
+          setTokens(toks || []);
+          // SSO bridge for new token
+          const activeToken = (toks || []).find((t: Token) => t.is_active);
+          if (activeToken) {
+            const email = user.email || "";
+            const name = user.user_metadata?.name || email.split("@")[0] || "";
+            localStorage.setItem('clf_token', activeToken.token);
+            localStorage.setItem('clf_email', email);
+            localStorage.setItem('clf_name', name);
+            window.postMessage({ type: 'clf_sso_token', token: activeToken.token, email, name }, '*');
+          }
+        }
+      } catch (err) {
+        console.error("Auto-onboard error:", err);
+      }
+      setOnboardChecked(true);
+    };
+    runOnboard();
+  }, [user, authLoading, adminLoading, isAdmin, subscriptions, tokens, onboardChecked]);
 
   // Fetch chat messages
   const fetchMessages = async () => {
@@ -292,7 +330,22 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Subscription Status */}
+        {/* Onboarding trial banner */}
+        {onboardingBanner && (
+          <div className="ep-card flex items-center gap-4 border-foreground/20">
+            <Gift className="h-6 w-6 text-foreground shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-foreground">🎉 Trial de 5 horas ativado!</p>
+              <p className="text-xs text-muted-foreground font-medium">
+                Seu token e extensão já estão disponíveis. Aproveite para testar a plataforma!
+              </p>
+            </div>
+            <Link to="/checkout" className="ep-btn-primary h-9 px-4 text-[9px] shrink-0">
+              VER PLANOS
+            </Link>
+          </div>
+        )}
+
         <div className="ep-card">
           <p className="ep-subtitle mb-4">STATUS DA ASSINATURA</p>
           {activeSubscription ? (
