@@ -208,7 +208,8 @@ export default function Community() {
 
       // Fetch link preview if URL provided
       let linkPreview = { title: "", description: "", image: "" };
-      if (newProjectUrl.trim() && !newProjectUrl.includes("lovable.app")) {
+      const isLovableUrl = (() => { try { return new URL(newProjectUrl.trim()).hostname.endsWith(".lovable.app"); } catch { return false; } })();
+      if (newProjectUrl.trim() && !isLovableUrl) {
         try {
           const { data: previewData } = await supabase.functions.invoke("link-preview", {
             body: { url: newProjectUrl.trim() },
@@ -522,7 +523,7 @@ export default function Community() {
                   {/* Project link with live preview */}
                   {post.project_url && (
                     <div className="mb-4">
-                      {post.project_url.includes("lovable.app") ? (
+                      {(() => { try { return new URL(post.project_url).hostname.endsWith(".lovable.app"); } catch { return false; } })() ? (
                         <div className="rounded-[12px] overflow-hidden border border-border">
                           <div className="bg-muted px-3 py-2 flex items-center justify-between">
                             <div className="flex items-center gap-2 min-w-0">
