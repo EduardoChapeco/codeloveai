@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
-import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -25,6 +25,23 @@ interface AffiliateInfo {
   weeklyReferrals: number;
   totalReferrals: number;
   pendingReferrals: number;
+  totalCommission: number;
+  bankInfo?: { pix_key_type: string; pix_key: string; holder_name: string };
+}
+
+interface Invoice {
+  id: string;
+  affiliate_id: string;
+  user_id: string;
+  week_start: string;
+  week_end: string;
+  total_sales: number;
+  total_commission: number;
+  status: string;
+  paid_at: string | null;
+  payment_notes: string;
+  affiliate_name?: string;
+  affiliate_code?: string;
 }
 
 const planOptions = [
@@ -38,7 +55,7 @@ const planLabels: Record<string, string> = {
   "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
 };
 
-type Tab = "members" | "affiliates" | "extension" | "notifications" | "messages" | "free-links";
+type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "free-links";
 
 export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -47,6 +64,7 @@ export default function Admin() {
   const [tab, setTab] = useState<Tab>("members");
   const [members, setMembers] = useState<Member[]>([]);
   const [affiliates, setAffiliates] = useState<AffiliateInfo[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [tokenInput, setTokenInput] = useState<Record<string, string>>({});
   const [planInput, setPlanInput] = useState<Record<string, string>>({});
   const [newAffUserId, setNewAffUserId] = useState("");
@@ -58,6 +76,7 @@ export default function Admin() {
   const [extensions, setExtensions] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [freeLinks, setFreeLinks] = useState<string[]>([]);
+  const [paymentNotes, setPaymentNotes] = useState<Record<string, string>>({});
 
   // Chat state
   const [chatUsers, setChatUsers] = useState<{ user_id: string; name: string; email: string; unread: number }[]>([]);
@@ -112,18 +131,39 @@ export default function Admin() {
     for (const a of affs) {
       const { data: coinsData } = await supabase.from("codecoins").select("*").eq("user_id", a.user_id).maybeSingle();
       const { data: refs } = await supabase.from("affiliate_referrals").select("*").eq("affiliate_id", a.id);
+      const { data: bankData } = await supabase.from("affiliate_bank_info").select("pix_key_type, pix_key, holder_name").eq("affiliate_id", a.id).maybeSingle();
       const allRefs = refs || [];
       const weeklyConfirmed = allRefs.filter((r) => r.confirmed && new Date(r.created_at) >= monday).length;
       const pending = allRefs.filter((r) => !r.confirmed).length;
+      const totalCommission = allRefs.reduce((sum, r) => sum + Number((r as any).commission_amount || 0), 0);
 
       list.push({
         id: a.id, user_id: a.user_id, affiliate_code: a.affiliate_code,
         display_name: a.display_name, discount_percent: a.discount_percent,
         coins: coinsData || undefined,
         weeklyReferrals: weeklyConfirmed, totalReferrals: allRefs.length, pendingReferrals: pending,
+        totalCommission,
+        bankInfo: bankData || undefined,
       });
     }
     setAffiliates(list);
+  };
+
+  // Fetch invoices
+  const fetchInvoices = async () => {
+    const { data } = await supabase.from("affiliate_invoices").select("*").order("week_start", { ascending: false });
+    if (!data) return;
+
+    // Enrich with affiliate names
+    const { data: affs } = await supabase.from("affiliates").select("id, display_name, affiliate_code");
+    const affMap = new Map((affs || []).map(a => [a.id, a]));
+
+    const enriched = data.map(inv => ({
+      ...inv,
+      affiliate_name: affMap.get(inv.affiliate_id)?.display_name || "?",
+      affiliate_code: affMap.get(inv.affiliate_id)?.affiliate_code || "?",
+    }));
+    setInvoices(enriched);
   };
 
   const fetchExtensions = async () => {
@@ -138,7 +178,6 @@ export default function Admin() {
 
   const fetchChatUsers = async () => {
     if (!user) return;
-    // Get all messages where admin is sender or receiver
     const { data: msgs } = await supabase
       .from("messages")
       .select("sender_id, receiver_id, is_read")
@@ -146,7 +185,6 @@ export default function Admin() {
 
     if (!msgs) return;
 
-    // Build unique user list
     const userIds = new Set<string>();
     msgs.forEach((m) => {
       if (m.sender_id !== user.id) userIds.add(m.sender_id);
@@ -176,7 +214,6 @@ export default function Admin() {
       .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
       .order("created_at", { ascending: true });
     setChatMessages(data || []);
-    // Mark as read
     await supabase.from("messages").update({ is_read: true })
       .eq("sender_id", otherUserId).eq("receiver_id", user.id).eq("is_read", false);
     fetchChatUsers();
@@ -186,13 +223,14 @@ export default function Admin() {
     if (isAdmin) {
       fetchMembers();
       fetchAffiliates();
+      fetchInvoices();
       fetchExtensions();
       fetchNotifications();
       fetchChatUsers();
     }
   }, [isAdmin]);
 
-  // Realtime for messages
+  // Realtime
   useEffect(() => {
     if (!user || !isAdmin) return;
     const channel = supabase
@@ -240,6 +278,13 @@ export default function Admin() {
     fetchMembers();
   };
 
+  const destroyToken = async (userId: string) => {
+    if (!confirm("Destruir/revogar TODOS os tokens deste usuário?")) return;
+    await supabase.from("tokens").update({ is_active: false }).eq("user_id", userId);
+    toast.success("Todos os tokens foram revogados!");
+    fetchMembers();
+  };
+
   const assignPlan = async (userId: string) => {
     const planValue = planInput[userId];
     if (!planValue) return toast.error("Selecione um plano.");
@@ -257,14 +302,14 @@ export default function Admin() {
   };
 
   const cancelSubscription = async (userId: string) => {
-    if (!confirm("Cancelar assinatura?")) return;
+    if (!confirm("Cancelar assinatura? O afiliado verá o cancelamento.")) return;
     await supabase.from("subscriptions").update({ status: "cancelled" as any }).eq("user_id", userId).eq("status", "active");
     toast.success("Cancelada!");
     fetchMembers();
   };
 
   const banUser = async (userId: string) => {
-    if (!confirm("Banir usuário?")) return;
+    if (!confirm("Banir usuário? Isso revoga token + cancela plano.")) return;
     await supabase.from("tokens").update({ is_active: false }).eq("user_id", userId);
     await supabase.from("subscriptions").update({ status: "cancelled" as any }).eq("user_id", userId).eq("status", "active");
     toast.success("Banido!");
@@ -274,14 +319,11 @@ export default function Admin() {
   // Affiliate actions
   const createAffiliate = async () => {
     if (!newAffUserId || !newAffCode || !newAffName) return toast.error("Preencha todos os campos.");
-    // Add role
     await supabase.from("user_roles").insert({ user_id: newAffUserId, role: "affiliate" as any });
-    // Create affiliate
     const { error } = await supabase.from("affiliates").insert({
       user_id: newAffUserId, affiliate_code: newAffCode.toUpperCase(), display_name: newAffName,
     });
     if (error) return toast.error(error.message);
-    // Create codecoins record
     await supabase.from("codecoins").insert({ user_id: newAffUserId });
     toast.success("Afiliado criado!");
     setNewAffUserId(""); setNewAffCode(""); setNewAffName("");
@@ -289,16 +331,13 @@ export default function Admin() {
   };
 
   const confirmReferral = async (affiliateId: string, affiliateUserId: string, referralId: string) => {
-    // Confirm referral
     await supabase.from("affiliate_referrals").update({ confirmed: true }).eq("id", referralId);
-    // Add codecoin
     const { data: coins } = await supabase.from("codecoins").select("*").eq("user_id", affiliateUserId).maybeSingle();
     if (coins) {
       await supabase.from("codecoins").update({
         balance: coins.balance + 1, total_earned: coins.total_earned + 1, updated_at: new Date().toISOString(),
       }).eq("user_id", affiliateUserId);
     }
-    // Log transaction
     const now = new Date();
     const monday = new Date(now);
     monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
@@ -313,23 +352,49 @@ export default function Admin() {
   const redeemCoins = async (affiliateUserId: string) => {
     const { data: coins } = await supabase.from("codecoins").select("*").eq("user_id", affiliateUserId).maybeSingle();
     if (!coins || coins.balance < 2) return toast.error("Saldo insuficiente (mínimo 2 coins).");
-    // Debit 2 coins
     await supabase.from("codecoins").update({
       balance: coins.balance - 2, total_spent: coins.total_spent + 2, updated_at: new Date().toISOString(),
     }).eq("user_id", affiliateUserId);
-    // Extend/create 7 day subscription
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     await supabase.from("subscriptions").insert({
       user_id: affiliateUserId, plan: "7_days" as any, status: "active" as any,
       starts_at: new Date().toISOString(), expires_at: expiresAt.toISOString(),
     });
-    // Log transaction
     await supabase.from("codecoin_transactions").insert({
       user_id: affiliateUserId, amount: -2, type: "redeemed", description: "Resgate: 7 dias free",
     });
-    toast.success("7 dias ativados! Renove o token manualmente.");
+    toast.success("7 dias ativados!");
     fetchAffiliates();
+  };
+
+  // Invoice actions
+  const closeInvoice = async (invoiceId: string) => {
+    if (!confirm("Fechar esta fatura? Isso indica que o pagamento será feito.")) return;
+    await supabase.from("affiliate_invoices").update({ status: "closed" }).eq("id", invoiceId);
+    toast.success("Fatura fechada!");
+    fetchInvoices();
+  };
+
+  const markInvoicePaid = async (invoiceId: string) => {
+    const notes = paymentNotes[invoiceId] || "";
+    if (!confirm("Marcar como PAGA? Confirme que o PIX foi realizado.")) return;
+    await supabase.from("affiliate_invoices").update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      paid_by: user?.id,
+      payment_notes: notes,
+    }).eq("id", invoiceId);
+    toast.success("Fatura marcada como paga!");
+    setPaymentNotes(prev => ({ ...prev, [invoiceId]: "" }));
+    fetchInvoices();
+  };
+
+  const cancelInvoice = async (invoiceId: string) => {
+    if (!confirm("Cancelar esta fatura? O afiliado verá o cancelamento.")) return;
+    await supabase.from("affiliate_invoices").update({ status: "cancelled" }).eq("id", invoiceId);
+    toast.success("Fatura cancelada!");
+    fetchInvoices();
   };
 
   // Extension upload
@@ -338,9 +403,7 @@ export default function Admin() {
     const path = `extensions/v${extVersion}/${extFile.name}`;
     const { error: upErr } = await supabase.storage.from("extensions").upload(path, extFile);
     if (upErr) return toast.error(upErr.message);
-    // Mark old as not latest
     await supabase.from("extension_files").update({ is_latest: false }).eq("is_latest", true);
-    // Insert record
     await supabase.from("extension_files").insert({
       file_url: path, version: extVersion, uploaded_by: user!.id, is_latest: true,
       instructions: extInstructions,
@@ -355,6 +418,13 @@ export default function Admin() {
       <p className="ep-subtitle">CARREGANDO...</p>
     </div>;
   }
+
+  const invoiceStatusLabel: Record<string, string> = {
+    open: "EM ABERTO", closed: "FECHADA", paid: "PAGA", cancelled: "CANCELADA",
+  };
+  const invoiceStatusClass: Record<string, string> = {
+    open: "ep-badge-live", closed: "bg-yellow-500/20 text-yellow-700", paid: "bg-green-500/20 text-green-700", cancelled: "ep-badge-offline",
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -376,7 +446,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <div className="flex gap-2 flex-wrap">
-          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["extension", "EXTENSÃO"], ["notifications", "NOTIFICAÇÕES"], ["messages", "MENSAGENS"], ["free-links", "LINKS GRÁTIS"]] as [Tab, string][]).map(([t, label]) => (
+          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["invoices", "FATURAS"], ["extension", "EXTENSÃO"], ["notifications", "NOTIFICAÇÕES"], ["messages", "MENSAGENS"], ["free-links", "LINKS GRÁTIS"]] as [Tab, string][]).map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
               className={`ep-btn-secondary h-10 px-6 text-[9px] relative ${tab === t ? "bg-foreground text-background" : ""}`}>
               {label}
@@ -388,6 +458,11 @@ export default function Admin() {
               {t === "messages" && chatUsers.reduce((sum, u) => sum + u.unread, 0) > 0 && (
                 <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[8px] text-white flex items-center justify-center">
                   {chatUsers.reduce((sum, u) => sum + u.unread, 0)}
+                </span>
+              )}
+              {t === "invoices" && invoices.filter(i => i.status === "open").length > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-yellow-500 text-[8px] text-white flex items-center justify-center">
+                  {invoices.filter(i => i.status === "open").length}
                 </span>
               )}
             </button>
@@ -442,7 +517,12 @@ export default function Admin() {
                         <Key className="h-3 w-3" />
                       </button>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {m.token && (
+                        <button onClick={() => destroyToken(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30">
+                          <Trash2 className="h-3 w-3 mr-1" /> REVOGAR TOKEN
+                        </button>
+                      )}
                       {m.subscription?.status === "active" && new Date(m.subscription.expires_at) > new Date() && (
                         <button onClick={() => cancelSubscription(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30">
                           <XCircle className="h-3 w-3 mr-1" /> CANCELAR
@@ -468,7 +548,6 @@ export default function Admin() {
         {/* Affiliates Tab */}
         {tab === "affiliates" && (
           <div className="space-y-6">
-            {/* Create affiliate */}
             <div className="ep-card">
               <p className="ep-subtitle mb-4">CRIAR AFILIADO</p>
               <div className="flex flex-col md:flex-row gap-3">
@@ -489,25 +568,31 @@ export default function Admin() {
               </div>
             </div>
 
-            {/* Affiliate list */}
             {affiliates.map((a) => (
               <div key={a.id} className="ep-card">
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
                   <div className="flex-1">
                     <p className="text-sm font-bold text-foreground">{a.display_name}</p>
                     <p className="text-xs text-muted-foreground font-medium font-mono">Código: {a.affiliate_code}</p>
+                    {a.bankInfo ? (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        PIX: {a.bankInfo.pix_key_type.toUpperCase()} — {a.bankInfo.pix_key} ({a.bankInfo.holder_name})
+                      </p>
+                    ) : (
+                      <p className="text-xs text-yellow-600 mt-1">⚠ Dados bancários não cadastrados</p>
+                    )}
                     <div className="flex items-center gap-4 mt-3">
                       <div className="text-center">
                         <p className="text-lg font-bold">{a.coins?.balance || 0}</p>
                         <p className="text-[9px] text-muted-foreground">COINS</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg font-bold">{a.weeklyReferrals}/2</p>
-                        <p className="text-[9px] text-muted-foreground">SEMANA</p>
+                        <p className="text-lg font-bold">{a.totalReferrals}</p>
+                        <p className="text-[9px] text-muted-foreground">VENDAS</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg font-bold">{a.totalReferrals}</p>
-                        <p className="text-[9px] text-muted-foreground">TOTAL</p>
+                        <p className="text-lg font-bold text-green-600">R${a.totalCommission.toFixed(2)}</p>
+                        <p className="text-[9px] text-muted-foreground">COMISSÃO TOTAL</p>
                       </div>
                       <div className="text-center">
                         <p className="text-lg font-bold">{a.pendingReferrals}</p>
@@ -518,11 +603,10 @@ export default function Admin() {
                   <div className="flex flex-col gap-2">
                     {(a.coins?.balance || 0) >= 2 && (
                       <button onClick={() => redeemCoins(a.user_id)} className="ep-btn-primary h-10 px-4 text-[9px]">
-                        <Coins className="h-3 w-3 mr-1" /> RESGATAR 2 COINS (7 DIAS)
+                        <Coins className="h-3 w-3 mr-1" /> RESGATAR 2 COINS
                       </button>
                     )}
                     <button onClick={() => {
-                      // Show pending referrals - simple confirm all
                       supabase.from("affiliate_referrals").select("*")
                         .eq("affiliate_id", a.id).eq("confirmed", false)
                         .then(({ data: pendingRefs }) => {
@@ -548,6 +632,80 @@ export default function Admin() {
           </div>
         )}
 
+        {/* Invoices Tab */}
+        {tab === "invoices" && (
+          <div className="space-y-6">
+            <div className="ep-card">
+              <p className="ep-subtitle mb-2">FATURAS SEMANAIS DOS AFILIADOS</p>
+              <p className="text-xs text-muted-foreground font-medium">
+                Comissão de 30% sobre cada venda. Feche a fatura e pague via PIX ao afiliado.
+              </p>
+            </div>
+
+            {invoices.length === 0 && (
+              <div className="ep-empty">
+                <FileText className="h-10 w-10 mx-auto mb-4" />
+                <p className="ep-subtitle">NENHUMA FATURA</p>
+                <p className="text-xs text-muted-foreground mt-2">As faturas são criadas automaticamente quando há vendas via afiliados.</p>
+              </div>
+            )}
+
+            {invoices.map((inv) => (
+              <div key={inv.id} className={`ep-card ${inv.status === "open" ? "border-yellow-500/30" : ""}`}>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-sm font-bold text-foreground">{inv.affiliate_name}</p>
+                      <span className="text-xs text-muted-foreground font-mono">({inv.affiliate_code})</span>
+                      <span className={`ep-badge text-[8px] ${invoiceStatusClass[inv.status] || "ep-badge-offline"}`}>
+                        {invoiceStatusLabel[inv.status] || inv.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium">
+                      Semana: {inv.week_start} → {inv.week_end}
+                    </p>
+                    <div className="flex items-center gap-4 mt-2">
+                      <span className="text-xs font-medium">{inv.total_sales} venda(s)</span>
+                      <span className="text-sm font-bold text-green-600">R${Number(inv.total_commission).toFixed(2)}</span>
+                    </div>
+                    {inv.paid_at && (
+                      <p className="text-xs text-green-600 mt-1">
+                        Pago em {format(new Date(inv.paid_at), "dd/MM/yyyy HH:mm")}
+                        {inv.payment_notes && ` — ${inv.payment_notes}`}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {inv.status === "open" && (
+                      <button onClick={() => closeInvoice(inv.id)} className="ep-btn-secondary h-10 px-4 text-[9px]">
+                        <FileText className="h-3 w-3 mr-1" /> FECHAR FATURA
+                      </button>
+                    )}
+                    {inv.status === "closed" && (
+                      <>
+                        <input
+                          placeholder="Notas do pagamento (opcional)"
+                          value={paymentNotes[inv.id] || ""}
+                          onChange={(e) => setPaymentNotes(prev => ({ ...prev, [inv.id]: e.target.value }))}
+                          className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border"
+                        />
+                        <button onClick={() => markInvoicePaid(inv.id)} className="ep-btn-primary h-10 px-4 text-[9px]">
+                          <CheckCircle className="h-3 w-3 mr-1" /> MARCAR COMO PAGA
+                        </button>
+                      </>
+                    )}
+                    {(inv.status === "open" || inv.status === "closed") && (
+                      <button onClick={() => cancelInvoice(inv.id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30">
+                        <XCircle className="h-3 w-3 mr-1" /> CANCELAR
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Extension Tab */}
         {tab === "extension" && (
           <div className="space-y-6">
@@ -563,7 +721,7 @@ export default function Admin() {
                     className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
                 </div>
                 <textarea
-                  placeholder="Instruções de instalação (passo a passo para o usuário)..."
+                  placeholder="Instruções de instalação..."
                   value={extInstructions}
                   onChange={(e) => setExtInstructions(e.target.value)}
                   rows={5}
@@ -631,7 +789,6 @@ export default function Admin() {
         {/* Messages Tab */}
         {tab === "messages" && (
           <div className="flex gap-6 min-h-[500px]">
-            {/* User list */}
             <div className="w-64 shrink-0 space-y-2">
               <p className="ep-subtitle mb-3">CONVERSAS</p>
               {chatUsers.length === 0 && (
@@ -658,7 +815,6 @@ export default function Admin() {
               ))}
             </div>
 
-            {/* Chat area */}
             <div className="flex-1 ep-card flex flex-col">
               {!selectedChatUser ? (
                 <div className="flex-1 flex items-center justify-center">
@@ -718,7 +874,7 @@ export default function Admin() {
             <div className="ep-card">
               <p className="ep-subtitle mb-4">GERAR LINK GRATUITO (1 DIA)</p>
               <p className="text-sm text-muted-foreground font-medium mb-6">
-                Gere um link único para que um usuário possa ativar um plano gratuito de 1 dia. 
+                Gere um link único para que um usuário possa ativar um plano gratuito de 1 dia.
                 Cada usuário pode usar apenas 1 plano gratuito.
               </p>
               <button

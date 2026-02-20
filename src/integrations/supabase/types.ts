@@ -47,30 +47,139 @@ export type Database = {
         }
         Relationships: []
       }
+      affiliate_bank_info: {
+        Row: {
+          affiliate_id: string
+          bank_name: string | null
+          created_at: string
+          holder_name: string
+          id: string
+          pix_key: string
+          pix_key_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          affiliate_id: string
+          bank_name?: string | null
+          created_at?: string
+          holder_name?: string
+          id?: string
+          pix_key?: string
+          pix_key_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          affiliate_id?: string
+          bank_name?: string | null
+          created_at?: string
+          holder_name?: string
+          id?: string
+          pix_key?: string
+          pix_key_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_bank_info_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: true
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliate_invoices: {
+        Row: {
+          affiliate_id: string
+          created_at: string
+          id: string
+          paid_at: string | null
+          paid_by: string | null
+          payment_notes: string | null
+          status: string
+          total_commission: number
+          total_sales: number
+          updated_at: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          affiliate_id: string
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_notes?: string | null
+          status?: string
+          total_commission?: number
+          total_sales?: number
+          updated_at?: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          affiliate_id?: string
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_notes?: string | null
+          status?: string
+          total_commission?: number
+          total_sales?: number
+          updated_at?: string
+          user_id?: string
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_invoices_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       affiliate_referrals: {
         Row: {
           affiliate_id: string
+          commission_amount: number | null
           confirmed: boolean
           created_at: string
           id: string
           referred_user_id: string
+          sale_amount: number | null
           subscription_id: string | null
+          subscription_plan: string | null
         }
         Insert: {
           affiliate_id: string
+          commission_amount?: number | null
           confirmed?: boolean
           created_at?: string
           id?: string
           referred_user_id: string
+          sale_amount?: number | null
           subscription_id?: string | null
+          subscription_plan?: string | null
         }
         Update: {
           affiliate_id?: string
+          commission_amount?: number | null
           confirmed?: boolean
           created_at?: string
           id?: string
           referred_user_id?: string
+          sale_amount?: number | null
           subscription_id?: string | null
+          subscription_plan?: string | null
         }
         Relationships: [
           {

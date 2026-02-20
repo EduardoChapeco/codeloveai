@@ -232,7 +232,7 @@ export default function Dashboard() {
                 {paymentStatus === "pending" && "Pagamento pendente."}
               </p>
               <p className="text-xs text-muted-foreground font-medium">
-                {paymentStatus === "success" && "Seu plano será ativado em instantes. O admin irá gerar seu token de acesso."}
+                {paymentStatus === "success" && "Seu plano foi ativado! Seu token de acesso será gerado automaticamente em instantes."}
                 {paymentStatus === "failure" && "Houve um problema com o pagamento. Tente novamente ou entre em contato com o suporte."}
                 {paymentStatus === "pending" && "Estamos aguardando a confirmação do pagamento. Isso pode levar alguns minutos."}
               </p>
@@ -277,7 +277,7 @@ export default function Dashboard() {
             ))
           ) : (
             <p className="text-sm text-muted-foreground font-medium">
-              Nenhum token ativo. Aguarde a ativação pelo administrador.
+              Nenhum token ativo. Após o pagamento, seu token será gerado automaticamente em instantes.
             </p>
           )}
         </div>
