@@ -17,6 +17,7 @@ import FreePlan from "./pages/FreePlan";
 import Community from "./pages/Community";
 import Profile from "./pages/Profile";
 import AffiliatesPage from "./pages/AffiliatesPage";
+import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
           <Route path="/community" element={<Community />} />
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/affiliates" element={<AffiliatesPage />} />
+          <Route path="/install" element={<Install />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
