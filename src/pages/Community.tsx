@@ -10,7 +10,8 @@ import {
   Image as ImageIcon, Link as LinkIcon, Folder, HelpCircle,
   Lightbulb, Eye, LogOut, Users, Loader2, Send, X,
   ChevronLeft, ChevronRight, Play, Gift, Copy, FileText,
-  Code, Layout, Square, RectangleHorizontal, Columns, Check
+  Code, Layout, Square, RectangleHorizontal, Columns, Check,
+  MoreHorizontal, Pencil, Archive, Trash2, Lock
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 
@@ -34,6 +35,8 @@ interface Post {
   comments_count: number;
   views_count: number;
   is_pinned: boolean;
+  is_archived: boolean;
+  rewarded: boolean;
   created_at: string;
   profile?: { display_name: string; username: string; avatar_url: string };
   liked?: boolean;
@@ -610,6 +613,13 @@ export default function Community() {
   const [profiles, setProfiles] = useState<Record<string, { display_name: string; username: string; avatar_url: string }>>({});
   const postingRef = useRef(false);
 
+  // CRUD state
+  const [editingPost, setEditingPost] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editPrompt, setEditPrompt] = useState("");
+  const [postMenuOpen, setPostMenuOpen] = useState<string | null>(null);
+
   const trackView = useViewTracker(user?.id);
 
   useEffect(() => {
@@ -619,7 +629,7 @@ export default function Community() {
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase.from("community_posts").select("*").eq("is_deleted", false)
+      let query = supabase.from("community_posts").select("*").eq("is_deleted", false).eq("is_archived", false)
         .order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).limit(50);
       if (filterType !== "all") query = query.eq("post_type", filterType);
       const { data } = await query;
@@ -690,6 +700,67 @@ export default function Community() {
     }
     setNewComment("");
     loadComments(postId);
+  };
+
+  // ─── Post CRUD ───
+  const startEditPost = (post: Post) => {
+    setEditingPost(post.id);
+    setEditTitle(post.title || "");
+    setEditContent(post.content || "");
+    setEditPrompt(post.prompt_text || "");
+    setPostMenuOpen(null);
+  };
+
+  const cancelEditPost = () => {
+    setEditingPost(null);
+    setEditTitle("");
+    setEditContent("");
+    setEditPrompt("");
+  };
+
+  const saveEditPost = async (postId: string) => {
+    if (!editContent.trim() && !editTitle.trim() && !editPrompt.trim()) return toast.error("Post não pode ficar vazio.");
+    const { error } = await supabase.from("community_posts").update({
+      title: editTitle.trim(),
+      content: editContent.trim(),
+      prompt_text: editPrompt.trim(),
+    }).eq("id", postId);
+    if (error) return toast.error("Erro ao editar: " + error.message);
+    toast.success("Post atualizado!");
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, title: editTitle.trim(), content: editContent.trim(), prompt_text: editPrompt.trim() } : p));
+    cancelEditPost();
+  };
+
+  const archivePost = async (post: Post) => {
+    setPostMenuOpen(null);
+    if (!confirm("Arquivar este post? Ele não aparecerá mais no feed.")) return;
+    await supabase.from("community_posts").update({ is_archived: true }).eq("id", post.id);
+    toast.success("Post arquivado!");
+    setPosts(prev => prev.filter(p => p.id !== post.id));
+  };
+
+  const deletePost = async (post: Post) => {
+    setPostMenuOpen(null);
+    if (post.rewarded) {
+      toast.error("Este post gerou recompensa de token e não pode ser excluído.");
+      return;
+    }
+    if (!confirm("Excluir este post permanentemente?")) return;
+    await supabase.from("community_posts").update({ is_deleted: true }).eq("id", post.id);
+    toast.success("Post excluído!");
+    setPosts(prev => prev.filter(p => p.id !== post.id));
+  };
+
+  const deleteComment = async (commentId: string, postId: string) => {
+    if (!confirm("Excluir este comentário?")) return;
+    await supabase.from("post_comments").update({ is_deleted: true }).eq("id", commentId);
+    const post = posts.find(p => p.id === postId);
+    if (post) {
+      await supabase.from("community_posts").update({ comments_count: Math.max(0, post.comments_count - 1) }).eq("id", postId);
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments_count: Math.max(0, p.comments_count - 1) } : p));
+    }
+    setComments(prev => prev.filter(c => c.id !== commentId));
+    toast.success("Comentário excluído!");
   };
 
   const submitPost = async (data: { title: string; content: string; type: string; projectUrl: string; hashtags: string; files: File[]; promptText: string; mediaTemplate: string }) => {
@@ -857,6 +928,8 @@ export default function Community() {
           ) : (
             posts.map(post => {
               const profile = getProfile(post.user_id);
+              const isOwner = user?.id === post.user_id;
+              const isEditing = editingPost === post.id;
               return (
                 <PostViewObserver key={post.id} postId={post.id} onView={trackView}>
                   <div className="ep-card">
@@ -883,27 +956,83 @@ export default function Community() {
                             <span className="text-[10px] text-muted-foreground">
                               {format(new Date(post.created_at), "dd MMM", { locale: ptBR })}
                             </span>
+                            {post.rewarded && (
+                              <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground/60" title="Post recompensado — não pode ser excluído">
+                                <Lock className="h-2.5 w-2.5" />
+                              </span>
+                            )}
                           </div>
-                          <span className="ep-badge text-[7px] flex items-center gap-1">
-                            {typeIcon(post.post_type)} {post.post_type.toUpperCase()}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="ep-badge text-[7px] flex items-center gap-1">
+                              {typeIcon(post.post_type)} {post.post_type.toUpperCase()}
+                            </span>
+                            {/* Owner actions menu */}
+                            {isOwner && (
+                              <div className="relative">
+                                <button onClick={() => setPostMenuOpen(postMenuOpen === post.id ? null : post.id)}
+                                  className="h-7 w-7 rounded-[8px] flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </button>
+                                {postMenuOpen === post.id && (
+                                  <div className="absolute right-0 top-8 z-20 bg-card border border-border rounded-[12px] shadow-lg py-1 min-w-[160px] animate-fade-in">
+                                    <button onClick={() => startEditPost(post)}
+                                      className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-foreground hover:bg-muted transition-colors">
+                                      <Pencil className="h-3.5 w-3.5" /> EDITAR
+                                    </button>
+                                    <button onClick={() => archivePost(post)}
+                                      className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-foreground hover:bg-muted transition-colors">
+                                      <Archive className="h-3.5 w-3.5" /> ARQUIVAR
+                                    </button>
+                                    {post.rewarded ? (
+                                      <div className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-muted-foreground/50 cursor-not-allowed">
+                                        <Lock className="h-3.5 w-3.5" /> EXCLUIR (BLOQUEADO)
+                                      </div>
+                                    ) : (
+                                      <button onClick={() => deletePost(post)}
+                                        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-destructive hover:bg-destructive/10 transition-colors">
+                                        <Trash2 className="h-3.5 w-3.5" /> EXCLUIR
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
 
-                        {post.title && <h3 className="text-base font-bold text-foreground mb-1">{post.title}</h3>}
-                        <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-3 leading-relaxed">{post.content}</p>
+                        {/* Edit mode */}
+                        {isEditing ? (
+                          <div className="space-y-2 mb-3">
+                            <input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Título"
+                              className="w-full bg-muted/50 border border-border/50 rounded-[10px] px-4 py-2 text-sm font-bold text-foreground focus:outline-none focus:border-foreground/20" />
+                            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} placeholder="Conteúdo" rows={3}
+                              className="w-full bg-muted/50 border border-border/50 rounded-[10px] px-4 py-2 text-sm text-foreground font-medium focus:outline-none focus:border-foreground/20 resize-none" />
+                            <textarea value={editPrompt} onChange={e => setEditPrompt(e.target.value)} placeholder="Prompt (opcional)" rows={2}
+                              className="w-full bg-muted/50 border border-border/50 rounded-[10px] px-4 py-2 text-sm text-foreground font-mono focus:outline-none focus:border-foreground/20 resize-none" />
+                            <div className="flex gap-2 justify-end">
+                              <button onClick={cancelEditPost} className="h-8 px-4 rounded-[8px] text-[9px] font-bold text-muted-foreground hover:text-foreground">CANCELAR</button>
+                              <button onClick={() => saveEditPost(post.id)} className="ep-btn-primary h-8 px-4 text-[9px]">SALVAR</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {post.title && <h3 className="text-base font-bold text-foreground mb-1">{post.title}</h3>}
+                            <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-3 leading-relaxed">{post.content}</p>
+                          </>
+                        )}
 
-                        {/* Media — uses static template detection */}
-                        {post.media_urls && post.media_urls.length > 0 && (
+                        {/* Media */}
+                        {!isEditing && post.media_urls && post.media_urls.length > 0 && (
                           <MediaCarousel urls={post.media_urls} template="threads" />
                         )}
 
                         {/* Prompt/CMD block */}
-                        {post.prompt_text && (
+                        {!isEditing && post.prompt_text && (
                           <PromptBlock text={post.prompt_text} postId={post.id} userId={user?.id} copyCount={post.copy_count || 0} />
                         )}
 
-                        {/* Static project preview (no iframe) */}
-                        {post.project_url && (
+                        {/* Static project preview */}
+                        {!isEditing && post.project_url && (
                           <>
                             {(() => { try { return new URL(post.project_url).hostname.endsWith(".lovable.app"); } catch { return false; } })() ? (
                               <StaticProjectPreview url={post.project_url} name={post.project_name} />
@@ -914,34 +1043,36 @@ export default function Community() {
                         )}
 
                         {/* Actions */}
-                        <div className="flex items-center gap-5">
-                          <button onClick={() => handleLike(post.id)}
-                            className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
-                              (post as any).liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
-                            }`}>
-                            <Heart className={`h-[18px] w-[18px] ${(post as any).liked ? "fill-red-500" : ""}`} />
-                            {post.likes_count > 0 && post.likes_count}
-                          </button>
-                          <button onClick={() => loadComments(post.id)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
-                            <MessageCircle className="h-[18px] w-[18px]" />
-                            {post.comments_count > 0 && post.comments_count}
-                          </button>
-                          <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/community?post=${post.id}`); toast.success("Link copiado!"); }}
-                            className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
-                            <Share2 className="h-[18px] w-[18px]" />
-                          </button>
-                          {post.copy_count > 0 && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground/60">
-                              <Copy className="h-3.5 w-3.5" /> {post.copy_count}
+                        {!isEditing && (
+                          <div className="flex items-center gap-5">
+                            <button onClick={() => handleLike(post.id)}
+                              className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
+                                (post as any).liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
+                              }`}>
+                              <Heart className={`h-[18px] w-[18px] ${(post as any).liked ? "fill-red-500" : ""}`} />
+                              {post.likes_count > 0 && post.likes_count}
+                            </button>
+                            <button onClick={() => loadComments(post.id)}
+                              className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
+                              <MessageCircle className="h-[18px] w-[18px]" />
+                              {post.comments_count > 0 && post.comments_count}
+                            </button>
+                            <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/community?post=${post.id}`); toast.success("Link copiado!"); }}
+                              className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
+                              <Share2 className="h-[18px] w-[18px]" />
+                            </button>
+                            {post.copy_count > 0 && (
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground/60">
+                                <Copy className="h-3.5 w-3.5" /> {post.copy_count}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground/50 ml-auto">
+                              <Eye className="h-3.5 w-3.5" /> {post.views_count || 0}
                             </span>
-                          )}
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground/50 ml-auto">
-                            <Eye className="h-3.5 w-3.5" /> {post.views_count || 0}
-                          </span>
-                        </div>
+                          </div>
+                        )}
 
-                        {post.comments_count > 0 && expandedComments !== post.id && (
+                        {!isEditing && post.comments_count > 0 && expandedComments !== post.id && (
                           <button onClick={() => loadComments(post.id)}
                             className="text-xs text-muted-foreground/60 font-medium mt-2 hover:text-muted-foreground transition-colors">
                             {post.comments_count} {post.comments_count === 1 ? "resposta" : "respostas"}
@@ -955,8 +1086,9 @@ export default function Community() {
                       <div className="ml-[52px] mt-3 space-y-3">
                         {comments.map(c => {
                           const cp = getProfile(c.user_id);
+                          const isCommentOwner = user?.id === c.user_id;
                           return (
-                            <div key={c.id} className="flex gap-2.5">
+                            <div key={c.id} className="flex gap-2.5 group">
                               <Link to={`/profile/${c.user_id}`}>
                                 {cp.avatar_url ? (
                                   <img src={cp.avatar_url} className="h-7 w-7 rounded-[10px] object-cover border border-border" />
@@ -970,6 +1102,13 @@ export default function Community() {
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-bold text-foreground">{cp.display_name || "Usuário"}</span>
                                   <span className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), "dd/MM HH:mm")}</span>
+                                  {isCommentOwner && (
+                                    <button onClick={() => deleteComment(c.id, post.id)}
+                                      className="opacity-0 group-hover:opacity-100 h-5 w-5 rounded-[6px] flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                                      title="Excluir comentário">
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  )}
                                 </div>
                                 <p className="text-sm text-muted-foreground font-medium leading-relaxed">{c.content}</p>
                               </div>

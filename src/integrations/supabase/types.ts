@@ -346,6 +346,7 @@ export type Database = {
           copy_count: number
           created_at: string
           id: string
+          is_archived: boolean
           is_deleted: boolean
           is_pinned: boolean
           likes_count: number
@@ -359,6 +360,7 @@ export type Database = {
           project_preview_image: string | null
           project_url: string | null
           prompt_text: string | null
+          rewarded: boolean
           title: string | null
           updated_at: string
           user_id: string
@@ -370,6 +372,7 @@ export type Database = {
           copy_count?: number
           created_at?: string
           id?: string
+          is_archived?: boolean
           is_deleted?: boolean
           is_pinned?: boolean
           likes_count?: number
@@ -383,6 +386,7 @@ export type Database = {
           project_preview_image?: string | null
           project_url?: string | null
           prompt_text?: string | null
+          rewarded?: boolean
           title?: string | null
           updated_at?: string
           user_id: string
@@ -394,6 +398,7 @@ export type Database = {
           copy_count?: number
           created_at?: string
           id?: string
+          is_archived?: boolean
           is_deleted?: boolean
           is_pinned?: boolean
           likes_count?: number
@@ -407,6 +412,7 @@ export type Database = {
           project_preview_image?: string | null
           project_url?: string | null
           prompt_text?: string | null
+          rewarded?: boolean
           title?: string | null
           updated_at?: string
           user_id?: string

@@ -111,6 +111,12 @@ Deno.serve(async (req) => {
       .update({ expires_at: newExpiry.toISOString() })
       .eq("id", activeSub.id);
 
+    // Mark the post as rewarded so it can't be deleted
+    await serviceClient
+      .from("community_posts")
+      .update({ rewarded: true })
+      .eq("id", postId);
+
     return new Response(JSON.stringify({
       rewarded: true,
       bonus_hours: 1,
