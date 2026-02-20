@@ -52,3 +52,37 @@ export function useIsAdmin() {
 
   return { isAdmin, loading };
 }
+
+export function useIsAffiliate() {
+  const { user } = useAuth();
+  const [isAffiliate, setIsAffiliate] = useState(false);
+  const [affiliateData, setAffiliateData] = useState<{
+    id: string;
+    affiliate_code: string;
+    display_name: string;
+    discount_percent: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+      setIsAffiliate(false);
+      setAffiliateData(null);
+      setLoading(false);
+      return;
+    }
+
+    supabase
+      .from("affiliates")
+      .select("id, affiliate_code, display_name, discount_percent")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setIsAffiliate(!!data);
+        setAffiliateData(data);
+        setLoading(false);
+      });
+  }, [user]);
+
+  return { isAffiliate, affiliateData, loading };
+}

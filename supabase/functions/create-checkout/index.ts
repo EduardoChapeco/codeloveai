@@ -33,7 +33,6 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Use getClaims for faster JWT validation
     const token = authHeader.replace("Bearer ", "");
     const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
     if (claimsError || !claimsData?.claims) {
@@ -46,7 +45,7 @@ Deno.serve(async (req) => {
     const userId = claimsData.claims.sub;
     const userEmail = claimsData.claims.email;
 
-    const { plan } = await req.json();
+    const { plan, affiliate_code } = await req.json();
 
     // Validate plan input
     const validPlans = ["1_day", "7_days", "1_month", "12_months"];
@@ -58,6 +57,34 @@ Deno.serve(async (req) => {
     }
 
     const planData = PLANS[plan];
+    let finalPrice = planData.price;
+
+    // Validate affiliate_code if provided
+    let validAffiliateCode: string | null = null;
+    if (affiliate_code && typeof affiliate_code === "string") {
+      const sanitizedCode = affiliate_code.replace(/[^A-Za-z0-9]/g, "").substring(0, 20);
+      
+      // Use service role to check affiliate exists
+      const serviceClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      
+      const { data: aff } = await serviceClient
+        .from("affiliates")
+        .select("affiliate_code, user_id, discount_percent")
+        .eq("affiliate_code", sanitizedCode)
+        .maybeSingle();
+
+      if (aff) {
+        validAffiliateCode = aff.affiliate_code;
+        // Check if buyer IS the affiliate — give them the discount
+        if (aff.user_id === userId) {
+          finalPrice = Math.round(planData.price * (1 - aff.discount_percent / 100) * 100) / 100;
+        }
+      }
+    }
+
     const accessToken = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN");
     if (!accessToken) {
       return new Response(JSON.stringify({ error: "Configuração de pagamento inválida" }), {
@@ -66,12 +93,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get origin for redirect URLs - validate it
     const rawOrigin = req.headers.get("origin");
     const allowedOrigins = ["https://codeloveai.lovable.app", "https://id-preview--804f123e-068a-44af-90b4-2843ed8e7d2a.lovable.app"];
     const origin = rawOrigin && allowedOrigins.some(o => rawOrigin.startsWith(o)) ? rawOrigin : "https://codeloveai.lovable.app";
 
-    // Webhook URL for Mercado Pago notifications
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const webhookUrl = `${supabaseUrl}/functions/v1/mercadopago-webhook`;
 
@@ -80,11 +105,14 @@ Deno.serve(async (req) => {
         {
           title: planData.title,
           quantity: 1,
-          unit_price: planData.price,
+          unit_price: finalPrice,
           currency_id: "BRL",
         },
       ],
-      external_reference: JSON.stringify({ user_id: userId, plan, email: userEmail }),
+      external_reference: JSON.stringify({
+        user_id: userId, plan, email: userEmail,
+        affiliate_code: validAffiliateCode,
+      }),
       back_urls: {
         success: `${origin}/dashboard?payment=success`,
         failure: `${origin}/dashboard?payment=failure`,
