@@ -54,6 +54,7 @@ export default function Admin() {
   const [newAffName, setNewAffName] = useState("");
   const [extVersion, setExtVersion] = useState("");
   const [extFile, setExtFile] = useState<File | null>(null);
+  const [extInstructions, setExtInstructions] = useState("");
   const [extensions, setExtensions] = useState<any[]>([]);
 
   useEffect(() => {
@@ -242,12 +243,12 @@ export default function Admin() {
     // Mark old as not latest
     await supabase.from("extension_files").update({ is_latest: false }).eq("is_latest", true);
     // Insert record
-    const { data: urlData } = supabase.storage.from("extensions").getPublicUrl(path);
     await supabase.from("extension_files").insert({
       file_url: path, version: extVersion, uploaded_by: user!.id, is_latest: true,
+      instructions: extInstructions,
     });
     toast.success("Extensão enviada!");
-    setExtVersion(""); setExtFile(null);
+    setExtVersion(""); setExtFile(null); setExtInstructions("");
     fetchExtensions();
   };
 
@@ -444,28 +445,45 @@ export default function Admin() {
           <div className="space-y-6">
             <div className="ep-card">
               <p className="ep-subtitle mb-4">UPLOAD DA EXTENSÃO</p>
-              <div className="flex flex-col md:flex-row gap-3">
-                <input placeholder="Versão (ex: 1.0.3)" value={extVersion}
-                  onChange={(e) => setExtVersion(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
-                <input type="file" accept=".zip,.crx,.xpi"
-                  onChange={(e) => setExtFile(e.target.files?.[0] || null)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
+              <div className="space-y-3">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <input placeholder="Versão (ex: 1.0.3)" value={extVersion}
+                    onChange={(e) => setExtVersion(e.target.value)}
+                    className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
+                  <input type="file" accept=".zip,.crx,.xpi,.txt"
+                    onChange={(e) => setExtFile(e.target.files?.[0] || null)}
+                    className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
+                </div>
+                <textarea
+                  placeholder="Instruções de instalação (passo a passo para o usuário)..."
+                  value={extInstructions}
+                  onChange={(e) => setExtInstructions(e.target.value)}
+                  rows={5}
+                  className="ep-input w-full rounded-[14px] text-xs px-4 py-3 border border-border resize-none"
+                />
                 <button onClick={uploadExtension} className="ep-btn-primary h-10 px-6 text-[9px]">
-                  <Upload className="h-3 w-3 mr-1" /> ENVIAR
+                  <Upload className="h-3 w-3 mr-1" /> ENVIAR EXTENSÃO
                 </button>
               </div>
             </div>
 
             {extensions.map((ext) => (
-              <div key={ext.id} className="ep-card-sm flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-foreground">v{ext.version}</p>
-                  <p className="text-xs text-muted-foreground">{format(new Date(ext.created_at), "dd/MM/yyyy HH:mm")}</p>
+              <div key={ext.id} className="ep-card">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-sm font-bold text-foreground">v{ext.version}</p>
+                    <p className="text-xs text-muted-foreground">{format(new Date(ext.created_at), "dd/MM/yyyy HH:mm")}</p>
+                  </div>
+                  <span className={`ep-badge ${ext.is_latest ? "ep-badge-live" : "ep-badge-offline"}`}>
+                    {ext.is_latest ? "ATUAL" : "ANTIGA"}
+                  </span>
                 </div>
-                <span className={`ep-badge ${ext.is_latest ? "ep-badge-live" : "ep-badge-offline"}`}>
-                  {ext.is_latest ? "ATUAL" : "ANTIGA"}
-                </span>
+                {ext.instructions && (
+                  <div className="bg-muted rounded-[12px] p-4 mt-2">
+                    <p className="ep-subtitle text-[9px] mb-2">INSTRUÇÕES</p>
+                    <pre className="text-xs text-muted-foreground font-medium whitespace-pre-wrap">{ext.instructions}</pre>
+                  </div>
+                )}
               </div>
             ))}
           </div>

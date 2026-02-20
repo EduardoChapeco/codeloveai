@@ -145,6 +145,7 @@ export type Database = {
           created_at: string
           file_url: string
           id: string
+          instructions: string
           is_latest: boolean
           uploaded_by: string
           version: string
@@ -153,6 +154,7 @@ export type Database = {
           created_at?: string
           file_url: string
           id?: string
+          instructions?: string
           is_latest?: boolean
           uploaded_by: string
           version: string
@@ -161,6 +163,7 @@ export type Database = {
           created_at?: string
           file_url?: string
           id?: string
+          instructions?: string
           is_latest?: boolean
           uploaded_by?: string
           version?: string
