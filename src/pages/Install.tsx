@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Download, Smartphone, Monitor, Check, ArrowRight, Share, MoreVertical } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import AppNav from "@/components/AppNav";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -11,6 +13,7 @@ export default function Install() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -45,11 +48,14 @@ export default function Install() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
-        <Link to="/login" className="ep-btn-secondary h-10 px-6 text-[9px]">ENTRAR</Link>
-      </nav>
+      {user ? (
+        <AppNav />
+      ) : (
+        <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-4 flex items-center justify-between">
+          <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
+          <Link to="/login" className="ep-btn-secondary h-10 px-6 text-[9px]">ENTRAR</Link>
+        </nav>
+      )}
 
       <section className="px-8 py-24 max-w-3xl mx-auto">
         <div className="text-center mb-16">

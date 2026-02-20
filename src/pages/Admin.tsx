@@ -6,6 +6,7 @@ import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, Refr
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import AppNav from "@/components/AppNav";
 
 interface Member {
   user_id: string;
@@ -553,15 +554,7 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
-        <div className="flex items-center gap-4">
-          <span className="ep-badge ep-badge-live">ADMIN</span>
-          <button onClick={signOut} className="ep-btn-icon h-10 w-10 rounded-[14px]">
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </nav>
+      <AppNav />
 
       <div className="max-w-6xl mx-auto px-8 py-12 space-y-8">
         <div>

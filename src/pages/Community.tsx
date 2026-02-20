@@ -11,6 +11,7 @@ import {
   Lightbulb, Eye, LogOut, Users, Loader2, Send, X,
   ChevronLeft, ChevronRight, Play
 } from "lucide-react";
+import AppNav from "@/components/AppNav";
 
 interface Post {
   id: string;
@@ -673,16 +674,7 @@ export default function Community() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
-        <div className="flex items-center gap-4">
-          <Link to="/community" className="ep-badge ep-badge-live">COMUNIDADE</Link>
-          <Link to="/dashboard" className="ep-btn-secondary h-10 px-4 text-[9px]">DASHBOARD</Link>
-          <Link to={`/profile/${user.id}`} className="ep-btn-secondary h-10 px-4 text-[9px]">MEU PERFIL</Link>
-          <button onClick={signOut} className="ep-btn-icon h-10 w-10 rounded-[14px]"><LogOut className="h-4 w-4" /></button>
-        </div>
-      </nav>
+      <AppNav />
 
       <div className="max-w-6xl mx-auto px-8 py-8 flex gap-8">
         {/* Sidebar */}

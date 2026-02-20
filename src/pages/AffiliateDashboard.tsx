@@ -6,6 +6,7 @@ import { Copy, Link as LinkIcon, LogOut, Coins, Users, Shield, Download, DollarS
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import AppNav from "@/components/AppNav";
 
 interface Referral {
   id: string;
@@ -178,16 +179,7 @@ export default function AffiliateDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
-        <div className="flex items-center gap-4">
-          <span className="ep-badge ep-badge-live">AFILIADO</span>
-          <Link to="/dashboard" className="ep-btn-secondary h-10 px-4 text-[9px]">DASHBOARD</Link>
-          <button onClick={signOut} className="ep-btn-icon h-10 w-10 rounded-[14px]">
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </nav>
+      <AppNav />
 
       <div className="max-w-4xl mx-auto px-8 py-12 space-y-8">
         <div>
