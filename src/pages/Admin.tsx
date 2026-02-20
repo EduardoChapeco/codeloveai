@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
-import { LogOut, Key, UserCheck, UserX } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX, Ban, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -120,6 +120,32 @@ export default function Admin() {
     fetchMembers();
   };
 
+  const cancelSubscription = async (userId: string) => {
+    if (!confirm("Tem certeza que deseja cancelar a assinatura deste usuário?")) return;
+    const { error } = await supabase
+      .from("subscriptions")
+      .update({ status: "cancelled" as any })
+      .eq("user_id", userId)
+      .eq("status", "active");
+    if (error) return toast.error(error.message);
+    toast.success("Assinatura cancelada!");
+    fetchMembers();
+  };
+
+  const banUser = async (userId: string) => {
+    if (!confirm("Tem certeza que deseja banir este usuário? Isso cancelará assinatura e desativará tokens.")) return;
+    // Deactivate all tokens
+    await supabase.from("tokens").update({ is_active: false }).eq("user_id", userId);
+    // Cancel all active subscriptions
+    await supabase
+      .from("subscriptions")
+      .update({ status: "cancelled" as any })
+      .eq("user_id", userId)
+      .eq("status", "active");
+    toast.success("Usuário banido! Tokens e assinaturas desativados.");
+    fetchMembers();
+  };
+
   const planLabels: Record<string, string> = {
     "1_day": "1 Dia",
     "7_days": "7 Dias",
@@ -204,6 +230,19 @@ export default function Admin() {
                     />
                     <button onClick={() => assignToken(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px]">
                       <Key className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {/* Cancel / Ban */}
+                  <div className="flex items-center gap-2">
+                    {m.subscription?.status === "active" && new Date(m.subscription.expires_at) > new Date() && (
+                      <button onClick={() => cancelSubscription(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30 hover:bg-destructive/10">
+                        <XCircle className="h-3 w-3 mr-1" />
+                        CANCELAR
+                      </button>
+                    )}
+                    <button onClick={() => banUser(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30 hover:bg-destructive/10">
+                      <Ban className="h-3 w-3 mr-1" />
+                      BANIR
                     </button>
                   </div>
                 </div>
