@@ -4,9 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function Login() {
   const { user, loading: authLoading } = useAuth();
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
   useSEO({ title: "Entrar" });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,7 +45,7 @@ export default function Login() {
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <Link to="/" className="block text-center mb-10">
-          <span className="text-lg font-semibold tracking-tight text-foreground">CodeLove AI</span>
+          <span className="text-lg font-semibold tracking-tight text-foreground">{brandName}</span>
         </Link>
 
         <div className="lv-card p-8">

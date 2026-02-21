@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
+import { useTenant } from "@/contexts/TenantContext";
 import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, ChevronRight, Zap, Monitor, Key, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -35,6 +36,8 @@ interface Message {
 
 export default function Dashboard() {
   const { user, loading: authLoading, signOut } = useAuth();
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
   useSEO({ title: "Dashboard" });
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
@@ -459,7 +462,7 @@ export default function Dashboard() {
             <div>
               <p className="lv-overline mb-1">Programa de Afiliados</p>
               <p className="lv-body">
-                Ganhe 30% de comissão indicando o CodeLove AI + 20% de desconto nos seus planos.
+                Ganhe 30% de comissão indicando o {brandName} + 20% de desconto nos seus planos.
               </p>
             </div>
             <Link to="/affiliates" className="lv-btn-primary h-10 px-5 text-sm shrink-0">
