@@ -1669,12 +1669,14 @@ export type Database = {
       tenants: {
         Row: {
           accent_color: string
+          affiliate_global_split_percent: number | null
           border_radius: string
           commission_percent: number
           created_at: string
           domain_custom: string | null
           favicon_url: string | null
           font_family: string
+          global_split_percent: number | null
           id: string
           is_active: boolean
           is_domain_approved: boolean
@@ -1684,20 +1686,24 @@ export type Database = {
           name: string
           primary_color: string
           secondary_color: string
+          setup_paid: boolean | null
           slug: string
           terms_template: string | null
           theme_preset: string
           token_cost: number
           updated_at: string
+          white_label_plan_id: string | null
         }
         Insert: {
           accent_color?: string
+          affiliate_global_split_percent?: number | null
           border_radius?: string
           commission_percent?: number
           created_at?: string
           domain_custom?: string | null
           favicon_url?: string | null
           font_family?: string
+          global_split_percent?: number | null
           id?: string
           is_active?: boolean
           is_domain_approved?: boolean
@@ -1707,20 +1713,24 @@ export type Database = {
           name: string
           primary_color?: string
           secondary_color?: string
+          setup_paid?: boolean | null
           slug: string
           terms_template?: string | null
           theme_preset?: string
           token_cost?: number
           updated_at?: string
+          white_label_plan_id?: string | null
         }
         Update: {
           accent_color?: string
+          affiliate_global_split_percent?: number | null
           border_radius?: string
           commission_percent?: number
           created_at?: string
           domain_custom?: string | null
           favicon_url?: string | null
           font_family?: string
+          global_split_percent?: number | null
           id?: string
           is_active?: boolean
           is_domain_approved?: boolean
@@ -1730,13 +1740,23 @@ export type Database = {
           name?: string
           primary_color?: string
           secondary_color?: string
+          setup_paid?: boolean | null
           slug?: string
           terms_template?: string | null
           theme_preset?: string
           token_cost?: number
           updated_at?: string
+          white_label_plan_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tenants_white_label_plan_id_fkey"
+            columns: ["white_label_plan_id"]
+            isOneToOne: false
+            referencedRelation: "white_label_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tokens: {
         Row: {
@@ -1893,6 +1913,292 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      white_label_affiliate_bank_info: {
+        Row: {
+          affiliate_id: string
+          bank_name: string | null
+          created_at: string
+          holder_name: string
+          id: string
+          pix_key: string
+          pix_key_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          affiliate_id: string
+          bank_name?: string | null
+          created_at?: string
+          holder_name?: string
+          id?: string
+          pix_key?: string
+          pix_key_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          affiliate_id?: string
+          bank_name?: string | null
+          created_at?: string
+          holder_name?: string
+          id?: string
+          pix_key?: string
+          pix_key_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "white_label_affiliate_bank_info_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: true
+            referencedRelation: "white_label_affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      white_label_affiliate_invoices: {
+        Row: {
+          affiliate_id: string
+          created_at: string
+          id: string
+          paid_at: string | null
+          paid_by: string | null
+          payment_notes: string | null
+          status: string
+          total_commission_cents: number
+          total_sales: number
+          updated_at: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          affiliate_id: string
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_notes?: string | null
+          status?: string
+          total_commission_cents?: number
+          total_sales?: number
+          updated_at?: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          affiliate_id?: string
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_notes?: string | null
+          status?: string
+          total_commission_cents?: number
+          total_sales?: number
+          updated_at?: string
+          user_id?: string
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "white_label_affiliate_invoices_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "white_label_affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      white_label_affiliates: {
+        Row: {
+          code: string
+          commission_percent: number
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          code: string
+          commission_percent?: number
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          code?: string
+          commission_percent?: number
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      white_label_plans: {
+        Row: {
+          affiliate_global_split_percent: number
+          created_at: string
+          description: string | null
+          global_split_percent: number
+          id: string
+          is_active: boolean
+          monthly_price_cents: number
+          name: string
+          setup_is_free: boolean
+          setup_price_cents: number
+          updated_at: string
+          yearly_price_cents: number | null
+        }
+        Insert: {
+          affiliate_global_split_percent?: number
+          created_at?: string
+          description?: string | null
+          global_split_percent?: number
+          id?: string
+          is_active?: boolean
+          monthly_price_cents?: number
+          name: string
+          setup_is_free?: boolean
+          setup_price_cents?: number
+          updated_at?: string
+          yearly_price_cents?: number | null
+        }
+        Update: {
+          affiliate_global_split_percent?: number
+          created_at?: string
+          description?: string | null
+          global_split_percent?: number
+          id?: string
+          is_active?: boolean
+          monthly_price_cents?: number
+          name?: string
+          setup_is_free?: boolean
+          setup_price_cents?: number
+          updated_at?: string
+          yearly_price_cents?: number | null
+        }
+        Relationships: []
+      }
+      white_label_referrals: {
+        Row: {
+          affiliate_id: string
+          created_at: string
+          id: string
+          setup_commission_cents: number | null
+          subscription_commission_cents: number | null
+          tenant_id: string
+          total_recurring_earned_cents: number | null
+        }
+        Insert: {
+          affiliate_id: string
+          created_at?: string
+          id?: string
+          setup_commission_cents?: number | null
+          subscription_commission_cents?: number | null
+          tenant_id: string
+          total_recurring_earned_cents?: number | null
+        }
+        Update: {
+          affiliate_id?: string
+          created_at?: string
+          id?: string
+          setup_commission_cents?: number | null
+          subscription_commission_cents?: number | null
+          tenant_id?: string
+          total_recurring_earned_cents?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "white_label_referrals_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "white_label_affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "white_label_referrals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      white_label_subscriptions: {
+        Row: {
+          affiliate_wl_code: string | null
+          amount_cents: number
+          created_at: string
+          expires_at: string
+          id: string
+          owner_user_id: string
+          payment_id: string | null
+          period: string
+          plan_id: string
+          starts_at: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          affiliate_wl_code?: string | null
+          amount_cents?: number
+          created_at?: string
+          expires_at: string
+          id?: string
+          owner_user_id: string
+          payment_id?: string | null
+          period?: string
+          plan_id: string
+          starts_at?: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          affiliate_wl_code?: string | null
+          amount_cents?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          owner_user_id?: string
+          payment_id?: string | null
+          period?: string
+          plan_id?: string
+          starts_at?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "white_label_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "white_label_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "white_label_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
