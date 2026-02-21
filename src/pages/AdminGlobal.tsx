@@ -8,7 +8,7 @@ import { THEME_PRESETS } from "@/lib/tenant-themes";
 import {
   Building2, Plus, Pencil, Trash2, DollarSign, Wallet, Users,
   BarChart3, CheckCircle, XCircle, Loader2, Save, ArrowLeft,
-  Globe, Palette, FileText, Eye, EyeOff, RefreshCw
+  Globe, Palette, FileText, Eye, EyeOff, RefreshCw, Shield, BookOpen, LogIn
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -20,6 +20,7 @@ interface TenantRow {
   name: string;
   slug: string;
   domain_custom: string | null;
+  is_domain_approved: boolean;
   logo_url: string | null;
   favicon_url: string | null;
   primary_color: string;
@@ -35,6 +36,16 @@ interface TenantRow {
   theme_preset: string;
   font_family: string;
   border_radius: string;
+}
+
+interface LedgerEntry {
+  id: string;
+  tenant_id: string;
+  payment_id: string | null;
+  entry_type: string;
+  amount: number;
+  description: string;
+  created_at: string;
 }
 
 interface TenantWallet {
@@ -54,7 +65,7 @@ interface AdminCommission {
   payment_id: string | null;
 }
 
-type Tab = "tenants" | "finances" | "commissions" | "wallets";
+type Tab = "tenants" | "finances" | "commissions" | "wallets" | "ledger" | "operations";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -67,6 +78,7 @@ export default function AdminGlobal() {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [wallets, setWallets] = useState<TenantWallet[]>([]);
   const [commissions, setCommissions] = useState<AdminCommission[]>([]);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Create/Edit tenant sheet
@@ -76,7 +88,7 @@ export default function AdminGlobal() {
     name: "", slug: "", domain_custom: "", logo_url: "", favicon_url: "",
     primary_color: "#0A84FF", secondary_color: "#5E5CE6", accent_color: "#5E5CE6",
     meta_title: "", meta_description: "", terms_template: "",
-    commission_percent: 30, token_cost: 0, is_active: true,
+    commission_percent: 30, token_cost: 0, is_active: true, is_domain_approved: false,
     theme_preset: "apple-glass", font_family: "system", border_radius: "1rem",
   });
   const [saving, setSaving] = useState(false);
@@ -96,14 +108,16 @@ export default function AdminGlobal() {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [tenantsRes, walletsRes, commissionsRes] = await Promise.all([
+    const [tenantsRes, walletsRes, commissionsRes, ledgerRes] = await Promise.all([
       supabase.from("tenants").select("*").order("created_at", { ascending: true }),
       supabase.from("tenant_wallets").select("*"),
       supabase.from("admin_commissions").select("*").order("created_at", { ascending: false }).limit(100),
+      supabase.from("ledger_entries").select("*").order("created_at", { ascending: false }).limit(200),
     ]);
     setTenants(tenantsRes.data || []);
     setWallets(walletsRes.data || []);
     setCommissions(commissionsRes.data || []);
+    setLedgerEntries((ledgerRes.data as LedgerEntry[]) || []);
     setLoading(false);
   };
 
@@ -117,7 +131,7 @@ export default function AdminGlobal() {
       name: "", slug: "", domain_custom: "", logo_url: "", favicon_url: "",
       primary_color: "#0A84FF", secondary_color: "#5E5CE6", accent_color: "#5E5CE6",
       meta_title: "", meta_description: "", terms_template: "",
-      commission_percent: 30, token_cost: 0, is_active: true,
+      commission_percent: 30, token_cost: 0, is_active: true, is_domain_approved: false,
       theme_preset: "apple-glass", font_family: "system", border_radius: "1rem",
     });
     setSheetOpen(true);
@@ -133,7 +147,7 @@ export default function AdminGlobal() {
       meta_title: t.meta_title || "", meta_description: t.meta_description || "",
       terms_template: t.terms_template || "",
       commission_percent: t.commission_percent, token_cost: t.token_cost,
-      is_active: t.is_active,
+      is_active: t.is_active, is_domain_approved: t.is_domain_approved,
       theme_preset: t.theme_preset || "apple-glass",
       font_family: t.font_family || "system",
       border_radius: t.border_radius || "1rem",
@@ -160,6 +174,7 @@ export default function AdminGlobal() {
         commission_percent: form.commission_percent,
         token_cost: form.token_cost,
         is_active: form.is_active,
+        is_domain_approved: form.is_domain_approved,
         theme_preset: form.theme_preset,
         font_family: form.font_family,
         border_radius: form.border_radius,
@@ -189,6 +204,16 @@ export default function AdminGlobal() {
     await supabase.from("tenants").update({ is_active: !currentActive }).eq("id", id);
     toast.success(currentActive ? "Tenant desativado" : "Tenant ativado");
     fetchAll();
+  };
+
+  const toggleDomainApproved = async (id: string, current: boolean) => {
+    await supabase.from("tenants").update({ is_domain_approved: !current }).eq("id", id);
+    toast.success(current ? "Domínio desaprovado" : "Domínio aprovado!");
+    fetchAll();
+  };
+
+  const impersonateTenant = (tenantSlug: string) => {
+    window.open(`/admin?tenant=${tenantSlug}`, "_blank");
   };
 
   const creditWallet = async () => {
@@ -248,6 +273,8 @@ export default function AdminGlobal() {
               { id: "finances", label: "Faturamento", icon: BarChart3 },
               { id: "commissions", label: "Comissões", icon: DollarSign },
               { id: "wallets", label: "Wallets", icon: Wallet },
+              { id: "ledger", label: "Ledger", icon: BookOpen },
+              { id: "operations", label: "Operações", icon: Shield },
             ] as const).map(t => (
               <button
                 key={t.id}
@@ -292,6 +319,19 @@ export default function AdminGlobal() {
                           <span className={`lv-badge ${t.is_active ? "lv-badge-success" : "lv-badge-muted"}`}>
                             {t.is_active ? "Ativo" : "Inativo"}
                           </span>
+                          {t.domain_custom && (
+                            <button
+                              onClick={() => toggleDomainApproved(t.id, t.is_domain_approved)}
+                              className={`lv-badge cursor-pointer ${t.is_domain_approved ? "lv-badge-success" : "lv-badge-muted"}`}
+                              title={t.is_domain_approved ? "Domínio aprovado - clique para desaprovar" : "Domínio pendente - clique para aprovar"}
+                            >
+                              <Globe className="h-3 w-3 mr-1 inline" />
+                              {t.is_domain_approved ? "DNS ✓" : "DNS ✗"}
+                            </button>
+                          )}
+                          <button onClick={() => impersonateTenant(t.slug)} className="lv-btn-icon h-8 w-8" title="Impersonar tenant">
+                            <LogIn className="h-3.5 w-3.5" />
+                          </button>
                           <button onClick={() => openEdit(t)} className="lv-btn-icon h-8 w-8">
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
@@ -416,6 +456,112 @@ export default function AdminGlobal() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ─── LEDGER TAB ─── */}
+          {tab === "ledger" && (
+            <div className="space-y-4">
+              <p className="lv-body-strong">{ledgerEntries.length} entrada(s) no ledger</p>
+              <div className="space-y-2">
+                {ledgerEntries.map(e => (
+                  <div key={e.id} className="lv-card-sm flex items-center justify-between">
+                    <div>
+                      <p className="lv-body-strong">{getTenantName(e.tenant_id)}</p>
+                      <p className="lv-caption">{e.entry_type} • {e.description}</p>
+                      <p className="lv-caption">{format(new Date(e.created_at), "dd/MM/yyyy HH:mm")}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`lv-stat text-lg ${e.entry_type === "admin_commission" ? "text-green-600" : ""}`}>
+                        R${Number(e.amount).toFixed(2)}
+                      </p>
+                      {e.payment_id && <p className="lv-caption">#{e.payment_id}</p>}
+                    </div>
+                  </div>
+                ))}
+                {ledgerEntries.length === 0 && <p className="lv-caption text-center py-8">Nenhuma entrada no ledger ainda.</p>}
+              </div>
+            </div>
+          )}
+
+          {/* ─── OPERATIONS TAB ─── */}
+          {tab === "operations" && (
+            <div className="space-y-6">
+              {/* Impersonate */}
+              <div className="lv-card">
+                <p className="lv-overline mb-4">Impersonar Tenant</p>
+                <p className="lv-caption mb-4">Abra o painel admin no contexto de um tenant específico.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {tenants.filter(t => t.is_active).map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => impersonateTenant(t.slug)}
+                      className="lv-card-sm flex items-center gap-3 hover:bg-muted/50 transition-colors cursor-pointer text-left"
+                    >
+                      <LogIn className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <p className="lv-body-strong truncate">{t.name}</p>
+                        <p className="lv-caption truncate">/{t.slug}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Domain Approvals */}
+              <div className="lv-card">
+                <p className="lv-overline mb-4">Aprovação de Domínios</p>
+                <div className="space-y-3">
+                  {tenants.filter(t => t.domain_custom).map(t => (
+                    <div key={t.id} className="lv-card-sm flex items-center justify-between">
+                      <div>
+                        <p className="lv-body-strong">{t.name}</p>
+                        <p className="lv-caption">{t.domain_custom}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`lv-badge ${t.is_domain_approved ? "lv-badge-success" : "lv-badge-muted"}`}>
+                          {t.is_domain_approved ? "Aprovado" : "Pendente"}
+                        </span>
+                        <button
+                          onClick={() => toggleDomainApproved(t.id, t.is_domain_approved)}
+                          className={`lv-btn-secondary h-8 px-3 text-xs ${!t.is_domain_approved ? "lv-btn-primary" : ""}`}
+                        >
+                          {t.is_domain_approved ? "Revogar" : "Aprovar"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {tenants.filter(t => t.domain_custom).length === 0 && (
+                    <p className="lv-caption text-center py-4">Nenhum tenant com domínio customizado.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* RLS Healthcheck */}
+              <div className="lv-card">
+                <p className="lv-overline mb-4">Segurança & Auditoria</p>
+                <div className="space-y-2">
+                  <div className="lv-card-sm flex items-center justify-between">
+                    <div>
+                      <p className="lv-body-strong">Tenants Ativos</p>
+                      <p className="lv-caption">Com domínio aprovado</p>
+                    </div>
+                    <p className="lv-stat text-lg">{tenants.filter(t => t.is_active && t.is_domain_approved).length}/{tenants.filter(t => t.is_active).length}</p>
+                  </div>
+                  <div className="lv-card-sm flex items-center justify-between">
+                    <div>
+                      <p className="lv-body-strong">Wallets com Saldo</p>
+                    </div>
+                    <p className="lv-stat text-lg">{wallets.filter(w => Number(w.balance) > 0).length}/{wallets.length}</p>
+                  </div>
+                  <div className="lv-card-sm flex items-center justify-between">
+                    <div>
+                      <p className="lv-body-strong">Entradas no Ledger</p>
+                    </div>
+                    <p className="lv-stat text-lg">{ledgerEntries.length}</p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -548,6 +694,10 @@ export default function AdminGlobal() {
             <div className="flex items-center gap-3">
               <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} className="h-4 w-4 rounded" />
               <span className="lv-body">Tenant ativo</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <input type="checkbox" checked={form.is_domain_approved} onChange={e => setForm({ ...form, is_domain_approved: e.target.checked })} className="h-4 w-4 rounded" />
+              <span className="lv-body">Domínio aprovado</span>
             </div>
             <button onClick={saveTenant} disabled={saving} className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
