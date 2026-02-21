@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
+import { useTenant } from "@/contexts/TenantContext";
 import { LogOut, Shield, Users, MessageCircle, LayoutDashboard, Download, Bot, Link2, FolderOpen } from "lucide-react";
 
 export default function AppNav() {
@@ -8,6 +9,8 @@ export default function AppNav() {
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
   const location = useLocation();
 
   if (authLoading || !user) return null;
@@ -27,7 +30,7 @@ export default function AppNav() {
   return (
     <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
       <Link to="/" className="text-base font-semibold tracking-tight text-foreground">
-        CodeLove AI
+        {brandName}
       </Link>
       <div className="flex items-center gap-1">
         {navItems.filter(n => n.show).map(item => (
@@ -55,7 +58,7 @@ export default function AppNav() {
           className={`lv-btn-icon ${
             isChatOpen ? "bg-primary/10 text-primary" : ""
           }`}
-          title="CodeLove AI"
+          title={brandName}
         >
           <Bot className="h-4 w-4" />
         </button>

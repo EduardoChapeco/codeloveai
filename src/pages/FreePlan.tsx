@@ -2,11 +2,14 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 import { Loader2, CheckCircle, XCircle, Gift } from "lucide-react";
 import { toast } from "sonner";
 
 export default function FreePlan() {
   const { user, loading: authLoading } = useAuth();
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const code = searchParams.get("code");
@@ -59,7 +62,7 @@ export default function FreePlan() {
   return (
     <div className="min-h-screen bg-background">
       <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
-        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
+        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
       </nav>
 
       <div className="max-w-md mx-auto px-6 py-20 text-center">
@@ -71,7 +74,7 @@ export default function FreePlan() {
             <p className="lv-overline mb-2">Testdrive gratuito</p>
             <h1 className="lv-heading-lg mb-3">5 horas grátis</h1>
             <p className="lv-body mb-8">
-              Ative seu testdrive gratuito de 5 horas para testar a extensão CodeLove AI.
+              Ative seu testdrive gratuito de 5 horas para testar a extensão.
               Sem custos, sem compromisso.
             </p>
             {code ? (

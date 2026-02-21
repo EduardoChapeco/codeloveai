@@ -720,7 +720,7 @@ function PostViewObserver({ postId, onView, children }: { postId: string; onView
 export default function Community() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin } = useIsAdmin();
-  useSEO({ title: "Comunidade", description: "Comunidade CodeLove AI — compartilhe projetos, prompts e conecte-se com outros membros." });
+  useSEO({ title: "Comunidade", description: "Compartilhe projetos, prompts e conecte-se com outros membros." });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterType = searchParams.get("type") || "all";

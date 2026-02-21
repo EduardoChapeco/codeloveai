@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface SEOProps {
   title: string;
@@ -6,8 +7,10 @@ interface SEOProps {
 }
 
 export function useSEO({ title, description }: SEOProps) {
+  const { tenant } = useTenant();
+  const suffix = tenant?.name || "CodeLove AI";
+
   useEffect(() => {
-    const suffix = "CodeLove AI";
     document.title = title === suffix ? title : `${title} — ${suffix}`;
 
     if (description) {
@@ -16,5 +19,5 @@ export function useSEO({ title, description }: SEOProps) {
         meta.setAttribute("content", description);
       }
     }
-  }, [title, description]);
+  }, [title, description, suffix]);
 }

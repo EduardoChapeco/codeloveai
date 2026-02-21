@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { X, List, Plus } from "lucide-react";
 import { useChatContext } from "@/contexts/ChatContext";
+import { useTenant } from "@/contexts/TenantContext";
 import ChatMessages from "./ChatMessages";
 import ChatInput from "./ChatInput";
 import ChatConversationList from "./ChatConversationList";
 
 export default function ChatPanel() {
   const { isChatOpen, closeChat, currentConversationId, newConversation, conversations } = useChatContext();
+  const { tenant } = useTenant();
   const [showList, setShowList] = useState(false);
 
   if (!isChatOpen) return null;
 
-  const currentTitle = conversations.find(c => c.id === currentConversationId)?.title || "CodeLove AI";
+  const currentTitle = conversations.find(c => c.id === currentConversationId)?.title || tenant?.name || "Chat";
 
   return (
     <div className="fixed top-0 right-0 h-full w-full sm:w-[380px] bg-background border-l border-border z-30 flex flex-col shadow-xl animate-in slide-in-from-right duration-300">
