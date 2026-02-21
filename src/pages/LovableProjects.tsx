@@ -68,7 +68,7 @@ export default function LovableProjects() {
         if (err?.isTokenExpired) {
           setConnectionStatus("expired");
         } else {
-          toast.error("Erro ao carregar workspaces: " + (err?.message || "Tente novamente"));
+          toast.error("Erro ao carregar workspaces");
         }
       } finally {
         setLoadingWs(false);
@@ -77,6 +77,22 @@ export default function LovableProjects() {
     loadWorkspaces();
   }, [connectionStatus, invoke]);
 
+  const syncProjectsToDb = useCallback(async (projectsList: LovableProject[]) => {
+    if (!user || projectsList.length === 0) return;
+    for (const p of projectsList) {
+      await supabase.from("lovable_projects").upsert({
+        user_id: user.id,
+        lovable_project_id: p.id,
+        name: p.name || null,
+        display_name: p.display_name || p.name || null,
+        latest_screenshot_url: p.latest_screenshot_url || null,
+        published_url: p.published_url || null,
+        preview_build_commit_sha: p.preview_build_commit_sha || null,
+        workspace_id: selectedWs,
+      }, { onConflict: "lovable_project_id" });
+    }
+  }, [user, selectedWs]);
+
   const loadProjects = useCallback(async () => {
     if (!selectedWs) return;
     setLoading(true);
@@ -84,32 +100,17 @@ export default function LovableProjects() {
       const data = await invoke({ route: `/workspaces/${selectedWs}/projects` });
       const projectsList = Array.isArray(data) ? data : data?.projects || [];
       setProjects(projectsList);
-
-      // Sync to local DB
-      if (user && projectsList.length > 0) {
-        for (const p of projectsList) {
-          await supabase.from("lovable_projects").upsert({
-            user_id: user.id,
-            lovable_project_id: p.id,
-            name: p.name || null,
-            display_name: p.display_name || p.name || null,
-            latest_screenshot_url: p.latest_screenshot_url || null,
-            published_url: p.published_url || null,
-            preview_build_commit_sha: p.preview_build_commit_sha || null,
-            workspace_id: selectedWs,
-          }, { onConflict: "lovable_project_id" }).then(() => {});
-        }
-      }
+      await syncProjectsToDb(projectsList);
     } catch (err: any) {
       if (err?.isTokenExpired) {
         setConnectionStatus("expired");
       } else {
-        toast.error("Erro ao carregar projetos: " + (err?.message || "Tente novamente"));
+        toast.error("Erro ao carregar projetos");
       }
     } finally {
       setLoading(false);
     }
-  }, [selectedWs, invoke, user]);
+  }, [selectedWs, invoke, syncProjectsToDb]);
 
   useEffect(() => {
     if (selectedWs) loadProjects();
@@ -131,7 +132,7 @@ export default function LovableProjects() {
           target_url: data?.url || null,
         });
       }
-      toast.success("Deploy iniciado! O processo pode levar alguns minutos.");
+      toast.success("Deploy iniciado com sucesso!");
     } catch (err: any) {
       toast.error("Erro no deploy: " + (err?.message || "Tente novamente"));
     } finally {
@@ -150,7 +151,6 @@ export default function LovableProjects() {
       setProjects((prev) =>
         prev.map((p) => (p.id === projectId ? { ...p, display_name: renameValue.trim() } : p))
       );
-      // Also update local DB
       if (user) {
         await supabase.from("lovable_projects")
           .update({ display_name: renameValue.trim() })
@@ -170,13 +170,11 @@ export default function LovableProjects() {
       const data = await invoke({ route: `/projects/${projectId}/analytics` });
       setAnalyticsData({ projectId, ...data });
     } catch (err: any) {
-      toast.error("Erro ao buscar analytics: " + (err?.message || "Tente novamente"));
+      toast.error("Analytics indisponível para este projeto");
     } finally {
       setAnalyticsLoading(null);
     }
   };
-
-  const getPreviewUrl = (projectId: string) => `https://id-preview--${projectId}.lovable.app`;
 
   if (authLoading || !user) return <div className="min-h-screen bg-background" />;
 
@@ -188,13 +186,13 @@ export default function LovableProjects() {
             <>
               <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
               <h2 className="lv-heading-sm mb-2">Token expirado</h2>
-              <p className="lv-body mb-6">Reconecte via extensão para continuar gerenciando seus projetos.</p>
+              <p className="lv-body mb-6">Reconecte via extensão para continuar.</p>
             </>
           ) : (
             <>
               <Link2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h2 className="lv-heading-sm mb-2">Não conectado</h2>
-              <p className="lv-body mb-6">Conecte sua conta Lovable para gerenciar projetos, deploys e previews.</p>
+              <p className="lv-body mb-6">Conecte sua conta Lovable para gerenciar projetos.</p>
             </>
           )}
           <button onClick={() => navigate("/lovable/connect")} className="lv-btn-primary h-11 px-8 text-sm">
@@ -241,8 +239,9 @@ export default function LovableProjects() {
           </div>
         ) : projects.length === 0 ? (
           <div className="text-center py-20">
-            <p className="lv-overline mb-2">Nenhum projeto</p>
-            <p className="lv-body">Nenhum projeto encontrado neste workspace.</p>
+            <Globe className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+            <p className="lv-body-strong mb-1">Nenhum projeto</p>
+            <p className="lv-caption">Nenhum projeto encontrado neste workspace.</p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -311,15 +310,13 @@ export default function LovableProjects() {
                     Deploy
                   </button>
 
-                  <a
-                    href={getPreviewUrl(project.id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => navigate(`/lovable/preview?projectId=${project.id}`)}
                     className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1.5"
-                    title="Abrir preview em nova aba"
+                    title="Abrir preview"
                   >
                     <Eye className="h-3 w-3" /> Preview
-                  </a>
+                  </button>
 
                   <button
                     onClick={() => handleAnalytics(project.id)}
@@ -328,13 +325,11 @@ export default function LovableProjects() {
                     title="Ver analytics"
                   >
                     {analyticsLoading === project.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <BarChart3 className="h-3 w-3" />}
-                    Analytics
                   </button>
 
                   {project.published_url && (
                     <a href={project.published_url} target="_blank" rel="noopener noreferrer"
                       className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1.5"
-                      title="Abrir site publicado"
                     >
                       <Globe className="h-3 w-3" /> Site
                     </a>
@@ -342,10 +337,10 @@ export default function LovableProjects() {
 
                   <button
                     onClick={() => { navigator.clipboard.writeText(project.id); toast.success("ID copiado!"); }}
-                    className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1.5"
-                    title="Copiar ID do projeto"
+                    className="lv-btn-secondary h-8 w-8 flex items-center justify-center"
+                    title="Copiar ID"
                   >
-                    <Copy className="h-3 w-3" /> ID
+                    <Copy className="h-3 w-3" />
                   </button>
                 </div>
               </div>
@@ -358,7 +353,7 @@ export default function LovableProjects() {
           <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setAnalyticsData(null)}>
             <div className="bg-card border border-border/60 rounded-2xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="lv-heading-sm">Analytics do Projeto</h2>
+                <h2 className="lv-heading-sm">Analytics</h2>
                 <button onClick={() => setAnalyticsData(null)} className="lv-btn-icon h-8 w-8">
                   <X className="h-4 w-4" />
                 </button>
