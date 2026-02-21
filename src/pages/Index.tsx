@@ -96,18 +96,6 @@ export default function Index() {
 
       {/* Hero */}
       <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center">
-        {/* TestDrive Badge */}
-        <div className="inline-flex items-center gap-2 lv-pill-primary px-4 py-2 mb-8">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-40" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-          </span>
-          <span className="text-xs font-medium text-primary">Testdrive gratuito — 5h por tempo limitado</span>
-          <Link to="/free" className="text-xs font-medium text-primary underline underline-offset-2 hover:opacity-70 transition-opacity ml-1">
-            Ativar →
-          </Link>
-        </div>
-
         <p className="lv-overline mb-4">Extensão não oficial para Lovable</p>
         <h1 className="lv-heading-xl mb-6">
           A melhor plataforma de envios infinitos
@@ -118,7 +106,7 @@ export default function Index() {
         </p>
         <div className="flex items-center justify-center gap-3">
           <Link to="/checkout" className="lv-btn-primary lv-btn-lg">Ver planos</Link>
-          <Link to="/free" className="lv-btn-secondary lv-btn-lg">Testar grátis</Link>
+          <Link to="/register" className="lv-btn-secondary lv-btn-lg">Criar conta</Link>
         </div>
       </section>
 

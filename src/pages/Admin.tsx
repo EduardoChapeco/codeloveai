@@ -65,7 +65,7 @@ const planLabels: Record<string, string> = {
   "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
 };
 
-type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "free-links" | "worker-tokens";
+type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "worker-tokens";
 
 export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -86,7 +86,7 @@ export default function Admin() {
   const [extInstructions, setExtInstructions] = useState("");
   const [extensions, setExtensions] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [freeLinks, setFreeLinks] = useState<string[]>([]);
+  // freeLinks removed
   const [paymentNotes, setPaymentNotes] = useState<Record<string, string>>({});
 
   // Worker token management
@@ -581,7 +581,7 @@ export default function Admin() {
         {/* Tab title */}
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold capitalize">{
-            { members: "Membros", affiliates: "Afiliados", invoices: "Faturas", "worker-tokens": "Tokens API", extension: "Extensão", notifications: "Notificações", messages: "Mensagens", "free-links": "Links Grátis" }[tab]
+            { members: "Membros", affiliates: "Afiliados", invoices: "Faturas", "worker-tokens": "Tokens API", extension: "Extensão", notifications: "Notificações", messages: "Mensagens" }[tab]
           }</h2>
         </div>
 
@@ -1149,53 +1149,7 @@ export default function Admin() {
           </div>
         )}
 
-        {/* Free Links Tab */}
-        {tab === "free-links" && (
-          <div className="space-y-6">
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">GERAR LINK GRATUITO (1 DIA)</p>
-              <p className="text-sm text-muted-foreground font-medium mb-6">
-                Gere um link único para que um usuário possa ativar um plano gratuito de 1 dia.
-                Cada usuário pode usar apenas 1 plano gratuito.
-              </p>
-              <button
-                onClick={() => {
-                  const code = `FREE_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-                  const origin = window.location.origin;
-                  const link = `${origin}/free?code=${code}`;
-                  setFreeLinks((prev) => [link, ...prev]);
-                  navigator.clipboard.writeText(link);
-                  toast.success("Link copiado para a área de transferência!");
-                }}
-                className="ep-btn-primary h-12 px-8 text-[9px]"
-              >
-                <Gift className="h-4 w-4 mr-2" /> GERAR NOVO LINK
-              </button>
-            </div>
-
-            {freeLinks.length > 0 && (
-              <div className="ep-card">
-                <p className="ep-subtitle mb-4">LINKS GERADOS</p>
-                <div className="space-y-3">
-                  {freeLinks.map((link, i) => (
-                    <div key={i} className="ep-card-sm flex items-center justify-between gap-4">
-                      <code className="text-xs font-mono text-muted-foreground truncate flex-1">{link}</code>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(link);
-                          toast.success("Link copiado!");
-                        }}
-                        className="ep-btn-icon h-8 w-8 rounded-[10px] shrink-0"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Free Links Tab removed */}
       </div>
 
       {/* Create User Sheet */}

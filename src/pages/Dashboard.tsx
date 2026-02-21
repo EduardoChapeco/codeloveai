@@ -145,41 +145,7 @@ export default function Dashboard() {
     generateAdminToken();
   }, [user, isAdmin, adminLoading, tokens, adminTokenGenerated]);
 
-  // Auto-onboard: give new users a 5-hour trial (runs once only via ref guard)
-  useEffect(() => {
-    if (!user || authLoading || adminLoading) return;
-    if (onboardRef.current) return;
-    if (isAdmin) return;
-    if (subscriptions.length > 0 || tokens.length > 0) return;
-
-    onboardRef.current = true;
-
-    const runOnboard = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("auto-onboard");
-        if (!error && data?.status === "activated") {
-          setOnboardingBanner({ expires_at: data.expires_at });
-          toast.success("🎉 Trial de 5 horas ativado! Aproveite para testar.");
-          const { data: subs } = await supabase.from("subscriptions").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-          setSubscriptions(subs || []);
-          const { data: toks } = await supabase.from("tokens").select("*").eq("user_id", user.id);
-          setTokens(toks || []);
-          const activeToken = (toks || []).find((t: Token) => t.is_active);
-          if (activeToken) {
-            const email = user.email || "";
-            const name = user.user_metadata?.name || email.split("@")[0] || "";
-            localStorage.setItem('clf_token', activeToken.token);
-            localStorage.setItem('clf_email', email);
-            localStorage.setItem('clf_name', name);
-            window.postMessage({ type: 'clf_sso_token', token: activeToken.token, email, name }, window.location.origin);
-          }
-        }
-      } catch (err) {
-        console.error("Auto-onboard error:", err);
-      }
-    };
-    runOnboard();
-  }, [user, authLoading, adminLoading, isAdmin, subscriptions, tokens]);
+  // Auto-onboard removed
 
   // Fetch chat messages
   const fetchMessages = async () => {
@@ -310,21 +276,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Onboarding trial banner */}
-        {onboardingBanner && (
-          <div className="lv-card flex items-center gap-4 border-primary/30">
-            <Gift className="h-5 w-5 text-primary shrink-0" />
-            <div className="flex-1">
-              <p className="lv-body-strong">🎉 Trial de 5 horas ativado!</p>
-              <p className="lv-caption mt-0.5">
-                Seu token e extensão já estão disponíveis. Aproveite para testar a plataforma!
-              </p>
-            </div>
-            <Link to="/checkout" className="lv-btn-primary h-9 px-4 text-xs shrink-0">
-              Ver Planos
-            </Link>
-          </div>
-        )}
+        {/* Onboarding trial banner removed */}
 
         {/* ━━━ BENTO GRID ━━━ */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
