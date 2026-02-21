@@ -43,34 +43,8 @@ export default function LovableConnect() {
     load();
   }, [user, checkConnection]);
 
-  // Listen for token from extension via postMessage
-  useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "clf_lovable_token" && event.data.token) {
-        handleAutoToken(event.data.token);
-      }
-    };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, [connectionStatus, saving]);
-
-  // Detect extension presence
-  useEffect(() => {
-    const detectExtension = () => {
-      if ((window as any).__codeloveAI) {
-        setExtensionDetected(true);
-        return;
-      }
-      const handler = () => setExtensionDetected(true);
-      window.addEventListener("clf_extension_present", handler);
-      window.postMessage({ type: "clf_ping" }, window.location.origin);
-      setTimeout(() => window.removeEventListener("clf_extension_present", handler), 2000);
-    };
-    setTimeout(detectExtension, 500);
-  }, []);
-
-  const handleAutoToken = async (token: string) => {
+  // ─── handleAutoToken must be declared before the useEffects that use it ───
+  const handleAutoToken = useCallback(async (token: string) => {
     if (saving || connectionStatus === "active") return;
     setSaving(true);
     try {
@@ -78,16 +52,68 @@ export default function LovableConnect() {
       toast.success("Conta conectada automaticamente!");
       setConnectionStatus("active");
       setLastVerified(new Date().toISOString());
-    } catch (err: any) {
-      toast.error(err?.message || "Erro ao salvar token.");
+    } catch (err: unknown) {
+      toast.error((err as { message?: string })?.message || "Erro ao salvar token.");
     } finally {
       setSaving(false);
     }
-  };
+  }, [saving, connectionStatus, saveToken]);
+
+  // Listen for token from extension via postMessage
+  // NOTE: The extension content.js runs on lovable.dev (different origin) so we CANNOT
+  // block by origin — we need to accept messages from any trusted source.
+  useEffect(() => {
+    const ALLOWED_ORIGINS = [
+      window.location.origin,
+      "https://lovable.dev",
+      "https://www.lovable.dev",
+    ];
+    const handler = (event: MessageEvent) => {
+      // Accept from same origin OR known Lovable origins
+      if (event.origin && !ALLOWED_ORIGINS.includes(event.origin) && !event.origin.endsWith(".lovable.dev")) {
+        return;
+      }
+      if (event.data?.type === "clf_lovable_token" && event.data.token) {
+        handleAutoToken(event.data.token);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [connectionStatus, saving, handleAutoToken]);
+
+  // Detect extension presence via clf_pong or clf_extension_ready message
+  useEffect(() => {
+    const handleExtensionPresence = (event: MessageEvent) => {
+      if (event.data?.type === "clf_pong" || event.data?.type === "clf_extension_ready" || event.data?.type === "clf_lovable_token") {
+        setExtensionDetected(true);
+      }
+    };
+    window.addEventListener("message", handleExtensionPresence);
+
+    const detectExtension = () => {
+      // Check flag set by content.js if running on same page
+      if ((window as unknown as { __codeloveAI?: boolean }).__codeloveAI) {
+        setExtensionDetected(true);
+        return;
+      }
+      // Send ping — content.js responds with clf_pong
+      window.postMessage({ type: "clf_ping" }, "*");
+    };
+    
+    // Try immediately and after a short delay  
+    detectExtension();
+    const t = setTimeout(detectExtension, 800);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("message", handleExtensionPresence);
+    };
+  }, []);
+
 
   const requestTokenFromExtension = useCallback(() => {
     setAutoCapturing(true);
-    window.postMessage({ type: "clf_request_lovable_token" }, window.location.origin);
+    // Use "*" so the content.js on lovable.dev can receive the request
+    window.postMessage({ type: "clf_request_lovable_token" }, "*");
     setTimeout(() => setAutoCapturing(false), 5000);
   }, []);
 

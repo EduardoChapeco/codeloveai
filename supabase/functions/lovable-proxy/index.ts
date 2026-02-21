@@ -46,6 +46,19 @@ async function markTokenExpired(serviceClient: any, userId: string) {
     .eq("user_id", userId);
 }
 
+async function getUserIdFromJwt(authHeader: string): Promise<string | null> {
+  try {
+    // Decode JWT payload (no signature verification here — Supabase already does it)
+    const token = authHeader.replace("Bearer ", "");
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.sub || null;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -63,20 +76,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
+    const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    let userId: string;
-    try {
-      const token = authHeader.replace("Bearer ", "");
-      const { data, error } = await supabase.auth.getClaims(token);
-      if (error || !data?.claims) throw new Error("Invalid token");
-      userId = data.claims.sub;
-    } catch {
-      const { data: { user }, error } = await supabase.auth.getUser();
+    // Get userId: try fast JWT decode first, fallback to getUser()
+    let userId = await getUserIdFromJwt(authHeader);
+    if (!userId) {
+      const anonClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user }, error } = await anonClient.auth.getUser();
       if (error || !user) {
         return new Response(JSON.stringify({ error: "Não autenticado" }), {
           status: 401,
@@ -86,20 +99,10 @@ Deno.serve(async (req) => {
       userId = user.id;
     }
 
-    const serviceClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Parse the route from the request URL
-    const url = new URL(req.url);
-    const pathParts = url.pathname.split("/").filter(Boolean);
-    // Expected: /lovable-proxy/{action} or body contains route info
-    
     const body = req.method !== "GET" ? await req.json().catch(() => ({})) : {};
-    const action = body.action || pathParts[pathParts.length - 1] || "";
+    const action = body.action || "";
     const lovableRoute = body.route || "";
-    const lovableMethod = body.method || req.method;
+    const lovableMethod = body.method || "GET";
     const lovableBody = body.payload || null;
 
     if (!lovableRoute && action !== "save-token" && action !== "delete-token" && action !== "verify") {
@@ -109,9 +112,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validate lovableRoute to prevent SSRF - must start with / and only contain safe path characters
+    // Validate lovableRoute to prevent SSRF
     if (lovableRoute) {
-      // Block path traversal, protocol injection, and non-API paths
       if (
         !lovableRoute.startsWith("/") ||
         lovableRoute.includes("..") ||
@@ -127,7 +129,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Only allow known Lovable API path prefixes
       const allowedPrefixes = [
         "/projects/", "/workspaces/", "/profile/", "/user/", "/users/",
         "/permissions", "/files/",
@@ -151,19 +152,37 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Verify token first
-      const verifyRes = await fetch(`${LOVABLE_API_BASE}/permissions`, {
-        headers: { Authorization: `Bearer ${tokenValue}` },
-      });
+      // Verify token against Lovable API
+      // Try /user/workspaces as a reliable verification endpoint
+      let tokenValid = false;
+      try {
+        const verifyRes = await fetch(`${LOVABLE_API_BASE}/user/workspaces`, {
+          headers: { Authorization: `Bearer ${tokenValue}` },
+        });
+        tokenValid = verifyRes.ok || verifyRes.status === 403; // 403 = authenticated but no access
+        
+        // If /user/workspaces fails, try /permissions as fallback
+        if (!tokenValid) {
+          const permRes = await fetch(`${LOVABLE_API_BASE}/permissions`, {
+            headers: { Authorization: `Bearer ${tokenValue}` },
+          });
+          tokenValid = permRes.ok || permRes.status === 403;
+        }
+      } catch (fetchErr) {
+        console.error("Token verification fetch error:", fetchErr);
+        // Network error — allow saving as "unverified" to not block users
+        // The token will be marked expired on first actual API call if invalid
+        tokenValid = true;
+        console.warn("Token saved without external verification due to network error");
+      }
 
-      if (!verifyRes.ok) {
+      if (!tokenValid) {
         return new Response(JSON.stringify({ error: "Token Lovable inválido ou expirado" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Upsert token
       const { error: upsertError } = await serviceClient
         .from("lovable_accounts")
         .upsert(
@@ -173,7 +192,7 @@ Deno.serve(async (req) => {
 
       if (upsertError) {
         console.error("Upsert error:", upsertError);
-        return new Response(JSON.stringify({ error: "Erro ao salvar token" }), {
+        return new Response(JSON.stringify({ error: "Erro ao salvar token: " + upsertError.message }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -205,7 +224,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Build full URL
     const apiUrl = `${LOVABLE_API_BASE}${lovableRoute}`;
 
     const fetchOptions: RequestInit = {
@@ -235,7 +253,6 @@ Deno.serve(async (req) => {
 
     await logApiCall(serviceClient, userId, lovableRoute, lovableMethod, apiRes.status, duration);
 
-    // Forward response
     const contentType = apiRes.headers.get("content-type") || "application/json";
     const responseBody = await apiRes.text();
 
