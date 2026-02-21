@@ -8,10 +8,10 @@ const corsHeaders = {
 };
 
 const PLANS: Record<string, { title: string; price: number; days: number }> = {
-  "1_day": { title: "CodeLove AI - 1 Dia", price: 9.99, days: 1 },
-  "7_days": { title: "CodeLove AI - 7 Dias", price: 49.9, days: 7 },
-  "1_month": { title: "CodeLove AI - 1 Mês", price: 149.9, days: 30 },
-  "12_months": { title: "CodeLove AI - 12 Meses (Tempo Indeterminado)", price: 499.0, days: 365 },
+  "1_day": { title: "Plano 1 Dia", price: 9.99, days: 1 },
+  "7_days": { title: "Plano 7 Dias", price: 49.9, days: 7 },
+  "1_month": { title: "Plano 1 Mês", price: 149.9, days: 30 },
+  "12_months": { title: "Plano 12 Meses", price: 499.0, days: 365 },
 };
 
 Deno.serve(async (req) => {
