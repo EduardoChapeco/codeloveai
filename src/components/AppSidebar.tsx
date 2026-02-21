@@ -5,6 +5,7 @@ import {
   LayoutDashboard, MessageCircle, Users, Download, Bot,
   Link2, FolderOpen, Shield, LogOut, User, ChevronDown,
   ArrowLeft, Key, Bell, Send, Gift, Upload, FileText, Coins, Unlock,
+  PanelLeftClose, PanelLeft,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -45,7 +46,7 @@ export default function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { state: sidebarState } = useSidebar();
+  const { state: sidebarState, toggleSidebar } = useSidebar();
   const collapsed = sidebarState === "collapsed";
 
   if (!user) return null;
@@ -57,8 +58,8 @@ export default function AppSidebar() {
   // ─── Admin contextual sidebar ───
   if (isAdminPage && isAdmin) {
     return (
-      <Sidebar collapsible="icon" className="border-none bg-transparent">
-        <SidebarHeader className="p-4 border-b border-border/30">
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="p-3 flex flex-row items-center justify-between">
           <button
             onClick={() => navigate("/dashboard")}
             className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm"
@@ -66,6 +67,11 @@ export default function AppSidebar() {
             <ArrowLeft className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Voltar ao painel</span>}
           </button>
+          {!collapsed && (
+            <button onClick={toggleSidebar} className="text-muted-foreground hover:text-foreground transition-colors">
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
         </SidebarHeader>
 
         <SidebarContent className="px-2 py-3">
@@ -92,7 +98,12 @@ export default function AppSidebar() {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="p-3 border-t border-border/30 space-y-1">
+        <SidebarFooter className="p-3 border-t border-border/20 space-y-1">
+          {collapsed && (
+            <button onClick={toggleSidebar} className="w-full flex items-center justify-center py-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          )}
           <button
             onClick={toggleChat}
             className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors hover:bg-accent ${
@@ -139,12 +150,17 @@ export default function AppSidebar() {
   const accountActive = accountItems.some(i => isActive(i.to));
 
   return (
-    <Sidebar collapsible="icon" className="border-none bg-transparent">
-      <SidebarHeader className="p-4 border-b border-border/30">
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="p-3 flex flex-row items-center justify-between">
         <NavLink to="/dashboard" className="flex items-center gap-2 text-foreground font-semibold tracking-tight">
-          {!collapsed && <span className="text-base">CodeLove AI</span>}
+          {!collapsed && <span className="text-sm">CodeLove AI</span>}
           {collapsed && <span className="text-xs font-bold">CL</span>}
         </NavLink>
+        {!collapsed && (
+          <button onClick={toggleSidebar} className="text-muted-foreground hover:text-foreground transition-colors">
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-3">
@@ -253,7 +269,12 @@ export default function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-3 border-t border-border/30 space-y-1">
+      <SidebarFooter className="p-3 border-t border-border/20 space-y-1">
+        {collapsed && (
+          <button onClick={toggleSidebar} className="w-full flex items-center justify-center py-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+            <PanelLeft className="h-4 w-4" />
+          </button>
+        )}
         <button
           onClick={toggleChat}
           className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors hover:bg-accent ${
