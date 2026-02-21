@@ -29,3 +29,12 @@ verify_jwt = false
 
 [functions.admin-test-endpoint]
 verify_jwt = false
+
+[functions.create-white-label-checkout]
+verify_jwt = false
+
+[functions.affiliate-enroll]
+verify_jwt = false
+
+[functions.reward-post]
+verify_jwt = false
