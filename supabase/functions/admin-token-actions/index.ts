@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
         "days_15": "days_15",
         "days_30": "days_30",
         "days_90": "days_90",
-        "days_1000": "days_1000",
+        "days_1000": "days_90",
       };
 
       const requestedPlan = plan || "days_30";
