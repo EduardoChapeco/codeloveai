@@ -1,5 +1,8 @@
 project_id = "qlhhmmboxlufvdtpbrsm"
 
+[functions.chat-relay]
+verify_jwt = false
+
 [functions.create-checkout]
 verify_jwt = false
 
