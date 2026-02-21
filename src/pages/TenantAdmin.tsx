@@ -61,6 +61,10 @@ export default function TenantAdmin() {
   const [tokens, setTokens] = useState<TenantToken[]>([]);
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [wlSub, setWlSub] = useState<{
+    status: string; period: string; amount_cents: number;
+    starts_at: string; expires_at: string; plan_name?: string;
+  } | null>(null);
 
   // Brand form
   const [brandForm, setBrandForm] = useState({
@@ -100,11 +104,12 @@ export default function TenantAdmin() {
     if (!tenant) return;
     setLoading(true);
 
-    const [membersRes, tokensRes, walletRes, txRes] = await Promise.all([
+    const [membersRes, tokensRes, walletRes, txRes, wlSubRes] = await Promise.all([
       supabase.from("tenant_users").select("*").eq("tenant_id", tenant.id),
       supabase.from("tokens").select("*").eq("tenant_id", tenant.id).order("created_at", { ascending: false }),
       supabase.from("tenant_wallets").select("balance, total_credited, total_debited").eq("tenant_id", tenant.id).maybeSingle(),
       supabase.from("tenant_wallet_transactions").select("*").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(50),
+      supabase.from("white_label_subscriptions").select("status, period, amount_cents, starts_at, expires_at, plan_id").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
 
     // Enrich members with profiles
@@ -135,6 +140,19 @@ export default function TenantAdmin() {
 
     setWallet(walletRes.data as WalletInfo | null);
     setTransactions((txRes.data || []) as WalletTransaction[]);
+    
+    // WL subscription info
+    if (wlSubRes.data) {
+      const sub = wlSubRes.data as any;
+      // Optionally fetch plan name
+      let planName = "";
+      if (sub.plan_id) {
+        const { data: plan } = await supabase.from("white_label_plans").select("name").eq("id", sub.plan_id).maybeSingle();
+        planName = plan?.name || "";
+      }
+      setWlSub({ ...sub, plan_name: planName });
+    }
+    
     setLoading(false);
   };
 
@@ -203,6 +221,28 @@ export default function TenantAdmin() {
             <h1 className="lv-heading-lg">{tenant?.name || "Tenant"}</h1>
             <p className="lv-caption">/{tenant?.slug} {tenant?.domain_custom && `• ${tenant.domain_custom}`}</p>
           </div>
+
+          {/* WL Subscription Status */}
+          {wlSub && (
+            <div className="lv-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="lv-body-strong flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-primary" />
+                  Plano White Label: {wlSub.plan_name || "—"}
+                </p>
+                <p className="lv-caption">
+                  {wlSub.period === "yearly" ? "Anual" : "Mensal"} • R${(wlSub.amount_cents / 100).toFixed(2)} •
+                  {" "}{format(new Date(wlSub.starts_at), "dd/MM/yyyy")} → {format(new Date(wlSub.expires_at), "dd/MM/yyyy")}
+                </p>
+              </div>
+              <span className={`lv-badge ${
+                wlSub.status === "active" && new Date(wlSub.expires_at) > new Date()
+                  ? "lv-badge-success" : "lv-badge-muted"
+              }`}>
+                {wlSub.status === "active" && new Date(wlSub.expires_at) > new Date() ? "Ativo" : "Expirado"}
+              </span>
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="flex gap-2 flex-wrap">

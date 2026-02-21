@@ -90,7 +90,22 @@ interface WlAffiliate {
   created_at: string;
 }
 
-type Tab = "tenants" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates";
+interface WlSubscription {
+  id: string;
+  tenant_id: string;
+  plan_id: string;
+  owner_user_id: string;
+  status: string;
+  period: string;
+  amount_cents: number;
+  starts_at: string;
+  expires_at: string;
+  payment_id: string | null;
+  affiliate_wl_code: string | null;
+  created_at: string;
+}
+
+type Tab = "tenants" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -106,6 +121,7 @@ export default function AdminGlobal() {
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [wlPlans, setWlPlans] = useState<WlPlan[]>([]);
   const [wlAffiliates, setWlAffiliates] = useState<WlAffiliate[]>([]);
+  const [wlSubs, setWlSubs] = useState<WlSubscription[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Create/Edit tenant sheet
@@ -135,13 +151,14 @@ export default function AdminGlobal() {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [tenantsRes, walletsRes, commissionsRes, ledgerRes, wlPlansRes, wlAffRes] = await Promise.all([
+    const [tenantsRes, walletsRes, commissionsRes, ledgerRes, wlPlansRes, wlAffRes, wlSubsRes] = await Promise.all([
       supabase.from("tenants").select("*").order("created_at", { ascending: true }),
       supabase.from("tenant_wallets").select("*"),
       supabase.from("admin_commissions").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("ledger_entries").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("white_label_plans").select("*").order("created_at", { ascending: false }),
       supabase.from("white_label_affiliates").select("*").order("created_at", { ascending: false }),
+      supabase.from("white_label_subscriptions").select("*").order("created_at", { ascending: false }).limit(100),
     ]);
     setTenants(tenantsRes.data || []);
     setWallets(walletsRes.data || []);
@@ -149,6 +166,7 @@ export default function AdminGlobal() {
     setLedgerEntries((ledgerRes.data as LedgerEntry[]) || []);
     setWlPlans((wlPlansRes.data as WlPlan[]) || []);
     setWlAffiliates((wlAffRes.data as WlAffiliate[]) || []);
+    setWlSubs((wlSubsRes.data as WlSubscription[]) || []);
     setLoading(false);
   };
 
@@ -303,6 +321,7 @@ export default function AdminGlobal() {
               { id: "tenants", label: "Tenants", icon: Building2 },
               { id: "wl_plans", label: "Planos WL", icon: Package },
               { id: "wl_affiliates", label: "Afiliados WL", icon: UserPlus },
+              { id: "wl_subs", label: "Assinaturas WL", icon: FileText },
               { id: "finances", label: "Faturamento", icon: BarChart3 },
               { id: "commissions", label: "Comissões", icon: DollarSign },
               { id: "wallets", label: "Wallets", icon: Wallet },
@@ -744,6 +763,54 @@ export default function AdminGlobal() {
                   </div>
                 ))}
                 {wlAffiliates.length === 0 && <p className="lv-caption text-center py-8">Nenhum afiliado WL cadastrado.</p>}
+              </div>
+            </div>
+          )}
+
+          {/* ─── WL SUBSCRIPTIONS TAB ─── */}
+          {tab === "wl_subs" && (
+            <div className="space-y-4">
+              <p className="lv-body-strong">{wlSubs.length} assinatura(s) WL</p>
+              <div className="space-y-3">
+                {wlSubs.map(s => {
+                  const plan = wlPlans.find(p => p.id === s.plan_id);
+                  const tenant = tenants.find(t => t.id === s.tenant_id);
+                  const isExpired = new Date(s.expires_at) < new Date();
+                  return (
+                    <div key={s.id} className="lv-card">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="lv-body-strong">{plan?.name || "Plano desconhecido"}</p>
+                          <p className="lv-caption">Tenant: {tenant?.name || s.tenant_id.substring(0, 8)}</p>
+                          <p className="lv-caption">Período: {s.period === "yearly" ? "Anual" : "Mensal"} • R${(s.amount_cents / 100).toFixed(2)}</p>
+                          <p className="lv-caption">{format(new Date(s.starts_at), "dd/MM/yyyy")} → {format(new Date(s.expires_at), "dd/MM/yyyy")}</p>
+                          {s.affiliate_wl_code && <p className="lv-caption">Afiliado WL: {s.affiliate_wl_code}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`lv-badge ${
+                            s.status === "active" && !isExpired ? "lv-badge-success" :
+                            isExpired ? "lv-badge-muted" : "lv-badge-primary"
+                          }`}>
+                            {isExpired ? "Expirado" : s.status === "active" ? "Ativo" : s.status}
+                          </span>
+                          {s.status === "active" && isExpired && (
+                            <button
+                              onClick={async () => {
+                                await supabase.from("white_label_subscriptions").update({ status: "expired" }).eq("id", s.id);
+                                toast.success("Status atualizado");
+                                fetchAll();
+                              }}
+                              className="lv-btn-secondary h-8 px-3 text-xs"
+                            >
+                              Marcar expirado
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {wlSubs.length === 0 && <p className="lv-caption text-center py-8">Nenhuma assinatura WL registrada.</p>}
               </div>
             </div>
           )}

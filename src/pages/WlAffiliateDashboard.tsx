@@ -3,9 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
-import { Copy, Loader2, DollarSign, Users, TrendingUp, FileText, Building2 } from "lucide-react";
+import { Copy, Loader2, DollarSign, Users, TrendingUp, FileText, Building2, Save, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+
+interface BankInfo {
+  id: string;
+  holder_name: string;
+  pix_key_type: string;
+  pix_key: string;
+  bank_name: string | null;
+}
 
 interface WlAffData {
   id: string;
@@ -41,13 +49,16 @@ export default function WlAffiliateDashboard() {
   const [referrals, setReferrals] = useState<WlReferral[]>([]);
   const [invoices, setInvoices] = useState<WlInvoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bankInfo, setBankInfo] = useState<BankInfo | null>(null);
+  const [bankForm, setBankForm] = useState({ holder_name: "", pix_key_type: "cpf", pix_key: "", bank_name: "" });
+  const [savingBank, setSavingBank] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
     if (!user) { navigate("/login"); return; }
 
     const load = async () => {
-      const [affRes, refRes, invRes] = await Promise.all([
+      const [affRes, refRes, invRes, bankRes] = await Promise.all([
         supabase
           .from("white_label_affiliates")
           .select("id, code, display_name, commission_percent, is_active")
@@ -63,11 +74,21 @@ export default function WlAffiliateDashboard() {
           .eq("user_id", user.id)
           .order("week_start", { ascending: false })
           .limit(20),
+        supabase
+          .from("white_label_affiliate_bank_info")
+          .select("id, holder_name, pix_key_type, pix_key, bank_name")
+          .eq("user_id", user.id)
+          .maybeSingle(),
       ]);
 
       setWlAff(affRes.data as WlAffData | null);
       setReferrals((refRes.data as WlReferral[]) || []);
       setInvoices((invRes.data as WlInvoice[]) || []);
+      if (bankRes.data) {
+        const b = bankRes.data as BankInfo;
+        setBankInfo(b);
+        setBankForm({ holder_name: b.holder_name, pix_key_type: b.pix_key_type, pix_key: b.pix_key, bank_name: b.bank_name || "" });
+      }
       setLoading(false);
     };
     load();
@@ -105,6 +126,36 @@ export default function WlAffiliateDashboard() {
 
   const formatCents = (c: number) => `R$${(c / 100).toFixed(2).replace(".", ",")}`;
 
+  const saveBank = async () => {
+    if (!wlAff || !user) return;
+    if (!bankForm.holder_name || !bankForm.pix_key) {
+      toast.error("Preencha nome e chave PIX");
+      return;
+    }
+    setSavingBank(true);
+    try {
+      const payload = {
+        affiliate_id: wlAff.id,
+        user_id: user.id,
+        holder_name: bankForm.holder_name,
+        pix_key_type: bankForm.pix_key_type,
+        pix_key: bankForm.pix_key,
+        bank_name: bankForm.bank_name || null,
+      };
+      if (bankInfo) {
+        const { error } = await supabase.from("white_label_affiliate_bank_info").update(payload).eq("id", bankInfo.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("white_label_affiliate_bank_info").insert(payload);
+        if (error) throw error;
+      }
+      toast.success("Dados bancários salvos!");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar");
+    } finally {
+      setSavingBank(false);
+    }
+  };
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto py-8 px-4 space-y-8">
@@ -206,6 +257,68 @@ export default function WlAffiliateDashboard() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Bank Info (PIX) */}
+        <div>
+          <h2 className="lv-heading-sm mb-4 flex items-center gap-2">
+            <CreditCard className="h-4 w-4" /> Dados para Saque (PIX)
+          </h2>
+          <div className="lv-card space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="lv-caption block mb-1">Nome do titular *</label>
+                <input
+                  className="lv-input w-full"
+                  value={bankForm.holder_name}
+                  onChange={e => setBankForm({ ...bankForm, holder_name: e.target.value })}
+                  placeholder="Nome completo"
+                />
+              </div>
+              <div>
+                <label className="lv-caption block mb-1">Banco (opcional)</label>
+                <input
+                  className="lv-input w-full"
+                  value={bankForm.bank_name}
+                  onChange={e => setBankForm({ ...bankForm, bank_name: e.target.value })}
+                  placeholder="Ex: Nubank, Itaú..."
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="lv-caption block mb-1">Tipo da chave PIX *</label>
+                <select
+                  className="lv-input w-full"
+                  value={bankForm.pix_key_type}
+                  onChange={e => setBankForm({ ...bankForm, pix_key_type: e.target.value })}
+                >
+                  <option value="cpf">CPF</option>
+                  <option value="cnpj">CNPJ</option>
+                  <option value="email">Email</option>
+                  <option value="phone">Telefone</option>
+                  <option value="random">Chave aleatória</option>
+                </select>
+              </div>
+              <div>
+                <label className="lv-caption block mb-1">Chave PIX *</label>
+                <input
+                  className="lv-input w-full"
+                  value={bankForm.pix_key}
+                  onChange={e => setBankForm({ ...bankForm, pix_key: e.target.value })}
+                  placeholder="Sua chave PIX"
+                />
+              </div>
+            </div>
+            <button
+              onClick={saveBank}
+              disabled={savingBank}
+              className="lv-btn-primary h-10 px-6 text-sm flex items-center gap-2"
+            >
+              {savingBank ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {bankInfo ? "Atualizar dados" : "Salvar dados"}
+            </button>
+          </div>
         </div>
       </div>
     </AppLayout>
