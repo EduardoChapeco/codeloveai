@@ -2,22 +2,30 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
+import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
-import { Loader2, ExternalLink, RefreshCw, Copy, Monitor, Link2, AlertTriangle } from "lucide-react";
+import { Loader2, ExternalLink, RefreshCw, Copy, Monitor, Link2, AlertTriangle, ChevronDown } from "lucide-react";
+
+interface SavedProject {
+  lovable_project_id: string;
+  display_name: string | null;
+  name: string | null;
+  published_url: string | null;
+}
 
 export default function LovablePreview() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { invoke, checkConnection } = useLovableProxy();
+  const { checkConnection } = useLovableProxy();
 
   const [projectId, setProjectId] = useState(searchParams.get("projectId") || "");
-  const [sandboxUrl, setSandboxUrl] = useState<string | null>(null);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"active" | "expired" | "none" | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login?returnTo=/lovable/preview");
@@ -32,49 +40,53 @@ export default function LovablePreview() {
     check();
   }, [user, checkConnection]);
 
-  const loadPreview = async () => {
-    if (!projectId.trim()) return toast.error("Insira o ID do projeto.");
+  // Load saved projects for dropdown
+  useEffect(() => {
+    if (!user) return;
+    const loadSaved = async () => {
+      const { data } = await supabase
+        .from("lovable_projects")
+        .select("lovable_project_id, display_name, name, published_url")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false });
+      if (data) setSavedProjects(data);
+    };
+    loadSaved();
+  }, [user]);
+
+  // Auto-load preview when projectId changes from URL
+  useEffect(() => {
+    const pid = searchParams.get("projectId");
+    if (pid && pid !== projectId) {
+      setProjectId(pid);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (projectId) loadPreview();
+  }, [projectId]);
+
+  const loadPreview = () => {
+    if (!projectId.trim()) return;
     setLoading(true);
-    setSandboxUrl(null);
-    setAuthToken(null);
     setErrorMsg(null);
+    setPreviewUrl(null);
 
     try {
-      // Get auth token for the project
-      const tokenData = await invoke({ route: `/projects/${projectId}/auth-token` });
-      const token = tokenData?.token || tokenData?.auth_token || "";
-
-      // Get sandbox URL
-      let sandboxData = await invoke({ route: `/projects/${projectId}/sandbox/url` });
-      let url = sandboxData?.url || sandboxData?.sandbox_url || "";
-
-      // If no URL, try starting the sandbox first
-      if (!url) {
-        toast.info("Iniciando sandbox do projeto...");
-        await invoke({ route: `/projects/${projectId}/sandbox/start`, method: "POST" });
-        // Wait a moment then retry
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        sandboxData = await invoke({ route: `/projects/${projectId}/sandbox/url` });
-        url = sandboxData?.url || sandboxData?.sandbox_url || "";
-      }
-
-      if (!url) {
-        setErrorMsg("Não foi possível obter a URL do sandbox. O projeto pode estar inativo ou o ID pode estar incorreto.");
-        return;
-      }
-
-      setSandboxUrl(url);
-      setAuthToken(token);
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Falha ao carregar preview. Verifique o ID do projeto.");
+      // Construct the preview URL using the known pattern
+      const url = `https://id-preview--${projectId.trim()}.lovable.app`;
+      setPreviewUrl(url);
+    } catch {
+      setErrorMsg("ID de projeto inválido.");
     } finally {
       setLoading(false);
     }
   };
 
-  const fullUrl = sandboxUrl && authToken
-    ? `${sandboxUrl}/?__lovable_token=${authToken}`
-    : sandboxUrl || "";
+  const handleProjectSelect = (pid: string) => {
+    setProjectId(pid);
+    navigate(`/lovable/preview?projectId=${pid}`, { replace: true });
+  };
 
   if (authLoading || !user) return <div className="min-h-screen bg-background" />;
 
@@ -108,16 +120,35 @@ export default function LovablePreview() {
       <div className="flex flex-col" style={{ height: "calc(100vh - 3rem)" }}>
         {/* Toolbar */}
         <div className="border-b border-border/60 px-6 py-3 flex items-center gap-3 flex-wrap shrink-0">
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
-            <input
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              placeholder="ID do projeto Lovable (UUID)"
-              className="lv-input flex-1 h-9 font-mono text-sm"
-              onKeyDown={(e) => e.key === "Enter" && loadPreview()}
-            />
-          </div>
+          <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
+
+          {/* Project selector dropdown */}
+          {savedProjects.length > 0 && (
+            <div className="relative">
+              <select
+                value={projectId}
+                onChange={(e) => handleProjectSelect(e.target.value)}
+                className="lv-input h-9 px-3 pr-8 text-xs appearance-none cursor-pointer min-w-[200px]"
+              >
+                <option value="">Selecionar projeto...</option>
+                {savedProjects.map((p) => (
+                  <option key={p.lovable_project_id} value={p.lovable_project_id}>
+                    {p.display_name || p.name || p.lovable_project_id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none text-muted-foreground" />
+            </div>
+          )}
+
+          <input
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            placeholder="ID do projeto (UUID)"
+            className="lv-input flex-1 h-9 font-mono text-sm min-w-[150px]"
+            onKeyDown={(e) => e.key === "Enter" && loadPreview()}
+          />
+
           <button
             onClick={loadPreview}
             disabled={loading || !projectId.trim()}
@@ -126,12 +157,13 @@ export default function LovablePreview() {
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             Carregar
           </button>
-          {fullUrl && (
+
+          {previewUrl && (
             <>
-              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+              <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
                 <ExternalLink className="h-3.5 w-3.5" /> Nova aba
               </a>
-              <button onClick={() => { navigator.clipboard.writeText(fullUrl); toast.success("Link copiado!"); }} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+              <button onClick={() => { navigator.clipboard.writeText(previewUrl); toast.success("Link copiado!"); }} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
                 <Copy className="h-3.5 w-3.5" /> Copiar
               </button>
             </>
@@ -157,10 +189,10 @@ export default function LovablePreview() {
               </button>
             </div>
           </div>
-        ) : fullUrl ? (
+        ) : previewUrl ? (
           <div className="flex-1 relative">
             <iframe
-              src={fullUrl}
+              src={previewUrl}
               className="w-full h-full border-0"
               title="Lovable Preview"
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
@@ -171,7 +203,11 @@ export default function LovablePreview() {
             <div className="text-center">
               <Monitor className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
               <p className="lv-body-strong mb-1">Preview de Projetos</p>
-              <p className="lv-caption">Insira o ID do projeto e clique em Carregar para visualizar</p>
+              <p className="lv-caption">
+                {savedProjects.length > 0
+                  ? "Selecione um projeto acima ou insira o ID manualmente"
+                  : "Insira o ID do projeto e clique em Carregar"}
+              </p>
             </div>
           </div>
         )}

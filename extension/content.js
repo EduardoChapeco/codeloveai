@@ -1,16 +1,87 @@
 // CodeLove AI Extension — Content Script
-// Injects panel, intercepts chat, captures tokens
+// Injects panel, intercepts chat, captures Lovable API tokens automatically
 
 (function () {
   "use strict";
 
-  // Prevent double injection
   if (window.__codeloveAI) return;
   window.__codeloveAI = true;
 
-  // ─── Token capture (best effort) ───
+  // ─── Automatic Lovable Token Capture via XHR/Fetch interception ───
+  let capturedLovableToken = null;
+
+  // Intercept fetch to capture Bearer tokens to api.lovable.dev
+  const origFetch = window.fetch;
+  window.fetch = function (...args) {
+    try {
+      const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
+      if (url.includes("api.lovable.dev")) {
+        const headers = args[1]?.headers;
+        let authHeader = null;
+        if (headers instanceof Headers) {
+          authHeader = headers.get("authorization");
+        } else if (headers && typeof headers === "object") {
+          authHeader = headers["authorization"] || headers["Authorization"];
+        }
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+          const token = authHeader.replace("Bearer ", "");
+          if (token !== capturedLovableToken) {
+            capturedLovableToken = token;
+            chrome.storage.local.set({ lovable_api_token: token });
+            // Notify platform if connected
+            notifyPlatformToken(token);
+          }
+        }
+      }
+    } catch (e) { /* silent */ }
+    return origFetch.apply(this, args);
+  };
+
+  // Intercept XMLHttpRequest too
+  const origXHROpen = XMLHttpRequest.prototype.open;
+  const origXHRSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+  const origXHRSend = XMLHttpRequest.prototype.send;
+
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    this.__codeloveUrl = url;
+    return origXHROpen.call(this, method, url, ...rest);
+  };
+
+  XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    if (this.__codeloveUrl && this.__codeloveUrl.includes("api.lovable.dev")) {
+      if (name.toLowerCase() === "authorization" && value.startsWith("Bearer ")) {
+        const token = value.replace("Bearer ", "");
+        if (token !== capturedLovableToken) {
+          capturedLovableToken = token;
+          chrome.storage.local.set({ lovable_api_token: token });
+          notifyPlatformToken(token);
+        }
+      }
+    }
+    return origXHRSetHeader.call(this, name, value);
+  };
+
+  function notifyPlatformToken(token) {
+    // Send to background script for relay
+    chrome.runtime.sendMessage({
+      type: "LOVABLE_TOKEN_CAPTURED",
+      token,
+    });
+    // Also store for panel display
+    chrome.storage.local.get("clf_token", (data) => {
+      if (data.clf_token) {
+        // Auto-save to platform if user is logged in
+        chrome.runtime.sendMessage({
+          type: "AUTO_SAVE_LOVABLE_TOKEN",
+          lovableToken: token,
+          supabaseJwt: data.clf_token,
+        });
+      }
+    });
+  }
+
+  // ─── SSO Bridge (platform ↔ extension) ───
   function captureToken() {
-    // Try localStorage SSO bridge
     const token = localStorage.getItem("clf_token");
     const email = localStorage.getItem("clf_email");
     const name = localStorage.getItem("clf_name");
@@ -19,7 +90,6 @@
     }
   }
 
-  // Listen for SSO messages from platform
   window.addEventListener("message", (event) => {
     if (event.data?.type === "clf_sso_login") {
       chrome.storage.local.set({
@@ -30,6 +100,17 @@
     }
     if (event.data?.type === "clf_sso_logout") {
       chrome.storage.local.remove(["clf_token", "clf_email", "clf_name"]);
+    }
+    // Platform requesting current Lovable token
+    if (event.data?.type === "clf_request_lovable_token") {
+      chrome.storage.local.get("lovable_api_token", (data) => {
+        if (data.lovable_api_token) {
+          window.postMessage({
+            type: "clf_lovable_token",
+            token: data.lovable_api_token,
+          }, window.location.origin);
+        }
+      });
     }
   });
 
@@ -51,8 +132,8 @@
       <div id="codelove-panel-content">
         <div class="codelove-section" data-section="dashboard">
           <h3>Dashboard</h3>
-          <p>Status da conta, token, plano ativo.</p>
-          <div id="codelove-status">Carregando...</div>
+          <div id="codelove-status">Capturando token automaticamente...</div>
+          <div id="codelove-token-status" style="margin-top:12px;padding:10px;border-radius:8px;font-size:11px;"></div>
         </div>
         <div class="codelove-section" data-section="chat" style="display:none">
           <h3>Chat AI</h3>
@@ -76,7 +157,6 @@
           <select id="codelove-intercept-mode">
             <option value="off">Desativado</option>
             <option value="overlay">Overlay (bloquear chat nativo)</option>
-            <option value="intercept">Interceptar fetch</option>
           </select>
         </div>
       </div>
@@ -93,10 +173,8 @@
       });
     });
 
-    // Close
     document.getElementById("codelove-close").addEventListener("click", togglePanel);
 
-    // Settings save
     document.getElementById("codelove-save-settings")?.addEventListener("click", () => {
       const url = document.getElementById("codelove-platform-url").value;
       const mode = document.getElementById("codelove-intercept-mode").value;
@@ -104,14 +182,41 @@
       alert("Configurações salvas!");
     });
 
-    // Load settings
     chrome.storage.local.get(["platformUrl", "interceptMode"], (data) => {
       if (data.platformUrl) document.getElementById("codelove-platform-url").value = data.platformUrl;
       if (data.interceptMode) document.getElementById("codelove-intercept-mode").value = data.interceptMode;
     });
 
+    // Update token status display
+    updateTokenStatusUI();
+
     return panel;
   }
+
+  function updateTokenStatusUI() {
+    const el = document.getElementById("codelove-token-status");
+    if (!el) return;
+    chrome.storage.local.get(["lovable_api_token", "clf_token"], (data) => {
+      if (data.lovable_api_token) {
+        el.style.background = "#0a2a0a";
+        el.style.border = "1px solid #1a4a1a";
+        el.style.color = "#4ade80";
+        el.textContent = "✅ Token Lovable capturado automaticamente";
+      } else {
+        el.style.background = "#2a1a0a";
+        el.style.border = "1px solid #4a3a1a";
+        el.style.color = "#fbbf24";
+        el.textContent = "⏳ Aguardando — faça qualquer ação no Lovable para capturar o token";
+      }
+    });
+  }
+
+  // Listen for storage changes to update UI
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.lovable_api_token) {
+      updateTokenStatusUI();
+    }
+  });
 
   let panelEl = null;
   let panelOpen = false;
@@ -129,8 +234,6 @@
   chrome.storage.local.get("interceptMode", (data) => {
     if (data.interceptMode === "overlay") {
       injectOverlay();
-    } else if (data.interceptMode === "intercept") {
-      interceptFetch();
     }
   });
 
@@ -148,19 +251,6 @@
     overlay.querySelector(".codelove-overlay-badge").style.cssText = "background:#fff;color:#000;padding:16px 32px;border-radius:12px;font-size:14px;font-weight:bold;";
     chatArea.style.position = "relative";
     chatArea.appendChild(overlay);
-  }
-
-  function interceptFetch() {
-    const origFetch = window.fetch;
-    window.fetch = function (...args) {
-      const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
-      if (url.includes("/projects/") && url.includes("/chat")) {
-        console.log("[CodeLove AI] Intercepted chat request:", url);
-        // Redirect to platform — placeholder logic
-        return Promise.resolve(new Response(JSON.stringify({ intercepted: true }), { status: 200 }));
-      }
-      return origFetch.apply(this, args);
-    };
   }
 
   // ─── Extension button (floating) ───
