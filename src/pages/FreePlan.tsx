@@ -31,7 +31,6 @@ export default function FreePlan() {
       const { data, error } = await supabase.functions.invoke("activate-free-plan", {
         body: { code },
       });
-
       if (error) throw error;
       if (data?.error) {
         setErrorMsg(data.error);
@@ -59,61 +58,67 @@ export default function FreePlan() {
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
+      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
+        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
       </nav>
 
-      <div className="max-w-lg mx-auto px-8 py-20 text-center">
+      <div className="max-w-md mx-auto px-6 py-20 text-center">
         {status === "idle" && (
-          <>
-            <Gift className="h-16 w-16 text-foreground mx-auto mb-6" />
-            <p className="ep-subtitle mb-2">TESTDRIVE GRATUITO</p>
-            <h1 className="ep-section-title mb-4">5 HORAS GRÁTIS</h1>
-            <p className="text-sm text-muted-foreground font-medium mb-8">
-              Ative seu testdrive gratuito de 5 horas para testar a extensão CodeLove AI. 
+          <div className="lv-card p-10">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+              <Gift className="h-7 w-7 text-primary" />
+            </div>
+            <p className="lv-overline mb-2">Testdrive gratuito</p>
+            <h1 className="lv-heading-lg mb-3">5 horas grátis</h1>
+            <p className="lv-body mb-8">
+              Ative seu testdrive gratuito de 5 horas para testar a extensão CodeLove AI.
               Sem custos, sem compromisso.
             </p>
             {code ? (
-              <button onClick={activateFreePlan} className="ep-btn-primary h-12 px-8 text-[9px]">
-                ATIVAR TESTDRIVE GRATUITO
+              <button onClick={activateFreePlan} className="lv-btn-primary lv-btn-lg w-full">
+                Ativar testdrive gratuito
               </button>
             ) : (
-              <p className="text-sm text-destructive font-medium">Link inválido. Solicite um novo link ao administrador.</p>
+              <p className="text-sm text-destructive">Link inválido. Solicite um novo link ao administrador.</p>
             )}
-          </>
+          </div>
         )}
 
         {status === "loading" && (
-          <>
-            <Loader2 className="h-12 w-12 animate-spin text-muted-foreground mx-auto mb-6" />
-            <p className="ep-subtitle">ATIVANDO...</p>
-          </>
+          <div className="lv-card p-10">
+            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-6" />
+            <p className="lv-overline">Ativando...</p>
+          </div>
         )}
 
         {status === "success" && (
-          <>
-            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-6" />
-            <p className="ep-subtitle mb-2">ATIVADO!</p>
-            <h2 className="ep-section-title mb-4">TESTDRIVE ATIVO</h2>
-            <p className="text-sm text-muted-foreground font-medium mb-8">
-              Seu testdrive de 5 horas foi ativado com sucesso. Acesse seu dashboard para ver seu token de ativação.
+          <div className="lv-card p-10">
+            <div className="h-16 w-16 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="h-7 w-7 text-green-500" />
+            </div>
+            <p className="lv-overline mb-2">Ativado!</p>
+            <h2 className="lv-heading-lg mb-3">Testdrive ativo</h2>
+            <p className="lv-body mb-8">
+              Seu testdrive de 5 horas foi ativado com sucesso. Acesse seu dashboard para ver seu token.
             </p>
-            <Link to="/dashboard" className="ep-btn-primary h-12 px-8 text-[9px]">
-              IR PARA DASHBOARD
+            <Link to="/dashboard" className="lv-btn-primary lv-btn-lg w-full">
+              Ir para dashboard
             </Link>
-          </>
+          </div>
         )}
 
         {status === "error" && (
-          <>
-            <XCircle className="h-16 w-16 text-destructive mx-auto mb-6" />
-            <p className="ep-subtitle mb-2">ERRO</p>
-            <h2 className="ep-section-title mb-4">NÃO FOI POSSÍVEL ATIVAR</h2>
-            <p className="text-sm text-muted-foreground font-medium mb-8">{errorMsg}</p>
-            <Link to="/dashboard" className="ep-btn-secondary h-12 px-8 text-[9px]">
-              IR PARA DASHBOARD
+          <div className="lv-card p-10">
+            <div className="h-16 w-16 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-6">
+              <XCircle className="h-7 w-7 text-destructive" />
+            </div>
+            <p className="lv-overline mb-2">Erro</p>
+            <h2 className="lv-heading-lg mb-3">Não foi possível ativar</h2>
+            <p className="lv-body mb-8">{errorMsg}</p>
+            <Link to="/dashboard" className="lv-btn-secondary lv-btn-lg w-full">
+              Ir para dashboard
             </Link>
-          </>
+          </div>
         )}
       </div>
     </div>

@@ -4,36 +4,36 @@ import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle, T
 
 const plans = [
   {
-    id: "1_day", name: "1 DIA", price: "R$9,99", originalPrice: "R$29,97", period: "por dia",
+    id: "1_day", name: "1 Dia", price: "R$9,99", originalPrice: "R$29,97", period: "por dia",
     description: "Perfeito para testar a extensão antes de se comprometer.",
     features: ["Envios ilimitados por 24h", "Sem descontar créditos", "Ativação imediata", "Suporte via chat"],
   },
   {
-    id: "7_days", name: "7 DIAS", price: "R$49,90", originalPrice: "R$149,70", period: "por semana",
+    id: "7_days", name: "7 Dias", price: "R$49,90", originalPrice: "R$149,70", period: "por semana",
     description: "Ideal para sprints rápidos ou projetos de curta duração.",
     features: ["Envios ilimitados por 7 dias", "Sem descontar créditos", "Ativação imediata", "Suporte prioritário"],
   },
   {
-    id: "1_month", name: "1 MÊS", price: "R$149,90", originalPrice: "R$449,70", period: "por mês",
+    id: "1_month", name: "1 Mês", price: "R$149,90", originalPrice: "R$449,70", period: "por mês",
     description: "O plano mais escolhido. Ideal para projetos completos.",
     popular: true,
     features: ["Envios ilimitados por 30 dias", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte prioritário"],
-    badge: "POPULAR",
+    badge: "Popular",
   },
   {
-    id: "12_months", name: "12 MESES", price: "R$499,00", originalPrice: "R$1.497,00", period: "por tempo indeterminado*",
+    id: "12_months", name: "12 Meses", price: "R$499,00", originalPrice: "R$1.497,00", period: "por tempo indeterminado*",
     description: "Plano por tempo indeterminado até 12 meses. Acesso completo enquanto a extensão estiver ativa.",
     highlight: true,
     features: ["Acesso por tempo indeterminado (até 12 meses)", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
-    badge: "MELHOR CUSTO",
+    badge: "Melhor custo",
   },
 ];
 
 const benefits = [
-  { icon: Zap, title: "ENVIOS ILIMITADOS", desc: "Envie quantas mensagens quiser, sem limite algum." },
-  { icon: Clock, title: "24/7 SEM PARAR", desc: "Funciona o dia todo, todos os dias, sem interrupções." },
-  { icon: MessageSquare, title: "SEM DESCONTAR CRÉDITOS", desc: "Seus créditos Lovable permanecem intactos." },
-  { icon: Shield, title: "MÉTODO PRÓPRIO", desc: "Tecnologia exclusiva de comunicação com a plataforma." },
+  { icon: Zap, title: "Envios ilimitados", desc: "Envie quantas mensagens quiser, sem limite algum." },
+  { icon: Clock, title: "24/7 sem parar", desc: "Funciona o dia todo, todos os dias, sem interrupções." },
+  { icon: MessageSquare, title: "Sem descontar créditos", desc: "Seus créditos Lovable permanecem intactos." },
+  { icon: Shield, title: "Método próprio", desc: "Tecnologia exclusiva de comunicação com a plataforma." },
 ];
 
 const faqs = [
@@ -47,7 +47,6 @@ const faqs = [
   { q: "O que significa 'por tempo indeterminado' no plano de 12 meses?", a: "O plano de 12 meses oferece acesso por tempo indeterminado, com duração máxima de até 12 meses. O acesso permanece válido enquanto a extensão estiver ativa e funcional. Caso a extensão seja descontinuada, limitada ou pare de funcionar, não haverá reembolso proporcional ou integral." },
 ];
 
-// Countdown: unlimited plan disappears Feb 25, 2026 23:59:59 BRT
 const UNLIMITED_DEADLINE = new Date("2026-02-25T23:59:59-03:00").getTime();
 
 function useCountdown(deadline: number) {
@@ -80,132 +79,131 @@ export default function Index() {
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <span className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</span>
-        <div className="flex items-center gap-4">
-          <Link to="/community" className="ep-btn-secondary h-10 px-6 text-[9px]">COMUNIDADE</Link>
-          <Link to="/login" className="ep-btn-secondary h-10 px-6 text-[9px]">ENTRAR</Link>
-          <Link to="/register" className="ep-btn-primary h-10 px-6 text-[9px]">CRIAR CONTA</Link>
+      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
+        <span className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</span>
+        <div className="flex items-center gap-2">
+          <Link to="/community" className="lv-btn-ghost">Comunidade</Link>
+          <Link to="/login" className="lv-btn-secondary">Entrar</Link>
+          <Link to="/register" className="lv-btn-primary">Criar conta</Link>
         </div>
       </nav>
 
       {/* Hero */}
-      <section className="px-8 py-32 lg:py-40 max-w-5xl mx-auto text-center">
+      <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center">
         {/* TestDrive Badge */}
-        <div className="inline-flex items-center gap-2 border border-foreground/20 bg-foreground/5 rounded-[48px] px-6 py-2.5 mb-8">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-[4px] bg-foreground opacity-40" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-[4px] bg-foreground" />
+        <div className="inline-flex items-center gap-2 lv-pill-primary px-4 py-2 mb-8">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-40" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
-          <span className="text-[10px] font-bold text-foreground tracking-[0.2em]">TESTDRIVE GRATUITO — 5H POR TEMPO LIMITADO</span>
-          <Link to="/free" className="text-[9px] font-bold text-foreground underline underline-offset-2 hover:opacity-70 transition-opacity tracking-widest ml-1">
-            ATIVAR →
+          <span className="text-xs font-medium text-primary">Testdrive gratuito — 5h por tempo limitado</span>
+          <Link to="/free" className="text-xs font-medium text-primary underline underline-offset-2 hover:opacity-70 transition-opacity ml-1">
+            Ativar →
           </Link>
         </div>
 
-        <p className="ep-subtitle mb-6">EXTENSÃO NÃO OFICIAL PARA LOVABLE</p>
-        <h1 className="ep-title mb-8">
-          A MELHOR PLATAFORMA DE ENVIOS INFINITOS
+        <p className="lv-overline mb-4">Extensão não oficial para Lovable</p>
+        <h1 className="lv-heading-xl mb-6">
+          A melhor plataforma de envios infinitos
         </h1>
-        <p className="text-base text-muted-foreground font-medium max-w-2xl mx-auto mb-12">
+        <p className="lv-body text-base max-w-2xl mx-auto mb-10">
           Crie quantos projetos quiser, envie quantas mensagens quiser. 24/7 sem parar.
           Sem descontar créditos da sua conta Lovable.
         </p>
-        <div className="flex items-center justify-center gap-4">
-          <Link to="/checkout" className="ep-btn-primary inline-flex">VER PLANOS</Link>
-          <Link to="/free" className="ep-btn-secondary inline-flex">TESTAR GRÁTIS</Link>
+        <div className="flex items-center justify-center gap-3">
+          <Link to="/checkout" className="lv-btn-primary lv-btn-lg">Ver planos</Link>
+          <Link to="/free" className="lv-btn-secondary lv-btn-lg">Testar grátis</Link>
         </div>
       </section>
 
       {/* Benefits */}
-      <section className="px-8 pb-32 max-w-6xl mx-auto">
-        <p className="ep-subtitle text-center mb-4">POR QUE ESCOLHER</p>
-        <h2 className="ep-section-title text-center mb-16">CODELOVE AI</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <section className="px-6 pb-24 max-w-5xl mx-auto">
+        <p className="lv-overline text-center mb-3">Por que escolher</p>
+        <h2 className="lv-heading-lg text-center mb-12">CodeLove AI</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {benefits.map((b) => (
-            <div key={b.title} className="ep-card-sm flex flex-col items-start gap-6">
-              <div className="h-14 w-14 rounded-[20px] border border-border flex items-center justify-center">
-                <b.icon className="h-6 w-6 text-foreground" />
+            <div key={b.title} className="lv-card flex flex-col items-start gap-4">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <b.icon className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h3 className="ep-label text-[11px] mb-3">{b.title}</h3>
-                <p className="text-sm text-muted-foreground font-medium">{b.desc}</p>
+                <h3 className="lv-heading-sm mb-2">{b.title}</h3>
+                <p className="lv-body">{b.desc}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Plans preview */}
-      <section id="plans" className="px-8 pb-32 max-w-6xl mx-auto">
-        <p className="ep-subtitle text-center mb-4">NOSSOS PLANOS</p>
-        <h2 className="ep-section-title text-center mb-8">PLANOS E PREÇOS</h2>
-        
+      {/* Plans */}
+      <section id="plans" className="px-6 pb-24 max-w-5xl mx-auto">
+        <p className="lv-overline text-center mb-3">Nossos planos</p>
+        <h2 className="lv-heading-lg text-center mb-6">Planos e preços</h2>
+
         {/* Limited time banner */}
-        <div className="ep-card-sm border-foreground/20 bg-foreground/5 text-center mb-12">
-          <p className="text-xs font-bold text-foreground tracking-widest mb-1">⏰ PREÇOS POR TEMPO LIMITADO</p>
-          <p className="text-[11px] text-muted-foreground font-medium">
-            Aproveite os preços promocionais de lançamento. Em breve os valores serão reajustados para a tabela original.
+        <div className="lv-card-sm text-center mb-10 border-primary/20 bg-primary/5">
+          <p className="text-sm font-medium text-foreground mb-0.5">⏰ Preços por tempo limitado</p>
+          <p className="lv-caption">
+            Aproveite os preços promocionais de lançamento. Em breve os valores serão reajustados.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {plans.map((plan) => (
             <div
               key={plan.id}
-              className={`ep-card-interactive flex flex-col justify-between ${plan.popular ? "ep-card-active" : ""}`}
+              className={`lv-card-interactive flex flex-col justify-between ${plan.popular ? "lv-card-active" : ""}`}
             >
               <div className="flex flex-col h-full">
                 {/* Badge */}
-                <div className="min-h-[32px] mb-4">
+                <div className="min-h-[28px] mb-3">
                   {plan.popular && (
-                    <span className="ep-badge ep-badge-live inline-block">POPULAR</span>
+                    <span className="lv-badge lv-badge-primary">{plan.badge}</span>
                   )}
                   {plan.highlight && !countdown.expired && (
-                    <span className="ep-badge ep-badge-live inline-block">MELHOR CUSTO</span>
+                    <span className="lv-badge lv-badge-primary">{plan.badge}</span>
                   )}
                   {plan.highlight && countdown.expired && (
-                    <span className="ep-badge ep-badge-offline inline-block">ENCERRADO</span>
+                    <span className="lv-badge lv-badge-muted">Encerrado</span>
                   )}
                 </div>
 
-                {/* Countdown for highlight plan */}
+                {/* Countdown */}
                 {plan.highlight && !countdown.expired && (
-                  <div className="bg-foreground/5 border border-foreground/20 rounded-[10px] p-3 mb-4">
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 mb-4">
                     <div className="flex items-center gap-1.5 justify-center mb-2">
-                      <Timer className="h-3.5 w-3.5 text-foreground" />
-                      <span className="text-[9px] font-bold text-foreground tracking-widest">OFERTA ENCERRA EM</span>
+                      <Timer className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-xs font-medium text-primary">Oferta encerra em</span>
                     </div>
                     <div className="flex items-center justify-center gap-2">
                       {[
-                        { value: countdown.days, label: "D" },
-                        { value: countdown.hours, label: "H" },
-                        { value: countdown.minutes, label: "M" },
-                        { value: countdown.seconds, label: "S" },
+                        { value: countdown.days, label: "d" },
+                        { value: countdown.hours, label: "h" },
+                        { value: countdown.minutes, label: "m" },
+                        { value: countdown.seconds, label: "s" },
                       ].map((t, i) => (
                         <div key={i} className="flex items-baseline gap-0.5">
-                          <span className="text-lg font-black text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
-                          <span className="text-[8px] font-bold text-muted-foreground">{t.label}</span>
+                          <span className="text-lg font-semibold text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
+                          <span className="text-xs text-muted-foreground">{t.label}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Price block */}
-                <p className="ep-subtitle mb-2">{plan.name}</p>
-                <p className="text-sm text-muted-foreground line-through font-medium">{plan.originalPrice}</p>
-                <p className="ep-value text-4xl mb-1">{plan.price}</p>
-                <p className="text-xs text-muted-foreground font-medium mb-4">{plan.period}</p>
+                {/* Price */}
+                <p className="lv-overline mb-1">{plan.name}</p>
+                <p className="text-sm text-muted-foreground line-through">{plan.originalPrice}</p>
+                <p className="lv-stat text-3xl mb-1">{plan.price}</p>
+                <p className="lv-caption mb-4">{plan.period}</p>
 
-                {/* Description */}
-                <p className="text-sm text-muted-foreground font-medium mb-6">{plan.description}</p>
+                <p className="lv-body mb-5">{plan.description}</p>
 
                 {/* Features */}
-                <ul className="space-y-3 mb-8 flex-1">
+                <ul className="space-y-2.5 mb-6 flex-1">
                   {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground font-medium">
-                      <Check className="h-4 w-4 text-foreground shrink-0 mt-0.5" />
+                    <li key={f} className="flex items-start gap-2 lv-body">
+                      <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                       <span>{f}</span>
                     </li>
                   ))}
@@ -213,55 +211,52 @@ export default function Index() {
               </div>
               <Link
                 to={plan.highlight && countdown.expired ? "#" : `/checkout?plan=${plan.id}`}
-                className={`w-full text-center ${plan.highlight && countdown.expired ? "ep-btn-secondary opacity-50 pointer-events-none" : plan.popular || plan.highlight ? "ep-btn-primary" : "ep-btn-secondary"}`}
+                className={`w-full text-center ${plan.highlight && countdown.expired ? "lv-btn-secondary opacity-50 pointer-events-none" : plan.popular || plan.highlight ? "lv-btn-primary" : "lv-btn-secondary"}`}
               >
-                {plan.highlight && countdown.expired ? "ENCERRADO" : "ASSINAR"}
+                {plan.highlight && countdown.expired ? "Encerrado" : "Assinar"}
               </Link>
             </div>
           ))}
         </div>
 
-        {/* Weekend grace note */}
-        <div className="mt-6 max-w-2xl mx-auto text-center">
-          <p className="text-[10px] text-muted-foreground font-medium italic">
+        <div className="mt-5 max-w-2xl mx-auto text-center">
+          <p className="lv-caption italic">
             *Tolerância de fim de semana: se seu plano expirar no sábado ou domingo, o acesso é estendido automaticamente até segunda-feira.
           </p>
         </div>
 
         <div className="mt-4 max-w-2xl mx-auto">
-          <div className="ep-card-sm flex items-start gap-4">
-            <AlertTriangle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">
-                <strong className="text-foreground">Importante:</strong> Ao contratar qualquer plano, você concorda que o serviço é considerado
-                entregue após a ativação do token. A extensão é um produto não oficial.
-              </p>
-            </div>
+          <div className="lv-card-sm flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <p className="lv-caption">
+              <strong className="text-foreground">Importante:</strong> Ao contratar qualquer plano, você concorda que o serviço é considerado
+              entregue após a ativação do token. A extensão é um produto não oficial.
+            </p>
           </div>
         </div>
       </section>
 
       {/* FAQ */}
-      <section className="px-8 pb-32 max-w-3xl mx-auto">
-        <p className="ep-subtitle text-center mb-4">DÚVIDAS FREQUENTES</p>
-        <h2 className="ep-section-title text-center mb-16">FAQ</h2>
-        <div className="space-y-3">
+      <section className="px-6 pb-24 max-w-2xl mx-auto">
+        <p className="lv-overline text-center mb-3">Dúvidas frequentes</p>
+        <h2 className="lv-heading-lg text-center mb-10">FAQ</h2>
+        <div className="space-y-2">
           {faqs.map((faq, i) => (
             <div
               key={i}
-              className="ep-card-sm cursor-pointer"
+              className="lv-card-sm cursor-pointer"
               onClick={() => setOpenFaq(openFaq === i ? null : i)}
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-foreground">{faq.q}</span>
+                <span className="lv-body-strong">{faq.q}</span>
                 <ChevronDown
-                  className={`h-5 w-5 text-muted-foreground transition-transform duration-300 ${
+                  className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
                     openFaq === i ? "rotate-180" : ""
                   }`}
                 />
               </div>
               {openFaq === i && (
-                <p className="mt-4 text-sm text-muted-foreground font-medium">{faq.a}</p>
+                <p className="mt-3 lv-body">{faq.a}</p>
               )}
             </div>
           ))}
@@ -269,8 +264,8 @@ export default function Index() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border px-8 py-8 text-center">
-        <p className="ep-subtitle">© 2025 CODELOVE AI — TODOS OS DIREITOS RESERVADOS</p>
+      <footer className="border-t border-border/60 px-6 py-6 text-center">
+        <p className="lv-caption">© 2025 CodeLove AI — Todos os direitos reservados</p>
       </footer>
     </div>
   );

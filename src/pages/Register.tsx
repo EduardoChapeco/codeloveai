@@ -13,20 +13,16 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Redirect already-authenticated users
   useEffect(() => {
     if (!authLoading && user) navigate("/dashboard", { replace: true });
   }, [user, authLoading, navigate]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Block disposable/temporary emails
     if (isDisposableEmail(email)) {
       toast.error("Emails temporários não são permitidos. Use um email permanente.");
       return;
     }
-
     setLoading(true);
     const { error } = await supabase.auth.signUp({
       email,
@@ -46,46 +42,59 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-8">
-      <div className="w-full max-w-md">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em] block text-center mb-12">
-          CODELOVE AI
+    <div className="min-h-screen bg-background flex items-center justify-center px-6">
+      <div className="w-full max-w-sm">
+        <Link to="/" className="block text-center mb-10">
+          <span className="text-lg font-semibold tracking-tight text-foreground">CodeLove AI</span>
         </Link>
-        <h1 className="ep-section-title text-center mb-12">CRIAR CONTA</h1>
-        <form onSubmit={handleRegister} className="space-y-4">
-          <input
-            type="text"
-            placeholder="Nome"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="ep-input w-full border border-border px-6"
-            required
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="ep-input w-full border border-border px-6"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Senha"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="ep-input w-full border border-border px-6"
-            minLength={6}
-            required
-          />
-          <button type="submit" disabled={loading} className="ep-btn-primary w-full">
-            {loading ? "CRIANDO..." : "CRIAR CONTA"}
-          </button>
-        </form>
-        <p className="mt-6 text-center text-sm text-muted-foreground font-medium">
-          Já tem conta?{" "}
-          <Link to="/login" className="text-foreground font-bold hover:underline">Entrar</Link>
-        </p>
+
+        <div className="lv-card p-8">
+          <h1 className="lv-heading-md text-center mb-6">Criar conta</h1>
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label className="lv-caption mb-1.5 block">Nome</label>
+              <input
+                type="text"
+                placeholder="Seu nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="lv-input"
+                required
+              />
+            </div>
+            <div>
+              <label className="lv-caption mb-1.5 block">Email</label>
+              <input
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="lv-input"
+                required
+              />
+            </div>
+            <div>
+              <label className="lv-caption mb-1.5 block">Senha</label>
+              <input
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="lv-input"
+                minLength={6}
+                required
+              />
+            </div>
+            <button type="submit" disabled={loading} className="lv-btn-primary w-full">
+              {loading ? "Criando..." : "Criar conta"}
+            </button>
+          </form>
+
+          <p className="mt-5 text-center lv-caption">
+            Já tem conta?{" "}
+            <Link to="/login" className="text-primary font-medium hover:underline">Entrar</Link>
+          </p>
+        </div>
       </div>
     </div>
   );

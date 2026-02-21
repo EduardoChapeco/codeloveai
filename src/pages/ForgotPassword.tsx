@@ -22,28 +22,35 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-8">
-      <div className="w-full max-w-md">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em] block text-center mb-12">
-          CODELOVE AI
+    <div className="min-h-screen bg-background flex items-center justify-center px-6">
+      <div className="w-full max-w-sm">
+        <Link to="/" className="block text-center mb-10">
+          <span className="text-lg font-semibold tracking-tight text-foreground">CodeLove AI</span>
         </Link>
-        <h1 className="ep-section-title text-center mb-12">RECUPERAR SENHA</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="ep-input w-full border border-border px-6"
-            required
-          />
-          <button type="submit" disabled={loading} className="ep-btn-primary w-full">
-            {loading ? "ENVIANDO..." : "ENVIAR LINK"}
-          </button>
-        </form>
-        <p className="mt-6 text-center text-sm text-muted-foreground font-medium">
-          <Link to="/login" className="text-foreground font-bold hover:underline">Voltar ao login</Link>
-        </p>
+
+        <div className="lv-card p-8">
+          <h1 className="lv-heading-md text-center mb-6">Recuperar senha</h1>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="lv-caption mb-1.5 block">Email</label>
+              <input
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="lv-input"
+                required
+              />
+            </div>
+            <button type="submit" disabled={loading} className="lv-btn-primary w-full">
+              {loading ? "Enviando..." : "Enviar link de recuperação"}
+            </button>
+          </form>
+
+          <p className="mt-5 text-center lv-caption">
+            <Link to="/login" className="text-primary font-medium hover:underline">Voltar ao login</Link>
+          </p>
+        </div>
       </div>
     </div>
   );
