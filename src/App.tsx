@@ -7,7 +7,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { ChatProvider } from "@/contexts/ChatContext";
+import { SupportChatProvider } from "@/contexts/SupportChatContext";
 import ChatPanel from "@/components/chat/ChatPanel";
+import SupportChatPanel from "@/components/chat/SupportChatPanel";
 import Index from "./pages/Index";
 
 const Login = lazy(() => import("./pages/Login"));
@@ -43,6 +45,7 @@ const App = () => (
         <AuthProvider>
           <TenantProvider>
           <ChatProvider>
+          <SupportChatProvider>
             <Suspense fallback={<div className="min-h-screen bg-background" />}>
               <Routes>
                 <Route path="/" element={<Index />} />
@@ -70,6 +73,8 @@ const App = () => (
               </Routes>
             </Suspense>
             <ChatPanel />
+            <SupportChatPanel />
+          </SupportChatProvider>
           </ChatProvider>
           </TenantProvider>
         </AuthProvider>
