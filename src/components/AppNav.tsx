@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useTenant } from "@/contexts/TenantContext";
+import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import { LogOut, Shield, Users, MessageCircle, LayoutDashboard, Download, Bot, Link2, FolderOpen } from "lucide-react";
 
 export default function AppNav() {
@@ -10,6 +11,7 @@ export default function AppNav() {
   const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
   const { tenant } = useTenant();
+  const { hasAccess } = useHasActiveAccess();
   const brandName = tenant?.name || "CodeLove AI";
   const location = useLocation();
 
@@ -24,7 +26,7 @@ export default function AppNav() {
     { to: "/lovable/connect", label: "Lovable", icon: Link2, show: true },
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, show: true },
     { to: "/admin", label: "Admin", icon: Shield, show: isAdmin },
-    { to: "/install", label: "Instalar", icon: Download, show: true },
+    { to: "/install", label: "Instalar", icon: Download, show: hasAccess },
   ];
 
   return (

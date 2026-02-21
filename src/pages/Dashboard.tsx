@@ -337,7 +337,8 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Download Card */}
+          {/* Download Card — only visible with active token or subscription */}
+          {(activeSubscription || tokens.some(t => t.is_active)) && (
           <div className="lv-card">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -350,7 +351,7 @@ export default function Dashboard() {
             </div>
             <button
               className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2"
-              disabled={!activeSubscription || !latestExt}
+              disabled={!latestExt}
               onClick={async () => {
                 if (!latestExt) return;
                 const { data } = await supabase.storage.from("extensions").createSignedUrl(latestExt.file_url, 300);
@@ -360,6 +361,7 @@ export default function Dashboard() {
               <Download className="h-4 w-4" /> Baixar Extensão
             </button>
           </div>
+          )}
         </div>
 
         {/* Admin Tenant Card */}
