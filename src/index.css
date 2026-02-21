@@ -147,7 +147,7 @@
 
   /* ── Buttons — Apple pill style (44px touch target) ── */
   .lv-btn-primary {
-    @apply h-11 px-5 rounded-full bg-primary text-primary-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer shadow-sm;
+    @apply h-11 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer shadow-sm;
   }
   .lv-btn-primary:hover {
     @apply brightness-105 shadow-md;
@@ -160,7 +160,7 @@
   }
 
   .lv-btn-secondary {
-    @apply h-11 px-5 rounded-full border border-white/50 bg-white/60 text-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-11 px-5 rounded-xl border border-white/50 bg-white/60 text-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
     backdrop-filter: blur(12px) saturate(150%);
     -webkit-backdrop-filter: blur(12px) saturate(150%);
   }
@@ -172,21 +172,21 @@
   }
 
   .lv-btn-ghost {
-    @apply h-11 px-4 rounded-full text-muted-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-11 px-4 rounded-xl text-muted-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-btn-ghost:hover {
     @apply bg-white/50 text-foreground;
   }
 
   .lv-btn-icon {
-    @apply h-11 w-11 rounded-full flex items-center justify-center text-muted-foreground transition-all duration-200 cursor-pointer;
+    @apply h-11 w-11 rounded-xl flex items-center justify-center text-muted-foreground transition-all duration-200 cursor-pointer;
   }
   .lv-btn-icon:hover {
     @apply bg-white/50 text-foreground;
   }
 
   .lv-btn-lg {
-    @apply h-12 px-6 rounded-full text-[14px] font-medium;
+    @apply h-12 px-6 rounded-xl text-[14px] font-medium;
   }
 
   /* ── Inputs — Apple style ── */
@@ -256,7 +256,7 @@
 
   /* ── Sheet / Drawer ── */
   .lv-sheet-btn {
-    @apply w-full h-12 rounded-full bg-primary text-primary-foreground font-medium text-[14px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-sm;
+    @apply w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium text-[14px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-sm;
   }
   .lv-sheet-btn:hover {
     @apply brightness-105 shadow-md;
