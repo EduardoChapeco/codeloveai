@@ -1,11 +1,12 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
+import { useTenant } from "@/contexts/TenantContext";
 import {
   LayoutDashboard, MessageCircle, Users, Download, Bot,
   Link2, FolderOpen, Shield, LogOut, User, ChevronDown,
   ArrowLeft, Bell, Send, Gift, Upload, FileText, Coins, Unlock,
-  PanelLeftClose, PanelLeft,
+  PanelLeftClose, PanelLeft, Building2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -40,6 +41,9 @@ const adminTabs = [
 
 export default function AppSidebar() {
   const { user, signOut } = useAuth();
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
+  const brandInitials = brandName.substring(0, 2).toUpperCase();
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
@@ -108,9 +112,9 @@ export default function AppSidebar() {
               </SidebarMenuItem>
             )}
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip="CodeLove AI">
+              <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
                 <Bot className="h-4 w-4" />
-                <span>CodeLove AI</span>
+                <span>{brandName} AI</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -147,7 +151,10 @@ export default function AppSidebar() {
   ];
 
   const adminItems = isAdmin
-    ? [{ to: "/admin", label: "Admin", icon: Shield }]
+    ? [
+        { to: "/admin", label: "Admin Tenant", icon: Shield },
+        { to: "/admin/global", label: "Admin Global", icon: Building2 },
+      ]
     : [];
 
   const lovableActive = lovableItems.some(i => isActive(i.to));
@@ -172,10 +179,10 @@ export default function AppSidebar() {
       <SidebarHeader className="p-2 relative">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="CodeLove AI">
+            <SidebarMenuButton asChild tooltip={brandName}>
               <NavLink to="/dashboard" className="font-semibold">
-                <span className="text-[13px] font-bold">CL</span>
-                <span>CodeLove AI</span>
+                <span className="text-[13px] font-bold">{brandInitials}</span>
+                <span>{brandName}</span>
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -264,9 +271,9 @@ export default function AppSidebar() {
             </SidebarMenuItem>
           )}
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip="CodeLove AI">
+            <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
               <Bot className="h-4 w-4" />
-              <span>CodeLove AI</span>
+              <span>{brandName} AI</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
