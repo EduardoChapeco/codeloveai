@@ -1,9 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function generateAffiliateCode(name: string): string {
@@ -26,8 +27,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -41,8 +41,7 @@ Deno.serve(async (req) => {
     const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -59,36 +58,39 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Check if user is already an affiliate
+    // Resolve tenant
+    const tenantInfo = await resolveTenant(serviceClient, req, userId);
+    const tenantId = tenantInfo.id || tenantInfo.tenant_id;
+
+    // Check if user is already an affiliate in this tenant
     const { data: existing } = await serviceClient
       .from("affiliates")
       .select("id, affiliate_code")
       .eq("user_id", userId)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (existing) {
       return new Response(JSON.stringify({ error: "Você já é um afiliado!", affiliate_code: existing.affiliate_code }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Check user has an active subscription (requirement to become affiliate)
+    // Check user has an active subscription in this tenant
     const { data: activeSub } = await serviceClient
       .from("subscriptions")
       .select("id")
       .eq("user_id", userId)
       .eq("status", "active")
+      .eq("tenant_id", tenantId)
       .limit(1);
 
     if (!activeSub || activeSub.length === 0) {
       return new Response(JSON.stringify({ error: "Você precisa ter uma assinatura ativa para se tornar afiliado." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Generate unique affiliate code
     let affiliateCode = generateAffiliateCode(displayName);
     let attempts = 0;
     while (attempts < 5) {
@@ -102,7 +104,6 @@ Deno.serve(async (req) => {
       attempts++;
     }
 
-    // Create affiliate record
     const { data: newAffiliate, error: insertError } = await serviceClient
       .from("affiliates")
       .insert({
@@ -110,6 +111,7 @@ Deno.serve(async (req) => {
         affiliate_code: affiliateCode,
         display_name: displayName,
         discount_percent: 20,
+        tenant_id: tenantId,
       })
       .select("id, affiliate_code, display_name, discount_percent")
       .single();
@@ -117,44 +119,31 @@ Deno.serve(async (req) => {
     if (insertError) {
       console.error("Affiliate insert error:", insertError);
       return new Response(JSON.stringify({ error: "Erro ao criar conta de afiliado" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Add affiliate role
-    await serviceClient.from("user_roles").insert({
-      user_id: userId,
-      role: "affiliate",
-    });
+    await serviceClient.from("user_roles").insert({ user_id: userId, role: "affiliate" });
 
-    // Create codecoins wallet
     await serviceClient.from("codecoins").insert({
-      user_id: userId,
-      balance: 0,
-      total_earned: 0,
-      total_spent: 0,
+      user_id: userId, balance: 0, total_earned: 0, total_spent: 0, tenant_id: tenantId,
     });
 
-    // Notify admin
     await serviceClient.from("admin_notifications").insert({
       type: "new_affiliate",
       title: "Novo afiliado cadastrado",
       description: `${userEmail || userId} se cadastrou como afiliado. Código: ${affiliateCode}`,
       user_id: userId,
+      tenant_id: tenantId,
     });
 
-    return new Response(JSON.stringify({
-      status: "created",
-      affiliate: newAffiliate,
-    }), {
+    return new Response(JSON.stringify({ status: "created", affiliate: newAffiliate }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Affiliate enrollment error:", error);
     return new Response(JSON.stringify({ error: "Erro interno" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

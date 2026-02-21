@@ -1,10 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -12,14 +13,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const startTime = Date.now();
-
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -34,30 +32,33 @@ serve(async (req) => {
     const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const userId = claimsData.claims.sub as string;
 
+    const serviceClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // Resolve tenant
+    const tenantInfo = await resolveTenant(serviceClient, req, userId);
+    const tenantId = tenantInfo.id || tenantInfo.tenant_id;
+
     const { conversation_id, message } = await req.json();
 
     if (!conversation_id || !message || typeof message !== "string" || message.trim().length === 0) {
       return new Response(JSON.stringify({ error: "conversation_id and message are required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (message.length > 4000) {
       return new Response(JSON.stringify({ error: "Message too long (max 4000 chars)" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Verify conversation ownership
+    // Verify conversation ownership (RLS handles tenant isolation)
     const { data: conv, error: convError } = await supabase
       .from("chat_conversations")
       .select("id")
@@ -67,28 +68,27 @@ serve(async (req) => {
 
     if (convError || !conv) {
       return new Response(JSON.stringify({ error: "Conversation not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Insert user message
+    // Insert user message with tenant_id
     const { error: insertError } = await supabase.from("chat_messages").insert({
       conversation_id,
       user_id: userId,
       role: "user",
       content: message.trim(),
+      tenant_id: tenantId,
     });
 
     if (insertError) {
       console.error("Insert user message error:", insertError);
       return new Response(JSON.stringify({ error: "Failed to save message" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get conversation history (last 50 messages)
+    // Get conversation history
     const { data: history } = await supabase
       .from("chat_messages")
       .select("role, content")
@@ -97,16 +97,14 @@ serve(async (req) => {
       .limit(50);
 
     const messages = (history || []).map((m: { role: string; content: string }) => ({
-      role: m.role,
-      content: m.content,
+      role: m.role, content: m.content,
     }));
 
     // Call Lovable AI Gateway
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -121,8 +119,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content:
-              "Você é o CodeLove AI, assistente inteligente da plataforma CodeLove. Responda de forma clara, útil e em português brasileiro. Use markdown para formatação quando apropriado. Seja conciso mas completo.",
+            content: "Você é o CodeLove AI, assistente inteligente da plataforma CodeLove. Responda de forma clara, útil e em português brasileiro. Use markdown para formatação quando apropriado. Seja conciso mas completo.",
           },
           ...messages,
         ],
@@ -137,24 +134,20 @@ serve(async (req) => {
 
       if (status === 429) {
         return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (status === 402) {
         return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       return new Response(JSON.stringify({ error: "Erro ao conectar com AI" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Stream response + collect full content for saving
     const reader = aiResponse.body!.getReader();
     const decoder = new TextDecoder();
     let fullContent = "";
@@ -169,7 +162,6 @@ serve(async (req) => {
             const chunk = decoder.decode(value, { stream: true });
             controller.enqueue(new TextEncoder().encode(chunk));
 
-            // Extract content from SSE for saving
             for (const line of chunk.split("\n")) {
               if (!line.startsWith("data: ")) continue;
               const jsonStr = line.slice(6).trim();
@@ -178,17 +170,9 @@ serve(async (req) => {
                 const parsed = JSON.parse(jsonStr);
                 const content = parsed.choices?.[0]?.delta?.content;
                 if (content) fullContent += content;
-              } catch {
-                // partial JSON, skip
-              }
+              } catch {}
             }
           }
-
-          // Save assistant message using service role
-          const serviceClient = createClient(
-            supabaseUrl,
-            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-          );
 
           if (fullContent.trim()) {
             await serviceClient.from("chat_messages").insert({
@@ -196,9 +180,9 @@ serve(async (req) => {
               user_id: userId,
               role: "assistant",
               content: fullContent.trim(),
+              tenant_id: tenantId,
             });
 
-            // Auto-title conversation if it's the default title
             const { data: convData } = await serviceClient
               .from("chat_conversations")
               .select("title")
@@ -234,10 +218,7 @@ serve(async (req) => {
     console.error("chat-relay error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

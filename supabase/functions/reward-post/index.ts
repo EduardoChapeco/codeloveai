@@ -1,9 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -15,8 +16,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -26,9 +26,7 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Try getClaims first, fallback to getUser
     let userId: string;
-
     try {
       const token = authHeader.replace("Bearer ", "");
       const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
@@ -40,10 +38,8 @@ Deno.serve(async (req) => {
     } catch {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
-        console.error("Auth failed:", userError);
         return new Response(JSON.stringify({ error: "Não autenticado" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       userId = user.id;
@@ -54,8 +50,7 @@ Deno.serve(async (req) => {
 
     if (!postId || typeof postId !== "string" || postId.length > 50) {
       return new Response(JSON.stringify({ error: "post_id inválido" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -64,30 +59,32 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify the post exists and belongs to this user
+    // Resolve tenant
+    const tenantInfo = await resolveTenant(serviceClient, req, userId);
+    const tenantId = tenantInfo.id || tenantInfo.tenant_id;
+
+    // Verify the post exists and belongs to this user in this tenant
     const { data: post } = await serviceClient
       .from("community_posts")
       .select("id, user_id, rewarded")
       .eq("id", postId)
       .eq("user_id", userId)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (!post) {
       return new Response(JSON.stringify({ error: "Post não encontrado" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Already rewarded — skip
     if (post.rewarded) {
-      console.log(`Post ${postId} already rewarded, skipping`);
       return new Response(JSON.stringify({ rewarded: false, reason: "already_rewarded" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Rate limit: max 5 rewards per day per user (count rewarded posts today)
+    // Rate limit per tenant
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -96,37 +93,34 @@ Deno.serve(async (req) => {
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .eq("rewarded", true)
+      .eq("tenant_id", tenantId)
       .gte("created_at", todayStart.toISOString());
 
     if ((count || 0) >= 5) {
-      console.log(`User ${userId} hit daily reward limit (${count} rewarded posts today)`);
       return new Response(JSON.stringify({ error: "Limite diário de recompensas atingido (5 posts/dia)", rewarded: false }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Find active subscription and extend by 1 hour
+    // Find active subscription in this tenant
     const { data: activeSub } = await serviceClient
       .from("subscriptions")
       .select("id, expires_at")
       .eq("user_id", userId)
       .eq("status", "active")
+      .eq("tenant_id", tenantId)
       .order("expires_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (!activeSub) {
-      console.log(`User ${userId} has no active subscription for reward`);
       return new Response(JSON.stringify({ error: "Sem assinatura ativa", rewarded: false }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Extend by 1 hour
     const currentExpiry = new Date(activeSub.expires_at);
-    const newExpiry = new Date(currentExpiry.getTime() + 60 * 60 * 1000); // +1 hour
+    const newExpiry = new Date(currentExpiry.getTime() + 60 * 60 * 1000);
 
     const { error: updateError } = await serviceClient
       .from("subscriptions")
@@ -134,33 +128,22 @@ Deno.serve(async (req) => {
       .eq("id", activeSub.id);
 
     if (updateError) {
-      console.error("Failed to extend subscription:", updateError);
       return new Response(JSON.stringify({ error: "Erro ao estender plano", rewarded: false }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Mark the post as rewarded so it can't be deleted
-    await serviceClient
-      .from("community_posts")
-      .update({ rewarded: true })
-      .eq("id", postId);
-
-    console.log(`Rewarded user ${userId}: post ${postId}, extended ${currentExpiry.toISOString()} → ${newExpiry.toISOString()}`);
+    await serviceClient.from("community_posts").update({ rewarded: true }).eq("id", postId);
 
     return new Response(JSON.stringify({
-      rewarded: true,
-      bonus_hours: 1,
-      new_expires_at: newExpiry.toISOString(),
+      rewarded: true, bonus_hours: 1, new_expires_at: newExpiry.toISOString(),
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Reward post error:", error);
     return new Response(JSON.stringify({ error: "Erro interno" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

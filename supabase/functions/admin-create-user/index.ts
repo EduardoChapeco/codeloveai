@@ -1,9 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const WORKER_URL = "https://codelove-fix-api.eusoueduoficial.workers.dev";
@@ -17,8 +18,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -32,8 +32,7 @@ Deno.serve(async (req) => {
     const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -44,7 +43,11 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify admin role
+    // Verify admin role (global admin OR tenant_admin)
+    const tenantInfo = await resolveTenant(serviceClient, req, adminUserId);
+    const tenantId = tenantInfo.id || tenantInfo.tenant_id;
+
+    // Check global admin first
     const { data: roleData } = await serviceClient
       .from("user_roles")
       .select("role")
@@ -52,36 +55,43 @@ Deno.serve(async (req) => {
       .eq("role", "admin")
       .limit(1);
 
-    if (!roleData || roleData.length === 0) {
-      return new Response(JSON.stringify({ error: "Acesso negado" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const isGlobalAdmin = roleData && roleData.length > 0;
+
+    if (!isGlobalAdmin) {
+      // Check tenant admin
+      const { data: tenantRole } = await serviceClient
+        .from("tenant_users")
+        .select("role")
+        .eq("user_id", adminUserId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+
+      if (!tenantRole || !["tenant_owner", "tenant_admin"].includes(tenantRole.role)) {
+        return new Response(JSON.stringify({ error: "Acesso negado" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const body = await req.json();
     const { email, name, password, plan, generate_token, role } = body;
 
-    // Validate inputs
     if (!email || typeof email !== "string" || email.length > 254) {
       return new Response(JSON.stringify({ error: "Email inválido" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return new Response(JSON.stringify({ error: "Formato de email inválido" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!password || typeof password !== "string" || password.length < 6 || password.length > 128) {
       return new Response(JSON.stringify({ error: "Senha deve ter entre 6 e 128 caracteres" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -90,7 +100,6 @@ Deno.serve(async (req) => {
     const validRoles = ["member", "admin", "affiliate"];
     const sanitizedRole = (role && validRoles.includes(role)) ? role : "member";
 
-    // Create user via Supabase Auth Admin API
     const { data: newUser, error: createError } = await serviceClient.auth.admin.createUser({
       email: sanitizedEmail,
       password,
@@ -100,23 +109,26 @@ Deno.serve(async (req) => {
 
     if (createError) {
       return new Response(JSON.stringify({ error: createError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const newUserId = newUser.user.id;
 
-    // The handle_new_user trigger should create profile and role automatically.
-    // But if admin selected a different role, update it.
     if (sanitizedRole !== "member") {
-      // The trigger sets member by default (since there's already users).
-      // Update the role to the desired one.
-      await serviceClient
-        .from("user_roles")
-        .update({ role: sanitizedRole })
-        .eq("user_id", newUserId);
+      await serviceClient.from("user_roles").update({ role: sanitizedRole }).eq("user_id", newUserId);
     }
+
+    // Assign user to tenant
+    await serviceClient.from("tenant_users").upsert({
+      tenant_id: tenantId,
+      user_id: newUserId,
+      role: "tenant_member",
+      is_primary: true,
+    }, { onConflict: "tenant_id,user_id" });
+
+    // Set tenant_id on profile
+    await serviceClient.from("profiles").update({ tenant_id: tenantId }).eq("user_id", newUserId);
 
     const result: any = {
       success: true,
@@ -124,9 +136,9 @@ Deno.serve(async (req) => {
       email: sanitizedEmail,
       name: sanitizedName,
       role: sanitizedRole,
+      tenant_id: tenantId,
     };
 
-    // Assign plan if requested
     if (plan) {
       const planDays: Record<string, number> = {
         "1_day": 1, "7_days": 7, "1_month": 30, "12_months": 365,
@@ -141,19 +153,35 @@ Deno.serve(async (req) => {
           status: "active",
           starts_at: new Date().toISOString(),
           expires_at: expiresAt.toISOString(),
+          tenant_id: tenantId,
         });
         result.plan = plan;
       }
     }
 
-    // Generate token via Worker if requested
     if (generate_token) {
+      // Check tenant wallet balance for token cost
+      const tenantConfig = await serviceClient
+        .from("tenants").select("token_cost").eq("id", tenantId).maybeSingle();
+      
+      if (tenantConfig?.data?.token_cost > 0) {
+        const { data: wallet } = await serviceClient
+          .from("tenant_wallets").select("balance").eq("tenant_id", tenantId).maybeSingle();
+        
+        if (!wallet || wallet.balance < tenantConfig.data.token_cost) {
+          result.token_error = "Saldo insuficiente no wallet do tenant para gerar token";
+          return new Response(JSON.stringify(result), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
       if (webhookSecret) {
         const workerPlan = plan === "1_day" ? "test_1d" :
-                           plan === "7_days" ? "days_15" :
-                           plan === "1_month" ? "days_30" :
-                           plan === "12_months" ? "days_1000" : "days_30";
+                          plan === "7_days" ? "days_15" :
+                          plan === "1_month" ? "days_30" :
+                          plan === "12_months" ? "days_1000" : "days_30";
 
         try {
           const resp = await fetch(`${WORKER_URL}/webhook/purchase`, {
@@ -174,9 +202,29 @@ Deno.serve(async (req) => {
                 user_id: newUserId,
                 token: tokenData.token,
                 is_active: true,
+                tenant_id: tenantId,
               });
               result.token = tokenData.token;
               result.token_expires = tokenData.expires;
+
+              // Debit tenant wallet
+              if (tenantConfig?.data?.token_cost > 0) {
+                const { data: tw } = await serviceClient
+                  .from("tenant_wallets").select("balance, total_debited").eq("tenant_id", tenantId).maybeSingle();
+                if (tw) {
+                  await serviceClient.from("tenant_wallets").update({
+                    balance: tw.balance - tenantConfig.data.token_cost,
+                    total_debited: tw.total_debited + tenantConfig.data.token_cost,
+                  }).eq("tenant_id", tenantId);
+
+                  await serviceClient.from("tenant_wallet_transactions").insert({
+                    tenant_id: tenantId,
+                    amount: -tenantConfig.data.token_cost,
+                    type: "token_cost",
+                    description: `Token gerado para ${sanitizedEmail}`,
+                  });
+                }
+              }
             }
           }
         } catch (e) {
@@ -192,8 +240,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Admin create user error:", error);
     return new Response(JSON.stringify({ error: "Erro interno" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
