@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Download, Smartphone, Monitor, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 import AppLayout from "@/components/AppLayout";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -14,6 +15,8 @@ export default function Install() {
   const [isInstalled, setIsInstalled] = useState(false);
   const [installing, setInstalling] = useState(false);
   const { user } = useAuth();
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -42,7 +45,7 @@ export default function Install() {
 
   const guestNav = !user ? (
     <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
-      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
+      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
       <Link to="/login" className="lv-btn-secondary">Entrar</Link>
     </nav>
   ) : null;
@@ -57,9 +60,9 @@ export default function Install() {
             <Smartphone className="h-4 w-4" />
             <span className="text-xs font-medium">Instalar App</span>
           </div>
-          <h1 className="lv-heading-xl mb-6">Instale o CodeLove AI</h1>
+          <h1 className="lv-heading-xl mb-6">Instale o {brandName}</h1>
           <p className="lv-body text-base max-w-lg mx-auto">
-            Acesse o CodeLove AI direto da tela inicial do seu celular ou computador.
+            Acesse o {brandName} direto da tela inicial do seu celular ou computador.
             Funciona offline e carrega instantaneamente.
           </p>
         </div>
@@ -70,7 +73,7 @@ export default function Install() {
               <Check className="h-10 w-10 text-primary" />
             </div>
             <h2 className="lv-heading-lg mb-3">App instalado!</h2>
-            <p className="lv-body mb-8">O CodeLove AI já está na sua tela inicial.</p>
+            <p className="lv-body mb-8">O {brandName} já está na sua tela inicial.</p>
             <Link to="/dashboard" className="lv-btn-primary lv-btn-lg">Ir para o Dashboard</Link>
           </div>
         ) : deferredPrompt ? (
@@ -170,7 +173,7 @@ export default function Install() {
       </section>
 
       <footer className="border-t border-border/60 px-6 py-6 text-center">
-        <p className="lv-caption">© 2025 CodeLove AI — Todos os direitos reservados</p>
+        <p className="lv-caption">© 2025 {brandName} — Todos os direitos reservados</p>
       </footer>
     </div>
   );
