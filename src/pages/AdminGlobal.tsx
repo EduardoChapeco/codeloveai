@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
+import { THEME_PRESETS } from "@/lib/tenant-themes";
 import {
   Building2, Plus, Pencil, Trash2, DollarSign, Wallet, Users,
   BarChart3, CheckCircle, XCircle, Loader2, Save, ArrowLeft,
@@ -23,6 +24,7 @@ interface TenantRow {
   favicon_url: string | null;
   primary_color: string;
   secondary_color: string;
+  accent_color: string;
   meta_title: string | null;
   meta_description: string | null;
   terms_template: string | null;
@@ -30,6 +32,9 @@ interface TenantRow {
   token_cost: number;
   is_active: boolean;
   created_at: string;
+  theme_preset: string;
+  font_family: string;
+  border_radius: string;
 }
 
 interface TenantWallet {
@@ -69,9 +74,10 @@ export default function AdminGlobal() {
   const [editingTenant, setEditingTenant] = useState<TenantRow | null>(null);
   const [form, setForm] = useState({
     name: "", slug: "", domain_custom: "", logo_url: "", favicon_url: "",
-    primary_color: "#0A84FF", secondary_color: "#5E5CE6",
+    primary_color: "#0A84FF", secondary_color: "#5E5CE6", accent_color: "#5E5CE6",
     meta_title: "", meta_description: "", terms_template: "",
     commission_percent: 30, token_cost: 0, is_active: true,
+    theme_preset: "apple-glass", font_family: "system", border_radius: "1rem",
   });
   const [saving, setSaving] = useState(false);
 
@@ -109,9 +115,10 @@ export default function AdminGlobal() {
     setEditingTenant(null);
     setForm({
       name: "", slug: "", domain_custom: "", logo_url: "", favicon_url: "",
-      primary_color: "#0A84FF", secondary_color: "#5E5CE6",
+      primary_color: "#0A84FF", secondary_color: "#5E5CE6", accent_color: "#5E5CE6",
       meta_title: "", meta_description: "", terms_template: "",
       commission_percent: 30, token_cost: 0, is_active: true,
+      theme_preset: "apple-glass", font_family: "system", border_radius: "1rem",
     });
     setSheetOpen(true);
   };
@@ -122,10 +129,14 @@ export default function AdminGlobal() {
       name: t.name, slug: t.slug, domain_custom: t.domain_custom || "",
       logo_url: t.logo_url || "", favicon_url: t.favicon_url || "",
       primary_color: t.primary_color, secondary_color: t.secondary_color,
+      accent_color: t.accent_color || "#5E5CE6",
       meta_title: t.meta_title || "", meta_description: t.meta_description || "",
       terms_template: t.terms_template || "",
       commission_percent: t.commission_percent, token_cost: t.token_cost,
       is_active: t.is_active,
+      theme_preset: t.theme_preset || "apple-glass",
+      font_family: t.font_family || "system",
+      border_radius: t.border_radius || "1rem",
     });
     setSheetOpen(true);
   };
@@ -142,12 +153,16 @@ export default function AdminGlobal() {
         favicon_url: form.favicon_url || null,
         primary_color: form.primary_color,
         secondary_color: form.secondary_color,
+        accent_color: form.accent_color,
         meta_title: form.meta_title || null,
         meta_description: form.meta_description || null,
         terms_template: form.terms_template || null,
         commission_percent: form.commission_percent,
         token_cost: form.token_cost,
         is_active: form.is_active,
+        theme_preset: form.theme_preset,
+        font_family: form.font_family,
+        border_radius: form.border_radius,
       };
 
       if (editingTenant) {
@@ -442,6 +457,63 @@ export default function AdminGlobal() {
                   <input className="lv-input flex-1" value={form.secondary_color} onChange={e => setForm({ ...form, secondary_color: e.target.value })} />
                 </div>
               </div>
+            </div>
+            {/* Accent color */}
+            <div>
+              <label className="lv-caption block mb-1">Cor Accent</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={form.accent_color} onChange={e => setForm({ ...form, accent_color: e.target.value })} className="h-9 w-9 rounded cursor-pointer" />
+                <input className="lv-input flex-1" value={form.accent_color} onChange={e => setForm({ ...form, accent_color: e.target.value })} />
+              </div>
+            </div>
+            {/* Theme Preset */}
+            <div>
+              <label className="lv-caption block mb-2">Tema Visual</label>
+              <div className="grid grid-cols-2 gap-2">
+                {THEME_PRESETS.map(preset => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setForm({ ...form, theme_preset: preset.id })}
+                    className={`rounded-xl border p-2.5 text-left transition-all ${
+                      form.theme_preset === preset.id
+                        ? "border-primary ring-2 ring-primary/20"
+                        : "border-border/60 hover:border-border"
+                    }`}
+                  >
+                    <div className="flex gap-1 mb-1.5">
+                      {[preset.preview.bg, preset.preview.card, preset.preview.primary, preset.preview.accent].map((c, i) => (
+                        <div key={i} className="h-3 w-3 rounded-full border border-black/10" style={{ backgroundColor: c }} />
+                      ))}
+                    </div>
+                    <p className="text-xs font-medium text-foreground">{preset.name}</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight">{preset.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Font Family */}
+            <div>
+              <label className="lv-caption block mb-1">Fonte</label>
+              <select className="lv-input w-full" value={form.font_family} onChange={e => setForm({ ...form, font_family: e.target.value })}>
+                <option value="system">System (Apple)</option>
+                <option value="inter">Inter</option>
+                <option value="poppins">Poppins</option>
+                <option value="dm_sans">DM Sans</option>
+                <option value="space_grotesk">Space Grotesk</option>
+                <option value="nunito">Nunito</option>
+              </select>
+            </div>
+            {/* Border Radius */}
+            <div>
+              <label className="lv-caption block mb-1">Border Radius</label>
+              <select className="lv-input w-full" value={form.border_radius} onChange={e => setForm({ ...form, border_radius: e.target.value })}>
+                <option value="0.25rem">Sharp (4px)</option>
+                <option value="0.5rem">Small (8px)</option>
+                <option value="0.75rem">Medium (12px)</option>
+                <option value="1rem">Large (16px)</option>
+                <option value="1.5rem">XL (24px)</option>
+              </select>
             </div>
             <div>
               <label className="lv-caption block mb-1">Logo URL</label>

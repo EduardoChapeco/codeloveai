@@ -100,6 +100,23 @@ serve(async (req) => {
       role: m.role, content: m.content,
     }));
 
+    // Get tenant name for system prompt personalization
+    const { data: tenantData } = await serviceClient
+      .from("tenants").select("name").eq("id", tenantId).maybeSingle();
+    const tenantName = tenantData?.name || "CodeLove AI";
+
+    // Check for custom AI config per tenant
+    const { data: aiConfig } = await serviceClient
+      .from("ai_endpoint_config")
+      .select("system_prompt, model")
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    const systemPrompt = aiConfig?.system_prompt ||
+      `Você é o ${tenantName}, assistente inteligente da plataforma ${tenantName}. Responda de forma clara, útil e em português brasileiro. Use markdown para formatação quando apropriado. Seja conciso mas completo.`;
+    const model = aiConfig?.model || "google/gemini-3-flash-preview";
+
     // Call Lovable AI Gateway
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -115,12 +132,9 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         messages: [
-          {
-            role: "system",
-            content: "Você é o CodeLove AI, assistente inteligente da plataforma CodeLove. Responda de forma clara, útil e em português brasileiro. Use markdown para formatação quando apropriado. Seja conciso mas completo.",
-          },
+          { role: "system", content: systemPrompt },
           ...messages,
         ],
         stream: true,

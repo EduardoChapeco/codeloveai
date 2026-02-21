@@ -1607,10 +1607,13 @@ export type Database = {
       }
       tenants: {
         Row: {
+          accent_color: string
+          border_radius: string
           commission_percent: number
           created_at: string
           domain_custom: string | null
           favicon_url: string | null
+          font_family: string
           id: string
           is_active: boolean
           logo_url: string | null
@@ -1621,14 +1624,18 @@ export type Database = {
           secondary_color: string
           slug: string
           terms_template: string | null
+          theme_preset: string
           token_cost: number
           updated_at: string
         }
         Insert: {
+          accent_color?: string
+          border_radius?: string
           commission_percent?: number
           created_at?: string
           domain_custom?: string | null
           favicon_url?: string | null
+          font_family?: string
           id?: string
           is_active?: boolean
           logo_url?: string | null
@@ -1639,14 +1646,18 @@ export type Database = {
           secondary_color?: string
           slug: string
           terms_template?: string | null
+          theme_preset?: string
           token_cost?: number
           updated_at?: string
         }
         Update: {
+          accent_color?: string
+          border_radius?: string
           commission_percent?: number
           created_at?: string
           domain_custom?: string | null
           favicon_url?: string | null
+          font_family?: string
           id?: string
           is_active?: boolean
           logo_url?: string | null
@@ -1657,6 +1668,7 @@ export type Database = {
           secondary_color?: string
           slug?: string
           terms_template?: string | null
+          theme_preset?: string
           token_cost?: number
           updated_at?: string
         }
