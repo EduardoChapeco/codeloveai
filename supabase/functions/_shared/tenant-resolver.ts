@@ -43,6 +43,7 @@ export async function resolveTenant(
           .from("tenants")
           .select("id, commission_percent, token_cost, is_active")
           .eq("domain_custom", hostname)
+          .eq("is_domain_approved", true)
           .eq("is_active", true)
           .maybeSingle();
         if (data) return data as TenantInfo;

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isDisposableEmail } from "../_shared/disposable-emails.ts";
+import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,6 +63,10 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Resolve tenant
+    const tenantInfo = await resolveTenant(serviceClient, req, userId);
+    const tenantId = tenantInfo.id || tenantInfo.tenant_id;
+
     // Validate the free plan code exists in admin_notifications as a generated link
     // The code format is: FREE_<timestamp>_<random>
     if (!sanitizedCode.startsWith("FREE_")) {
@@ -115,6 +120,7 @@ Deno.serve(async (req) => {
         starts_at: startsAt.toISOString(),
         expires_at: expiresAt.toISOString(),
         payment_id: `free_${sanitizedCode}`,
+        tenant_id: tenantId,
       });
 
     if (insertError) {
@@ -131,6 +137,7 @@ Deno.serve(async (req) => {
       title: "Testdrive gratuito ativado",
       description: `Usuário ${userEmail || userId} ativou o testdrive gratuito de 5 horas. Código: ${sanitizedCode}`,
       user_id: userId,
+      tenant_id: tenantId,
     });
 
     // Call external webhook for token generation
@@ -165,6 +172,7 @@ Deno.serve(async (req) => {
                 user_id: userId,
                 token: webhookData.token,
                 is_active: true,
+                tenant_id: tenantId,
               });
               console.log(`Auto-generated token stored for user ${userId}`);
             } else {
