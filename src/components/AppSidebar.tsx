@@ -57,7 +57,7 @@ export default function AppSidebar() {
   // ─── Admin contextual sidebar ───
   if (isAdminPage && isAdmin) {
     return (
-      <Sidebar collapsible="icon" variant="floating">
+      <Sidebar collapsible="icon" className="border-none bg-transparent">
         <SidebarHeader className="p-4 border-b border-border/30">
           <button
             onClick={() => navigate("/dashboard")}
@@ -139,7 +139,7 @@ export default function AppSidebar() {
   const accountActive = accountItems.some(i => isActive(i.to));
 
   return (
-    <Sidebar collapsible="icon" variant="floating">
+    <Sidebar collapsible="icon" className="border-none bg-transparent">
       <SidebarHeader className="p-4 border-b border-border/30">
         <NavLink to="/dashboard" className="flex items-center gap-2 text-foreground font-semibold tracking-tight">
           {!collapsed && <span className="text-base">CodeLove AI</span>}
