@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('clf_token');
     localStorage.removeItem('clf_email');
     localStorage.removeItem('clf_name');
-    window.postMessage({ type: 'clf_sso_logout' }, '*');
+    window.postMessage({ type: 'clf_sso_logout' }, window.location.origin);
     await supabase.auth.signOut();
   };
 

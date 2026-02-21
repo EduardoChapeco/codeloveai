@@ -1,10 +1,21 @@
 // CodeLove AI Extension — Background Service Worker
 // Handles message routing, token relay, and auto-save
 
+const DEFAULT_PLATFORM_URL = "https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1";
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[CodeLove AI] Extension installed");
-  chrome.storage.local.set({ panelOpen: false, interceptMode: "off" });
+  chrome.storage.local.set({
+    panelOpen: false,
+    interceptMode: "off",
+    platformUrl: DEFAULT_PLATFORM_URL,
+  });
 });
+
+async function getPlatformUrl() {
+  const { platformUrl } = await chrome.storage.local.get("platformUrl");
+  return platformUrl || DEFAULT_PLATFORM_URL;
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "PROXY_REQUEST") {
@@ -23,6 +34,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "LOVABLE_TOKEN_CAPTURED") {
     console.log("[CodeLove AI] Lovable API token captured automatically");
+    // Auto-save if user is logged into platform
+    chrome.storage.local.get("clf_token", (data) => {
+      if (data.clf_token && message.token) {
+        autoSaveLovableToken(message.token, data.clf_token).then((res) => {
+          if (res?.success) {
+            console.log("[CodeLove AI] Token auto-saved to platform");
+          }
+        });
+      }
+    });
     sendResponse({ ok: true });
     return false;
   }
@@ -36,10 +57,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleProxyRequest({ route, method = "GET", body, supabaseJwt }) {
-  const { platformUrl } = await chrome.storage.local.get("platformUrl");
-  if (!platformUrl) throw new Error("Platform URL not configured");
+  const baseUrl = await getPlatformUrl();
 
-  const res = await fetch(`${platformUrl}/lovable-proxy`, {
+  const res = await fetch(`${baseUrl}/lovable-proxy`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -53,11 +73,10 @@ async function handleProxyRequest({ route, method = "GET", body, supabaseJwt }) 
 }
 
 async function autoSaveLovableToken(lovableToken, supabaseJwt) {
-  const { platformUrl } = await chrome.storage.local.get("platformUrl");
-  if (!platformUrl) return { skipped: true, reason: "No platform URL" };
+  const baseUrl = await getPlatformUrl();
 
   try {
-    const res = await fetch(`${platformUrl}/lovable-proxy`, {
+    const res = await fetch(`${baseUrl}/lovable-proxy`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

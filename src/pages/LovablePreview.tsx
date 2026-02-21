@@ -5,7 +5,7 @@ import { useLovableProxy } from "@/hooks/useLovableProxy";
 import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
-import { Loader2, ExternalLink, RefreshCw, Copy, Monitor, Link2, AlertTriangle, ChevronDown } from "lucide-react";
+import { Loader2, ExternalLink, RefreshCw, Copy, Monitor, Link2, AlertTriangle, ChevronDown, Globe } from "lucide-react";
 
 interface SavedProject {
   lovable_project_id: string;
@@ -22,10 +22,9 @@ export default function LovablePreview() {
 
   const [projectId, setProjectId] = useState(searchParams.get("projectId") || "");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"active" | "expired" | "none" | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
+  const [iframeError, setIframeError] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login?returnTo=/lovable/preview");
@@ -66,26 +65,36 @@ export default function LovablePreview() {
     if (projectId) loadPreview();
   }, [projectId]);
 
+  const getPreviewUrl = (pid: string): string => {
+    // Try published_url first from saved projects
+    const saved = savedProjects.find(p => p.lovable_project_id === pid);
+    if (saved?.published_url) return saved.published_url;
+    // Fallback to the standard preview URL pattern
+    return `https://id-preview--${pid}.lovable.app`;
+  };
+
   const loadPreview = () => {
     if (!projectId.trim()) return;
-    setLoading(true);
-    setErrorMsg(null);
-    setPreviewUrl(null);
-
-    try {
-      // Construct the preview URL using the known pattern
-      const url = `https://id-preview--${projectId.trim()}.lovable.app`;
-      setPreviewUrl(url);
-    } catch {
-      setErrorMsg("ID de projeto inválido.");
-    } finally {
-      setLoading(false);
-    }
+    setIframeError(false);
+    setPreviewUrl(getPreviewUrl(projectId.trim()));
   };
 
   const handleProjectSelect = (pid: string) => {
     setProjectId(pid);
     navigate(`/lovable/preview?projectId=${pid}`, { replace: true });
+  };
+
+  const handleIframeError = () => {
+    // If preview URL fails, try the published URL or vice versa
+    const saved = savedProjects.find(p => p.lovable_project_id === projectId);
+    const altUrl = `https://id-preview--${projectId}.lovable.app`;
+    if (previewUrl !== altUrl) {
+      setPreviewUrl(altUrl);
+    } else if (saved?.published_url && previewUrl !== saved.published_url) {
+      setPreviewUrl(saved.published_url);
+    } else {
+      setIframeError(true);
+    }
   };
 
   if (authLoading || !user) return <div className="min-h-screen bg-background" />;
@@ -98,13 +107,13 @@ export default function LovablePreview() {
             <>
               <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
               <h2 className="lv-heading-sm mb-2">Token expirado</h2>
-              <p className="lv-body mb-6">Reconecte sua conta Lovable para visualizar previews.</p>
+              <p className="lv-body mb-6">Reconecte sua conta para visualizar previews.</p>
             </>
           ) : (
             <>
               <Link2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h2 className="lv-heading-sm mb-2">Não conectado</h2>
-              <p className="lv-body mb-6">Conecte sua conta Lovable primeiro.</p>
+              <p className="lv-body mb-6">Conecte sua conta primeiro.</p>
             </>
           )}
           <button onClick={() => navigate("/lovable/connect")} className="lv-btn-primary h-11 px-8 text-sm">
@@ -141,52 +150,36 @@ export default function LovablePreview() {
             </div>
           )}
 
-          <input
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            placeholder="ID do projeto (UUID)"
-            className="lv-input flex-1 h-9 font-mono text-sm min-w-[150px]"
-            onKeyDown={(e) => e.key === "Enter" && loadPreview()}
-          />
-
-          <button
-            onClick={loadPreview}
-            disabled={loading || !projectId.trim()}
-            className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-1.5"
-          >
-            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Carregar
-          </button>
-
           {previewUrl && (
-            <>
+            <div className="flex items-center gap-2 ml-auto">
               <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
                 <ExternalLink className="h-3.5 w-3.5" /> Nova aba
               </a>
               <button onClick={() => { navigator.clipboard.writeText(previewUrl); toast.success("Link copiado!"); }} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
                 <Copy className="h-3.5 w-3.5" /> Copiar
               </button>
-            </>
+              <button onClick={loadPreview} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" /> Recarregar
+              </button>
+            </div>
           )}
         </div>
 
         {/* Content */}
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-              <p className="lv-caption mt-3">Carregando preview...</p>
-            </div>
-          </div>
-        ) : errorMsg ? (
+        {iframeError ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md px-4">
               <AlertTriangle className="h-10 w-10 mx-auto text-amber-500 mb-3" />
-              <p className="lv-body-strong mb-2">Erro ao carregar</p>
-              <p className="lv-caption">{errorMsg}</p>
-              <button onClick={loadPreview} className="lv-btn-secondary h-9 px-4 text-xs mt-4">
-                Tentar novamente
-              </button>
+              <p className="lv-body-strong mb-2">Preview indisponível</p>
+              <p className="lv-caption mb-4">O projeto pode não estar publicado ainda ou o preview expirou. Tente fazer um deploy primeiro.</p>
+              <div className="flex gap-3 justify-center">
+                <button onClick={loadPreview} className="lv-btn-secondary h-9 px-4 text-xs">
+                  Tentar novamente
+                </button>
+                <a href={previewUrl || ""} target="_blank" rel="noopener noreferrer" className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-1.5">
+                  <ExternalLink className="h-3.5 w-3.5" /> Abrir direto
+                </a>
+              </div>
             </div>
           </div>
         ) : previewUrl ? (
@@ -196,6 +189,7 @@ export default function LovablePreview() {
               className="w-full h-full border-0"
               title="Lovable Preview"
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              onError={handleIframeError}
             />
           </div>
         ) : (
@@ -205,9 +199,14 @@ export default function LovablePreview() {
               <p className="lv-body-strong mb-1">Preview de Projetos</p>
               <p className="lv-caption">
                 {savedProjects.length > 0
-                  ? "Selecione um projeto acima ou insira o ID manualmente"
-                  : "Insira o ID do projeto e clique em Carregar"}
+                  ? "Selecione um projeto acima para visualizar"
+                  : "Sincronize seus projetos primeiro em Meus Projetos"}
               </p>
+              {savedProjects.length === 0 && (
+                <button onClick={() => navigate("/lovable/projects")} className="lv-btn-primary h-9 px-4 text-xs mt-4 flex items-center gap-1.5 mx-auto">
+                  <Globe className="h-3.5 w-3.5" /> Ir para Meus Projetos
+                </button>
+              )}
             </div>
           </div>
         )}
