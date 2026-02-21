@@ -137,8 +137,28 @@ Deno.serve(async (req) => {
         });
       }
 
-      const validPlans = ["test_5h", "test_1d", "days_15", "days_30", "days_90", "days_1000"];
-      const sanitizedPlan = (plan && validPlans.includes(plan)) ? plan : "days_30";
+      // Map internal plan IDs to Worker-accepted plan IDs
+      const planMap: Record<string, string> = {
+        "test_5h": "test_5h",
+        "test_1d": "test_1d",
+        "days_15": "days_15",
+        "days_30": "days_30",
+        "days_90": "days_90",
+        "days_1000": "days_1000",
+      };
+
+      const requestedPlan = plan || "days_30";
+      const workerPlan = planMap[requestedPlan];
+
+      if (!workerPlan) {
+        return new Response(JSON.stringify({ 
+          error: `Plano inválido: ${requestedPlan}. Planos aceitos: ${Object.keys(planMap).join(", ")}. Entre em contato com o suporte.` 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const sanitizedEmail = email.trim().toLowerCase().substring(0, 254);
       const sanitizedName = (name || sanitizedEmail.split("@")[0]).substring(0, 100);
 
@@ -149,7 +169,7 @@ Deno.serve(async (req) => {
           webhookSecret,
           email: sanitizedEmail,
           name: sanitizedName,
-          plan: sanitizedPlan,
+          plan: workerPlan,
         }),
       });
 
@@ -180,8 +200,17 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response(responseText, {
-        status: resp.status,
+      // Worker rejected the request — provide a clear error
+      let workerError = responseText;
+      try {
+        const parsed = JSON.parse(responseText);
+        workerError = parsed.error || parsed.message || responseText;
+      } catch {}
+
+      return new Response(JSON.stringify({ 
+        error: `Erro ao gerar token: ${workerError}. Verifique o plano ou entre em contato com o suporte.` 
+      }), {
+        status: resp.status >= 400 ? resp.status : 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
