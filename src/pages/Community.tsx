@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
+import { useSEO } from "@/hooks/useSEO";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -719,6 +720,7 @@ function PostViewObserver({ postId, onView, children }: { postId: string; onView
 export default function Community() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin } = useIsAdmin();
+  useSEO({ title: "Comunidade", description: "Comunidade CodeLove AI — compartilhe projetos, prompts e conecte-se com outros membros." });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterType = searchParams.get("type") || "all";

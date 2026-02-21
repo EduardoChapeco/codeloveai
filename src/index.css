@@ -106,7 +106,7 @@
     letter-spacing: -0.03em;
   }
 
-  /* ── Liquid Glass surface ── */
+  /* ── Liquid Glass surface (Apple-spec) ── */
   .lv-glass {
     background: hsla(var(--glass-bg));
     border: 1px solid hsla(var(--glass-border));
@@ -114,24 +114,29 @@
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   }
 
-  /* ── Cards — Liquid Glass ── */
+  /* ── Cards — Liquid Glass with specular highlight ── */
   .lv-card {
-    @apply rounded-2xl border border-white/40 bg-white/70 p-5 transition-all duration-300 ease-out;
+    @apply rounded-2xl border border-white/40 bg-white/70 p-5 transition-all duration-300 ease-out relative overflow-hidden;
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6);
   }
   .lv-card-sm {
-    @apply rounded-xl border border-white/40 bg-white/70 p-3.5 transition-all duration-300 ease-out;
+    @apply rounded-xl border border-white/40 bg-white/70 p-3.5 transition-all duration-300 ease-out relative;
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.5);
   }
   .lv-card-interactive {
-    @apply rounded-2xl border border-white/40 bg-white/70 p-5 cursor-pointer transition-all duration-300 ease-out;
+    @apply rounded-2xl border border-white/40 bg-white/70 p-5 cursor-pointer transition-all duration-300 ease-out relative overflow-hidden;
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6);
   }
   .lv-card-interactive:hover {
-    @apply border-white/60 bg-white/85 shadow-sm;
+    @apply border-white/60 bg-white/85;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.7);
+    transform: translateY(-1px);
   }
   .lv-card-active {
     @apply border-primary/30 bg-primary/5;

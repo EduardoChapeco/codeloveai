@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
+import { useSEO } from "@/hooks/useSEO";
 import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2, UserPlus, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -70,6 +71,7 @@ type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications"
 export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
+  useSEO({ title: "Admin" });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tab = (searchParams.get("tab") || "members") as Tab;

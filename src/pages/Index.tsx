@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle, Timer } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useSEO } from "@/hooks/useSEO";
 import AppLayout from "@/components/AppLayout";
 
 const plans = [
@@ -78,6 +79,7 @@ export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const countdown = useCountdown(UNLIMITED_DEADLINE);
   const { user, loading: authLoading } = useAuth();
+  useSEO({ title: "CodeLove AI", description: "A melhor plataforma de envios ilimitados para Lovable. 24/7, sem descontar créditos." });
 
   const guestNav = !authLoading && !user ? (
     <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
