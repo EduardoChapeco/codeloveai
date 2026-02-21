@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Check, Zap, Clock, MessageSquare, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { useTenant } from "@/contexts/TenantContext";
 
 const plans = [
   { id: "1_day", name: "1 Dia", price: 9.99, priceLabel: "R$9,99", period: "por dia" },
@@ -21,6 +22,7 @@ const benefits = [
 export default function AffiliateRefPage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const { tenant } = useTenant();
   const [affiliate, setAffiliate] = useState<{ display_name: string; affiliate_code: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -67,6 +69,8 @@ export default function AffiliateRefPage() {
     }
   };
 
+  const brandName = affiliate?.display_name || tenant?.name || "CodeLove AI";
+
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
       <p className="lv-overline">Carregando...</p>
@@ -85,7 +89,7 @@ export default function AffiliateRefPage() {
   return (
     <div className="min-h-screen bg-background">
       <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
-        <span className="text-base font-semibold tracking-tight text-foreground">{affiliate.display_name || "CodeLove AI"}</span>
+        <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
         <div className="flex items-center gap-3">
           <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
           <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
@@ -152,7 +156,7 @@ export default function AffiliateRefPage() {
       </section>
 
       <footer className="border-t border-border/60 px-6 py-6 text-center">
-        <p className="lv-caption">© 2025 CodeLove AI — Todos os direitos reservados</p>
+        <p className="lv-caption">© 2025 {brandName} — Todos os direitos reservados</p>
       </footer>
     </div>
   );

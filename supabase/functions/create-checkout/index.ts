@@ -257,7 +257,7 @@ Deno.serve(async (req) => {
       },
       auto_return: "approved",
       notification_url: webhookUrl,
-      statement_descriptor: "CODELOVE AI",
+      statement_descriptor: "PLATAFORMA DIGITAL",
     };
 
     const mpResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {

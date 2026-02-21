@@ -1,10 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isDisposableEmail } from "../_shared/disposable-emails.ts";
+import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 // Default deadline: Feb 20, 2026 18:00 BRT (21:00 UTC)
@@ -55,6 +56,10 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Resolve tenant
+    const tenantInfo = await resolveTenant(serviceClient, req, userId);
+    const tenantId = tenantInfo.id || tenantInfo.tenant_id;
 
     // Check if onboarding is active: deadline not passed OR admin override exists
     const now = Date.now();
@@ -118,6 +123,7 @@ Deno.serve(async (req) => {
         starts_at: startsAt.toISOString(),
         expires_at: expiresAt.toISOString(),
         payment_id: `onboard_${userId.substring(0, 8)}`,
+        tenant_id: tenantId,
       });
 
     if (insertError) {
@@ -134,6 +140,7 @@ Deno.serve(async (req) => {
       title: "Novo trial de 5h ativado",
       description: `Usuário ${userEmail || userId} recebeu trial automático de 5 horas.`,
       user_id: userId,
+      tenant_id: tenantId,
     });
 
     // Call external webhook for token generation (5h = test_5h or test_1d as fallback)
@@ -174,8 +181,9 @@ Deno.serve(async (req) => {
                 user_id: userId,
                 token: webhookData.token,
                 is_active: true,
+                tenant_id: tenantId,
               });
-              console.log(`Onboard token stored for ${userId}`);
+              console.log(`Onboard token stored for ${userId} in tenant ${tenantId}`);
             }
           } catch (parseErr) {
             console.error(`Failed to parse webhook response: ${responseText}`);

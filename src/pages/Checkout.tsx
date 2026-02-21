@@ -47,7 +47,7 @@ const basePlans = [
 ];
 
 const terms = [
-  "Estamos vendendo acesso à extensão CodeLove AI, e não acesso à plataforma Lovable.",
+  "Estamos vendendo acesso à extensão, e não acesso à plataforma Lovable.",
   "A extensão NÃO é oficial e não possui nenhum vínculo com a Lovable.",
   "Não há reembolso caso a extensão pare de funcionar ou seja limitada, independentemente do tempo restante do plano.",
   "O cancelamento ou paralisação temporária do serviço não gera direito a indenização de qualquer natureza.",
