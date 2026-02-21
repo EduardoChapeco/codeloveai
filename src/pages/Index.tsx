@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle, Timer } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
+import { useTenant } from "@/contexts/TenantContext";
 import AppLayout from "@/components/AppLayout";
 
 const plans = [
@@ -79,11 +80,13 @@ export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const countdown = useCountdown(UNLIMITED_DEADLINE);
   const { user, loading: authLoading } = useAuth();
-  useSEO({ title: "CodeLove AI", description: "A melhor plataforma de envios ilimitados para Lovable. 24/7, sem descontar créditos." });
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
+  useSEO({ title: tenant?.meta_title || brandName, description: tenant?.meta_description || "A melhor plataforma de envios ilimitados para Lovable. 24/7, sem descontar créditos." });
 
   const guestNav = !authLoading && !user ? (
     <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
-      <span className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</span>
+      <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
       <div className="flex items-center gap-2">
         <Link to="/community" className="lv-btn-ghost">Comunidade</Link>
         <Link to="/login" className="lv-btn-secondary">Entrar</Link>
@@ -115,7 +118,7 @@ export default function Index() {
       {/* Benefits */}
       <section className="px-6 pb-24 max-w-5xl mx-auto">
         <p className="lv-overline text-center mb-3">Por que escolher</p>
-        <h2 className="lv-heading-lg text-center mb-12">CodeLove AI</h2>
+        <h2 className="lv-heading-lg text-center mb-12">{brandName}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {benefits.map((b) => (
             <div key={b.title} className="lv-card flex flex-col items-start gap-4">

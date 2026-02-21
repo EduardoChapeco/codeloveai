@@ -4,6 +4,7 @@ import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer, Percent, 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
+import { useTenant } from "@/contexts/TenantContext";
 import { toast } from "sonner";
 
 interface Plan {
@@ -89,7 +90,9 @@ function formatBRL(value: number) {
 
 export default function Checkout() {
   const { user, loading: authLoading } = useAuth();
-  useSEO({ title: "Checkout", description: "Escolha seu plano CodeLove AI e comece a usar envios ilimitados." });
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
+  useSEO({ title: "Checkout", description: `Escolha seu plano ${brandName} e comece a usar envios ilimitados.` });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedPlan = searchParams.get("plan");
@@ -212,7 +215,7 @@ export default function Checkout() {
     <div className="min-h-screen bg-background">
       {/* Nav */}
       <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
-        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
+        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
         <button
           onClick={() => {
             if (step === "terms") { setStep("plan"); setAgreedTerms(false); }
