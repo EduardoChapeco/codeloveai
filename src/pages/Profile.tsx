@@ -105,7 +105,6 @@ export default function Profile() {
         .eq("user_id", userId)
         .maybeSingle();
 
-      // Auto-create profile if owner and none exists
       if (!data && user && user.id === userId) {
         const { data: created } = await supabase.from("user_profiles").insert({
           user_id: user.id,
@@ -128,7 +127,6 @@ export default function Profile() {
         setEditLinkedin(data.social_linkedin || "");
       }
 
-      // Fetch posts (exclude deleted and archived)
       const { data: postsData } = await supabase
         .from("community_posts")
         .select("*")
@@ -139,7 +137,6 @@ export default function Profile() {
         .limit(30);
       setPosts((postsData || []) as Post[]);
 
-      // Check following
       if (user && user.id !== userId) {
         const { data: follow } = await supabase
           .from("user_followers")
@@ -160,7 +157,6 @@ export default function Profile() {
     if (!user || !userId) return toast.error("Faça login para seguir.");
     if (isFollowing) {
       await supabase.from("user_followers").delete().eq("follower_id", user.id).eq("following_id", userId);
-      // Update counts in DB
       if (profile) {
         const newCount = Math.max(0, profile.followers_count - 1);
         await supabase.from("user_profiles").update({ followers_count: newCount }).eq("user_id", userId);
@@ -170,7 +166,6 @@ export default function Profile() {
       setIsFollowing(false);
     } else {
       await supabase.from("user_followers").insert({ follower_id: user.id, following_id: userId });
-      // Update counts in DB
       if (profile) {
         const newCount = profile.followers_count + 1;
         await supabase.from("user_profiles").update({ followers_count: newCount }).eq("user_id", userId);
@@ -214,14 +209,12 @@ export default function Profile() {
     setLoadingList(false);
   };
 
-  // Chat functions
   const fetchChatMessages = async () => {
     if (!user || !userId) return;
     const { data } = await supabase.from("messages").select("*")
       .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
       .order("created_at", { ascending: true });
     setChatMessages(data || []);
-    // Mark as read
     await supabase.from("messages").update({ is_read: true }).eq("receiver_id", user.id).eq("sender_id", userId).eq("is_read", false);
   };
 
@@ -307,20 +300,20 @@ export default function Profile() {
   if (!profile) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">
-        <p className="ep-section-title mb-4">PERFIL NÃO ENCONTRADO</p>
-        <Link to="/community" className="ep-btn-primary">VOLTAR</Link>
+        <p className="lv-heading-lg mb-4">Perfil não encontrado</p>
+        <Link to="/community" className="lv-btn-primary">Voltar</Link>
       </div>
     </div>;
   }
 
   const followListData = showFollowers ? followersList : followingList;
-  const followListTitle = showFollowers ? "SEGUIDORES" : "SEGUINDO";
+  const followListTitle = showFollowers ? "Seguidores" : "Seguindo";
   const showListModal = showFollowers || showFollowing;
 
   const guestNav = !user ? (
-    <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-4 flex items-center justify-between">
-      <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
-      <Link to="/login" className="ep-btn-primary h-10 px-6 text-[9px]">ENTRAR</Link>
+    <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
+      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
+      <Link to="/login" className="lv-btn-primary h-9 px-4 text-xs">Entrar</Link>
     </nav>
   ) : null;
 
@@ -336,15 +329,15 @@ export default function Profile() {
           <div className="w-full h-full bg-gradient-to-br from-muted to-muted-foreground/10" />
         )}
         {isOwner && (
-          <label className="absolute bottom-4 right-4 ep-btn-secondary h-8 px-3 text-[8px] flex items-center gap-1 cursor-pointer bg-background/80 backdrop-blur">
-            <Camera className="h-3 w-3" /> CAPA
+          <label className="absolute bottom-4 right-4 lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1 cursor-pointer">
+            <Camera className="h-3 w-3" /> Capa
             <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload("cover", e.target.files[0])} />
           </label>
         )}
       </div>
 
       {/* Profile header */}
-      <div className="max-w-4xl mx-auto px-8 -mt-16 relative z-10">
+      <div className="max-w-4xl mx-auto px-6 -mt-16 relative z-10">
         <div className="flex items-end gap-6 mb-6">
           <div className="relative">
             {profile.avatar_url ? (
@@ -362,24 +355,24 @@ export default function Profile() {
             )}
           </div>
           <div className="flex-1 pb-2">
-            <h1 className="ep-section-title text-2xl">{profile.display_name}</h1>
-            {profile.username && <p className="text-sm text-muted-foreground font-medium">@{profile.username}</p>}
+            <h1 className="lv-heading-lg">{profile.display_name}</h1>
+            {profile.username && <p className="lv-caption font-medium">@{profile.username}</p>}
           </div>
           <div className="pb-2 flex gap-2">
             {isOwner ? (
-              <button onClick={() => setEditing(!editing)} className="ep-btn-secondary h-10 px-4 text-[9px] flex items-center gap-1">
-                <Edit className="h-3 w-3" /> EDITAR
+              <button onClick={() => setEditing(!editing)} className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-1.5">
+                <Edit className="h-3 w-3" /> Editar
               </button>
             ) : (
               <>
                 <button onClick={handleFollow}
-                  className={`h-10 px-6 text-[9px] ${isFollowing ? "ep-btn-secondary" : "ep-btn-primary"}`}>
-                  {isFollowing ? "SEGUINDO" : "SEGUIR"}
+                  className={`h-9 px-5 text-xs ${isFollowing ? "lv-btn-secondary" : "lv-btn-primary"}`}>
+                  {isFollowing ? "Seguindo" : "Seguir"}
                 </button>
                 {user && (
                   <button onClick={() => setChatOpen(!chatOpen)}
-                    className="ep-btn-secondary h-10 px-4 text-[9px] flex items-center gap-1">
-                    <MessageSquare className="h-3 w-3" /> MENSAGEM
+                    className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-1.5">
+                    <MessageSquare className="h-3 w-3" /> Mensagem
                   </button>
                 )}
               </>
@@ -390,39 +383,39 @@ export default function Profile() {
         {/* Stats */}
         <div className="flex gap-6 mb-6">
           <div className="text-center">
-            <p className="ep-value text-lg">{profile.posts_count}</p>
-            <p className="text-[10px] text-muted-foreground font-bold">POSTS</p>
+            <p className="lv-stat text-lg">{profile.posts_count}</p>
+            <p className="lv-caption">Posts</p>
           </div>
           <button onClick={loadFollowers} className="text-center hover:opacity-80 transition-opacity">
-            <p className="ep-value text-lg">{profile.followers_count}</p>
-            <p className="text-[10px] text-muted-foreground font-bold">SEGUIDORES</p>
+            <p className="lv-stat text-lg">{profile.followers_count}</p>
+            <p className="lv-caption">Seguidores</p>
           </button>
           <button onClick={loadFollowing} className="text-center hover:opacity-80 transition-opacity">
-            <p className="ep-value text-lg">{profile.following_count}</p>
-            <p className="text-[10px] text-muted-foreground font-bold">SEGUINDO</p>
+            <p className="lv-stat text-lg">{profile.following_count}</p>
+            <p className="lv-caption">Seguindo</p>
           </button>
         </div>
 
         {/* Followers/Following Modal */}
         {showListModal && (
-          <div className="ep-card mb-6">
+          <div className="lv-card mb-6">
             <div className="flex items-center justify-between mb-3">
-              <p className="ep-subtitle">{followListTitle} ({followListData.length})</p>
+              <p className="lv-overline">{followListTitle} ({followListData.length})</p>
               <button onClick={() => { setShowFollowers(false); setShowFollowing(false); }}
-                className="h-7 w-7 rounded-[8px] flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
             {loadingList ? (
               <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
             ) : followListData.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">Nenhum resultado.</p>
+              <p className="lv-caption text-center py-4">Nenhum resultado.</p>
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {followListData.map(u => (
                   <Link key={u.user_id} to={`/profile/${u.user_id}`}
                     onClick={() => { setShowFollowers(false); setShowFollowing(false); }}
-                    className="flex items-center gap-3 px-3 py-2 rounded-[10px] hover:bg-muted transition-colors">
+                    className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-muted transition-colors">
                     {u.avatar_url ? (
                       <img src={u.avatar_url} className="h-8 w-8 rounded-full object-cover" />
                     ) : (
@@ -431,8 +424,8 @@ export default function Profile() {
                       </div>
                     )}
                     <div>
-                      <p className="text-sm font-bold text-foreground">{u.display_name}</p>
-                      {u.username && <p className="text-[10px] text-muted-foreground">@{u.username}</p>}
+                      <p className="lv-body-strong">{u.display_name}</p>
+                      {u.username && <p className="lv-caption">@{u.username}</p>}
                     </div>
                   </Link>
                 ))}
@@ -442,29 +435,29 @@ export default function Profile() {
         )}
 
         {/* Bio & socials */}
-        {profile.bio && <p className="text-sm text-muted-foreground font-medium mb-4">{profile.bio}</p>}
+        {profile.bio && <p className="lv-body mb-4">{profile.bio}</p>}
         <div className="flex gap-4 mb-8 flex-wrap">
           {profile.website && (
             <a href={profile.website} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              className="flex items-center gap-1 lv-caption hover:text-foreground">
               <Globe className="h-3 w-3" /> {profile.website.replace(/^https?:\/\//, "")}
             </a>
           )}
           {profile.social_github && (
             <a href={`https://github.com/${profile.social_github}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              className="flex items-center gap-1 lv-caption hover:text-foreground">
               <Github className="h-3 w-3" /> {profile.social_github}
             </a>
           )}
           {profile.social_twitter && (
             <a href={`https://twitter.com/${profile.social_twitter}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              className="flex items-center gap-1 lv-caption hover:text-foreground">
               <Twitter className="h-3 w-3" /> {profile.social_twitter}
             </a>
           )}
           {profile.social_linkedin && (
             <a href={`https://linkedin.com/in/${profile.social_linkedin}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              className="flex items-center gap-1 lv-caption hover:text-foreground">
               <Linkedin className="h-3 w-3" /> {profile.social_linkedin}
             </a>
           )}
@@ -472,80 +465,73 @@ export default function Profile() {
 
         {/* Edit form */}
         {editing && isOwner && (
-          <div className="ep-card mb-8 space-y-4">
-            <p className="ep-subtitle mb-2">EDITAR PERFIL</p>
+          <div className="lv-card mb-8 space-y-4">
+            <p className="lv-overline mb-2">Editar perfil</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">NOME</label>
-                <input value={editName} onChange={e => setEditName(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-[10px] px-3 py-2 text-sm text-foreground" />
+                <label className="lv-caption font-medium block mb-1.5">Nome</label>
+                <input value={editName} onChange={e => setEditName(e.target.value)} className="lv-input" />
               </div>
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">USERNAME</label>
-                <input value={editUsername} onChange={e => setEditUsername(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-[10px] px-3 py-2 text-sm text-foreground" />
+                <label className="lv-caption font-medium block mb-1.5">Username</label>
+                <input value={editUsername} onChange={e => setEditUsername(e.target.value)} className="lv-input" />
               </div>
             </div>
             <div>
-              <label className="text-xs font-bold text-foreground block mb-1">BIO</label>
-              <textarea value={editBio} onChange={e => setEditBio(e.target.value)} rows={3}
-                className="w-full bg-muted border border-border rounded-[10px] px-3 py-2 text-sm text-foreground resize-none" />
+              <label className="lv-caption font-medium block mb-1.5">Bio</label>
+              <textarea value={editBio} onChange={e => setEditBio(e.target.value)} rows={3} className="lv-textarea" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">WEBSITE</label>
-                <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-[10px] px-3 py-2 text-sm text-foreground" />
+                <label className="lv-caption font-medium block mb-1.5">Website</label>
+                <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)} className="lv-input" />
               </div>
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">GITHUB</label>
-                <input value={editGithub} onChange={e => setEditGithub(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-[10px] px-3 py-2 text-sm text-foreground" />
+                <label className="lv-caption font-medium block mb-1.5">GitHub</label>
+                <input value={editGithub} onChange={e => setEditGithub(e.target.value)} className="lv-input" />
               </div>
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">TWITTER</label>
-                <input value={editTwitter} onChange={e => setEditTwitter(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-[10px] px-3 py-2 text-sm text-foreground" />
+                <label className="lv-caption font-medium block mb-1.5">Twitter</label>
+                <input value={editTwitter} onChange={e => setEditTwitter(e.target.value)} className="lv-input" />
               </div>
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">LINKEDIN</label>
-                <input value={editLinkedin} onChange={e => setEditLinkedin(e.target.value)}
-                  className="w-full bg-muted border border-border rounded-[10px] px-3 py-2 text-sm text-foreground" />
+                <label className="lv-caption font-medium block mb-1.5">LinkedIn</label>
+                <input value={editLinkedin} onChange={e => setEditLinkedin(e.target.value)} className="lv-input" />
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={handleSaveProfile} className="ep-btn-primary h-10 px-6 text-[9px]">SALVAR</button>
-              <button onClick={() => setEditing(false)} className="ep-btn-secondary h-10 px-6 text-[9px]">CANCELAR</button>
+              <button onClick={handleSaveProfile} className="lv-btn-primary h-10 px-5 text-sm">Salvar</button>
+              <button onClick={() => setEditing(false)} className="lv-btn-secondary h-10 px-5 text-sm">Cancelar</button>
             </div>
           </div>
         )}
 
         {/* User's posts */}
         <div className="space-y-4 pb-16">
-          <p className="ep-subtitle">PUBLICAÇÕES ({posts.length})</p>
+          <p className="lv-overline">Publicações ({posts.length})</p>
           {posts.length === 0 ? (
-            <p className="text-sm text-muted-foreground font-medium">Nenhuma publicação ainda.</p>
+            <p className="lv-body">Nenhuma publicação ainda.</p>
           ) : posts.map(post => (
             <Link key={post.id} to={`/community?post=${post.id}`} className="block">
-              <div className="ep-card hover:border-foreground/20 transition-colors">
+              <div className="lv-card hover:border-white/60 transition-colors">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="ep-badge text-[7px]">{post.post_type.toUpperCase()}</span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="lv-badge lv-badge-muted">{post.post_type.toUpperCase()}</span>
+                  <span className="lv-caption">
                     {format(new Date(post.created_at), "dd MMM yyyy", { locale: ptBR })}
                   </span>
                 </div>
-                {post.title && <h3 className="text-sm font-bold text-foreground mb-1">{post.title}</h3>}
-                <p className="text-sm text-muted-foreground font-medium whitespace-pre-wrap mb-3 line-clamp-3">{post.content}</p>
+                {post.title && <h3 className="lv-body-strong mb-1">{post.title}</h3>}
+                <p className="lv-body whitespace-pre-wrap mb-3 line-clamp-3">{post.content}</p>
 
                 {post.media_urls && post.media_urls.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     {post.media_urls.slice(0, 4).map((url, i) => (
-                      <img key={i} src={url} alt="" className="rounded-[8px] w-full max-h-48 object-cover" />
+                      <img key={i} src={url} alt="" className="rounded-xl w-full max-h-48 object-cover" />
                     ))}
                   </div>
                 )}
 
-                <div className="flex items-center gap-4 text-xs text-muted-foreground font-bold">
+                <div className="flex items-center gap-4 lv-caption font-medium">
                   <span className="flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {post.likes_count}</span>
                   <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {post.comments_count}</span>
                 </div>
@@ -557,29 +543,29 @@ export default function Profile() {
 
       {/* Chat panel for DM */}
       {chatOpen && !isOwner && user && (
-        <div className="fixed bottom-6 right-6 z-30 w-[360px] max-h-[500px] bg-background border border-border rounded-[20px] shadow-2xl flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="fixed bottom-6 right-6 z-30 w-[360px] max-h-[500px] lv-glass rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
             <div>
-              <p className="ep-label text-[10px]">MENSAGEM</p>
-              <p className="text-xs text-muted-foreground">{profile.display_name}</p>
+              <p className="lv-caption font-medium">Mensagem</p>
+              <p className="lv-caption">{profile.display_name}</p>
             </div>
-            <button onClick={() => setChatOpen(false)} className="h-7 w-7 rounded-[8px] flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
+            <button onClick={() => setChatOpen(false)} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[350px]">
             {chatMessages.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-8">
+              <p className="lv-caption text-center py-8">
                 Envie uma mensagem para iniciar a conversa.
               </p>
             )}
             {chatMessages.map(msg => (
               <div key={msg.id} className={`flex ${msg.sender_id === user.id ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] px-3 py-2 rounded-[12px] text-xs ${
-                  msg.sender_id === user.id ? "bg-foreground text-background" : "bg-muted text-foreground"
+                <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs ${
+                  msg.sender_id === user.id ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
                 }`}>
                   <p className="font-medium">{msg.content}</p>
-                  <p className={`text-[9px] mt-1 ${msg.sender_id === user.id ? "text-background/60" : "text-muted-foreground"}`}>
+                  <p className={`text-[9px] mt-1 ${msg.sender_id === user.id ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                     {format(new Date(msg.created_at), "HH:mm")}
                   </p>
                 </div>
@@ -587,13 +573,13 @@ export default function Profile() {
             ))}
             <div ref={chatEndRef} />
           </div>
-          <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+          <div className="px-4 py-3 border-t border-border/50 flex items-center gap-2">
             <input value={newMessage} onChange={e => setNewMessage(e.target.value)}
               onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChatMessage()}
               placeholder="Digite..."
-              className="ep-input h-10 rounded-[12px] text-xs px-3 border border-border flex-1" />
+              className="lv-input flex-1 h-9 text-xs" />
             <button onClick={sendChatMessage} disabled={sendingMessage || !newMessage.trim()}
-              className="ep-btn-primary h-10 w-10 rounded-[12px] flex items-center justify-center">
+              className="lv-btn-primary h-9 w-9 rounded-xl flex items-center justify-center">
               <Send className="h-4 w-4" />
             </button>
           </div>

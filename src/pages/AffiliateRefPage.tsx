@@ -5,17 +5,17 @@ import { Check, Zap, Clock, MessageSquare, Shield } from "lucide-react";
 import { toast } from "sonner";
 
 const plans = [
-  { id: "1_day", name: "1 DIA", price: 9.99, priceLabel: "R$9,99", period: "por dia" },
-  { id: "7_days", name: "7 DIAS", price: 49.90, priceLabel: "R$49,90", period: "por semana" },
-  { id: "1_month", name: "1 MÊS", price: 149.90, priceLabel: "R$149,90", period: "por mês", popular: true },
-  { id: "12_months", name: "12 MESES", price: 499.00, priceLabel: "R$499,00", period: "por tempo indeterminado*", highlight: true },
+  { id: "1_day", name: "1 Dia", price: 9.99, priceLabel: "R$9,99", period: "por dia" },
+  { id: "7_days", name: "7 Dias", price: 49.90, priceLabel: "R$49,90", period: "por semana" },
+  { id: "1_month", name: "1 Mês", price: 149.90, priceLabel: "R$149,90", period: "por mês", popular: true },
+  { id: "12_months", name: "12 Meses", price: 499.00, priceLabel: "R$499,00", period: "por tempo indeterminado*", highlight: true },
 ];
 
 const benefits = [
-  { icon: Zap, title: "ENVIOS ILIMITADOS", desc: "Envie quantas mensagens quiser." },
-  { icon: Clock, title: "24/7 SEM PARAR", desc: "Funciona o dia todo, todos os dias." },
-  { icon: MessageSquare, title: "SEM DESCONTAR CRÉDITOS", desc: "Seus créditos permanecem intactos." },
-  { icon: Shield, title: "MÉTODO PRÓPRIO", desc: "Tecnologia exclusiva de comunicação." },
+  { icon: Zap, title: "Envios ilimitados", desc: "Envie quantas mensagens quiser." },
+  { icon: Clock, title: "24/7 sem parar", desc: "Funciona o dia todo, todos os dias." },
+  { icon: MessageSquare, title: "Sem descontar créditos", desc: "Seus créditos permanecem intactos." },
+  { icon: Shield, title: "Método próprio", desc: "Tecnologia exclusiva de comunicação." },
 ];
 
 export default function AffiliateRefPage() {
@@ -69,49 +69,49 @@ export default function AffiliateRefPage() {
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
-      <p className="ep-subtitle">CARREGANDO...</p>
+      <p className="lv-overline">Carregando...</p>
     </div>;
   }
 
   if (!affiliate) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">
-        <p className="ep-section-title mb-4">LINK INVÁLIDO</p>
-        <Link to="/" className="ep-btn-primary">VOLTAR</Link>
+        <p className="lv-heading-lg mb-4">Link inválido</p>
+        <Link to="/" className="lv-btn-primary">Voltar</Link>
       </div>
     </div>;
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <span className="ep-label text-sm tracking-[0.3em]">{affiliate.display_name || "CODELOVE AI"}</span>
-        <div className="flex items-center gap-4">
-          <Link to="/login" className="ep-btn-secondary h-10 px-6 text-[9px]">ENTRAR</Link>
-          <Link to="/register" className="ep-btn-primary h-10 px-6 text-[9px]">CRIAR CONTA</Link>
+      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
+        <span className="text-base font-semibold tracking-tight text-foreground">{affiliate.display_name || "CodeLove AI"}</span>
+        <div className="flex items-center gap-3">
+          <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+          <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
         </div>
       </nav>
 
       {/* Hero */}
-      <section className="px-8 py-24 max-w-5xl mx-auto text-center">
-        <p className="ep-subtitle mb-6">EXTENSÃO PARA LOVABLE</p>
-        <h1 className="ep-title mb-8">ENVIOS ILIMITADOS SEM DESCONTAR CRÉDITOS</h1>
-        <p className="text-base text-muted-foreground font-medium max-w-2xl mx-auto mb-12">
+      <section className="px-6 py-24 max-w-4xl mx-auto text-center">
+        <p className="lv-overline mb-4">Extensão para Lovable</p>
+        <h1 className="lv-heading-xl mb-6">Envios ilimitados sem descontar créditos</h1>
+        <p className="lv-body text-base max-w-2xl mx-auto mb-10">
           Crie quantos projetos quiser, envie quantas mensagens quiser. 24/7 sem parar.
         </p>
       </section>
 
       {/* Benefits */}
-      <section className="px-8 pb-20 max-w-6xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <section className="px-6 pb-20 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {benefits.map((b) => (
-            <div key={b.title} className="ep-card-sm flex flex-col items-start gap-4">
-              <div className="h-12 w-12 rounded-[16px] border border-border flex items-center justify-center">
-                <b.icon className="h-5 w-5 text-foreground" />
+            <div key={b.title} className="lv-card-sm flex flex-col items-start gap-4">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <b.icon className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h3 className="ep-label text-[11px] mb-2">{b.title}</h3>
-                <p className="text-sm text-muted-foreground font-medium">{b.desc}</p>
+                <h3 className="lv-heading-sm mb-2">{b.title}</h3>
+                <p className="lv-body">{b.desc}</p>
               </div>
             </div>
           ))}
@@ -119,22 +119,22 @@ export default function AffiliateRefPage() {
       </section>
 
       {/* Plans */}
-      <section className="px-8 pb-24 max-w-6xl mx-auto">
-        <p className="ep-subtitle text-center mb-4">ESCOLHA SEU PLANO</p>
-        <h2 className="ep-section-title text-center mb-16">PLANOS E PREÇOS</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <section className="px-6 pb-24 max-w-5xl mx-auto">
+        <p className="lv-overline text-center mb-3">Escolha seu plano</p>
+        <h2 className="lv-heading-lg text-center mb-12">Planos e preços</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {plans.map((plan) => (
-            <div key={plan.id} className={`ep-card-interactive flex flex-col justify-between ${plan.popular ? "ep-card-active" : ""}`}>
+            <div key={plan.id} className={`lv-card-interactive flex flex-col justify-between ${plan.popular ? "lv-card-active" : ""}`}>
               <div>
-                {plan.popular && <span className="ep-badge ep-badge-live mb-6 inline-block">POPULAR</span>}
-                {plan.highlight && <span className="ep-badge ep-badge-live mb-6 inline-block">MELHOR CUSTO</span>}
-                <p className="ep-subtitle mb-2">{plan.name}</p>
-                <p className="ep-value text-4xl mb-1">{plan.priceLabel}</p>
-                <p className="text-xs text-muted-foreground font-medium mb-6">{plan.period}</p>
-                <ul className="space-y-3 mb-8">
+                {plan.popular && <span className="lv-badge lv-badge-primary mb-4 inline-block">Popular</span>}
+                {plan.highlight && <span className="lv-badge lv-badge-primary mb-4 inline-block">Melhor custo</span>}
+                <p className="lv-overline mb-2">{plan.name}</p>
+                <p className="lv-stat text-3xl mb-1">{plan.priceLabel}</p>
+                <p className="lv-caption mb-5">{plan.period}</p>
+                <ul className="space-y-2.5 mb-6">
                   {["Envios ilimitados", "Sem descontar créditos", "Suporte via chat", "Ativação imediata"].map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-                      <Check className="h-4 w-4 text-foreground" /> {f}
+                    <li key={f} className="flex items-center gap-2 lv-body">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> {f}
                     </li>
                   ))}
                 </ul>
@@ -142,17 +142,17 @@ export default function AffiliateRefPage() {
               <button
                 onClick={() => handleSubscribe(plan.id)}
                 disabled={loadingPlan === plan.id}
-                className={`w-full ${plan.popular || plan.highlight ? "ep-btn-primary" : "ep-btn-secondary"}`}
+                className={`w-full ${plan.popular || plan.highlight ? "lv-btn-primary" : "lv-btn-secondary"}`}
               >
-                {loadingPlan === plan.id ? "PROCESSANDO..." : "ASSINAR"}
+                {loadingPlan === plan.id ? "Processando..." : "Assinar"}
               </button>
             </div>
           ))}
         </div>
       </section>
 
-      <footer className="border-t border-border px-8 py-8 text-center">
-        <p className="ep-subtitle">© 2025 CODELOVE AI — TODOS OS DIREITOS RESERVADOS</p>
+      <footer className="border-t border-border/60 px-6 py-6 text-center">
+        <p className="lv-caption">© 2025 CodeLove AI — Todos os direitos reservados</p>
       </footer>
     </div>
   );
