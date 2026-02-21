@@ -2,11 +2,14 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
 
   useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -32,7 +35,7 @@ export default function ResetPassword() {
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <Link to="/" className="block text-center mb-10">
-          <span className="text-lg font-semibold tracking-tight text-foreground">CodeLove AI</span>
+          <span className="text-lg font-semibold tracking-tight text-foreground">{brandName}</span>
         </Link>
 
         <div className="lv-card p-8">

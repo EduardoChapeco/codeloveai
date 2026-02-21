@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
+import { useTenant } from "@/contexts/TenantContext";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -37,7 +38,9 @@ const faqs = [
 
 export default function AffiliatesPage() {
   const { user, loading: authLoading } = useAuth();
-  useSEO({ title: "Programa de Afiliados", description: "Ganhe 30% de comissão indicando a CodeLove AI." });
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
+  useSEO({ title: "Programa de Afiliados", description: `Ganhe 30% de comissão indicando ${brandName}.` });
   const navigate = useNavigate();
   const [enrolling, setEnrolling] = useState(false);
   const [enrollName, setEnrollName] = useState("");
@@ -67,7 +70,7 @@ export default function AffiliatesPage() {
   return (
     <div className="min-h-screen bg-background">
       <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
-        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
+        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
         <div className="flex items-center gap-3">
           {!authLoading && user ? (
             <Link to="/dashboard" className="lv-btn-secondary h-9 px-4 text-xs">Dashboard</Link>
@@ -83,7 +86,7 @@ export default function AffiliatesPage() {
       {/* Hero */}
       <section className="px-6 py-20 max-w-4xl mx-auto text-center">
         <p className="lv-overline mb-4">Programa de Afiliados</p>
-        <h1 className="lv-heading-xl mb-6">Ganhe dinheiro indicando o CodeLove AI</h1>
+        <h1 className="lv-heading-xl mb-6">Ganhe dinheiro indicando o {brandName}</h1>
         <p className="lv-body text-base max-w-2xl mx-auto mb-10">
           Torne-se afiliado, compartilhe seu link exclusivo e receba <strong className="text-foreground">30% de comissão</strong> em cada venda.
           Além disso, ganhe <strong className="text-foreground">20% de desconto</strong> nos seus próprios planos.
@@ -246,13 +249,13 @@ export default function AffiliatesPage() {
               {enrolling ? "Ativando..." : "Confirmar ativação"}
             </button>
 
-            <p className="text-center lv-caption pt-4">CodeLove AI — Programa de Afiliados</p>
+            <p className="text-center lv-caption pt-4">{brandName} — Programa de Afiliados</p>
           </div>
         </SheetContent>
       </Sheet>
 
       <footer className="border-t border-border/60 px-6 py-6 text-center">
-        <p className="lv-caption">© 2025 CodeLove AI — Todos os direitos reservados</p>
+        <p className="lv-caption">© 2025 {brandName} — Todos os direitos reservados</p>
       </footer>
     </div>
   );
