@@ -4,45 +4,51 @@
 
 @layer base {
   :root {
-    /* ━━━ LOVABLE SOFT UI PALETTE ━━━ */
-    --background: 0 0% 97%;
-    --foreground: 0 0% 10%;
+    /* ━━━ APPLE LIQUID GLASS PALETTE ━━━ */
+    --background: 0 0% 97.5%;
+    --foreground: 0 0% 8%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 10%;
+    --card-foreground: 0 0% 8%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 10%;
+    --popover-foreground: 0 0% 8%;
 
-    --primary: 252 85% 60%;
+    --primary: 211 100% 50%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 10%;
+    --secondary-foreground: 0 0% 8%;
 
     --muted: 0 0% 95.5%;
-    --muted-foreground: 0 0% 45%;
+    --muted-foreground: 0 0% 40%;
 
-    --accent: 252 85% 96%;
-    --accent-foreground: 252 85% 40%;
+    --accent: 211 100% 96%;
+    --accent-foreground: 211 100% 35%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 91%;
-    --input: 0 0% 91%;
-    --ring: 252 85% 60%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 211 100% 50%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
+
+    /* ── Glass tokens ── */
+    --glass-bg: 0 0% 100% / 0.72;
+    --glass-border: 0 0% 100% / 0.5;
+    --glass-blur: 24px;
+    --glass-saturate: 180%;
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 0 0% 25%;
-    --sidebar-primary: 252 85% 60%;
+    --sidebar-foreground: 0 0% 22%;
+    --sidebar-primary: 211 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 252 85% 96%;
-    --sidebar-accent-foreground: 252 85% 40%;
-    --sidebar-border: 0 0% 93%;
-    --sidebar-ring: 252 85% 60%;
+    --sidebar-accent: 211 100% 96%;
+    --sidebar-accent-foreground: 211 100% 35%;
+    --sidebar-border: 0 0% 92%;
+    --sidebar-ring: 211 100% 50%;
   }
 }
 
@@ -52,9 +58,10 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
   }
 }
 
@@ -62,115 +69,143 @@
 
 @layer components {
 
-  /* ── Typography ── */
+  /* ── Typography (Apple-style tight tracking) ── */
   .lv-heading-xl {
-    @apply text-4xl lg:text-5xl font-semibold tracking-tight text-foreground leading-tight;
+    @apply text-4xl lg:text-5xl font-semibold text-foreground leading-tight;
+    letter-spacing: -0.03em;
   }
   .lv-heading-lg {
-    @apply text-2xl lg:text-3xl font-semibold tracking-tight text-foreground;
+    @apply text-2xl lg:text-3xl font-semibold text-foreground;
+    letter-spacing: -0.025em;
   }
   .lv-heading-md {
     @apply text-xl font-semibold text-foreground;
+    letter-spacing: -0.02em;
   }
   .lv-heading-sm {
     @apply text-base font-semibold text-foreground;
+    letter-spacing: -0.015em;
   }
   .lv-overline {
-    @apply text-xs font-medium text-muted-foreground tracking-wide;
+    @apply text-xs font-medium text-muted-foreground uppercase;
+    letter-spacing: 0.06em;
   }
   .lv-body {
     @apply text-sm text-muted-foreground leading-relaxed;
+    letter-spacing: -0.006em;
   }
   .lv-body-strong {
     @apply text-sm font-medium text-foreground;
+    letter-spacing: -0.006em;
   }
   .lv-caption {
     @apply text-xs text-muted-foreground;
   }
   .lv-stat {
-    @apply text-3xl font-semibold tracking-tight text-foreground tabular-nums;
+    @apply text-3xl font-semibold text-foreground tabular-nums;
+    letter-spacing: -0.03em;
   }
 
-  /* ── Cards — clean flat, no shadows ── */
+  /* ── Liquid Glass surface ── */
+  .lv-glass {
+    background: hsla(var(--glass-bg));
+    border: 1px solid hsla(var(--glass-border));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  }
+
+  /* ── Cards — Liquid Glass ── */
   .lv-card {
-    @apply rounded-xl border border-border/50 bg-card p-5 transition-all duration-200 ease-out;
+    @apply rounded-2xl border border-white/40 bg-white/70 p-5 transition-all duration-300 ease-out;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
   .lv-card-sm {
-    @apply rounded-lg border border-border/50 bg-card p-3.5 transition-all duration-200 ease-out;
+    @apply rounded-xl border border-white/40 bg-white/70 p-3.5 transition-all duration-300 ease-out;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
   .lv-card-interactive {
-    @apply rounded-xl border border-border/50 bg-card p-5 cursor-pointer transition-all duration-200 ease-out;
+    @apply rounded-2xl border border-white/40 bg-white/70 p-5 cursor-pointer transition-all duration-300 ease-out;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
   .lv-card-interactive:hover {
-    @apply border-border bg-muted/20;
+    @apply border-white/60 bg-white/85 shadow-sm;
   }
   .lv-card-active {
-    @apply border-primary/25 bg-primary/5;
+    @apply border-primary/30 bg-primary/5;
   }
   .lv-card-flat {
-    @apply rounded-xl bg-muted/50 p-5;
+    @apply rounded-2xl bg-muted/40 p-5;
   }
 
-  /* ── Buttons — clean, no shadows ── */
+  /* ── Buttons — Apple pill style (44px touch target) ── */
   .lv-btn-primary {
-    @apply h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-11 px-5 rounded-full bg-primary text-primary-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer shadow-sm;
   }
   .lv-btn-primary:hover {
-    @apply brightness-110;
+    @apply brightness-105 shadow-md;
   }
   .lv-btn-primary:active {
-    @apply scale-[0.98];
+    @apply scale-[0.97] shadow-sm;
   }
   .lv-btn-primary:disabled {
-    @apply opacity-50 pointer-events-none;
+    @apply opacity-50 pointer-events-none shadow-none;
   }
 
   .lv-btn-secondary {
-    @apply h-9 px-4 rounded-lg border border-border/60 bg-card text-foreground text-[13px] font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-11 px-5 rounded-full border border-white/50 bg-white/60 text-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
   }
   .lv-btn-secondary:hover {
-    @apply bg-muted/50 border-border;
+    @apply bg-white/80 border-white/70 shadow-sm;
   }
   .lv-btn-secondary:active {
-    @apply scale-[0.98];
+    @apply scale-[0.97];
   }
 
   .lv-btn-ghost {
-    @apply h-9 px-3.5 rounded-lg text-muted-foreground text-[13px] font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-11 px-4 rounded-full text-muted-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-btn-ghost:hover {
-    @apply bg-muted/50 text-foreground;
+    @apply bg-white/50 text-foreground;
   }
 
   .lv-btn-icon {
-    @apply h-9 w-9 rounded-lg flex items-center justify-center text-muted-foreground transition-all duration-150 cursor-pointer;
+    @apply h-11 w-11 rounded-full flex items-center justify-center text-muted-foreground transition-all duration-200 cursor-pointer;
   }
   .lv-btn-icon:hover {
-    @apply bg-muted/50 text-foreground;
+    @apply bg-white/50 text-foreground;
   }
 
   .lv-btn-lg {
-    @apply h-11 px-5 rounded-lg text-[13px] font-medium;
+    @apply h-12 px-6 rounded-full text-[14px] font-medium;
   }
 
-  /* ── Inputs ── */
+  /* ── Inputs — Apple style ── */
   .lv-input {
-    @apply h-9 w-full rounded-lg px-3.5 bg-muted/50 border border-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
+    @apply h-11 w-full rounded-xl px-4 bg-white/50 border border-white/40 text-[14px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
   .lv-input:focus {
-    @apply bg-background border-border ring-2 ring-primary/15;
+    @apply bg-white/80 border-primary/30 ring-2 ring-primary/10;
   }
 
   .lv-textarea {
-    @apply w-full rounded-lg px-3.5 py-2.5 bg-muted/50 border border-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
+    @apply w-full rounded-xl px-4 py-3 bg-white/50 border border-white/40 text-[14px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
   .lv-textarea:focus {
-    @apply bg-background border-border ring-2 ring-primary/15;
+    @apply bg-white/80 border-primary/30 ring-2 ring-primary/10;
   }
 
-  /* ── Badges ── */
+  /* ── Badges — pill shape ── */
   .lv-badge {
-    @apply inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium;
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium;
   }
   .lv-badge-primary {
     @apply bg-primary/10 text-primary;
@@ -188,15 +223,15 @@
     @apply bg-muted text-muted-foreground;
   }
 
-  /* ── Nav items ── */
+  /* ── Nav items — Apple pill highlight ── */
   .lv-nav-item {
-    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150;
+    @apply flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200;
   }
   .lv-nav-item-active {
     @apply bg-primary/10 text-primary;
   }
   .lv-nav-item-inactive {
-    @apply text-muted-foreground hover:bg-muted/50 hover:text-foreground;
+    @apply text-muted-foreground hover:bg-white/50 hover:text-foreground;
   }
 
   /* ── Dividers ── */
@@ -206,7 +241,9 @@
 
   /* ── Pill ── */
   .lv-pill {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-muted/60 text-muted-foreground;
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium bg-white/50 text-muted-foreground;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
   .lv-pill-primary {
     @apply bg-primary/10 text-primary;
@@ -214,24 +251,24 @@
 
   /* ── Sheet / Drawer ── */
   .lv-sheet-btn {
-    @apply w-full h-11 rounded-lg bg-primary text-primary-foreground font-medium text-[13px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer;
+    @apply w-full h-12 rounded-full bg-primary text-primary-foreground font-medium text-[14px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-sm;
   }
   .lv-sheet-btn:hover {
-    @apply brightness-110;
+    @apply brightness-105 shadow-md;
   }
   .lv-sheet-btn:active {
-    @apply scale-[0.98];
+    @apply scale-[0.97];
   }
   .lv-sheet-btn:disabled {
-    @apply opacity-40 pointer-events-none;
+    @apply opacity-40 pointer-events-none shadow-none;
   }
 
   /* ── Empty state ── */
   .lv-empty {
-    @apply rounded-xl border-2 border-dashed border-border/50 py-14 text-center flex flex-col items-center justify-center gap-3;
+    @apply rounded-2xl border-2 border-dashed border-border/40 py-14 text-center flex flex-col items-center justify-center gap-3;
   }
   .lv-empty-icon {
-    @apply h-14 w-14 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground;
+    @apply h-14 w-14 rounded-2xl bg-white/50 flex items-center justify-center text-muted-foreground;
   }
 
   /* ── Scrollbar hide ── */
@@ -252,28 +289,28 @@
   .ep-card { @apply lv-card; }
   .ep-card-sm { @apply lv-card-sm; }
   .ep-card-interactive { @apply lv-card-interactive; }
-  .ep-card-interactive:hover { @apply border-border; }
+  .ep-card-interactive:hover { @apply border-white/60; }
   .ep-card-active { @apply lv-card-active; }
   .ep-btn-primary { @apply lv-btn-primary; }
-  .ep-btn-primary:active { @apply scale-[0.98]; }
+  .ep-btn-primary:active { @apply scale-[0.97]; }
   .ep-btn-secondary { @apply lv-btn-secondary; }
-  .ep-btn-secondary:hover { @apply bg-muted/50; }
+  .ep-btn-secondary:hover { @apply bg-white/80; }
   .ep-btn-icon { @apply lv-btn-icon; }
-  .ep-btn-icon:hover { @apply bg-muted/50 text-foreground; }
+  .ep-btn-icon:hover { @apply bg-white/50 text-foreground; }
   .ep-input { @apply lv-input; }
-  .ep-input:focus-visible { @apply bg-background border-border ring-2 ring-primary/15; }
+  .ep-input:focus-visible { @apply bg-white/80 border-primary/30 ring-2 ring-primary/10; }
   .ep-badge { @apply lv-badge; }
   .ep-badge-live { @apply lv-badge-primary; }
   .ep-badge-offline { @apply lv-badge-muted; }
   .ep-empty { @apply lv-empty; }
   .ep-empty-icon { @apply lv-empty-icon; }
   .ep-empty-title { @apply text-xl font-semibold text-muted-foreground; }
-  .ep-sheet-input { @apply lv-input h-11 text-base px-4; }
-  .ep-sheet-input:focus-visible { @apply bg-background border-border ring-2 ring-primary/15; }
+  .ep-sheet-input { @apply lv-input h-12 text-base px-4; }
+  .ep-sheet-input:focus-visible { @apply bg-white/80 border-primary/30 ring-2 ring-primary/10; }
   .ep-sheet-label { @apply text-xs font-medium text-foreground tracking-wide ml-1 block mb-1.5; }
   .ep-sheet-btn { @apply lv-sheet-btn; }
-  .ep-sheet-btn:hover { @apply brightness-110; }
-  .ep-sheet-btn:active { @apply scale-[0.98]; }
+  .ep-sheet-btn:hover { @apply brightness-105; }
+  .ep-sheet-btn:active { @apply scale-[0.97]; }
   .ep-sheet-btn:disabled { @apply opacity-40; }
   .ep-sheet-footer { @apply text-center text-xs text-muted-foreground pt-6; }
 }

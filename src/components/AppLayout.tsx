@@ -16,15 +16,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         className="h-screen w-full p-2 overflow-hidden"
         style={{
           background: `
-            radial-gradient(ellipse at 10% 20%, hsl(252 85% 92% / 0.5) 0%, transparent 50%),
-            radial-gradient(ellipse at 90% 10%, hsl(280 70% 90% / 0.4) 0%, transparent 45%),
-            radial-gradient(ellipse at 50% 90%, hsl(220 80% 92% / 0.35) 0%, transparent 50%),
-            hsl(0 0% 97%)
+            radial-gradient(ellipse at 10% 20%, hsl(211 100% 92% / 0.5) 0%, transparent 50%),
+            radial-gradient(ellipse at 90% 10%, hsl(230 80% 92% / 0.4) 0%, transparent 45%),
+            radial-gradient(ellipse at 50% 90%, hsl(200 80% 94% / 0.35) 0%, transparent 50%),
+            hsl(0 0% 97.5%)
           `,
         }}
       >
         {/* Layer 1 — Unified glass surface */}
-        <div className="h-full w-full bg-white/90 backdrop-blur-xl rounded-2xl overflow-hidden flex border border-white/60">
+        <div className="h-full w-full bg-white/85 backdrop-blur-2xl rounded-3xl overflow-hidden flex border border-white/50" style={{ backdropFilter: 'blur(24px) saturate(180%)' }}>
           {/* Sidebar */}
           <AppSidebar />
 
