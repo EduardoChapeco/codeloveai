@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Check, Zap, Clock, MessageSquare, Shield, ChevronDown, AlertTriangle, Timer } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import AppNav from "@/components/AppNav";
 
 const plans = [
   {
@@ -75,18 +77,23 @@ function useCountdown(deadline: number) {
 export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const countdown = useCountdown(UNLIMITED_DEADLINE);
+  const { user, loading: authLoading } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
-        <span className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</span>
-        <div className="flex items-center gap-2">
-          <Link to="/community" className="lv-btn-ghost">Comunidade</Link>
-          <Link to="/login" className="lv-btn-secondary">Entrar</Link>
-          <Link to="/register" className="lv-btn-primary">Criar conta</Link>
-        </div>
-      </nav>
+      {/* Nav - show AppNav if logged in, guest nav otherwise */}
+      {!authLoading && user ? (
+        <AppNav />
+      ) : (
+        <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
+          <span className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</span>
+          <div className="flex items-center gap-2">
+            <Link to="/community" className="lv-btn-ghost">Comunidade</Link>
+            <Link to="/login" className="lv-btn-secondary">Entrar</Link>
+            <Link to="/register" className="lv-btn-primary">Criar conta</Link>
+          </div>
+        </nav>
+      )}
 
       {/* Hero */}
       <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center">
