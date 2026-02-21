@@ -27,10 +27,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Layer 2 — Content Card */}
         <main
-          className="flex-1 flex flex-col min-w-0 bg-card rounded-2xl overflow-hidden"
-          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.06)' }}
+          className="flex-1 flex flex-col min-w-0 bg-card rounded-2xl overflow-hidden border border-border/40"
+          style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)' }}
         >
-          <header className="h-12 flex items-center px-4 border-b border-border/30">
+          <header className="h-11 flex items-center px-4 border-b border-border/20">
             <SidebarTrigger />
           </header>
           <div className="flex-1 overflow-y-auto">

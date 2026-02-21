@@ -47,6 +47,8 @@
     --mesh-color-1: 252 85% 92%;
     --mesh-color-2: 280 70% 90%;
     --mesh-color-3: 220 80% 92%;
+    /* Floating sidebar shadow */
+    --sidebar-variant-floating: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
   }
 }
 
