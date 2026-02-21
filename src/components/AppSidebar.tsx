@@ -58,7 +58,7 @@ export default function AppSidebar() {
   // ─── Admin contextual sidebar ───
   if (isAdminPage && isAdmin) {
     return (
-      <Sidebar collapsible="icon" className="border-r border-black/[0.04] bg-white/70" style={{ backdropFilter: 'blur(24px) saturate(180%)' }}>
+      <Sidebar collapsible="icon">
         <SidebarHeader className="p-3 flex flex-row items-center justify-between">
           <button
             onClick={() => navigate("/dashboard")}
@@ -178,7 +178,7 @@ export default function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-black/[0.04] bg-white/70" style={{ backdropFilter: 'blur(24px) saturate(180%)' }}>
+    <Sidebar collapsible="icon">
       <SidebarHeader className="p-3 flex flex-row items-center justify-between">
         <NavLink to="/dashboard" className="flex items-center gap-2 text-foreground font-semibold tracking-tight">
           {!collapsed && <span className="text-[13px]">CodeLove AI</span>}
