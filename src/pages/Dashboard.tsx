@@ -277,9 +277,9 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-full">
 
-      <div className="max-w-5xl mx-auto px-6 py-10 space-y-6">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-5">
         {/* Header */}
         <div>
           <p className="lv-overline mb-1">Área do membro</p>
