@@ -9,7 +9,6 @@ export default function ResetPassword() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for recovery token in URL
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     if (hashParams.get("type") !== "recovery") {
       // Still allow the page to render for manual access
@@ -30,26 +29,32 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-8">
-      <div className="w-full max-w-md">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em] block text-center mb-12">
-          CODELOVE AI
+    <div className="min-h-screen bg-background flex items-center justify-center px-6">
+      <div className="w-full max-w-sm">
+        <Link to="/" className="block text-center mb-10">
+          <span className="text-lg font-semibold tracking-tight text-foreground">CodeLove AI</span>
         </Link>
-        <h1 className="ep-section-title text-center mb-12">NOVA SENHA</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="password"
-            placeholder="Nova senha"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="ep-input w-full border border-border px-6"
-            minLength={6}
-            required
-          />
-          <button type="submit" disabled={loading} className="ep-btn-primary w-full">
-            {loading ? "SALVANDO..." : "SALVAR NOVA SENHA"}
-          </button>
-        </form>
+
+        <div className="lv-card p-8">
+          <h1 className="lv-heading-md text-center mb-6">Nova senha</h1>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="lv-caption mb-1.5 block">Nova senha</label>
+              <input
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="lv-input"
+                minLength={6}
+                required
+              />
+            </div>
+            <button type="submit" disabled={loading} className="lv-btn-primary w-full">
+              {loading ? "Salvando..." : "Salvar nova senha"}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

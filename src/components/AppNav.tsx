@@ -15,54 +15,52 @@ export default function AppNav() {
   const isActive = (path: string) => location.pathname === path;
 
   const navItems = [
-    { to: "/dashboard", label: "PAINEL", icon: LayoutDashboard, show: true },
-    { to: "/community", label: "COMUNIDADE", icon: MessageCircle, show: true },
-    { to: "/affiliate", label: "AFILIADO", icon: Users, show: isAffiliate },
-    { to: "/lovable/connect", label: "LOVABLE", icon: Link2, show: true },
-    { to: "/lovable/projects", label: "PROJETOS", icon: FolderOpen, show: true },
-    { to: "/admin", label: "ADMIN", icon: Shield, show: isAdmin },
-    { to: "/install", label: "INSTALAR", icon: Download, show: true },
+    { to: "/dashboard", label: "Painel", icon: LayoutDashboard, show: true },
+    { to: "/community", label: "Comunidade", icon: MessageCircle, show: true },
+    { to: "/affiliate", label: "Afiliado", icon: Users, show: isAffiliate },
+    { to: "/lovable/connect", label: "Lovable", icon: Link2, show: true },
+    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, show: true },
+    { to: "/admin", label: "Admin", icon: Shield, show: isAdmin },
+    { to: "/install", label: "Instalar", icon: Download, show: true },
   ];
 
   return (
-    <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-4 flex items-center justify-between">
-      <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
-      <div className="flex items-center gap-2">
+    <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
+      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">
+        CodeLove AI
+      </Link>
+      <div className="flex items-center gap-1">
         {navItems.filter(n => n.show).map(item => (
           <Link
             key={item.to}
             to={item.to}
-            className={`h-9 px-4 rounded-[12px] text-[9px] font-bold tracking-wider flex items-center gap-1.5 transition-all ${
-              isActive(item.to)
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            className={`lv-nav-item ${
+              isActive(item.to) ? "lv-nav-item-active" : "lv-nav-item-inactive"
             }`}
           >
-            <item.icon className="h-3.5 w-3.5" />
+            <item.icon className="h-4 w-4" />
             <span className="hidden sm:inline">{item.label}</span>
           </Link>
         ))}
         <Link
           to={`/profile/${user.id}`}
-          className={`h-9 px-4 rounded-[12px] text-[9px] font-bold tracking-wider flex items-center gap-1.5 transition-all ${
-            location.pathname.startsWith("/profile")
-              ? "bg-foreground text-background"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          className={`lv-nav-item ${
+            location.pathname.startsWith("/profile") ? "lv-nav-item-active" : "lv-nav-item-inactive"
           }`}
         >
-          <span className="hidden sm:inline">PERFIL</span>
+          <span className="hidden sm:inline">Perfil</span>
         </Link>
         <button
           onClick={toggleChat}
-          className={`h-9 w-9 rounded-[12px] flex items-center justify-center transition-all ${
-            isChatOpen ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          className={`lv-btn-icon ${
+            isChatOpen ? "bg-primary/10 text-primary" : ""
           }`}
           title="CodeLove AI"
         >
-          <Bot className="h-3.5 w-3.5" />
+          <Bot className="h-4 w-4" />
         </button>
-        <button onClick={signOut} className="ep-btn-icon h-9 w-9 rounded-[12px] ml-1">
-          <LogOut className="h-3.5 w-3.5" />
+        <button onClick={signOut} className="lv-btn-icon ml-1">
+          <LogOut className="h-4 w-4" />
         </button>
       </div>
     </nav>

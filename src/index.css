@@ -4,44 +4,45 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
+    /* ━━━ LOVABLE SOFT UI PALETTE ━━━ */
+    --background: 0 0% 98.5%;
+    --foreground: 0 0% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
+    --card-foreground: 0 0% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
+    --popover-foreground: 0 0% 10%;
 
-    --primary: 0 0% 0%;
+    --primary: 252 85% 60%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 0%;
+    --secondary-foreground: 0 0% 10%;
 
     --muted: 0 0% 96%;
     --muted-foreground: 0 0% 45%;
 
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 0%;
+    --accent: 252 85% 96%;
+    --accent-foreground: 252 85% 40%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 0 0% 0%;
+    --border: 0 0% 92%;
+    --input: 0 0% 92%;
+    --ring: 252 85% 60%;
 
-    --radius: 0.5rem;
+    --radius: 1rem;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 15%;
-    --sidebar-primary: 0 0% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 0 0% 96%;
-    --sidebar-accent-foreground: 0 0% 10%;
-    --sidebar-border: 0 0% 91%;
-    --sidebar-ring: 0 0% 0%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 25%;
+    --sidebar-primary: 252 85% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 252 85% 96%;
+    --sidebar-accent-foreground: 252 85% 40%;
+    --sidebar-border: 0 0% 94%;
+    --sidebar-ring: 252 85% 60%;
   }
 }
 
@@ -52,130 +53,196 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* ━━━ DESIGN SYSTEM UTILITY CLASSES ━━━ */
+/* ━━━ LOVABLE SOFT UI DESIGN SYSTEM (lv-*) ━━━ */
 
 @layer components {
-  /* Typography */
-  .ep-title {
-    @apply text-5xl lg:text-6xl font-black italic uppercase tracking-tighter leading-none text-foreground;
+
+  /* ── Typography ── */
+  .lv-heading-xl {
+    @apply text-4xl lg:text-5xl font-semibold tracking-tight text-foreground leading-tight;
   }
-  .ep-section-title {
-    @apply text-2xl font-black italic uppercase tracking-tighter text-foreground leading-none;
+  .lv-heading-lg {
+    @apply text-2xl lg:text-3xl font-semibold tracking-tight text-foreground;
   }
-  .ep-subtitle {
-    @apply text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground;
+  .lv-heading-md {
+    @apply text-xl font-semibold text-foreground;
   }
-  .ep-label {
-    @apply text-[10px] font-black uppercase tracking-[0.5em] text-foreground;
+  .lv-heading-sm {
+    @apply text-base font-semibold text-foreground;
   }
-  .ep-value {
-    @apply text-3xl font-black italic uppercase tracking-tighter text-foreground;
-    font-variant-numeric: tabular-nums;
+  .lv-overline {
+    @apply text-xs font-medium text-muted-foreground tracking-wide;
+  }
+  .lv-body {
+    @apply text-sm text-muted-foreground leading-relaxed;
+  }
+  .lv-body-strong {
+    @apply text-sm font-medium text-foreground;
+  }
+  .lv-caption {
+    @apply text-xs text-muted-foreground;
+  }
+  .lv-stat {
+    @apply text-3xl font-semibold tracking-tight text-foreground tabular-nums;
   }
 
-  /* Cards */
-  .ep-card {
-    @apply rounded-[48px] border border-border bg-card p-10 lg:p-12 transition-all duration-700;
+  /* ── Cards ── */
+  .lv-card {
+    @apply rounded-2xl border border-border/60 bg-card p-6 transition-all duration-200 ease-out;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
   }
-  .ep-card-sm {
-    @apply rounded-[32px] border border-border bg-card p-8 transition-all duration-700;
+  .lv-card-sm {
+    @apply rounded-xl border border-border/60 bg-card p-4 transition-all duration-200 ease-out;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.04);
   }
-  .ep-card-interactive {
-    @apply rounded-[48px] border border-border bg-card p-10 lg:p-12 cursor-pointer transition-all duration-700;
+  .lv-card-interactive {
+    @apply rounded-2xl border border-border/60 bg-card p-6 cursor-pointer transition-all duration-200 ease-out;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
   }
-  .ep-card-interactive:hover {
-    @apply border-foreground;
+  .lv-card-interactive:hover {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+    @apply border-border;
   }
-  .ep-card-active {
-    @apply border-foreground;
+  .lv-card-active {
+    @apply border-primary/40;
+    box-shadow: 0 0 0 1px hsl(252 85% 60% / 0.15), 0 4px 12px rgba(0,0,0,0.06);
   }
-
-  /* Buttons */
-  .ep-btn-primary {
-    @apply h-14 px-10 rounded-[24px] bg-foreground text-background font-black uppercase tracking-[0.4em] text-[11px] transition-all duration-500 flex items-center justify-center gap-3 cursor-pointer;
-  }
-  .ep-btn-primary:active {
-    @apply scale-95;
-  }
-  .ep-btn-secondary {
-    @apply h-14 px-10 rounded-[24px] border border-border bg-background text-foreground font-black uppercase tracking-widest text-[10px] transition-all duration-500 flex items-center justify-center gap-3 cursor-pointer;
-  }
-  .ep-btn-secondary:hover {
-    @apply border-foreground text-foreground;
-  }
-  .ep-btn-icon {
-    @apply h-14 w-14 rounded-[20px] border border-border bg-background flex items-center justify-center text-muted-foreground transition-all duration-300 cursor-pointer;
-  }
-  .ep-btn-icon:hover {
-    @apply bg-muted text-foreground;
+  .lv-card-flat {
+    @apply rounded-2xl bg-muted/50 p-6;
   }
 
-  /* Inputs */
-  .ep-input {
-    @apply h-16 rounded-[28px] border-border bg-muted pl-6 font-bold transition-all duration-700;
+  /* ── Buttons ── */
+  .lv-btn-primary {
+    @apply h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px hsl(252 85% 60% / 0.25);
   }
-  .ep-input:focus-visible {
-    @apply bg-background border-foreground ring-0;
+  .lv-btn-primary:hover {
+    @apply brightness-110;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08), 0 4px 12px hsl(252 85% 60% / 0.3);
   }
-
-  /* Sheet Inputs (larger, immersive) */
-  .ep-sheet-input {
-    @apply h-20 rounded-[32px] border-border bg-muted pl-20 pr-10 text-xl font-black italic uppercase tracking-tighter shadow-inner transition-all duration-700;
+  .lv-btn-primary:active {
+    @apply scale-[0.98];
   }
-  .ep-sheet-input:focus-visible {
-    @apply bg-background border-foreground ring-0;
-  }
-
-  /* Sheet Label */
-  .ep-sheet-label {
-    @apply text-[10px] font-black uppercase tracking-[0.5em] text-foreground ml-4 block mb-2;
+  .lv-btn-primary:disabled {
+    @apply opacity-50 pointer-events-none;
   }
 
-  /* Sheet Action Button */
-  .ep-sheet-btn {
-    @apply w-full h-24 rounded-[40px] bg-foreground text-background font-black uppercase tracking-[0.5em] text-[12px] transition-all duration-500 flex items-center justify-center gap-3 cursor-pointer;
+  .lv-btn-secondary {
+    @apply h-10 px-5 rounded-xl border border-border/80 bg-transparent text-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
-  .ep-sheet-btn:hover {
-    @apply bg-foreground/90;
+  .lv-btn-secondary:hover {
+    @apply bg-muted/50 border-border;
   }
-  .ep-sheet-btn:active {
-    @apply scale-95;
-  }
-  .ep-sheet-btn:disabled {
-    @apply opacity-30;
+  .lv-btn-secondary:active {
+    @apply scale-[0.98];
   }
 
-  /* Sheet Footer Text */
-  .ep-sheet-footer {
-    @apply text-center text-[8px] font-black uppercase text-muted-foreground/40 tracking-[1em] pt-8;
+  .lv-btn-ghost {
+    @apply h-10 px-4 rounded-xl text-muted-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
+  }
+  .lv-btn-ghost:hover {
+    @apply bg-muted/60 text-foreground;
   }
 
-  /* Badges */
-  .ep-badge {
-    @apply rounded-[12px] px-4 py-2 text-[9px] font-black uppercase tracking-[0.3em] border border-border;
+  .lv-btn-icon {
+    @apply h-10 w-10 rounded-xl flex items-center justify-center text-muted-foreground transition-all duration-150 cursor-pointer;
   }
-  .ep-badge-live {
-    @apply bg-foreground/10 text-foreground border-foreground/20;
+  .lv-btn-icon:hover {
+    @apply bg-muted/60 text-foreground;
   }
-  .ep-badge-offline {
+
+  .lv-btn-lg {
+    @apply h-12 px-6 rounded-xl text-sm font-medium;
+  }
+
+  /* ── Inputs ── */
+  .lv-input {
+    @apply h-10 w-full rounded-xl px-4 bg-muted/50 border border-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
+  }
+  .lv-input:focus {
+    @apply bg-background border-border ring-2 ring-primary/20;
+  }
+
+  .lv-textarea {
+    @apply w-full rounded-xl px-4 py-3 bg-muted/50 border border-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
+  }
+  .lv-textarea:focus {
+    @apply bg-background border-border ring-2 ring-primary/20;
+  }
+
+  /* ── Badges ── */
+  .lv-badge {
+    @apply inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium;
+  }
+  .lv-badge-primary {
+    @apply bg-primary/10 text-primary;
+  }
+  .lv-badge-success {
+    @apply bg-green-500/10 text-green-600;
+  }
+  .lv-badge-warning {
+    @apply bg-yellow-500/10 text-yellow-600;
+  }
+  .lv-badge-destructive {
+    @apply bg-destructive/10 text-destructive;
+  }
+  .lv-badge-muted {
     @apply bg-muted text-muted-foreground;
   }
 
-  /* Empty state */
-  .ep-empty {
-    @apply rounded-[64px] border-4 border-dashed border-border py-48 text-center flex flex-col items-center justify-center gap-8;
+  /* ── Nav items ── */
+  .lv-nav-item {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150;
   }
-  .ep-empty-icon {
-    @apply h-24 w-24 rounded-[32px] bg-background border border-border flex items-center justify-center text-muted-foreground;
+  .lv-nav-item-active {
+    @apply bg-primary/10 text-primary;
   }
-  .ep-empty-title {
-    @apply text-3xl font-black italic uppercase tracking-tighter text-muted-foreground;
+  .lv-nav-item-inactive {
+    @apply text-muted-foreground hover:bg-muted/60 hover:text-foreground;
   }
 
-  /* Scrollbar hide */
+  /* ── Dividers ── */
+  .lv-divider {
+    @apply border-t border-border/60;
+  }
+
+  /* ── Pill (rounded-full alternatives) ── */
+  .lv-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-muted/60 text-muted-foreground;
+  }
+  .lv-pill-primary {
+    @apply bg-primary/10 text-primary;
+  }
+
+  /* ── Sheet / Drawer ── */
+  .lv-sheet-btn {
+    @apply w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px hsl(252 85% 60% / 0.25);
+  }
+  .lv-sheet-btn:hover {
+    @apply brightness-110;
+  }
+  .lv-sheet-btn:active {
+    @apply scale-[0.98];
+  }
+  .lv-sheet-btn:disabled {
+    @apply opacity-40 pointer-events-none;
+  }
+
+  /* ── Empty state ── */
+  .lv-empty {
+    @apply rounded-2xl border-2 border-dashed border-border/60 py-16 text-center flex flex-col items-center justify-center gap-4;
+  }
+  .lv-empty-icon {
+    @apply h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground;
+  }
+
+  /* ── Scrollbar hide ── */
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
@@ -183,4 +250,38 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* ━━━ LEGACY ep-* classes (kept for backward compat during migration) ━━━ */
+  .ep-title { @apply lv-heading-xl; }
+  .ep-section-title { @apply lv-heading-lg; }
+  .ep-subtitle { @apply lv-overline; }
+  .ep-label { @apply text-xs font-medium text-foreground tracking-wide; }
+  .ep-value { @apply lv-stat; }
+  .ep-card { @apply lv-card; }
+  .ep-card-sm { @apply lv-card-sm; }
+  .ep-card-interactive { @apply lv-card-interactive; }
+  .ep-card-interactive:hover { @apply border-border; }
+  .ep-card-active { @apply lv-card-active; }
+  .ep-btn-primary { @apply lv-btn-primary; }
+  .ep-btn-primary:active { @apply scale-[0.98]; }
+  .ep-btn-secondary { @apply lv-btn-secondary; }
+  .ep-btn-secondary:hover { @apply bg-muted/50; }
+  .ep-btn-icon { @apply lv-btn-icon; }
+  .ep-btn-icon:hover { @apply bg-muted/60 text-foreground; }
+  .ep-input { @apply lv-input; }
+  .ep-input:focus-visible { @apply bg-background border-border ring-2 ring-primary/20; }
+  .ep-badge { @apply lv-badge; }
+  .ep-badge-live { @apply lv-badge-primary; }
+  .ep-badge-offline { @apply lv-badge-muted; }
+  .ep-empty { @apply lv-empty; }
+  .ep-empty-icon { @apply lv-empty-icon; }
+  .ep-empty-title { @apply text-xl font-semibold text-muted-foreground; }
+  .ep-sheet-input { @apply lv-input h-12 text-base px-5; }
+  .ep-sheet-input:focus-visible { @apply bg-background border-border ring-2 ring-primary/20; }
+  .ep-sheet-label { @apply text-xs font-medium text-foreground tracking-wide ml-1 block mb-1.5; }
+  .ep-sheet-btn { @apply lv-sheet-btn; }
+  .ep-sheet-btn:hover { @apply brightness-110; }
+  .ep-sheet-btn:active { @apply scale-[0.98]; }
+  .ep-sheet-btn:disabled { @apply opacity-40; }
+  .ep-sheet-footer { @apply text-center text-xs text-muted-foreground pt-6; }
 }
