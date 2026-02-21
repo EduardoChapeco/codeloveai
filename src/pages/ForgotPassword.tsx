@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useSEO } from "@/hooks/useSEO";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  useSEO({ title: "Esqueci a senha" });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

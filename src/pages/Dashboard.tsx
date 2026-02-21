@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
-import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, Gift, ChevronRight, Zap, Monitor, Key, ArrowRight } from "lucide-react";
+import { useSEO } from "@/hooks/useSEO";
+import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, ChevronRight, Zap, Monitor, Key, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -34,17 +35,18 @@ interface Message {
 
 export default function Dashboard() {
   const { user, loading: authLoading, signOut } = useAuth();
+  useSEO({ title: "Dashboard" });
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const [adminTokenGenerated, setAdminTokenGenerated] = useState(false);
-  const onboardRef = useRef(false);
+  
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
   const [latestExt, setLatestExt] = useState<{ file_url: string; version: string; instructions: string } | null>(null);
-  const [onboardingBanner, setOnboardingBanner] = useState<{ expires_at: string } | null>(null);
+  
 
   // Payment feedback
   const paymentStatus = searchParams.get("payment");

@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useSEO } from "@/hooks/useSEO";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ const faqs = [
 
 export default function AffiliatesPage() {
   const { user, loading: authLoading } = useAuth();
+  useSEO({ title: "Programa de Afiliados", description: "Ganhe 30% de comissão indicando a CodeLove AI." });
   const navigate = useNavigate();
   const [enrolling, setEnrolling] = useState(false);
   const [enrollName, setEnrollName] = useState("");

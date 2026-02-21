@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer, Percent, Copy, QrCode, CreditCard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useSEO } from "@/hooks/useSEO";
 import { toast } from "sonner";
 
 interface Plan {
@@ -88,6 +89,7 @@ function formatBRL(value: number) {
 
 export default function Checkout() {
   const { user, loading: authLoading } = useAuth();
+  useSEO({ title: "Checkout", description: "Escolha seu plano CodeLove AI e comece a usar envios ilimitados." });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedPlan = searchParams.get("plan");

@@ -3,10 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useSEO } from "@/hooks/useSEO";
 import { isDisposableEmail } from "@/lib/disposable-emails";
 
 export default function Register() {
   const { user, loading: authLoading } = useAuth();
+  useSEO({ title: "Criar conta" });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
