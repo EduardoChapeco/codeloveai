@@ -117,11 +117,12 @@ Deno.serve(async (req) => {
       });
     } catch (fetchError) {
       const latency = Date.now() - start;
+      console.error("Endpoint test fetch error:", fetchError);
       return new Response(JSON.stringify({
         success: false,
         status: 0,
         latency_ms: latency,
-        error: fetchError instanceof Error ? fetchError.message : "Erro de conexão",
+        error: "Erro de conexão com o endpoint",
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
