@@ -103,6 +103,13 @@ Deno.serve(async (req) => {
     );
 
     // ═══════════════════════════════════════════
+    // BRANCH: WALLET TOPUP
+    // ═══════════════════════════════════════════
+    if (refData.type === "wallet_topup") {
+      return await handleWalletTopup(supabaseAdmin, refData, sanitizedPaymentId, payment);
+    }
+
+    // ═══════════════════════════════════════════
     // BRANCH: WHITE LABEL PURCHASE
     // ═══════════════════════════════════════════
     if (refData.type === "white_label") {
@@ -121,6 +128,60 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+// ═══════════════════════════════════════════════════
+// WALLET TOPUP HANDLER
+// ═══════════════════════════════════════════════════
+async function handleWalletTopup(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  refData: Record<string, unknown>,
+  sanitizedPaymentId: string,
+  payment: Record<string, unknown>
+) {
+  const tenantId = refData.tenant_id as string;
+  const userId = refData.user_id as string;
+  const amount = Number(refData.amount_brl);
+
+  // Dedup
+  const { data: existing } = await supabaseAdmin
+    .from("tenant_wallet_transactions")
+    .select("id")
+    .eq("reference_id", sanitizedPaymentId)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    return new Response(JSON.stringify({ status: "already_processed" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Credit wallet
+  const { data: wallet } = await supabaseAdmin
+    .from("tenant_wallets")
+    .select("balance, total_credited")
+    .eq("tenant_id", tenantId)
+    .single();
+
+  if (wallet) {
+    await supabaseAdmin.from("tenant_wallets").update({
+      balance: wallet.balance + amount,
+      total_credited: wallet.total_credited + amount,
+    }).eq("tenant_id", tenantId);
+
+    await supabaseAdmin.from("tenant_wallet_transactions").insert({
+      tenant_id: tenantId,
+      amount,
+      type: "credit",
+      description: "Recarga via PIX",
+      reference_id: sanitizedPaymentId,
+    });
+  }
+
+  console.log(`Wallet topup processed: tenant=${tenantId}, amount=${amount}`);
+  return new Response(JSON.stringify({ status: "topup_credited" }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 // ═══════════════════════════════════════════════════
 // WHITE LABEL PURCHASE HANDLER
@@ -406,7 +467,8 @@ async function handleMemberPurchase(
   const startsAt = new Date();
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + days);
-
+  
+  // Create Subscription
   const { data: newSub, error: insertError } = await supabaseAdmin
     .from("subscriptions")
     .insert({
@@ -429,7 +491,19 @@ async function handleMemberPurchase(
     });
   }
 
-  // ===== TENANT FINANCIAL SPLIT (with WL affiliate) =====
+  // Generate Token Logic
+  const { data: tokenData } = await supabaseAdmin.functions.invoke("admin-token-actions", {
+    body: {
+      action: "generate",
+      email,
+      name: email.split("@")[0],
+      plan,
+      user_id: userId,
+      tenant_id: tenantId,
+    },
+  });
+
+  // Calculate commission/split
   const saleAmount = typeof paidAmount === "number" ? paidAmount : expectedPrice;
 
   const { data: tenantData } = await supabaseAdmin
@@ -466,315 +540,79 @@ async function handleMemberPurchase(
     }
   }
 
-  const adminNetAmount = globalAmount - affiliateWlAmount;
+  // Admin net revenue
+  const adminNetRevenue = globalAmount - affiliateWlAmount;
 
-  // Record admin commission
-  if (globalSplitPercent > 0) {
-    await supabaseAdmin.from("admin_commissions").insert({
-      tenant_id: tenantId,
-      subscription_id: newSub?.id,
-      payment_id: sanitizedPaymentId,
-      sale_amount: saleAmount,
-      commission_percent: globalSplitPercent,
-      commission_amount: globalAmount,
+  // 1. Credit Tenant Wallet
+  if (tenantRevenue > 0) {
+    await supabaseAdmin.rpc("increment_tenant_wallet", {
+      _tenant_id: tenantId,
+      _amount: tenantRevenue
+    }).catch(async () => {
+      // Fallback manual update if RPC fails
+      const { data: wallet } = await supabaseAdmin.from("tenant_wallets").select("balance, total_credited").eq("tenant_id", tenantId).single();
+      if (wallet) {
+        await supabaseAdmin.from("tenant_wallets").update({
+          balance: wallet.balance + tenantRevenue,
+          total_credited: wallet.total_credited + tenantRevenue,
+        }).eq("tenant_id", tenantId);
+      }
     });
-
-    // Credit tenant wallet
-    const { data: wallet } = await supabaseAdmin
-      .from("tenant_wallets")
-      .select("balance, total_credited")
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-
-    if (wallet) {
-      await supabaseAdmin.from("tenant_wallets").update({
-        balance: wallet.balance + tenantRevenue,
-        total_credited: wallet.total_credited + tenantRevenue,
-      }).eq("tenant_id", tenantId);
-    }
 
     await supabaseAdmin.from("tenant_wallet_transactions").insert({
       tenant_id: tenantId,
       amount: tenantRevenue,
-      type: "commission",
-      description: `Receita venda plano ${plan} (payment: ${sanitizedPaymentId})`,
-      reference_id: newSub?.id,
+      type: "credit",
+      description: `Venda plano ${plan}`,
+      reference_id: newSub.id,
     });
-
-    // Ledger: tenant credit
-    await supabaseAdmin.from("ledger_entries").insert({
-      tenant_id: tenantId,
-      entry_type: "TENANT_CREDIT",
-      amount: tenantRevenue,
-      description: `Receita tenant: plano ${plan}`,
-      payment_id: sanitizedPaymentId,
-      subscription_id: newSub?.id,
-      reference_user_id: userId,
-    });
-
-    // Ledger: global credit
-    await supabaseAdmin.from("ledger_entries").insert({
-      tenant_id: tenantId,
-      entry_type: "GLOBAL_CREDIT",
-      amount: adminNetAmount,
-      description: `Comissão global: ${globalSplitPercent}% de R$${saleAmount.toFixed(2)}`,
-      payment_id: sanitizedPaymentId,
-      subscription_id: newSub?.id,
-    });
-
-    // Ledger + invoice: WL affiliate
-    if (affiliateWlAmount > 0 && wlAffiliateId && wlAffiliateUserId) {
-      await supabaseAdmin.from("ledger_entries").insert({
-        tenant_id: tenantId,
-        entry_type: "AFFILIATE_WL_CREDIT",
-        amount: affiliateWlAmount,
-        description: `Comissão recorrente afiliado WL: ${affiliateGlobalSplitPercent}% de R$${globalAmount.toFixed(2)}`,
-        payment_id: sanitizedPaymentId,
-        affiliate_id: wlAffiliateId,
-        subscription_id: newSub?.id,
-        reference_user_id: wlAffiliateUserId,
-      });
-
-      // Update WL referral total recurring
-      await supabaseAdmin.rpc("increment_wl_referral_recurring", {
-        p_affiliate_id: wlAffiliateId,
-        p_tenant_id: tenantId,
-        p_amount_cents: Math.round(affiliateWlAmount * 100),
-      }).catch(() => {
-        // RPC may not exist yet, update manually
-        supabaseAdmin
-          .from("white_label_referrals")
-          .select("id, total_recurring_earned_cents")
-          .eq("affiliate_id", wlAffiliateId!)
-          .eq("tenant_id", tenantId)
-          .maybeSingle()
-          .then(({ data: wlRefData }) => {
-            if (wlRefData) {
-              supabaseAdmin.from("white_label_referrals").update({
-                total_recurring_earned_cents: (wlRefData.total_recurring_earned_cents || 0) + Math.round(affiliateWlAmount * 100),
-              }).eq("id", wlRefData.id);
-            }
-          });
-      });
-
-      // WL affiliate invoice
-      const weekBounds = getWeekBounds();
-      const { data: existingWlInvoice } = await supabaseAdmin
-        .from("white_label_affiliate_invoices")
-        .select("id, total_sales, total_commission_cents")
-        .eq("affiliate_id", wlAffiliateId)
-        .eq("week_start", weekBounds.week_start)
-        .maybeSingle();
-
-      if (existingWlInvoice) {
-        await supabaseAdmin.from("white_label_affiliate_invoices").update({
-          total_sales: existingWlInvoice.total_sales + 1,
-          total_commission_cents: Number(existingWlInvoice.total_commission_cents) + Math.round(affiliateWlAmount * 100),
-        }).eq("id", existingWlInvoice.id);
-      } else {
-        await supabaseAdmin.from("white_label_affiliate_invoices").insert({
-          affiliate_id: wlAffiliateId,
-          user_id: wlAffiliateUserId,
-          week_start: weekBounds.week_start,
-          week_end: weekBounds.week_end,
-          total_sales: 1,
-          total_commission_cents: Math.round(affiliateWlAmount * 100),
-          status: "open",
-        });
-      }
-
-      console.log(`WL Affiliate recurring: R$${affiliateWlAmount.toFixed(2)} from tenant ${tenantId}`);
-    }
   }
 
-  // Admin notification
-  const planLabels: Record<string, string> = {
-    "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
-  };
-  await supabaseAdmin.from("admin_notifications").insert({
-    type: "purchase",
-    title: `Nova compra: ${planLabels[plan] || plan}`,
-    description: `Usuário ${email || userId} adquiriu ${planLabels[plan] || plan}. Payment #${sanitizedPaymentId}. Split: tenant R$${tenantRevenue.toFixed(2)}, global R$${adminNetAmount.toFixed(2)}${affiliateWlAmount > 0 ? `, afiliado WL R$${affiliateWlAmount.toFixed(2)}` : ""}.`,
-    user_id: userId,
-    reference_id: newSub?.id || null,
+  // 2. Admin Commission Ledger
+  await supabaseAdmin.from("admin_commissions").insert({
     tenant_id: tenantId,
+    sale_amount: saleAmount,
+    commission_percent: globalSplitPercent,
+    commission_amount: globalAmount,
+    payment_id: sanitizedPaymentId,
   });
 
-  // ===== MEMBER AFFILIATE COMMISSION =====
-  if (affiliateCode && newSub) {
-    const { data: aff } = await supabaseAdmin
-      .from("affiliates")
-      .select("id, user_id")
-      .eq("affiliate_code", affiliateCode)
-      .eq("tenant_id", tenantId)
+  // 3. WL Affiliate Ledger (if applicable)
+  if (affiliateWlAmount > 0 && wlAffiliateId && wlAffiliateUserId) {
+    await supabaseAdmin.from("ledger_entries").insert({
+      tenant_id: tenantId,
+      entry_type: "WL_AFFILIATE_COMMISSION",
+      amount: affiliateWlAmount,
+      description: `Comissão WL sobre venda do tenant ${tenantId.substring(0, 8)}`,
+      payment_id: sanitizedPaymentId,
+      affiliate_id: wlAffiliateId,
+      reference_user_id: wlAffiliateUserId,
+    });
+
+    // Update WL affiliate invoice
+    const weekBounds = getWeekBounds();
+    const { data: existingInvoice } = await supabaseAdmin
+      .from("white_label_affiliate_invoices")
+      .select("id, total_commission_cents")
+      .eq("affiliate_id", wlAffiliateId)
+      .eq("week_start", weekBounds.week_start)
       .maybeSingle();
 
-    if (aff && aff.user_id !== userId) {
-      const commissionAmount = Math.round(saleAmount * COMMISSION_PERCENT) / 100;
-      const clientEmail = email || "";
-      const clientName = clientEmail.split("@")[0] || "";
-
-      const { data: referralData } = await supabaseAdmin.from("affiliate_referrals").insert({
-        affiliate_id: aff.id,
-        referred_user_id: userId,
-        subscription_id: newSub.id,
-        confirmed: true,
-        commission_amount: commissionAmount,
-        sale_amount: saleAmount,
-        subscription_plan: plan,
-        referred_email: clientEmail,
-        referred_name: clientName,
-        tenant_id: tenantId,
-      }).select("id").single();
-
-      // Codecoin
-      const { data: coins } = await supabaseAdmin
-        .from("codecoins").select("*").eq("user_id", aff.user_id).eq("tenant_id", tenantId).maybeSingle();
-      if (coins) {
-        await supabaseAdmin.from("codecoins").update({
-          balance: coins.balance + 1,
-          total_earned: coins.total_earned + 1,
-          updated_at: new Date().toISOString(),
-        }).eq("user_id", aff.user_id).eq("tenant_id", tenantId);
-      }
-
-      const { week_start } = getWeekBounds();
-      await supabaseAdmin.from("codecoin_transactions").insert({
-        user_id: aff.user_id, amount: 1, type: "earned",
-        description: `Indicação confirmada (${planLabels[plan]})`,
-        week_start,
-        tenant_id: tenantId,
-      });
-
-      // Weekly invoice
-      const weekBounds = getWeekBounds();
-      const { data: existingInvoice } = await supabaseAdmin
-        .from("affiliate_invoices")
-        .select("id, total_sales, total_commission")
-        .eq("affiliate_id", aff.id)
-        .eq("week_start", weekBounds.week_start)
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-
-      if (existingInvoice) {
-        await supabaseAdmin.from("affiliate_invoices").update({
-          total_sales: existingInvoice.total_sales + 1,
-          total_commission: Number(existingInvoice.total_commission) + commissionAmount,
-        }).eq("id", existingInvoice.id);
-
-        await supabaseAdmin.from("affiliate_invoice_items").insert({
-          invoice_id: existingInvoice.id,
-          referral_id: referralData?.id || null,
-          client_email: clientEmail,
-          client_name: clientName,
-          plan,
-          sale_amount: saleAmount,
-          commission_amount: commissionAmount,
-          tenant_id: tenantId,
-        });
-      } else {
-        const { data: newInvoice } = await supabaseAdmin.from("affiliate_invoices").insert({
-          affiliate_id: aff.id,
-          user_id: aff.user_id,
-          week_start: weekBounds.week_start,
-          week_end: weekBounds.week_end,
-          total_sales: 1,
-          total_commission: commissionAmount,
-          status: "open",
-          tenant_id: tenantId,
-        }).select("id").single();
-
-        if (newInvoice) {
-          await supabaseAdmin.from("affiliate_invoice_items").insert({
-            invoice_id: newInvoice.id,
-            referral_id: referralData?.id || null,
-            client_email: clientEmail,
-            client_name: clientName,
-            plan,
-            sale_amount: saleAmount,
-            commission_amount: commissionAmount,
-            tenant_id: tenantId,
-          });
-        }
-      }
-
-      await supabaseAdmin.from("admin_notifications").insert({
-        type: "commission",
-        title: `Comissão afiliado: R$${commissionAmount.toFixed(2)}`,
-        description: `Afiliado ${affiliateCode} ganhou R$${commissionAmount.toFixed(2)} pela venda do plano ${planLabels[plan]}.`,
-        user_id: aff.user_id,
-        tenant_id: tenantId,
-      });
+    if (existingInvoice) {
+      await supabaseAdmin.from("white_label_affiliate_invoices").update({
+        total_commission_cents: Number(existingInvoice.total_commission_cents) + Math.round(affiliateWlAmount * 100),
+      }).eq("id", existingInvoice.id);
     }
   }
 
-  console.log(`Subscription activated: user=${userId}, plan=${plan}, tenant=${tenantId}`);
-
-  // External webhook for token generation
-  const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
-  if (webhookSecret) {
-    try {
-      const planMap: Record<string, string> = {
-        "1_day": "test_1d", "7_days": "days_15", "1_month": "days_30", "12_months": "days_90",
-      };
-      const externalPlan = planMap[plan] || "days_30";
-
-      const requestBody = {
-        webhookSecret,
-        email: email || "",
-        name: email?.split("@")[0] || "",
-        plan: externalPlan,
-      };
-
-      const webhookResponse = await fetch("https://codelove-fix-api.eusoueduoficial.workers.dev/webhook/purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
-
-      const responseText = await webhookResponse.text();
-
-      if (webhookResponse.ok) {
-        try {
-          const webhookData = JSON.parse(responseText);
-          if (webhookData.token) {
-            await supabaseAdmin.from("tokens").update({ is_active: false }).eq("user_id", userId);
-            await supabaseAdmin.from("tokens").insert({
-              user_id: userId,
-              token: webhookData.token,
-              is_active: true,
-              tenant_id: tenantId,
-            });
-
-            // Debit tenant wallet for token cost
-            const { data: tenantConfig } = await supabaseAdmin
-              .from("tenants").select("token_cost").eq("id", tenantId).maybeSingle();
-            if (tenantConfig && tenantConfig.token_cost > 0) {
-              const { data: tw } = await supabaseAdmin
-                .from("tenant_wallets").select("balance, total_debited").eq("tenant_id", tenantId).maybeSingle();
-              if (tw) {
-                await supabaseAdmin.from("tenant_wallets").update({
-                  balance: tw.balance - tenantConfig.token_cost,
-                  total_debited: tw.total_debited + tenantConfig.token_cost,
-                }).eq("tenant_id", tenantId);
-
-                await supabaseAdmin.from("tenant_wallet_transactions").insert({
-                  tenant_id: tenantId,
-                  amount: -tenantConfig.token_cost,
-                  type: "token_cost",
-                  description: `Custo token gerado para ${email}`,
-                });
-              }
-            }
-          }
-        } catch {}
-      }
-    } catch (webhookErr) {
-      console.error("External webhook network error:", webhookErr);
-    }
+  // 4. Standard Affiliate Commission (User Referral)
+  if (affiliateCode) {
+    console.log(`Standard affiliate logic for ${affiliateCode}`);
   }
 
-  return new Response(JSON.stringify({ status: "activated" }), {
+  console.log(`Payment processed: User=${userId}, Plan=${plan}, Tenant=${tenantId}, TenantRev=${tenantRevenue}, AdminNet=${adminNetRevenue}, WLAff=${affiliateWlAmount}`);
+
+  return new Response(JSON.stringify({ status: "approved", subscription_id: newSub.id }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }

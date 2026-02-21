@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.reward-post]
 verify_jwt = false
+
+[functions.tenant-topup]
+verify_jwt = false
