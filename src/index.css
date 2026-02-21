@@ -43,6 +43,10 @@
     --sidebar-accent-foreground: 252 85% 40%;
     --sidebar-border: 0 0% 94%;
     --sidebar-ring: 252 85% 60%;
+    /* Mesh gradient for layered layout */
+    --mesh-color-1: 252 85% 92%;
+    --mesh-color-2: 280 70% 90%;
+    --mesh-color-3: 220 80% 92%;
   }
 }
 
