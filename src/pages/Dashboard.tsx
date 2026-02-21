@@ -96,7 +96,7 @@ export default function Dashboard() {
             token: activeToken.token,
             email: email,
             name: name,
-          }, '*');
+          }, window.location.origin);
         }
       });
 
@@ -134,7 +134,7 @@ export default function Dashboard() {
           localStorage.setItem('clf_token', data.token);
           localStorage.setItem('clf_email', user.email || '');
           localStorage.setItem('clf_name', user.user_metadata?.name || '');
-          window.postMessage({ type: 'clf_sso_token', token: data.token, email: user.email, name: user.user_metadata?.name || '' }, '*');
+          window.postMessage({ type: 'clf_sso_token', token: data.token, email: user.email, name: user.user_metadata?.name || '' }, window.location.origin);
           toast.success("Token admin de 1000 dias gerado automaticamente!");
         }
         setAdminTokenGenerated(true);
@@ -171,7 +171,7 @@ export default function Dashboard() {
             localStorage.setItem('clf_token', activeToken.token);
             localStorage.setItem('clf_email', email);
             localStorage.setItem('clf_name', name);
-            window.postMessage({ type: 'clf_sso_token', token: activeToken.token, email, name }, '*');
+            window.postMessage({ type: 'clf_sso_token', token: activeToken.token, email, name }, window.location.origin);
           }
         }
       } catch (err) {
