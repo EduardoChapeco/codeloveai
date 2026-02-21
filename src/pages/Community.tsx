@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -718,6 +718,7 @@ function PostViewObserver({ postId, onView, children }: { postId: string; onView
 
 export default function Community() {
   const { user, loading: authLoading, signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterType = searchParams.get("type") || "all";
@@ -960,7 +961,7 @@ export default function Community() {
 
   const deletePost = async (post: Post) => {
     setPostMenuOpen(null);
-    if (post.rewarded) {
+    if (post.rewarded && !isAdmin) {
       toast.error("Este post gerou recompensa de token e não pode ser excluído.");
       return;
     }
@@ -1195,6 +1196,7 @@ export default function Community() {
             posts.map(post => {
               const profile = getProfile(post.user_id);
               const isOwner = user?.id === post.user_id;
+              const canManagePost = isOwner || isAdmin;
               const isEditing = editingPost === post.id;
               return (
                 <PostViewObserver key={post.id} postId={post.id} onView={trackView}>
@@ -1233,7 +1235,7 @@ export default function Community() {
                               {typeIcon(post.post_type)} {post.post_type.toUpperCase()}
                             </span>
                             {/* Owner actions menu */}
-                            {isOwner && (
+                            {canManagePost && (
                               <div className="relative">
                                 <button onClick={() => setPostMenuOpen(postMenuOpen === post.id ? null : post.id)}
                                   className="h-7 w-7 rounded-[8px] flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
@@ -1249,7 +1251,7 @@ export default function Community() {
                                       className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-foreground hover:bg-muted transition-colors">
                                       <Archive className="h-3.5 w-3.5" /> ARQUIVAR
                                     </button>
-                                    {post.rewarded ? (
+                    {post.rewarded && !isAdmin ? (
                                       <div className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-muted-foreground/50 cursor-not-allowed">
                                         <Lock className="h-3.5 w-3.5" /> EXCLUIR (BLOQUEADO)
                                       </div>
@@ -1368,7 +1370,7 @@ export default function Community() {
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-bold text-foreground">{cp.display_name || "Usuário"}</span>
                                   <span className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), "dd/MM HH:mm")}</span>
-                                  {isCommentOwner && (
+                                  {(isCommentOwner || isAdmin) && (
                                     <button onClick={() => deleteComment(c.id, post.id)}
                                       className="opacity-0 group-hover:opacity-100 h-5 w-5 rounded-[6px] flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                                       title="Excluir comentário">
