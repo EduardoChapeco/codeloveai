@@ -6,7 +6,7 @@ import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, Refr
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 
 interface MemberToken {
   id: string;
@@ -568,8 +568,8 @@ export default function Admin() {
   };
 
   return (
+    <AppLayout>
     <div className="min-h-screen bg-background">
-      <AppNav />
 
       <div className="max-w-6xl mx-auto px-8 py-12 space-y-8">
         <div>
@@ -1326,5 +1326,6 @@ export default function Admin() {
         </SheetContent>
       </Sheet>
     </div>
+    </AppLayout>
   );
 }

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
 import { supabase } from "@/integrations/supabase/client";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
 import { Loader2, Upload, Download, Check, Image as ImageIcon, Copy } from "lucide-react";
 
@@ -107,13 +107,14 @@ export default function LovableUploadTest() {
 
   if (connected === false) {
     return (
+      <AppLayout>
       <div className="min-h-screen bg-background">
-        <AppNav />
         <div className="max-w-xl mx-auto px-8 py-20 text-center">
           <p className="ep-subtitle mb-2">NÃO CONECTADO</p>
           <button onClick={() => navigate("/lovable/connect")} className="ep-btn-primary h-11 px-8">CONECTAR</button>
         </div>
       </div>
+      </AppLayout>
     );
   }
 
@@ -125,8 +126,8 @@ export default function LovableUploadTest() {
   ];
 
   return (
+    <AppLayout>
     <div className="min-h-screen bg-background">
-      <AppNav />
       <div className="max-w-xl mx-auto px-8 py-12">
         <p className="ep-subtitle mb-1">TESTE</p>
         <h1 className="ep-section-title text-2xl mb-8">UPLOAD DE ARQUIVOS</h1>
@@ -204,5 +205,6 @@ export default function LovableUploadTest() {
         </div>
       </div>
     </div>
+    </AppLayout>
   );
 }

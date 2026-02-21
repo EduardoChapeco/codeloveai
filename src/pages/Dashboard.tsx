@@ -6,7 +6,7 @@ import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 
 interface Subscription {
   id: string;
@@ -276,8 +276,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
+    <AppLayout>
+      <div className="min-h-screen bg-background">
 
       <div className="max-w-5xl mx-auto px-6 py-10 space-y-6">
         {/* Header */}
@@ -590,6 +590,7 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </AppLayout>
   );
 }

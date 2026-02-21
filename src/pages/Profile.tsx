@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -317,16 +317,16 @@ export default function Profile() {
   const followListTitle = showFollowers ? "SEGUIDORES" : "SEGUINDO";
   const showListModal = showFollowers || showFollowing;
 
-  return (
+  const guestNav = !user ? (
+    <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-4 flex items-center justify-between">
+      <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
+      <Link to="/login" className="ep-btn-primary h-10 px-6 text-[9px]">ENTRAR</Link>
+    </nav>
+  ) : null;
+
+  const content = (
     <div className="min-h-screen bg-background">
-      {user ? (
-        <AppNav />
-      ) : (
-        <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-4 flex items-center justify-between">
-          <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
-          <Link to="/login" className="ep-btn-primary h-10 px-6 text-[9px]">ENTRAR</Link>
-        </nav>
-      )}
+      {guestNav}
 
       {/* Cover */}
       <div className="relative h-48 md:h-64 bg-muted overflow-hidden">
@@ -601,4 +601,7 @@ export default function Profile() {
       )}
     </div>
   );
+
+  if (user) return <AppLayout>{content}</AppLayout>;
+  return content;
 }

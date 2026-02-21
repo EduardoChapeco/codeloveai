@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
 import { supabase } from "@/integrations/supabase/client";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
 import { Loader2, ExternalLink, RefreshCw, Copy, Monitor } from "lucide-react";
 
@@ -79,20 +79,21 @@ export default function LovablePreview() {
 
   if (connected === false) {
     return (
+      <AppLayout>
       <div className="min-h-screen bg-background">
-        <AppNav />
         <div className="max-w-xl mx-auto px-6 py-20 text-center">
           <p className="lv-overline mb-2">Não conectado</p>
           <p className="lv-body mb-6">Conecte sua conta Lovable primeiro.</p>
           <button onClick={() => navigate("/lovable/connect")} className="lv-btn-primary h-11 px-8 text-sm">Conectar</button>
         </div>
       </div>
+      </AppLayout>
     );
   }
 
   return (
+    <AppLayout>
     <div className="min-h-screen bg-background flex flex-col">
-      <AppNav />
       <div className="flex-1 flex flex-col">
         <div className="border-b border-border/60 px-6 py-3 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 flex-1 min-w-[200px]">
@@ -147,5 +148,6 @@ export default function LovablePreview() {
         )}
       </div>
     </div>
+    </AppLayout>
   );
 }

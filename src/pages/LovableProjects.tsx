@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
 import { supabase } from "@/integrations/supabase/client";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
 import {
   Loader2, ExternalLink, Rocket, Eye, BarChart3, RefreshCw,
@@ -154,8 +154,8 @@ export default function LovableProjects() {
 
   if (connected === false) {
     return (
+      <AppLayout>
       <div className="min-h-screen bg-background">
-        <AppNav />
         <div className="max-w-xl mx-auto px-6 py-20 text-center">
           <p className="lv-overline mb-2">Não conectado</p>
           <p className="lv-body mb-6">Conecte sua conta Lovable para gerenciar projetos.</p>
@@ -164,12 +164,13 @@ export default function LovableProjects() {
           </button>
         </div>
       </div>
+      </AppLayout>
     );
   }
 
   return (
+    <AppLayout>
     <div className="min-h-screen bg-background">
-      <AppNav />
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -309,5 +310,6 @@ export default function LovableProjects() {
         )}
       </div>
     </div>
+    </AppLayout>
   );
 }

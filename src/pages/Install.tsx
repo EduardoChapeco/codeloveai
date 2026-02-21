@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Download, Smartphone, Monitor, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -40,16 +40,16 @@ export default function Install() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent);
 
-  return (
+  const guestNav = !user ? (
+    <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
+      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
+      <Link to="/login" className="lv-btn-secondary">Entrar</Link>
+    </nav>
+  ) : null;
+
+  const content = (
     <div className="min-h-screen bg-background">
-      {user ? (
-        <AppNav />
-      ) : (
-        <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
-          <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
-          <Link to="/login" className="lv-btn-secondary">Entrar</Link>
-        </nav>
-      )}
+      {guestNav}
 
       <section className="px-6 py-24 max-w-3xl mx-auto">
         <div className="text-center mb-16">
@@ -174,4 +174,7 @@ export default function Install() {
       </footer>
     </div>
   );
+
+  if (user) return <AppLayout>{content}</AppLayout>;
+  return content;
 }

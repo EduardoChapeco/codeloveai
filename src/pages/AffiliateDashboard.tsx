@@ -6,7 +6,7 @@ import { Copy, Link as LinkIcon, LogOut, Coins, Users, Shield, Download, DollarS
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 
 interface Referral {
   id: string;
@@ -178,8 +178,8 @@ export default function AffiliateDashboard() {
   }
 
   return (
+    <AppLayout>
     <div className="min-h-screen bg-background">
-      <AppNav />
 
       <div className="max-w-4xl mx-auto px-8 py-12 space-y-8">
         <div>
@@ -505,5 +505,6 @@ export default function AffiliateDashboard() {
         </div>
       </div>
     </div>
+    </AppLayout>
   );
 }

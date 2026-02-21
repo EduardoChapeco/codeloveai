@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
 import { supabase } from "@/integrations/supabase/client";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
 import { Loader2, Check, X, Link2, Unlink, Eye, EyeOff, ShieldCheck } from "lucide-react";
 
@@ -71,8 +71,8 @@ export default function LovableConnect() {
   const isConnected = account?.status === "active";
 
   return (
+    <AppLayout>
     <div className="min-h-screen bg-background">
-      <AppNav />
       <div className="max-w-xl mx-auto px-6 py-10">
         <p className="lv-overline mb-1">Integração</p>
         <h1 className="lv-heading-lg mb-8">Lovable Connect</h1>
@@ -168,5 +168,6 @@ export default function LovableConnect() {
         )}
       </div>
     </div>
+    </AppLayout>
   );
 }
