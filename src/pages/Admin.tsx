@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2, UserPlus, Eye, EyeOff } from "lucide-react";
@@ -71,7 +71,8 @@ export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("members");
+  const [searchParams] = useSearchParams();
+  const tab = (searchParams.get("tab") || "members") as Tab;
   const [members, setMembers] = useState<Member[]>([]);
   const [affiliates, setAffiliates] = useState<AffiliateInfo[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -577,29 +578,11 @@ export default function Admin() {
           <h1 className="ep-section-title">GERENCIAR</h1>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 flex-wrap">
-          {([["members", "MEMBROS"], ["affiliates", "AFILIADOS"], ["invoices", "FATURAS"], ["worker-tokens", "TOKENS API"], ["extension", "EXTENSÃO"], ["notifications", "NOTIFICAÇÕES"], ["messages", "MENSAGENS"], ["free-links", "LINKS GRÁTIS"]] as [Tab, string][]).map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`ep-btn-secondary h-10 px-6 text-[9px] relative ${tab === t ? "bg-foreground text-background" : ""}`}>
-              {label}
-              {t === "notifications" && notifications.filter((n) => !n.is_read).length > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[8px] text-white flex items-center justify-center">
-                  {notifications.filter((n) => !n.is_read).length}
-                </span>
-              )}
-              {t === "messages" && chatUsers.reduce((sum, u) => sum + u.unread, 0) > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[8px] text-white flex items-center justify-center">
-                  {chatUsers.reduce((sum, u) => sum + u.unread, 0)}
-                </span>
-              )}
-              {t === "invoices" && invoices.filter(i => i.status === "open").length > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-yellow-500 text-[8px] text-white flex items-center justify-center">
-                  {invoices.filter(i => i.status === "open").length}
-                </span>
-              )}
-            </button>
-          ))}
+        {/* Tab title */}
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold capitalize">{
+            { members: "Membros", affiliates: "Afiliados", invoices: "Faturas", "worker-tokens": "Tokens API", extension: "Extensão", notifications: "Notificações", messages: "Mensagens", "free-links": "Links Grátis" }[tab]
+          }</h2>
         </div>
 
         {/* Members Tab */}
