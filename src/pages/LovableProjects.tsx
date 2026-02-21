@@ -85,7 +85,7 @@ export default function LovableProjects() {
       const projectsList = Array.isArray(data) ? data : data?.projects || [];
       setProjects(projectsList);
 
-      // Sync projects to local DB for offline reference
+      // Sync to local DB
       if (user && projectsList.length > 0) {
         for (const p of projectsList) {
           await supabase.from("lovable_projects").upsert({
@@ -150,6 +150,13 @@ export default function LovableProjects() {
       setProjects((prev) =>
         prev.map((p) => (p.id === projectId ? { ...p, display_name: renameValue.trim() } : p))
       );
+      // Also update local DB
+      if (user) {
+        await supabase.from("lovable_projects")
+          .update({ display_name: renameValue.trim() })
+          .eq("lovable_project_id", projectId)
+          .eq("user_id", user.id);
+      }
       toast.success("Projeto renomeado!");
       setRenamingId(null);
     } catch (err: any) {
@@ -169,9 +176,10 @@ export default function LovableProjects() {
     }
   };
 
+  const getPreviewUrl = (projectId: string) => `https://id-preview--${projectId}.lovable.app`;
+
   if (authLoading || !user) return <div className="min-h-screen bg-background" />;
 
-  // Not connected or token expired
   if (connectionStatus === "none" || connectionStatus === "expired") {
     return (
       <AppLayout>
@@ -180,13 +188,13 @@ export default function LovableProjects() {
             <>
               <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
               <h2 className="lv-heading-sm mb-2">Token expirado</h2>
-              <p className="lv-body mb-6">Seu token Lovable expirou. Reconecte para continuar gerenciando seus projetos.</p>
+              <p className="lv-body mb-6">Reconecte via extensão para continuar gerenciando seus projetos.</p>
             </>
           ) : (
             <>
               <Link2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h2 className="lv-heading-sm mb-2">Não conectado</h2>
-              <p className="lv-body mb-6">Conecte sua conta Lovable para gerenciar projetos, fazer deploys e visualizar previews.</p>
+              <p className="lv-body mb-6">Conecte sua conta Lovable para gerenciar projetos, deploys e previews.</p>
             </>
           )}
           <button onClick={() => navigate("/lovable/connect")} className="lv-btn-primary h-11 px-8 text-sm">
@@ -303,13 +311,15 @@ export default function LovableProjects() {
                     Deploy
                   </button>
 
-                  <button
-                    onClick={() => navigate(`/lovable/preview?projectId=${project.id}`)}
+                  <a
+                    href={getPreviewUrl(project.id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1.5"
-                    title="Visualizar preview"
+                    title="Abrir preview em nova aba"
                   >
                     <Eye className="h-3 w-3" /> Preview
-                  </button>
+                  </a>
 
                   <button
                     onClick={() => handleAnalytics(project.id)}

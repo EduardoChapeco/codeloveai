@@ -1,35 +1,35 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
 import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
-import { Loader2, Check, X, Link2, Unlink, Eye, EyeOff, ShieldCheck, ExternalLink, Info } from "lucide-react";
+import { Loader2, Check, X, Link2, Unlink, ShieldCheck, Zap, RefreshCw, Plug } from "lucide-react";
 
 export default function LovableConnect() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { saveToken, deleteToken, checkConnection } = useLovableProxy();
 
-  const [token, setToken] = useState("");
-  const [showToken, setShowToken] = useState(false);
   const [saving, setSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"active" | "expired" | "none" | null>(null);
   const [loadingAccount, setLoadingAccount] = useState(true);
   const [disconnecting, setDisconnecting] = useState(false);
   const [lastVerified, setLastVerified] = useState<string | null>(null);
+  const [extensionDetected, setExtensionDetected] = useState(false);
+  const [autoCapturing, setAutoCapturing] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login?returnTo=/lovable/connect");
   }, [user, authLoading, navigate]);
 
+  // Check connection status
   useEffect(() => {
     if (!user) return;
     const load = async () => {
       const status = await checkConnection(user.id);
       setConnectionStatus(status);
       if (status === "active") {
-        // Get last verified date
         const { supabase } = await import("@/integrations/supabase/client");
         const { data } = await supabase
           .from("lovable_accounts")
@@ -43,24 +43,60 @@ export default function LovableConnect() {
     load();
   }, [user, checkConnection]);
 
-  const handleSave = async () => {
-    if (!token.trim()) return toast.error("Insira o token.");
+  // Listen for token from extension via postMessage
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "clf_lovable_token" && event.data.token) {
+        handleAutoToken(event.data.token);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // Detect extension presence
+  useEffect(() => {
+    const detectExtension = () => {
+      // Check if extension injected its marker
+      if ((window as any).__codeloveAI) {
+        setExtensionDetected(true);
+        return;
+      }
+      // Also check via custom event
+      const handler = () => setExtensionDetected(true);
+      window.addEventListener("clf_extension_present", handler);
+      // Dispatch a request to see if extension responds
+      window.postMessage({ type: "clf_ping" }, window.location.origin);
+      setTimeout(() => window.removeEventListener("clf_extension_present", handler), 2000);
+    };
+    setTimeout(detectExtension, 500);
+  }, []);
+
+  const handleAutoToken = async (token: string) => {
+    if (saving || connectionStatus === "active") return;
     setSaving(true);
     try {
-      await saveToken(token.trim());
-      toast.success("Token salvo e verificado com sucesso!");
+      await saveToken(token);
+      toast.success("Token capturado e salvo automaticamente!");
       setConnectionStatus("active");
       setLastVerified(new Date().toISOString());
-      setToken("");
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao salvar token.");
+      toast.error(err?.message || "Erro ao salvar token capturado.");
     } finally {
       setSaving(false);
     }
   };
 
+  const requestTokenFromExtension = useCallback(() => {
+    setAutoCapturing(true);
+    // Request token from extension
+    window.postMessage({ type: "clf_request_lovable_token" }, window.location.origin);
+    // Timeout after 5 seconds
+    setTimeout(() => setAutoCapturing(false), 5000);
+  }, []);
+
   const handleDisconnect = async () => {
-    if (!confirm("Desconectar sua conta Lovable? Você precisará inserir um novo token para reconectar.")) return;
+    if (!confirm("Desconectar sua conta Lovable? Você precisará reconectar via extensão.")) return;
     setDisconnecting(true);
     try {
       await deleteToken();
@@ -85,7 +121,7 @@ export default function LovableConnect() {
         <p className="lv-overline mb-1">Integração</p>
         <h1 className="lv-heading-lg mb-2">Lovable Connect</h1>
         <p className="lv-caption mb-8">
-          Conecte sua conta Lovable para gerenciar projetos, fazer deploys e acessar previews diretamente desta plataforma.
+          Conecte sua conta Lovable automaticamente via extensão do navegador para gerenciar projetos, deploys e previews.
         </p>
 
         {loadingAccount ? (
@@ -94,7 +130,7 @@ export default function LovableConnect() {
           </div>
         ) : isConnected ? (
           <div className="space-y-5">
-            {/* Connected status card */}
+            {/* Connected status */}
             <div className="lv-card flex items-center gap-4">
               <div className="h-11 w-11 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
                 <Check className="h-5 w-5 text-green-500" />
@@ -146,67 +182,74 @@ export default function LovableConnect() {
           </div>
         ) : (
           <div className="space-y-5">
-            {/* Expired token alert */}
+            {/* Expired alert */}
             {isExpired && (
               <div className="lv-card-sm bg-destructive/10 border-destructive/20 flex items-start gap-3">
                 <X className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                 <p className="lv-caption text-destructive">
-                  Seu token expirou. Gere um novo token no painel Lovable e insira abaixo para reconectar.
+                  Seu token expirou. Use a extensão para reconectar automaticamente — basta acessar o Lovable e a extensão capturará o novo token.
                 </p>
               </div>
             )}
 
-            {/* How to get token instructions */}
+            {/* Auto-connect via extension */}
             <div className="lv-card space-y-4">
               <div className="flex items-center gap-3 mb-2">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Link2 className="h-5 w-5 text-primary" />
+                  <Zap className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="lv-body-strong">Conectar Token</p>
-                  <p className="lv-caption">Insira seu Bearer token da API Lovable</p>
+                  <p className="lv-body-strong">Conexão Automática</p>
+                  <p className="lv-caption">A extensão captura o token automaticamente</p>
                 </div>
               </div>
 
-              <div className="relative">
-                <input
-                  type={showToken ? "text" : "password"}
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="Bearer token..."
-                  className="lv-input h-11 pr-12 font-mono w-full"
-                  onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                />
-                <button
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-
-              <button
-                onClick={handleSave}
-                disabled={saving || !token.trim()}
-                className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                Verificar e salvar
-              </button>
+              {extensionDetected ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-green-500">
+                    <Plug className="h-4 w-4" />
+                    <span className="text-sm font-medium">Extensão detectada</span>
+                  </div>
+                  <p className="lv-caption">
+                    Acesse <strong className="text-foreground">lovable.dev</strong> em outra aba e faça qualquer ação. A extensão capturará o token automaticamente e salvará aqui.
+                  </p>
+                  <button
+                    onClick={requestTokenFromExtension}
+                    disabled={autoCapturing || saving}
+                    className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
+                  >
+                    {autoCapturing || saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    {saving ? "Salvando token..." : autoCapturing ? "Buscando token da extensão..." : "Buscar token da extensão"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="lv-caption">
+                    Para conexão automática, instale a extensão CodeLove AI no seu navegador.
+                  </p>
+                  <button
+                    onClick={() => navigate("/install")}
+                    className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
+                  >
+                    <Link2 className="h-4 w-4" />
+                    Instalar extensão
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Instructions */}
+            {/* How it works */}
             <div className="lv-card-sm bg-accent/50 space-y-3">
-              <div className="flex items-center gap-2">
-                <Info className="h-4 w-4 text-primary shrink-0" />
-                <p className="lv-body-strong text-sm">Como obter seu token</p>
-              </div>
+              <p className="lv-body-strong text-sm">Como funciona</p>
               <ol className="lv-caption space-y-1.5 list-decimal list-inside">
-                <li>Acesse <strong className="text-foreground">lovable.dev</strong> e faça login</li>
-                <li>Abra as <strong className="text-foreground">DevTools</strong> do navegador (F12)</li>
-                <li>Na aba <strong className="text-foreground">Network</strong>, faça qualquer ação no Lovable</li>
-                <li>Encontre uma requisição para <code className="text-xs bg-muted px-1 rounded">api.lovable.dev</code></li>
-                <li>Copie o valor do header <code className="text-xs bg-muted px-1 rounded">Authorization: Bearer ...</code></li>
+                <li>Instale a extensão <strong className="text-foreground">CodeLove AI</strong></li>
+                <li>Acesse <strong className="text-foreground">lovable.dev</strong> e faça login normalmente</li>
+                <li>A extensão captura o token <strong className="text-foreground">automaticamente</strong> em segundo plano</li>
+                <li>O token é enviado para o servidor de forma segura e verificado</li>
               </ol>
             </div>
 
@@ -214,7 +257,7 @@ export default function LovableConnect() {
             <div className="lv-card-sm bg-accent/50 flex items-start gap-3">
               <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <div className="lv-caption space-y-1">
-                <p>O token será verificado contra a API Lovable antes de ser salvo.</p>
+                <p>O token é verificado contra a API Lovable antes de ser salvo.</p>
                 <p>Após salvo, ele <strong className="text-foreground">nunca retorna ao navegador</strong> — todas as chamadas são feitas pelo proxy seguro no servidor.</p>
               </div>
             </div>
