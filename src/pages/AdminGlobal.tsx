@@ -8,7 +8,8 @@ import { THEME_PRESETS } from "@/lib/tenant-themes";
 import {
   Building2, Plus, Pencil, Trash2, DollarSign, Wallet, Users,
   BarChart3, CheckCircle, XCircle, Loader2, Save, ArrowLeft,
-  Globe, Palette, FileText, Eye, EyeOff, RefreshCw, Shield, BookOpen, LogIn
+  Globe, Palette, FileText, Eye, EyeOff, RefreshCw, Shield, BookOpen, LogIn,
+  Package, UserPlus, Copy, Link as LinkIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -65,7 +66,31 @@ interface AdminCommission {
   payment_id: string | null;
 }
 
-type Tab = "tenants" | "finances" | "commissions" | "wallets" | "ledger" | "operations";
+interface WlPlan {
+  id: string;
+  name: string;
+  description: string;
+  setup_price_cents: number;
+  setup_is_free: boolean;
+  monthly_price_cents: number;
+  yearly_price_cents: number | null;
+  global_split_percent: number;
+  affiliate_global_split_percent: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface WlAffiliate {
+  id: string;
+  user_id: string;
+  code: string;
+  display_name: string;
+  commission_percent: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+type Tab = "tenants" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -79,6 +104,8 @@ export default function AdminGlobal() {
   const [wallets, setWallets] = useState<TenantWallet[]>([]);
   const [commissions, setCommissions] = useState<AdminCommission[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [wlPlans, setWlPlans] = useState<WlPlan[]>([]);
+  const [wlAffiliates, setWlAffiliates] = useState<WlAffiliate[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Create/Edit tenant sheet
@@ -108,16 +135,20 @@ export default function AdminGlobal() {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [tenantsRes, walletsRes, commissionsRes, ledgerRes] = await Promise.all([
+    const [tenantsRes, walletsRes, commissionsRes, ledgerRes, wlPlansRes, wlAffRes] = await Promise.all([
       supabase.from("tenants").select("*").order("created_at", { ascending: true }),
       supabase.from("tenant_wallets").select("*"),
       supabase.from("admin_commissions").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("ledger_entries").select("*").order("created_at", { ascending: false }).limit(200),
+      supabase.from("white_label_plans").select("*").order("created_at", { ascending: false }),
+      supabase.from("white_label_affiliates").select("*").order("created_at", { ascending: false }),
     ]);
     setTenants(tenantsRes.data || []);
     setWallets(walletsRes.data || []);
     setCommissions(commissionsRes.data || []);
     setLedgerEntries((ledgerRes.data as LedgerEntry[]) || []);
+    setWlPlans((wlPlansRes.data as WlPlan[]) || []);
+    setWlAffiliates((wlAffRes.data as WlAffiliate[]) || []);
     setLoading(false);
   };
 
@@ -270,6 +301,8 @@ export default function AdminGlobal() {
           <div className="flex gap-2 flex-wrap">
             {([
               { id: "tenants", label: "Tenants", icon: Building2 },
+              { id: "wl_plans", label: "Planos WL", icon: Package },
+              { id: "wl_affiliates", label: "Afiliados WL", icon: UserPlus },
               { id: "finances", label: "Faturamento", icon: BarChart3 },
               { id: "commissions", label: "Comissões", icon: DollarSign },
               { id: "wallets", label: "Wallets", icon: Wallet },
@@ -562,6 +595,155 @@ export default function AdminGlobal() {
                     <p className="lv-stat text-lg">{ledgerEntries.length}</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─── WL PLANS TAB ─── */}
+          {tab === "wl_plans" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="lv-body-strong">{wlPlans.length} plano(s) WL</p>
+                <button
+                  onClick={async () => {
+                    const name = prompt("Nome do plano:");
+                    if (!name) return;
+                    const monthly = prompt("Preço mensal (centavos):", "9900");
+                    if (!monthly) return;
+                    const { error } = await supabase.from("white_label_plans").insert({
+                      name,
+                      monthly_price_cents: Number(monthly),
+                      setup_price_cents: 0,
+                      setup_is_free: true,
+                      global_split_percent: 30,
+                      affiliate_global_split_percent: 30,
+                    });
+                    if (error) toast.error(error.message);
+                    else { toast.success("Plano criado!"); fetchAll(); }
+                  }}
+                  className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-2"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Novo Plano WL
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {wlPlans.map(p => (
+                  <div key={p.id} className="lv-card">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="lv-body-strong">{p.name}</p>
+                        <p className="lv-caption">{p.description || "Sem descrição"}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`lv-badge ${p.is_active ? "lv-badge-success" : "lv-badge-muted"}`}>
+                          {p.is_active ? "Ativo" : "Inativo"}
+                        </span>
+                        <button
+                          onClick={async () => {
+                            await supabase.from("white_label_plans").update({ is_active: !p.is_active }).eq("id", p.id);
+                            toast.success(p.is_active ? "Desativado" : "Ativado");
+                            fetchAll();
+                          }}
+                          className="lv-btn-icon h-8 w-8"
+                        >
+                          {p.is_active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                      <div className="rounded-lg bg-muted/50 p-3">
+                        <p className="lv-caption">Mensal</p>
+                        <p className="lv-stat text-lg">R${(p.monthly_price_cents / 100).toFixed(2)}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/50 p-3">
+                        <p className="lv-caption">Anual</p>
+                        <p className="lv-stat text-lg">{p.yearly_price_cents ? `R$${(p.yearly_price_cents / 100).toFixed(2)}` : "—"}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/50 p-3">
+                        <p className="lv-caption">Setup</p>
+                        <p className="lv-stat text-lg">{p.setup_is_free ? "Grátis" : `R$${(p.setup_price_cents / 100).toFixed(2)}`}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/50 p-3">
+                        <p className="lv-caption">Split Admin / Afiliado WL</p>
+                        <p className="lv-stat text-lg">{p.global_split_percent}% / {p.affiliate_global_split_percent}%</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {wlPlans.length === 0 && <p className="lv-caption text-center py-8">Nenhum plano WL criado. Clique em "Novo Plano WL" para começar.</p>}
+              </div>
+            </div>
+          )}
+
+          {/* ─── WL AFFILIATES TAB ─── */}
+          {tab === "wl_affiliates" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="lv-body-strong">{wlAffiliates.length} afiliado(s) WL</p>
+                <button
+                  onClick={async () => {
+                    const email = prompt("Email do usuário para promover a afiliado WL:");
+                    if (!email) return;
+                    // Find user by email in profiles
+                    const { data: profile } = await supabase.from("profiles").select("user_id").eq("email", email).maybeSingle();
+                    if (!profile) { toast.error("Usuário não encontrado"); return; }
+                    const code = `WL${Date.now().toString(36).toUpperCase()}`;
+                    const displayName = email.split("@")[0];
+                    const { error } = await supabase.from("white_label_affiliates").insert({
+                      user_id: profile.user_id,
+                      code,
+                      display_name: displayName,
+                      commission_percent: 30,
+                      is_active: true,
+                    });
+                    if (error) toast.error(error.message);
+                    else { toast.success(`Afiliado WL criado! Código: ${code}`); fetchAll(); }
+                  }}
+                  className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-2"
+                >
+                  <UserPlus className="h-3.5 w-3.5" /> Novo Afiliado WL
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {wlAffiliates.map(a => (
+                  <div key={a.id} className="lv-card flex items-center justify-between">
+                    <div>
+                      <p className="lv-body-strong">{a.display_name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="text-xs bg-muted px-2 py-0.5 rounded">{a.code}</code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/white-label/ref/${a.code}`);
+                            toast.success("Link copiado!");
+                          }}
+                          className="lv-btn-icon h-6 w-6"
+                          title="Copiar link de referência"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <p className="lv-caption mt-1">Comissão: {a.commission_percent}% • {format(new Date(a.created_at), "dd/MM/yyyy")}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`lv-badge ${a.is_active ? "lv-badge-success" : "lv-badge-muted"}`}>
+                        {a.is_active ? "Ativo" : "Inativo"}
+                      </span>
+                      <button
+                        onClick={async () => {
+                          await supabase.from("white_label_affiliates").update({ is_active: !a.is_active }).eq("id", a.id);
+                          toast.success(a.is_active ? "Desativado" : "Ativado");
+                          fetchAll();
+                        }}
+                        className="lv-btn-icon h-8 w-8"
+                      >
+                        {a.is_active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {wlAffiliates.length === 0 && <p className="lv-caption text-center py-8">Nenhum afiliado WL cadastrado.</p>}
               </div>
             </div>
           )}
