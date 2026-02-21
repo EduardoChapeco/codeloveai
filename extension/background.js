@@ -1,7 +1,8 @@
 // CodeLove AI Extension — Background Service Worker
 // Handles message routing, token relay, and auto-save
 
-const DEFAULT_PLATFORM_URL = "https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1";
+// ✅ CORRECT Supabase project: rvazulqdwutrhxqahocg (Waesy OS)
+const DEFAULT_PLATFORM_URL = "https://rvazulqdwutrhxqahocg.supabase.co/functions/v1";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[CodeLove AI] Extension installed");
@@ -38,7 +39,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.get("clf_token", (data) => {
       if (data.clf_token && message.token) {
         autoSaveLovableToken(message.token, data.clf_token).then((res) => {
-          if (res?.success) {
+          if (res?.success || res?.ok) {
             console.log("[CodeLove AI] Token auto-saved to platform");
           }
         });
@@ -52,6 +53,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     autoSaveLovableToken(message.lovableToken, message.supabaseJwt)
       .then(sendResponse)
       .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  // ── Notes sync ──
+  if (message.type === "SYNC_NOTES") {
+    chrome.storage.local.get("clf_token", (data) => {
+      if (!data.clf_token) {
+        sendResponse({ error: "Não autenticado" });
+        return;
+      }
+      syncNotes(message.notes || [], message.folders || [], data.clf_token)
+        .then(sendResponse)
+        .catch((err) => sendResponse({ error: err.message }));
+    });
+    return true;
+  }
+
+  if (message.type === "GET_NOTES") {
+    chrome.storage.local.get("clf_token", (data) => {
+      if (!data.clf_token) {
+        sendResponse({ error: "Não autenticado" });
+        return;
+      }
+      fetchNotes(data.clf_token)
+        .then(sendResponse)
+        .catch((err) => sendResponse({ error: err.message }));
+    });
     return true;
   }
 });
@@ -83,6 +111,52 @@ async function autoSaveLovableToken(lovableToken, supabaseJwt) {
         Authorization: `Bearer ${supabaseJwt}`,
       },
       body: JSON.stringify({ action: "save-token", token: lovableToken }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || `Status ${res.status}` };
+    }
+
+    return await res.json();
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+async function syncNotes(notes, folders, supabaseJwt) {
+  const baseUrl = await getPlatformUrl();
+
+  try {
+    const res = await fetch(`${baseUrl}/notes-sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${supabaseJwt}`,
+      },
+      body: JSON.stringify({ notes, folders }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || `Status ${res.status}` };
+    }
+
+    return await res.json();
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+async function fetchNotes(supabaseJwt) {
+  const baseUrl = await getPlatformUrl();
+
+  try {
+    const res = await fetch(`${baseUrl}/notes-sync`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${supabaseJwt}`,
+      },
     });
 
     if (!res.ok) {
