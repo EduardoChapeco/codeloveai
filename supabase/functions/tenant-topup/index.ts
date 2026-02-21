@@ -39,8 +39,18 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { tenant_id, amount_brl, payment_method } = body;
 
-    if (!tenant_id || !amount_brl || Number(amount_brl) < 5) {
-      return new Response(JSON.stringify({ error: "Dados inválidos. Mínimo R$5,00." }), {
+    // Validate tenant_id is a valid UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!tenant_id || typeof tenant_id !== "string" || !uuidRegex.test(tenant_id)) {
+      return new Response(JSON.stringify({ error: "Tenant inválido" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const amount = Number(amount_brl);
+    if (!amount_brl || isNaN(amount) || amount < 5 || amount > 50000) {
+      return new Response(JSON.stringify({ error: "Valor inválido. Mínimo R$5,00, máximo R$50.000,00." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -79,7 +89,6 @@ Deno.serve(async (req) => {
     const accessToken = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const webhookUrl = `${supabaseUrl}/functions/v1/mercadopago-webhook`;
-    const amount = Number(amount_brl);
 
     const externalReference = JSON.stringify({
       type: "wallet_topup",
