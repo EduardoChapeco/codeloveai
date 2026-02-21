@@ -59,74 +59,71 @@ export default function AppSidebar() {
   if (isAdminPage && isAdmin) {
     return (
       <Sidebar collapsible="icon">
-        <SidebarHeader className="p-3 flex flex-row items-center justify-between">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-sm"
-          >
-            <ArrowLeft className="h-4 w-4 shrink-0" />
-            {!collapsed && <span className="text-[13px]">Voltar</span>}
-          </button>
+        <SidebarHeader className="p-2">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => navigate("/dashboard")} tooltip="Voltar">
+                <ArrowLeft className="h-4 w-4" />
+                <span>Voltar</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
           {!collapsed && (
-            <button onClick={toggleSidebar} className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+            <button onClick={toggleSidebar} className="absolute right-2 top-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors">
               <PanelLeftClose className="h-4 w-4" />
             </button>
           )}
         </SidebarHeader>
 
-        <SidebarContent className="px-2 py-2">
+        <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/40 px-3 mb-1 font-semibold">
-              Administração
-            </SidebarGroupLabel>
+            <SidebarGroupLabel>Administração</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {adminTabs.map(tab => {
-                  const active = currentAdminTab === tab.id;
-                  return (
-                    <SidebarMenuItem key={tab.id}>
-                      <SidebarMenuButton
-                        isActive={active}
-                        onClick={() => setSearchParams({ tab: tab.id })}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] cursor-pointer transition-all duration-200 ${
-                          active
-                            ? "bg-primary/10 text-primary font-medium"
-                            : "text-muted-foreground hover:bg-white/60 hover:text-foreground"
-                        }`}
-                      >
-                        <tab.icon className={`h-4 w-4 shrink-0 ${active ? "text-primary" : ""}`} />
-                        {!collapsed && <span>{tab.label}</span>}
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
+                {adminTabs.map(tab => (
+                  <SidebarMenuItem key={tab.id}>
+                    <SidebarMenuButton
+                      isActive={currentAdminTab === tab.id}
+                      onClick={() => setSearchParams({ tab: tab.id })}
+                      tooltip={tab.label}
+                    >
+                      <tab.icon className="h-4 w-4" />
+                      <span>{tab.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="p-3 border-t border-black/[0.04] space-y-0.5">
-          {collapsed && (
-            <button onClick={toggleSidebar} className="w-full flex items-center justify-center py-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/60 transition-colors">
-              <PanelLeft className="h-4 w-4" />
-            </button>
-          )}
-          <button
-            onClick={toggleChat}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] transition-all duration-200 ${
-              isChatOpen ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-white/60 hover:text-foreground"
-            }`}
-          >
-            <Bot className={`h-4 w-4 shrink-0 ${isChatOpen ? "text-primary" : ""}`} />
-            {!collapsed && <span>CodeLove AI</span>}
-          </button>
-          <button
-            onClick={signOut}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Sair</span>}
-          </button>
+        <SidebarFooter className="border-t border-black/[0.04]">
+          <SidebarMenu>
+            {collapsed && (
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={toggleSidebar} tooltip="Expandir">
+                  <PanelLeft className="h-4 w-4" />
+                  <span>Expandir</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip="CodeLove AI">
+                <Bot className="h-4 w-4" />
+                <span>CodeLove AI</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={signOut}
+                tooltip="Sair"
+                className="hover:!bg-destructive/10 hover:!text-destructive"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sair</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
     );
@@ -160,17 +157,10 @@ export default function AppSidebar() {
     const active = isActive(item.to);
     return (
       <SidebarMenuItem key={item.to}>
-        <SidebarMenuButton asChild isActive={active}>
-          <NavLink
-            to={item.to}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] transition-all duration-200 ${
-              active
-                ? "bg-primary/10 text-primary font-medium"
-                : "text-muted-foreground hover:bg-white/60 hover:text-foreground"
-            }`}
-          >
-            <item.icon className={`h-4 w-4 shrink-0 ${active ? "text-primary" : ""}`} />
-            {!collapsed && <span>{item.label}</span>}
+        <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+          <NavLink to={item.to}>
+            <item.icon className="h-4 w-4" />
+            <span>{item.label}</span>
           </NavLink>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -179,24 +169,28 @@ export default function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="p-3 flex flex-row items-center justify-between">
-        <NavLink to="/dashboard" className="flex items-center gap-2 text-foreground font-semibold tracking-tight">
-          {!collapsed && <span className="text-[13px]">CodeLove AI</span>}
-          {collapsed && <span className="text-xs font-bold">CL</span>}
-        </NavLink>
+      <SidebarHeader className="p-2 relative">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="CodeLove AI">
+              <NavLink to="/dashboard" className="font-semibold">
+                <span className="text-[13px] font-bold">CL</span>
+                <span>CodeLove AI</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         {!collapsed && (
-          <button onClick={toggleSidebar} className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+          <button onClick={toggleSidebar} className="absolute right-2 top-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors">
             <PanelLeftClose className="h-4 w-4" />
           </button>
         )}
       </SidebarHeader>
 
-      <SidebarContent className="px-2 py-2">
+      <SidebarContent>
         {/* Principal */}
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/40 px-3 mb-1 font-semibold">
-            Principal
-          </SidebarGroupLabel>
+          <SidebarGroupLabel>Principal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainItems.map(renderNavItem)}
@@ -208,7 +202,7 @@ export default function AppSidebar() {
         <Collapsible defaultOpen={lovableActive} className="group/collapsible">
           <SidebarGroup>
             <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/40 px-3 flex items-center justify-between cursor-pointer hover:text-muted-foreground transition-colors font-semibold">
+              <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:text-muted-foreground transition-colors">
                 Lovable
                 {!collapsed && (
                   <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]/collapsible:rotate-180" />
@@ -229,7 +223,7 @@ export default function AppSidebar() {
         <Collapsible defaultOpen={accountActive} className="group/collapsible">
           <SidebarGroup>
             <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/40 px-3 flex items-center justify-between cursor-pointer hover:text-muted-foreground transition-colors font-semibold">
+              <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:text-muted-foreground transition-colors">
                 Conta
                 {!collapsed && (
                   <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]/collapsible:rotate-180" />
@@ -249,9 +243,7 @@ export default function AppSidebar() {
         {/* Admin */}
         {adminItems.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/40 px-3 mb-1 font-semibold">
-              Administração
-            </SidebarGroupLabel>
+            <SidebarGroupLabel>Administração</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {adminItems.map(renderNavItem)}
@@ -261,28 +253,33 @@ export default function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-3 border-t border-black/[0.04] space-y-0.5">
-        {collapsed && (
-          <button onClick={toggleSidebar} className="w-full flex items-center justify-center py-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/60 transition-colors">
-            <PanelLeft className="h-4 w-4" />
-          </button>
-        )}
-        <button
-          onClick={toggleChat}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] transition-all duration-200 ${
-            isChatOpen ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-white/60 hover:text-foreground"
-          }`}
-        >
-          <Bot className={`h-4 w-4 shrink-0 ${isChatOpen ? "text-primary" : ""}`} />
-          {!collapsed && <span>CodeLove AI</span>}
-        </button>
-        <button
-          onClick={signOut}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>Sair</span>}
-        </button>
+      <SidebarFooter className="border-t border-black/[0.04]">
+        <SidebarMenu>
+          {collapsed && (
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={toggleSidebar} tooltip="Expandir">
+                <PanelLeft className="h-4 w-4" />
+                <span>Expandir</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip="CodeLove AI">
+              <Bot className="h-4 w-4" />
+              <span>CodeLove AI</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={signOut}
+              tooltip="Sair"
+              className="hover:!bg-destructive/10 hover:!text-destructive"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Sair</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );
