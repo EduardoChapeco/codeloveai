@@ -109,6 +109,38 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Validate lovableRoute to prevent SSRF - must start with / and only contain safe path characters
+    if (lovableRoute) {
+      // Block path traversal, protocol injection, and non-API paths
+      if (
+        !lovableRoute.startsWith("/") ||
+        lovableRoute.includes("..") ||
+        lovableRoute.includes("://") ||
+        lovableRoute.includes("\\") ||
+        lovableRoute.includes("\n") ||
+        lovableRoute.includes("\r") ||
+        lovableRoute.includes("\0")
+      ) {
+        return new Response(JSON.stringify({ error: "Route inválida" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Only allow known Lovable API path prefixes
+      const allowedPrefixes = [
+        "/projects/", "/workspaces/", "/profile/", "/user/", "/users/",
+        "/permissions", "/files/",
+      ];
+      const isAllowed = allowedPrefixes.some(prefix => lovableRoute.startsWith(prefix));
+      if (!isAllowed) {
+        return new Response(JSON.stringify({ error: "Route não permitida" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // ─── Handle token management actions ───
     if (action === "save-token") {
       const tokenValue = body.token;
