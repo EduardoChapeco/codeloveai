@@ -68,7 +68,7 @@ export default function LovableProjects() {
         if (err?.isTokenExpired) {
           setConnectionStatus("expired");
         } else {
-          toast.error("Erro ao carregar workspaces");
+          toast.error("Erro ao carregar workspaces: " + (err?.message || "Tente novamente"));
         }
       } finally {
         setLoadingWs(false);

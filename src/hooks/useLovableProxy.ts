@@ -29,14 +29,21 @@ export function useLovableProxy() {
       body,
     });
 
+    // When the Edge Function returns a non-2xx status, supabase-js puts the
+    // parsed response body in `data` and sets a generic `error.message`.
+    // We read the real message from `data.error` (set by lovable-proxy).
     if (error) {
+      const realMessage = data?.error || error.message || "Erro na comunicação com o proxy";
+      const isExpired = realMessage.includes("expirado") || realMessage.includes("expired");
+      if (isExpired) setIsTokenExpired(true);
       const proxyError: ProxyError = {
-        message: error.message || "Erro na comunicação com o proxy",
+        message: realMessage,
+        isTokenExpired: isExpired,
       };
       throw proxyError;
     }
 
-    // Check for error in response body
+    // Check for error in response body (Edge Function returned 200 but with error field)
     if (data?.error) {
       const isExpired = data.error.includes("expirado") || data.error.includes("expired");
       if (isExpired) setIsTokenExpired(true);

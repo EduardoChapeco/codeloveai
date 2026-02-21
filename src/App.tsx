@@ -26,6 +26,7 @@ const Checkout = lazy(() => import("./pages/Checkout"));
 // FreePlan removed
 const Community = lazy(() => import("./pages/Community"));
 const Profile = lazy(() => import("./pages/Profile"));
+const Notes = lazy(() => import("./pages/Notes"));
 const AffiliatesPage = lazy(() => import("./pages/AffiliatesPage"));
 const Install = lazy(() => import("./pages/Install"));
 const LovableConnect = lazy(() => import("./pages/LovableConnect"));
@@ -68,6 +69,7 @@ const App = () => (
                 {/* /free route removed */}
                 <Route path="/community" element={<Community />} />
                 <Route path="/profile/:userId" element={<Profile />} />
+                <Route path="/notes" element={<Notes />} />
                 <Route path="/affiliates" element={<AffiliatesPage />} />
                 <Route path="/install" element={<Install />} />
                 <Route path="/lovable/connect" element={<LovableConnect />} />

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
-import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, ChevronRight, Zap, Monitor, Key, ArrowRight, Building2 } from "lucide-react";
+import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, ChevronRight, Zap, Monitor, Key, ArrowRight, Building2, Puzzle, StickyNote } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -41,7 +41,9 @@ export default function Dashboard() {
   useSEO({ title: "Dashboard" });
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
-  const [adminTokenGenerated, setAdminTokenGenerated] = useState(false);
+  const [tokensLoaded, setTokensLoaded] = useState(false);
+  const [extensionDetected, setExtensionDetected] = useState(false);
+  const [notesCount, setNotesCount] = useState(0);
   
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -87,9 +89,11 @@ export default function Dashboard() {
 
     supabase.from("tokens").select("*").eq("user_id", user.id)
       .then(({ data }) => {
-        setTokens(data || []);
+        const tokenList = data || [];
+        setTokens(tokenList);
+        setTokensLoaded(true);
         // SSO Bridge: notify extension of active token
-        const activeToken = (data || []).find((t: Token) => t.is_active);
+        const activeToken = tokenList.find((t: Token) => t.is_active);
         if (activeToken) {
           const email = user.email || "";
           const name = user.user_metadata?.name || email.split("@")[0] || "";
@@ -116,14 +120,30 @@ export default function Dashboard() {
       });
   }, [user]);
 
-  // Auto-generate 1000-day token for admin if none exists
+  // Auto-generate 1000-day token for admin ONLY ONCE (persisted via localStorage + DB check)
   useEffect(() => {
-    if (!user || adminLoading || !isAdmin || adminTokenGenerated) return;
+    if (!user || adminLoading || !isAdmin || !tokensLoaded) return;
     const hasActiveToken = tokens.some((t) => t.is_active);
     if (hasActiveToken) return;
 
+    // Prevent re-generation across page reloads using localStorage
+    const adminTokenKey = `clf_admin_token_created_${user.id}`;
+    if (localStorage.getItem(adminTokenKey) === "true") return;
+
     const generateAdminToken = async () => {
       try {
+        // Double-check DB one more time to avoid race conditions
+        const { data: existingTokens } = await supabase
+          .from("tokens")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .limit(1);
+        if (existingTokens && existingTokens.length > 0) {
+          localStorage.setItem(adminTokenKey, "true");
+          return;
+        }
+
         const { data, error } = await supabase.functions.invoke("admin-token-actions", {
           body: {
             action: "generate",
@@ -142,13 +162,32 @@ export default function Dashboard() {
           window.postMessage({ type: 'clf_sso_token', token: data.token, email: user.email, name: user.user_metadata?.name || '' }, window.location.origin);
           toast.success("Token admin de 1000 dias gerado automaticamente!");
         }
-        setAdminTokenGenerated(true);
+        localStorage.setItem(adminTokenKey, "true");
       } catch {
-        setAdminTokenGenerated(true);
+        // Don't set the flag on error so it can retry next time
       }
     };
     generateAdminToken();
-  }, [user, isAdmin, adminLoading, tokens, adminTokenGenerated]);
+  }, [user, isAdmin, adminLoading, tokensLoaded, tokens]);
+
+  // Detect extension presence
+  useEffect(() => {
+    const detect = () => {
+      if ((window as unknown as Record<string, unknown>).__codeloveAI) { setExtensionDetected(true); return; }
+      const handler = () => setExtensionDetected(true);
+      window.addEventListener("clf_extension_present", handler);
+      window.postMessage({ type: "clf_ping" }, window.location.origin);
+      setTimeout(() => window.removeEventListener("clf_extension_present", handler), 2000);
+    };
+    setTimeout(detect, 500);
+  }, []);
+
+  // Fetch notes count for summary card
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("notes").select("id", { count: "exact", head: true }).eq("user_id", user.id)
+      .then(({ count }) => setNotesCount(count || 0));
+  }, [user]);
 
   // Auto-onboard removed
 
@@ -363,6 +402,43 @@ export default function Dashboard() {
             </button>
           </div>
           )}
+          {/* Extension Status Card */}
+          <div className="lv-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${extensionDetected ? 'bg-green-500/10' : 'bg-muted'}`}>
+                <Puzzle className={`h-5 w-5 ${extensionDetected ? 'text-green-600' : 'text-muted-foreground'}`} />
+              </div>
+              <div>
+                <p className="lv-body-strong">CodeLove Ext</p>
+                <p className="lv-caption">
+                  {extensionDetected ? 'Extensão conectada' : 'Não detectada'}
+                </p>
+              </div>
+            </div>
+            {extensionDetected ? (
+              <span className="lv-badge lv-badge-success">✓ Conectada</span>
+            ) : (
+              <Link to="/install" className="lv-btn-secondary h-9 px-3 text-xs inline-flex items-center gap-1.5">
+                <Download className="h-3.5 w-3.5" /> Instalar
+              </Link>
+            )}
+          </div>
+
+          {/* Notes Summary Card */}
+          <div className="lv-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <StickyNote className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="lv-body-strong">Notas</p>
+                <p className="lv-caption">{notesCount === 0 ? 'Nenhuma nota' : `${notesCount} nota${notesCount > 1 ? 's' : ''}`}</p>
+              </div>
+            </div>
+            <Link to="/notes" className="lv-btn-secondary h-9 px-3 text-xs inline-flex items-center gap-1.5">
+              <StickyNote className="h-3.5 w-3.5" /> {notesCount > 0 ? 'Ver notas' : 'Criar nota'}
+            </Link>
+          </div>
         </div>
 
         {/* Admin Tenant Card */}
