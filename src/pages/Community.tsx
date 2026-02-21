@@ -14,7 +14,7 @@ import {
   MoreHorizontal, Pencil, Archive, Trash2, Lock, Search,
   EyeOff, Maximize2, Volume2, VolumeX
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import AppLayout from "@/components/AppLayout";
 
 interface Post {
   id: string;
@@ -1094,8 +1094,8 @@ export default function Community() {
   const myProfile = getProfile(user.id);
 
   return (
+    <AppLayout>
     <div className="min-h-screen bg-background">
-      <AppNav />
       <div className="max-w-6xl mx-auto px-8 py-8 flex gap-8">
         {/* Sidebar */}
         <aside className="hidden lg:block w-64 shrink-0 space-y-6">
@@ -1441,5 +1441,6 @@ export default function Community() {
         />
       )}
     </div>
+    </AppLayout>
   );
 }
