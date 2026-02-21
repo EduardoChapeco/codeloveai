@@ -44,16 +44,13 @@ export default function LovablePreview() {
     setAuthToken(null);
 
     try {
-      // Get auth token
       const tokenData = await invoke({ route: `/projects/${projectId}/auth-token` });
       const token = tokenData?.token || tokenData?.auth_token || "";
 
-      // Get sandbox URL
       const sandboxData = await invoke({ route: `/projects/${projectId}/sandbox/url` });
       const url = sandboxData?.url || sandboxData?.sandbox_url || "";
 
       if (!url) {
-        // Try starting sandbox
         await invoke({ route: `/projects/${projectId}/sandbox/start`, method: "POST" });
         const retryData = await invoke({ route: `/projects/${projectId}/sandbox/url` });
         const retryUrl = retryData?.url || retryData?.sandbox_url || "";
@@ -84,10 +81,10 @@ export default function LovablePreview() {
     return (
       <div className="min-h-screen bg-background">
         <AppNav />
-        <div className="max-w-xl mx-auto px-8 py-20 text-center">
-          <p className="ep-subtitle mb-2">NÃO CONECTADO</p>
-          <p className="text-sm text-muted-foreground mb-6">Conecte sua conta Lovable primeiro.</p>
-          <button onClick={() => navigate("/lovable/connect")} className="ep-btn-primary h-11 px-8">CONECTAR</button>
+        <div className="max-w-xl mx-auto px-6 py-20 text-center">
+          <p className="lv-overline mb-2">Não conectado</p>
+          <p className="lv-body mb-6">Conecte sua conta Lovable primeiro.</p>
+          <button onClick={() => navigate("/lovable/connect")} className="lv-btn-primary h-11 px-8 text-sm">Conectar</button>
         </div>
       </div>
     );
@@ -97,38 +94,36 @@ export default function LovablePreview() {
     <div className="min-h-screen bg-background flex flex-col">
       <AppNav />
       <div className="flex-1 flex flex-col">
-        {/* Controls */}
-        <div className="border-b border-border px-8 py-4 flex items-center gap-3 flex-wrap">
+        <div className="border-b border-border/60 px-6 py-3 flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 flex-1 min-w-[200px]">
             <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
             <input
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
               placeholder="ID do projeto Lovable (UUID)"
-              className="flex-1 bg-muted/50 border border-border/50 rounded-[10px] px-4 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/20"
+              className="lv-input flex-1 h-9 font-mono text-sm"
             />
           </div>
           <button
             onClick={loadPreview}
             disabled={loading || !projectId.trim()}
-            className="ep-btn-primary h-9 px-5 text-[9px] flex items-center gap-1.5 disabled:opacity-40"
+            className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-1.5"
           >
-            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-            CARREGAR
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Carregar
           </button>
           {fullUrl && (
             <>
-              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="ep-btn-secondary h-9 px-4 text-[9px] flex items-center gap-1.5">
-                <ExternalLink className="h-3 w-3" /> NOVA ABA
+              <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+                <ExternalLink className="h-3.5 w-3.5" /> Nova aba
               </a>
-              <button onClick={() => { navigator.clipboard.writeText(fullUrl); toast.success("Link copiado!"); }} className="ep-btn-secondary h-9 px-4 text-[9px] flex items-center gap-1.5">
-                <Copy className="h-3 w-3" /> COPIAR
+              <button onClick={() => { navigator.clipboard.writeText(fullUrl); toast.success("Link copiado!"); }} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+                <Copy className="h-3.5 w-3.5" /> Copiar
               </button>
             </>
           )}
         </div>
 
-        {/* Preview */}
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -146,7 +141,7 @@ export default function LovablePreview() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <Monitor className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground">Insira o ID do projeto e clique em Carregar</p>
+              <p className="lv-body">Insira o ID do projeto e clique em Carregar</p>
             </div>
           </div>
         )}
