@@ -23,6 +23,10 @@ const Community = lazy(() => import("./pages/Community"));
 const Profile = lazy(() => import("./pages/Profile"));
 const AffiliatesPage = lazy(() => import("./pages/AffiliatesPage"));
 const Install = lazy(() => import("./pages/Install"));
+const LovableConnect = lazy(() => import("./pages/LovableConnect"));
+const LovableProjects = lazy(() => import("./pages/LovableProjects"));
+const LovablePreview = lazy(() => import("./pages/LovablePreview"));
+const LovableUploadTest = lazy(() => import("./pages/LovableUploadTest"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -52,6 +56,10 @@ const App = () => (
                 <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/affiliates" element={<AffiliatesPage />} />
                 <Route path="/install" element={<Install />} />
+                <Route path="/lovable/connect" element={<LovableConnect />} />
+                <Route path="/lovable/projects" element={<LovableProjects />} />
+                <Route path="/lovable/preview" element={<LovablePreview />} />
+                <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

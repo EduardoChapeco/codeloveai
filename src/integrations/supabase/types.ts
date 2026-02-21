@@ -282,6 +282,36 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_endpoint_config: {
+        Row: {
+          api_key_encrypted: string | null
+          created_at: string
+          endpoint_url: string
+          id: string
+          is_active: boolean
+          model: string
+          system_prompt: string | null
+        }
+        Insert: {
+          api_key_encrypted?: string | null
+          created_at?: string
+          endpoint_url: string
+          id?: string
+          is_active?: boolean
+          model?: string
+          system_prompt?: string | null
+        }
+        Update: {
+          api_key_encrypted?: string | null
+          created_at?: string
+          endpoint_url?: string
+          id?: string
+          is_active?: boolean
+          model?: string
+          system_prompt?: string | null
+        }
+        Relationships: []
+      }
       chat_conversations: {
         Row: {
           created_at: string
@@ -485,6 +515,45 @@ export type Database = {
         }
         Relationships: []
       }
+      deployments_log: {
+        Row: {
+          created_at: string
+          deployment_id: string | null
+          id: string
+          lovable_project_id: string
+          progress: Json | null
+          status: string
+          target_name: string | null
+          target_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deployment_id?: string | null
+          id?: string
+          lovable_project_id: string
+          progress?: Json | null
+          status?: string
+          target_name?: string | null
+          target_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deployment_id?: string | null
+          id?: string
+          lovable_project_id?: string
+          progress?: Json | null
+          status?: string
+          target_name?: string | null
+          target_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       extension_files: {
         Row: {
           created_at: string
@@ -536,6 +605,114 @@ export type Database = {
           name?: string
           posts_count?: number
           slug?: string
+        }
+        Relationships: []
+      }
+      lovable_accounts: {
+        Row: {
+          created_at: string
+          id: string
+          last_verified_at: string | null
+          status: string
+          token_encrypted: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_verified_at?: string | null
+          status?: string
+          token_encrypted: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_verified_at?: string | null
+          status?: string
+          token_encrypted?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      lovable_api_calls_log: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          endpoint: string
+          id: string
+          method: string
+          request_meta: Json | null
+          response_meta: Json | null
+          response_status: number | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          endpoint: string
+          id?: string
+          method: string
+          request_meta?: Json | null
+          response_meta?: Json | null
+          response_status?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          endpoint?: string
+          id?: string
+          method?: string
+          request_meta?: Json | null
+          response_meta?: Json | null
+          response_status?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      lovable_projects: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          latest_screenshot_url: string | null
+          lovable_project_id: string
+          name: string | null
+          preview_build_commit_sha: string | null
+          published_url: string | null
+          updated_at: string
+          user_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          latest_screenshot_url?: string | null
+          lovable_project_id: string
+          name?: string | null
+          preview_build_commit_sha?: string | null
+          published_url?: string | null
+          updated_at?: string
+          user_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          latest_screenshot_url?: string | null
+          lovable_project_id?: string
+          name?: string | null
+          preview_build_commit_sha?: string | null
+          published_url?: string | null
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string | null
         }
         Relationships: []
       }
@@ -946,6 +1123,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "member" | "affiliate"
