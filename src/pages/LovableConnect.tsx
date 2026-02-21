@@ -73,21 +73,21 @@ export default function LovableConnect() {
   return (
     <div className="min-h-screen bg-background">
       <AppNav />
-      <div className="max-w-xl mx-auto px-8 py-12">
-        <p className="ep-subtitle mb-1">INTEGRAÇÃO</p>
-        <h1 className="ep-section-title text-2xl mb-8">LOVABLE CONNECT</h1>
+      <div className="max-w-xl mx-auto px-6 py-10">
+        <p className="lv-overline mb-1">Integração</p>
+        <h1 className="lv-heading-lg mb-8">Lovable Connect</h1>
 
         {loadingAccount ? (
           <div className="text-center py-20"><Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" /></div>
         ) : isConnected ? (
-          <div className="space-y-6">
-            <div className="ep-card flex items-center gap-4">
-              <div className="h-12 w-12 rounded-[14px] bg-green-500/10 flex items-center justify-center">
-                <Check className="h-6 w-6 text-green-500" />
+          <div className="space-y-5">
+            <div className="lv-card flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-green-500/10 flex items-center justify-center">
+                <Check className="h-5 w-5 text-green-500" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-foreground">CONECTADO</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="lv-body-strong">Conectado</p>
+                <p className="lv-caption">
                   {account?.last_verified_at
                     ? `Verificado em ${new Date(account.last_verified_at).toLocaleString("pt-BR")}`
                     : "Token ativo"}
@@ -95,41 +95,39 @@ export default function LovableConnect() {
               </div>
             </div>
 
-            <div className="ep-card-sm bg-muted/30 flex items-start gap-3 py-3 px-4">
-              <ShieldCheck className="h-4 w-4 text-foreground shrink-0 mt-0.5" />
-              <p className="text-[10px] text-muted-foreground font-medium">
-                Seu token é armazenado de forma segura no servidor e <strong className="text-foreground">nunca</strong> é exposto no navegador após salvo. Todas as chamadas à API Lovable passam pelo proxy seguro.
+            <div className="lv-card-sm bg-accent/50 flex items-start gap-3">
+              <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+              <p className="lv-caption">
+                Seu token é armazenado de forma segura no servidor e <strong className="text-foreground">nunca</strong> é exposto no navegador após salvo.
               </p>
             </div>
 
             <button
               onClick={handleDisconnect}
               disabled={disconnecting}
-              className="ep-btn-secondary w-full h-11 flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10"
+              className="lv-btn-secondary w-full h-11 flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10"
             >
               {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
-              DESCONECTAR
+              Desconectar
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-5">
             {account?.status === "expired" && (
-              <div className="ep-card-sm bg-destructive/10 border-destructive/20 flex items-start gap-3 py-3 px-4">
+              <div className="lv-card-sm bg-destructive/10 border-destructive/20 flex items-start gap-3">
                 <X className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                <p className="text-[10px] text-destructive font-medium">
-                  Seu token expirou. Insira um novo token para reconectar.
-                </p>
+                <p className="lv-caption text-destructive">Seu token expirou. Insira um novo token para reconectar.</p>
               </div>
             )}
 
-            <div className="ep-card space-y-4">
+            <div className="lv-card space-y-4">
               <div className="flex items-center gap-3 mb-2">
-                <div className="h-10 w-10 rounded-[14px] bg-muted flex items-center justify-center">
-                  <Link2 className="h-5 w-5 text-foreground" />
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Link2 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-foreground">Conectar Token</p>
-                  <p className="text-xs text-muted-foreground">Insira seu Bearer token da API Lovable</p>
+                  <p className="lv-body-strong">Conectar Token</p>
+                  <p className="lv-caption">Insira seu Bearer token da API Lovable</p>
                 </div>
               </div>
 
@@ -139,7 +137,7 @@ export default function LovableConnect() {
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder="Bearer token..."
-                  className="w-full bg-muted/50 border border-border/50 rounded-[10px] px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/20 font-mono"
+                  className="lv-input h-11 pr-12 font-mono"
                 />
                 <button
                   onClick={() => setShowToken(!showToken)}
@@ -152,18 +150,18 @@ export default function LovableConnect() {
               <button
                 onClick={handleSave}
                 disabled={saving || !token.trim()}
-                className="ep-btn-primary w-full h-11 flex items-center justify-center gap-2 disabled:opacity-40"
+                className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                VERIFICAR E SALVAR
+                Verificar e salvar
               </button>
             </div>
 
-            <div className="ep-card-sm bg-muted/30 flex items-start gap-3 py-3 px-4">
-              <ShieldCheck className="h-4 w-4 text-foreground shrink-0 mt-0.5" />
-              <div className="text-[10px] text-muted-foreground font-medium space-y-1">
+            <div className="lv-card-sm bg-accent/50 flex items-start gap-3">
+              <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+              <div className="lv-caption space-y-1">
                 <p>O token será verificado contra a API Lovable antes de ser salvo.</p>
-                <p>Após salvo, ele <strong className="text-foreground">nunca retorna ao navegador</strong> — todas as chamadas são feitas pelo proxy seguro do servidor.</p>
+                <p>Após salvo, ele <strong className="text-foreground">nunca retorna ao navegador</strong> — todas as chamadas são feitas pelo proxy seguro.</p>
               </div>
             </div>
           </div>

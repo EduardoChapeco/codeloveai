@@ -5,25 +5,39 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
+interface Plan {
+  id: string;
+  name: string;
+  price: number;
+  originalPrice: string;
+  period: string;
+  description: string;
+  features: string[];
+  popular?: boolean;
+  highlight?: boolean;
+  discountedPrice?: number;
+}
+
+// Base plans, terms, UNLIMITED_DEADLINE, useCountdown, formatBRL
 const basePlans = [
   {
-    id: "1_day", name: "1 DIA", price: 9.99, originalPrice: "R$29,97", period: "por dia",
+    id: "1_day", name: "1 Dia", price: 9.99, originalPrice: "R$29,97", period: "por dia",
     description: "Perfeito para testar a extensão antes de se comprometer.",
     features: ["Envios ilimitados por 24h", "Sem descontar créditos", "Ativação imediata", "Suporte via chat"],
   },
   {
-    id: "7_days", name: "7 DIAS", price: 49.90, originalPrice: "R$149,70", period: "por semana",
+    id: "7_days", name: "7 Dias", price: 49.90, originalPrice: "R$149,70", period: "por semana",
     description: "Ideal para sprints rápidos ou projetos de curta duração.",
     features: ["Envios ilimitados por 7 dias", "Sem descontar créditos", "Ativação imediata", "Suporte prioritário"],
   },
   {
-    id: "1_month", name: "1 MÊS", price: 149.90, originalPrice: "R$449,70", period: "por mês",
+    id: "1_month", name: "1 Mês", price: 149.90, originalPrice: "R$449,70", period: "por mês",
     description: "O plano mais escolhido. Ideal para projetos completos.",
     popular: true,
     features: ["Envios ilimitados por 30 dias", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte prioritário"],
   },
   {
-    id: "12_months", name: "12 MESES", price: 499.00, originalPrice: "R$1.497,00", period: "por tempo indeterminado*",
+    id: "12_months", name: "12 Meses", price: 499.00, originalPrice: "R$1.497,00", period: "por tempo indeterminado*",
     description: "Plano por tempo indeterminado até 12 meses. Acesso completo enquanto a extensão estiver ativa.",
     highlight: true,
     features: ["Acesso por tempo indeterminado (até 12 meses)", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
@@ -86,11 +100,9 @@ export default function Checkout() {
   const [pixData, setPixData] = useState<{ pix_code: string; pix_qr_base64?: string; ticket_url?: string; payment_id?: string } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"redirect" | "pix">("pix");
 
-  // Affiliate discount state
   const [affiliateDiscount, setAffiliateDiscount] = useState(0);
   const [loadingDiscount, setLoadingDiscount] = useState(true);
 
-  // Check if user is an affiliate and get their discount
   useEffect(() => {
     if (!user) { setLoadingDiscount(false); return; }
     const checkAffiliate = async () => {
@@ -107,7 +119,6 @@ export default function Checkout() {
     checkAffiliate();
   }, [user]);
 
-  // Build plans with discount applied
   const plans = basePlans.map(p => ({
     ...p,
     discountedPrice: affiliateDiscount > 0
@@ -152,8 +163,6 @@ export default function Checkout() {
         body: { plan: selectedPlan, payment_method: paymentMethod },
       });
 
-      console.log("Checkout response:", { data, error });
-
       if (error) throw error;
       if (data?.error) {
         toast.error(data.error);
@@ -174,12 +183,10 @@ export default function Checkout() {
       } else if (data?.init_point) {
         window.location.href = data.init_point;
       } else {
-        console.error("Unexpected checkout response:", data);
         toast.error("Erro ao criar checkout. Tente novamente.");
         setStep("terms");
       }
     } catch (err: any) {
-      console.error("Checkout error:", err);
       toast.error("Erro ao processar pagamento. Tente novamente.");
       setStep("terms");
     } finally {
@@ -202,30 +209,30 @@ export default function Checkout() {
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-background border-b border-border px-8 py-5 flex items-center justify-between">
-        <Link to="/" className="ep-label text-sm tracking-[0.3em]">CODELOVE AI</Link>
+      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
+        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
         <button
           onClick={() => {
             if (step === "terms") { setStep("plan"); setAgreedTerms(false); }
             else navigate("/");
           }}
-          className="ep-btn-secondary h-10 px-6 text-[9px] flex items-center gap-2"
+          className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-2"
         >
-          <ArrowLeft className="h-3 w-3" />
-          VOLTAR
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Voltar
         </button>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-8 py-12">
+      <div className="max-w-4xl mx-auto px-6 py-10">
         {/* Step indicator */}
-        <div className="flex items-center justify-center gap-4 mb-12">
+        <div className="flex items-center justify-center gap-3 mb-10">
           {[
-            { key: "plan", label: "1. PLANO" },
-            { key: "terms", label: "2. TERMOS" },
-            { key: "processing", label: "3. PAGAMENTO" },
+            { key: "plan", label: "1. Plano" },
+            { key: "terms", label: "2. Termos" },
+            { key: "processing", label: "3. Pagamento" },
           ].map((s, i) => (
             <div key={s.key} className="flex items-center gap-2">
-              <span className={`ep-badge ${step === s.key || (step === "pix" && s.key === "processing") ? "ep-badge-live" : "ep-badge-offline"}`}>
+              <span className={`lv-badge ${step === s.key || (step === "pix" && s.key === "processing") ? "lv-badge-primary" : "lv-badge-muted"}`}>
                 {s.label}
               </span>
               {i < 2 && <ChevronDown className="h-3 w-3 text-muted-foreground -rotate-90" />}
@@ -235,11 +242,11 @@ export default function Checkout() {
 
         {/* Affiliate discount banner */}
         {affiliateDiscount > 0 && step === "plan" && (
-          <div className="ep-card-sm border-green-500/30 bg-green-500/10 flex items-center gap-3 mb-8">
+          <div className="lv-card-sm border-green-500/30 bg-green-500/5 flex items-center gap-3 mb-8">
             <Percent className="h-5 w-5 text-green-500 shrink-0" />
             <div>
-              <p className="text-xs font-bold text-foreground tracking-widest">DESCONTO DE AFILIADO — {affiliateDiscount}% OFF</p>
-              <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+              <p className="lv-body-strong">Desconto de afiliado — {affiliateDiscount}% OFF</p>
+              <p className="lv-caption mt-0.5">
                 Como afiliado, seu desconto de {affiliateDiscount}% é aplicado automaticamente em todos os planos.
               </p>
             </div>
@@ -249,48 +256,35 @@ export default function Checkout() {
         {/* Step 1: Plan selection */}
         {step === "plan" && (
           <div>
-            <p className="ep-subtitle text-center mb-4">ESCOLHA SEU PLANO</p>
-            <h1 className="ep-section-title text-center mb-4">PLANOS E PREÇOS</h1>
+            <p className="lv-overline text-center mb-2">Escolha seu plano</p>
+            <h1 className="lv-heading-lg text-center mb-4">Planos e Preços</h1>
             
-            {/* Limited time banner */}
-            <div className="ep-card-sm border-foreground/20 bg-foreground/5 text-center mb-12">
-              <p className="text-xs font-bold text-foreground tracking-widest mb-1">⏰ PREÇOS POR TEMPO LIMITADO</p>
-              <p className="text-[11px] text-muted-foreground font-medium">
-                Aproveite os preços promocionais de lançamento.
-              </p>
+            <div className="lv-card-sm text-center mb-10">
+              <p className="lv-body-strong">⏰ Preços por tempo limitado</p>
+              <p className="lv-caption mt-0.5">Aproveite os preços promocionais de lançamento.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {plans.filter(p => !(p.highlight && countdown.expired)).map((plan) => (
                 <div
                   key={plan.id}
-                  className={`ep-card-interactive flex flex-col justify-between cursor-pointer transition-all ${
-                    plan.popular ? "ep-card-active" : ""
-                  } ${selectedPlan === plan.id ? "ring-2 ring-foreground" : ""}`}
+                  className={`lv-card-interactive flex flex-col justify-between ${
+                    plan.popular ? "lv-card-active" : ""
+                  } ${selectedPlan === plan.id ? "ring-2 ring-primary" : ""}`}
                   onClick={() => handleSelectPlan(plan.id)}
                 >
                   <div className="flex flex-col h-full">
-                    {/* Badge */}
-                    <div className="min-h-[32px] mb-4 flex gap-2">
-                      {plan.popular && (
-                        <span className="ep-badge ep-badge-live inline-block">POPULAR</span>
-                      )}
-                      {plan.highlight && !countdown.expired && (
-                        <span className="ep-badge ep-badge-live inline-block">MELHOR CUSTO</span>
-                      )}
-                      {affiliateDiscount > 0 && (
-                        <span className="ep-badge inline-block bg-green-500/20 text-green-500 border-green-500/30">
-                          -{affiliateDiscount}%
-                        </span>
-                      )}
+                    <div className="min-h-[28px] mb-3 flex gap-2">
+                      {plan.popular && <span className="lv-badge lv-badge-primary">Popular</span>}
+                      {plan.highlight && !countdown.expired && <span className="lv-badge lv-badge-primary">Melhor custo</span>}
+                      {affiliateDiscount > 0 && <span className="lv-badge lv-badge-success">-{affiliateDiscount}%</span>}
                     </div>
 
-                    {/* Countdown for highlight plan */}
                     {plan.highlight && !countdown.expired && (
-                      <div className="bg-foreground/5 border border-foreground/20 rounded-[10px] p-3 mb-4">
+                      <div className="bg-accent rounded-xl p-3 mb-4">
                         <div className="flex items-center gap-1.5 justify-center mb-2">
-                          <Timer className="h-3.5 w-3.5 text-foreground" />
-                          <span className="text-[9px] font-bold text-foreground tracking-widest">OFERTA ENCERRA EM</span>
+                          <Timer className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-xs font-medium text-primary">Oferta encerra em</span>
                         </div>
                         <div className="flex items-center justify-center gap-2">
                           {[
@@ -300,53 +294,48 @@ export default function Checkout() {
                             { value: countdown.seconds, label: "S" },
                           ].map((t, i) => (
                             <div key={i} className="flex items-baseline gap-0.5">
-                              <span className="text-lg font-black text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
-                              <span className="text-[8px] font-bold text-muted-foreground">{t.label}</span>
+                              <span className="text-lg font-semibold text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
+                              <span className="text-[10px] font-medium text-muted-foreground">{t.label}</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Price block */}
-                    <p className="ep-subtitle mb-2">{plan.name}</p>
-                    <p className="text-sm text-muted-foreground line-through font-medium">{plan.originalPrice}</p>
+                    <p className="lv-overline mb-2">{plan.name}</p>
+                    <p className="text-sm text-muted-foreground line-through">{plan.originalPrice}</p>
                     {affiliateDiscount > 0 ? (
                       <div className="flex items-baseline gap-2">
-                        <p className="text-sm text-muted-foreground line-through font-medium">{formatBRL(plan.price)}</p>
-                        <p className="ep-value text-3xl text-green-500">{formatBRL(plan.discountedPrice)}</p>
+                        <p className="text-sm text-muted-foreground line-through">{formatBRL(plan.price)}</p>
+                        <p className="lv-stat text-2xl text-green-600">{formatBRL(plan.discountedPrice)}</p>
                       </div>
                     ) : (
-                      <p className="ep-value text-3xl mb-1">{formatBRL(plan.price)}</p>
+                      <p className="lv-stat text-2xl mb-1">{formatBRL(plan.price)}</p>
                     )}
-                    <p className="text-xs text-muted-foreground font-medium mb-4">{plan.period}</p>
+                    <p className="lv-caption mb-4">{plan.period}</p>
+                    <p className="lv-body mb-5">{plan.description}</p>
 
-                    {/* Description */}
-                    <p className="text-sm text-muted-foreground font-medium mb-6">{plan.description}</p>
-
-                    {/* Features */}
                     <ul className="space-y-2 flex-1">
                       {plan.features.map((f) => (
-                        <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground font-medium">
-                          <Check className="h-4 w-4 text-foreground shrink-0 mt-0.5" />
+                        <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                           <span>{f}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
                   <button
-                    className={`w-full mt-6 ${plan.popular || plan.highlight ? "ep-btn-primary" : "ep-btn-secondary"}`}
+                    className={`w-full mt-5 ${plan.popular || plan.highlight ? "lv-btn-primary" : "lv-btn-secondary"} h-10 text-sm`}
                     onClick={(e) => { e.stopPropagation(); handleSelectPlan(plan.id); }}
                   >
-                    SELECIONAR
+                    Selecionar
                   </button>
                 </div>
               ))}
             </div>
 
-            {/* Weekend grace note */}
-            <div className="mt-6 text-center">
-              <p className="text-[10px] text-muted-foreground font-medium italic">
+            <div className="mt-5 text-center">
+              <p className="lv-caption italic">
                 *Tolerância de fim de semana: se seu plano expirar no sábado ou domingo, o acesso é estendido automaticamente até segunda-feira.
               </p>
             </div>
@@ -356,107 +345,87 @@ export default function Checkout() {
         {/* Step 2: Terms */}
         {step === "terms" && selectedPlanData && (
           <div>
-            <p className="ep-subtitle text-center mb-4">ACEITE OS TERMOS</p>
-            <h1 className="ep-section-title text-center mb-8">TERMOS DE USO</h1>
+            <p className="lv-overline text-center mb-2">Aceite os termos</p>
+            <h1 className="lv-heading-lg text-center mb-8">Termos de Uso</h1>
 
-            {/* Selected plan summary */}
-            <div className="ep-card-sm flex items-center justify-between mb-8">
+            <div className="lv-card-sm flex items-center justify-between mb-8">
               <div>
-                <p className="text-sm font-bold text-foreground">Plano selecionado: {selectedPlanData.name}</p>
-                <p className="text-xs text-muted-foreground">{selectedPlanData.description}</p>
+                <p className="lv-body-strong">Plano selecionado: {selectedPlanData.name}</p>
+                <p className="lv-caption">{selectedPlanData.description}</p>
               </div>
               <div className="text-right">
                 {affiliateDiscount > 0 ? (
                   <div>
                     <p className="text-xs text-muted-foreground line-through">{formatBRL(selectedPlanData.price)}</p>
-                    <p className="ep-value text-2xl text-green-500">{formatBRL(selectedPlanData.discountedPrice)}</p>
-                    <p className="text-[9px] font-bold text-green-500">-{affiliateDiscount}% AFILIADO</p>
+                    <p className="lv-stat text-xl text-green-600">{formatBRL(selectedPlanData.discountedPrice)}</p>
+                    <p className="text-[10px] font-medium text-green-600">-{affiliateDiscount}% afiliado</p>
                   </div>
                 ) : (
-                  <p className="ep-value text-2xl">{formatBRL(selectedPlanData.price)}</p>
+                  <p className="lv-stat text-xl">{formatBRL(selectedPlanData.price)}</p>
                 )}
               </div>
             </div>
 
-            <div className="ep-card space-y-4">
+            <div className="lv-card space-y-4">
               {terms.map((term, i) => (
                 <div key={i} className="flex items-start gap-3">
-                  <span className="ep-label mt-1 shrink-0">{String(i + 1).padStart(2, "0")}.</span>
-                  <p className="text-sm text-muted-foreground font-medium">{term}</p>
+                  <span className="lv-caption font-medium mt-0.5 shrink-0">{String(i + 1).padStart(2, "0")}.</span>
+                  <p className="lv-body">{term}</p>
                 </div>
               ))}
 
-              <div className="pt-8 border-t border-border">
+              <div className="pt-6 border-t border-border/60">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={agreedTerms}
                     onChange={(e) => setAgreedTerms(e.target.checked)}
-                    className="mt-1 h-4 w-4 rounded-[4px] border border-border accent-foreground"
+                    className="mt-1 h-4 w-4 rounded border border-border accent-primary"
                   />
-                  <span className="text-sm font-bold text-foreground">
-                    Li e concordo com todos os termos acima. Entendo que a extensão não é oficial, que o cancelamento
-                    ou paralisação não gera indenização, e assumo total responsabilidade pela sua utilização.
+                  <span className="lv-body">
+                    Li e concordo com todos os termos acima. Entendo que não há garantia de funcionamento contínuo e que não há reembolso.
                   </span>
                 </label>
               </div>
-            </div>
 
-            {/* Payment method selector */}
-            <div className="mt-8">
-              <p className="ep-label text-xs mb-3">MÉTODO DE PAGAMENTO</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setPaymentMethod("pix")}
-                  className={`flex items-center gap-2 justify-center p-3 rounded-lg border transition-all text-sm font-bold ${
-                    paymentMethod === "pix"
-                      ? "border-foreground bg-foreground/10 text-foreground"
-                      : "border-border text-muted-foreground hover:border-foreground/50"
-                  }`}
-                >
-                  <QrCode className="h-4 w-4" />
-                  PIX
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("redirect")}
-                  className={`flex items-center gap-2 justify-center p-3 rounded-lg border transition-all text-sm font-bold ${
-                    paymentMethod === "redirect"
-                      ? "border-foreground bg-foreground/10 text-foreground"
-                      : "border-border text-muted-foreground hover:border-foreground/50"
-                  }`}
-                >
-                  <CreditCard className="h-4 w-4" />
-                  CARTÃO / OUTROS
-                </button>
+              {/* Payment method selection */}
+              <div className="pt-4">
+                <p className="lv-overline mb-3">Método de pagamento</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setPaymentMethod("pix")}
+                    className={`lv-card-sm flex items-center gap-3 cursor-pointer transition-all ${
+                      paymentMethod === "pix" ? "lv-card-active" : ""
+                    }`}
+                  >
+                    <QrCode className="h-5 w-5 text-foreground" />
+                    <div className="text-left">
+                      <p className="lv-body-strong text-xs">PIX</p>
+                      <p className="lv-caption">Pagamento instantâneo</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setPaymentMethod("redirect")}
+                    className={`lv-card-sm flex items-center gap-3 cursor-pointer transition-all ${
+                      paymentMethod === "redirect" ? "lv-card-active" : ""
+                    }`}
+                  >
+                    <CreditCard className="h-5 w-5 text-foreground" />
+                    <div className="text-left">
+                      <p className="lv-body-strong text-xs">Cartão / Outros</p>
+                      <p className="lv-caption">Via Mercado Pago</p>
+                    </div>
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-6 flex items-center justify-between">
-              <button
-                onClick={() => { setStep("plan"); setAgreedTerms(false); }}
-                className="ep-btn-secondary h-12 px-8 text-[9px]"
-              >
-                TROCAR PLANO
-              </button>
               <button
                 onClick={handleConfirmAndPay}
                 disabled={!agreedTerms || loadingCheckout}
-                className="ep-btn-primary h-12 px-8 text-[9px]"
+                className="lv-btn-primary w-full h-12 text-sm mt-4"
               >
-                {loadingCheckout ? "PROCESSANDO..." : paymentMethod === "pix" ? "GERAR PIX" : "CONFIRMAR E PAGAR"}
+                {loadingCheckout ? "Processando..." : `Pagar ${affiliateDiscount > 0 ? formatBRL(selectedPlanData.discountedPrice) : formatBRL(selectedPlanData.price)}`}
               </button>
-            </div>
-
-            <div className="mt-6">
-              <div className="ep-card-sm flex items-start gap-4">
-                <AlertTriangle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                <p className="text-xs text-muted-foreground font-medium">
-                  <strong className="text-foreground">Importante:</strong>{" "}
-                  {paymentMethod === "pix"
-                    ? "Ao confirmar, será gerado um código PIX para pagamento. O acesso é ativado automaticamente após a confirmação."
-                    : "Ao confirmar, você será redirecionado para o Mercado Pago para completar o pagamento de forma segura."}
-                </p>
-              </div>
             </div>
           </div>
         )}
@@ -464,94 +433,46 @@ export default function Checkout() {
         {/* Step 3: Processing */}
         {step === "processing" && (
           <div className="text-center py-20">
-            <Loader2 className="h-12 w-12 animate-spin text-muted-foreground mx-auto mb-6" />
-            <p className="ep-subtitle mb-2">PROCESSANDO</p>
-            <p className="text-sm text-muted-foreground font-medium">
-              Redirecionando para o pagamento...
-            </p>
+            <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary mb-4" />
+            <p className="lv-heading-md mb-2">Processando...</p>
+            <p className="lv-body">Aguarde enquanto preparamos seu pagamento.</p>
           </div>
         )}
 
-        {/* Step 4: PIX Display */}
-        {step === "pix" && pixData && selectedPlanData && (
-          <div>
-            <p className="ep-subtitle text-center mb-4">PAGAMENTO VIA PIX</p>
-            <h1 className="ep-section-title text-center mb-8">ESCANEIE OU COPIE O CÓDIGO</h1>
+        {/* PIX step */}
+        {step === "pix" && pixData && (
+          <div className="max-w-md mx-auto">
+            <p className="lv-overline text-center mb-2">Pagamento PIX</p>
+            <h1 className="lv-heading-lg text-center mb-8">Escaneie ou copie</h1>
 
-            {/* Plan summary */}
-            <div className="ep-card-sm flex items-center justify-between mb-8">
+            <div className="lv-card text-center space-y-6">
+              {pixData.pix_qr_base64 && (
+                <div className="flex justify-center">
+                  <img src={`data:image/png;base64,${pixData.pix_qr_base64}`} alt="QR Code PIX" className="h-48 w-48 rounded-xl" />
+                </div>
+              )}
+
               <div>
-                <p className="text-sm font-bold text-foreground">{selectedPlanData.name}</p>
-                <p className="text-xs text-muted-foreground">{selectedPlanData.description}</p>
-              </div>
-              <div className="text-right">
-                {affiliateDiscount > 0 ? (
-                  <p className="ep-value text-2xl text-green-500">{formatBRL(selectedPlanData.discountedPrice)}</p>
-                ) : (
-                  <p className="ep-value text-2xl">{formatBRL(selectedPlanData.price)}</p>
-                )}
-              </div>
-            </div>
-
-            {/* QR Code */}
-            {pixData.pix_qr_base64 && (
-              <div className="flex justify-center mb-8">
-                <div className="bg-white p-4 rounded-xl">
-                  <img
-                    src={`data:image/png;base64,${pixData.pix_qr_base64}`}
-                    alt="QR Code PIX"
-                    className="w-64 h-64"
-                  />
+                <p className="lv-overline mb-2">Código PIX Copia e Cola</p>
+                <div className="bg-muted/50 rounded-xl p-3 break-all text-xs font-mono text-foreground">
+                  {pixData.pix_code.substring(0, 60)}...
                 </div>
               </div>
-            )}
 
-            {/* PIX Copy-Paste */}
-            <div className="ep-card">
-              <p className="ep-label text-xs mb-3">CÓDIGO PIX (COPIA E COLA)</p>
-              <div className="bg-muted/50 rounded-lg p-4 break-all text-xs text-muted-foreground font-mono mb-4 max-h-32 overflow-y-auto">
-                {pixData.pix_code}
-              </div>
-              <button
-                onClick={handleCopyPix}
-                className="ep-btn-primary w-full flex items-center justify-center gap-2"
-              >
-                <Copy className="h-4 w-4" />
-                COPIAR CÓDIGO PIX
+              <button onClick={handleCopyPix} className="lv-btn-primary w-full h-11 text-sm flex items-center justify-center gap-2">
+                <Copy className="h-4 w-4" /> Copiar código PIX
               </button>
-            </div>
 
-            <div className="mt-6 ep-card-sm flex items-start gap-4">
-              <AlertTriangle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">
-                  <strong className="text-foreground">Ativação automática:</strong> Após o pagamento ser confirmado,
-                  seu acesso será ativado automaticamente. Isso pode levar alguns minutos.
+              <div className="lv-card-sm bg-accent/50">
+                <p className="lv-caption">
+                  Após o pagamento, seu plano será ativado automaticamente em até 5 minutos.
+                  Você receberá seu token de acesso no dashboard.
                 </p>
               </div>
-            </div>
 
-            {pixData.ticket_url && (
-              <div className="mt-4 text-center">
-                <a
-                  href={pixData.ticket_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
-                >
-                  Abrir página de pagamento do Mercado Pago →
-                </a>
-              </div>
-            )}
-
-            <div className="mt-6 flex justify-center">
-              <button
-                onClick={() => { setStep("terms"); setPixData(null); }}
-                className="ep-btn-secondary h-10 px-6 text-[9px] flex items-center gap-2"
-              >
-                <ArrowLeft className="h-3 w-3" />
-                VOLTAR
-              </button>
+              <Link to="/dashboard" className="lv-btn-secondary w-full h-10 text-sm flex items-center justify-center">
+                Ir para o Dashboard
+              </Link>
             </div>
           </div>
         )}
