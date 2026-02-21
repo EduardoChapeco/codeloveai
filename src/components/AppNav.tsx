@@ -1,11 +1,13 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
-import { LogOut, Shield, Users, MessageCircle, LayoutDashboard, Download } from "lucide-react";
+import { useChatContext } from "@/contexts/ChatContext";
+import { LogOut, Shield, Users, MessageCircle, LayoutDashboard, Download, Bot } from "lucide-react";
 
 export default function AppNav() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
+  const { toggleChat, isChatOpen } = useChatContext();
   const location = useLocation();
 
   if (authLoading || !user) return null;
@@ -48,6 +50,15 @@ export default function AppNav() {
         >
           <span className="hidden sm:inline">PERFIL</span>
         </Link>
+        <button
+          onClick={toggleChat}
+          className={`h-9 w-9 rounded-[12px] flex items-center justify-center transition-all ${
+            isChatOpen ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          }`}
+          title="CodeLove AI"
+        >
+          <Bot className="h-3.5 w-3.5" />
+        </button>
         <button onClick={signOut} className="ep-btn-icon h-9 w-9 rounded-[12px] ml-1">
           <LogOut className="h-3.5 w-3.5" />
         </button>

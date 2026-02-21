@@ -5,6 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ChatProvider } from "@/contexts/ChatContext";
+import ChatPanel from "@/components/chat/ChatPanel";
 import Index from "./pages/Index";
 
 const Login = lazy(() => import("./pages/Login"));
@@ -32,26 +34,29 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={<div className="min-h-screen bg-background" />}>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/affiliate" element={<AffiliateDashboard />} />
-              <Route path="/ref/:code" element={<AffiliateRefPage />} />
-              <Route path="/checkout" element={<Checkout />} />
-              <Route path="/free" element={<FreePlan />} />
-              <Route path="/community" element={<Community />} />
-              <Route path="/profile/:userId" element={<Profile />} />
-              <Route path="/affiliates" element={<AffiliatesPage />} />
-              <Route path="/install" element={<Install />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+          <ChatProvider>
+            <Suspense fallback={<div className="min-h-screen bg-background" />}>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/affiliate" element={<AffiliateDashboard />} />
+                <Route path="/ref/:code" element={<AffiliateRefPage />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/free" element={<FreePlan />} />
+                <Route path="/community" element={<Community />} />
+                <Route path="/profile/:userId" element={<Profile />} />
+                <Route path="/affiliates" element={<AffiliatesPage />} />
+                <Route path="/install" element={<Install />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+            <ChatPanel />
+          </ChatProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
