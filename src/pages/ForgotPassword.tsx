@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
+import MeshBackground from "@/components/MeshBackground";
 
 export default function ForgotPassword() {
   const { tenant } = useTenant();
@@ -27,10 +28,16 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center px-6 relative">
+      <MeshBackground />
+
+      <div className="w-full max-w-sm animate-fade-in">
         <Link to="/" className="block text-center mb-10">
-          <span className="text-lg font-semibold tracking-tight text-foreground">{brandName}</span>
+          {tenant?.logo_url ? (
+            <img src={tenant.logo_url} alt={brandName} className="h-8 mx-auto" />
+          ) : (
+            <span className="text-lg font-semibold tracking-tight text-foreground">{brandName}</span>
+          )}
         </Link>
 
         <div className="lv-card p-8">

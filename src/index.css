@@ -5,23 +5,23 @@
 @layer base {
   :root {
     /* ━━━ APPLE LIQUID GLASS PALETTE ━━━ */
-    --background: 0 0% 97.5%;
-    --foreground: 0 0% 8%;
+    --background: 220 20% 97%;
+    --foreground: 220 15% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 8%;
+    --card-foreground: 220 15% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 8%;
+    --popover-foreground: 220 15% 10%;
 
     --primary: 211 100% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 8%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 15% 10%;
 
-    --muted: 0 0% 95.5%;
-    --muted-foreground: 0 0% 40%;
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 9% 46%;
 
     --accent: 211 100% 96%;
     --accent-foreground: 211 100% 35%;
@@ -29,25 +29,34 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
     --ring: 211 100% 50%;
 
     --radius: 1rem;
 
-    /* ── Glass tokens ── */
+    /* ── Liquid Glass tokens (Apple-spec) ── */
     --glass-bg: 0 0% 100% / 0.72;
     --glass-border: 0 0% 100% / 0.5;
     --glass-blur: 24px;
     --glass-saturate: 180%;
+    --glass-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.04);
+    --glass-shadow-hover: 0 4px 16px rgba(0,0,0,0.08), 0 12px 48px rgba(0,0,0,0.06);
+    --specular-top: inset 0 1px 0 rgba(255,255,255,0.7);
+    --specular-top-hover: inset 0 1px 0 rgba(255,255,255,0.85);
+
+    /* ── Mesh gradient orbs ── */
+    --mesh-1: 211 100% 85%;
+    --mesh-2: 199 90% 88%;
+    --mesh-3: 263 60% 90%;
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 0 0% 22%;
+    --sidebar-foreground: 220 10% 25%;
     --sidebar-primary: 211 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 211 100% 96%;
     --sidebar-accent-foreground: 211 100% 35%;
-    --sidebar-border: 0 0% 92%;
+    --sidebar-border: 220 13% 93%;
     --sidebar-ring: 211 100% 50%;
   }
 }
@@ -65,9 +74,33 @@
   }
 }
 
-/* ━━━ LOVABLE SOFT UI DESIGN SYSTEM (lv-*) ━━━ */
+/* ━━━ LOVABLE LIQUID GLASS DESIGN SYSTEM (lv-*) ━━━ */
 
 @layer components {
+
+  /* ── Animated mesh gradient background ── */
+  .lv-mesh-bg {
+    @apply fixed inset-0 -z-10 overflow-hidden;
+    background: hsl(var(--background));
+  }
+  .lv-mesh-bg::before,
+  .lv-mesh-bg::after,
+  .lv-mesh-bg > .lv-mesh-orb {
+    content: '';
+    @apply absolute rounded-full;
+    filter: blur(80px);
+    opacity: 0.6;
+  }
+  .lv-mesh-bg::before {
+    @apply w-[500px] h-[500px] top-[-10%] right-[10%];
+    background: radial-gradient(circle, hsl(var(--mesh-1)) 0%, transparent 70%);
+    animation: mesh-float-1 20s ease-in-out infinite;
+  }
+  .lv-mesh-bg::after {
+    @apply w-[600px] h-[600px] bottom-[-5%] left-[5%];
+    background: radial-gradient(circle, hsl(var(--mesh-2)) 0%, transparent 70%);
+    animation: mesh-float-2 25s ease-in-out infinite;
+  }
 
   /* ── Typography (Apple-style tight tracking) ── */
   .lv-heading-xl {
@@ -112,31 +145,39 @@
     border: 1px solid hsla(var(--glass-border));
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: var(--glass-shadow), var(--specular-top);
   }
 
   /* ── Cards — Liquid Glass with specular highlight ── */
   .lv-card {
-    @apply rounded-2xl border border-white/40 bg-white/70 p-5 transition-all duration-300 ease-out relative overflow-hidden;
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6);
+    @apply rounded-2xl p-5 transition-all duration-300 ease-out relative overflow-hidden;
+    background: hsla(var(--glass-bg));
+    border: 1px solid hsla(var(--glass-border));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: var(--glass-shadow), var(--specular-top);
   }
   .lv-card-sm {
-    @apply rounded-xl border border-white/40 bg-white/70 p-3.5 transition-all duration-300 ease-out relative;
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.5);
+    @apply rounded-xl p-3.5 transition-all duration-300 ease-out relative;
+    background: hsla(var(--glass-bg));
+    border: 1px solid hsla(var(--glass-border));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03), var(--specular-top);
   }
   .lv-card-interactive {
-    @apply rounded-2xl border border-white/40 bg-white/70 p-5 cursor-pointer transition-all duration-300 ease-out relative overflow-hidden;
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6);
+    @apply rounded-2xl p-5 cursor-pointer transition-all duration-300 ease-out relative overflow-hidden;
+    background: hsla(var(--glass-bg));
+    border: 1px solid hsla(var(--glass-border));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: var(--glass-shadow), var(--specular-top);
   }
   .lv-card-interactive:hover {
-    @apply border-white/60 bg-white/85;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.7);
-    transform: translateY(-1px);
+    background: hsla(0 0% 100% / 0.85);
+    border-color: hsla(0 0% 100% / 0.7);
+    box-shadow: var(--glass-shadow-hover), var(--specular-top-hover);
+    transform: translateY(-2px);
   }
   .lv-card-active {
     @apply border-primary/30 bg-primary/5;
@@ -147,65 +188,88 @@
 
   /* ── Buttons — Apple pill style (44px touch target) ── */
   .lv-btn-primary {
-    @apply h-11 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer shadow-sm;
+    @apply h-11 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 4px 12px hsl(var(--primary) / 0.2);
   }
   .lv-btn-primary:hover {
-    @apply brightness-105 shadow-md;
+    @apply brightness-105;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 8px 24px hsl(var(--primary) / 0.3);
+    transform: translateY(-1px);
   }
   .lv-btn-primary:active {
-    @apply scale-[0.97] shadow-sm;
+    @apply scale-[0.97];
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    transform: translateY(0);
   }
   .lv-btn-primary:disabled {
-    @apply opacity-50 pointer-events-none shadow-none;
+    @apply opacity-50 pointer-events-none;
+    box-shadow: none;
   }
 
   .lv-btn-secondary {
-    @apply h-11 px-5 rounded-xl border border-white/50 bg-white/60 text-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-11 px-5 rounded-xl text-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    background: hsla(var(--glass-bg));
+    border: 1px solid hsla(var(--glass-border));
     backdrop-filter: blur(12px) saturate(150%);
     -webkit-backdrop-filter: blur(12px) saturate(150%);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), var(--specular-top);
   }
   .lv-btn-secondary:hover {
-    @apply bg-white/80 border-white/70 shadow-sm;
+    background: hsla(0 0% 100% / 0.85);
+    border-color: hsla(0 0% 100% / 0.7);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06), var(--specular-top-hover);
+    transform: translateY(-1px);
   }
   .lv-btn-secondary:active {
     @apply scale-[0.97];
+    transform: translateY(0);
   }
 
   .lv-btn-ghost {
     @apply h-11 px-4 rounded-xl text-muted-foreground text-[13px] font-medium transition-all duration-200 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-btn-ghost:hover {
-    @apply bg-white/50 text-foreground;
+    @apply text-foreground;
+    background: hsla(0 0% 100% / 0.5);
   }
 
   .lv-btn-icon {
     @apply h-11 w-11 rounded-xl flex items-center justify-center text-muted-foreground transition-all duration-200 cursor-pointer;
   }
   .lv-btn-icon:hover {
-    @apply bg-white/50 text-foreground;
+    @apply text-foreground;
+    background: hsla(0 0% 100% / 0.5);
   }
 
   .lv-btn-lg {
     @apply h-12 px-6 rounded-xl text-[14px] font-medium;
   }
 
-  /* ── Inputs — Apple style ── */
+  /* ── Inputs — Apple glass style ── */
   .lv-input {
-    @apply h-11 w-full rounded-xl px-4 bg-white/50 border border-white/40 text-[14px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
+    @apply h-11 w-full rounded-xl px-4 text-[14px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
+    background: hsla(0 0% 100% / 0.5);
+    border: 1px solid hsla(var(--glass-border));
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
   .lv-input:focus {
-    @apply bg-white/80 border-primary/30 ring-2 ring-primary/10;
+    background: hsla(0 0% 100% / 0.85);
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.08);
   }
 
   .lv-textarea {
-    @apply w-full rounded-xl px-4 py-3 bg-white/50 border border-white/40 text-[14px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
+    @apply w-full rounded-xl px-4 py-3 text-[14px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
+    background: hsla(0 0% 100% / 0.5);
+    border: 1px solid hsla(var(--glass-border));
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
   .lv-textarea:focus {
-    @apply bg-white/80 border-primary/30 ring-2 ring-primary/10;
+    background: hsla(0 0% 100% / 0.85);
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.08);
   }
 
   /* ── Badges — pill shape ── */
@@ -246,7 +310,9 @@
 
   /* ── Pill ── */
   .lv-pill {
-    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium bg-white/50 text-muted-foreground;
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium;
+    background: hsla(0 0% 100% / 0.5);
+    color: hsl(var(--muted-foreground));
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
@@ -256,16 +322,19 @@
 
   /* ── Sheet / Drawer ── */
   .lv-sheet-btn {
-    @apply w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium text-[14px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-sm;
+    @apply w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium text-[14px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 4px 12px hsl(var(--primary) / 0.2);
   }
   .lv-sheet-btn:hover {
-    @apply brightness-105 shadow-md;
+    @apply brightness-105;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 8px 24px hsl(var(--primary) / 0.3);
   }
   .lv-sheet-btn:active {
     @apply scale-[0.97];
   }
   .lv-sheet-btn:disabled {
-    @apply opacity-40 pointer-events-none shadow-none;
+    @apply opacity-40 pointer-events-none;
+    box-shadow: none;
   }
 
   /* ── Empty state ── */
@@ -273,7 +342,8 @@
     @apply rounded-2xl border-2 border-dashed border-border/40 py-14 text-center flex flex-col items-center justify-center gap-3;
   }
   .lv-empty-icon {
-    @apply h-14 w-14 rounded-2xl bg-white/50 flex items-center justify-center text-muted-foreground;
+    @apply h-14 w-14 rounded-2xl flex items-center justify-center text-muted-foreground;
+    background: hsla(0 0% 100% / 0.5);
   }
 
   /* ── Scrollbar hide ── */
@@ -285,6 +355,25 @@
     scrollbar-width: none;
   }
 
+  /* ── Hover utilities ── */
+  .hover-scale {
+    @apply transition-transform duration-200 hover:scale-105;
+  }
+
+  /* ── Story link underline animation ── */
+  .story-link * {
+    @apply relative inline-block;
+  }
+  .story-link *::after {
+    content: '';
+    @apply absolute w-full h-0.5 bottom-0 left-0 bg-primary origin-bottom-right transition-transform duration-300;
+    transform: scaleX(0);
+  }
+  .story-link *:hover::after {
+    transform: scaleX(1);
+    transform-origin: bottom left;
+  }
+
   /* ━━━ LEGACY ep-* classes (kept for backward compat) ━━━ */
   .ep-title { @apply lv-heading-xl; }
   .ep-section-title { @apply lv-heading-lg; }
@@ -294,16 +383,12 @@
   .ep-card { @apply lv-card; }
   .ep-card-sm { @apply lv-card-sm; }
   .ep-card-interactive { @apply lv-card-interactive; }
-  .ep-card-interactive:hover { @apply border-white/60; }
   .ep-card-active { @apply lv-card-active; }
   .ep-btn-primary { @apply lv-btn-primary; }
   .ep-btn-primary:active { @apply scale-[0.97]; }
   .ep-btn-secondary { @apply lv-btn-secondary; }
-  .ep-btn-secondary:hover { @apply bg-white/80; }
   .ep-btn-icon { @apply lv-btn-icon; }
-  .ep-btn-icon:hover { @apply bg-white/50 text-foreground; }
   .ep-input { @apply lv-input; }
-  .ep-input:focus-visible { @apply bg-white/80 border-primary/30 ring-2 ring-primary/10; }
   .ep-badge { @apply lv-badge; }
   .ep-badge-live { @apply lv-badge-primary; }
   .ep-badge-offline { @apply lv-badge-muted; }
@@ -311,7 +396,6 @@
   .ep-empty-icon { @apply lv-empty-icon; }
   .ep-empty-title { @apply text-xl font-semibold text-muted-foreground; }
   .ep-sheet-input { @apply lv-input h-12 text-base px-4; }
-  .ep-sheet-input:focus-visible { @apply bg-white/80 border-primary/30 ring-2 ring-primary/10; }
   .ep-sheet-label { @apply text-xs font-medium text-foreground tracking-wide ml-1 block mb-1.5; }
   .ep-sheet-btn { @apply lv-sheet-btn; }
   .ep-sheet-btn:hover { @apply brightness-105; }
