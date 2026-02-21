@@ -18,7 +18,7 @@ const Admin = lazy(() => import("./pages/Admin"));
 const AffiliateDashboard = lazy(() => import("./pages/AffiliateDashboard"));
 const AffiliateRefPage = lazy(() => import("./pages/AffiliateRefPage"));
 const Checkout = lazy(() => import("./pages/Checkout"));
-const FreePlan = lazy(() => import("./pages/FreePlan"));
+// FreePlan removed
 const Community = lazy(() => import("./pages/Community"));
 const Profile = lazy(() => import("./pages/Profile"));
 const AffiliatesPage = lazy(() => import("./pages/AffiliatesPage"));
@@ -51,7 +51,7 @@ const App = () => (
                 <Route path="/affiliate" element={<AffiliateDashboard />} />
                 <Route path="/ref/:code" element={<AffiliateRefPage />} />
                 <Route path="/checkout" element={<Checkout />} />
-                <Route path="/free" element={<FreePlan />} />
+                {/* /free route removed */}
                 <Route path="/community" element={<Community />} />
                 <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/affiliates" element={<AffiliatesPage />} />

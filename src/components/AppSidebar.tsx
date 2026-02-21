@@ -35,7 +35,7 @@ const adminTabs = [
   { id: "extension", label: "Extensão", icon: Upload },
   { id: "notifications", label: "Notificações", icon: Bell },
   { id: "messages", label: "Mensagens", icon: Send },
-  { id: "free-links", label: "Links Grátis", icon: Gift },
+  
 ];
 
 export default function AppSidebar() {
