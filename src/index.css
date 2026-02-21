@@ -5,7 +5,7 @@
 @layer base {
   :root {
     /* ━━━ LOVABLE SOFT UI PALETTE ━━━ */
-    --background: 0 0% 98.5%;
+    --background: 0 0% 97%;
     --foreground: 0 0% 10%;
 
     --card: 0 0% 100%;
@@ -20,7 +20,7 @@
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 10%;
 
-    --muted: 0 0% 96%;
+    --muted: 0 0% 95.5%;
     --muted-foreground: 0 0% 45%;
 
     --accent: 252 85% 96%;
@@ -29,11 +29,11 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 92%;
-    --input: 0 0% 92%;
+    --border: 0 0% 91%;
+    --input: 0 0% 91%;
     --ring: 252 85% 60%;
 
-    --radius: 1rem;
+    --radius: 0.75rem;
 
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 0 0% 25%;
@@ -41,14 +41,8 @@
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 252 85% 96%;
     --sidebar-accent-foreground: 252 85% 40%;
-    --sidebar-border: 0 0% 94%;
+    --sidebar-border: 0 0% 93%;
     --sidebar-ring: 252 85% 60%;
-    /* Mesh gradient for layered layout */
-    --mesh-color-1: 252 85% 92%;
-    --mesh-color-2: 280 70% 90%;
-    --mesh-color-3: 220 80% 92%;
-    /* Floating sidebar shadow */
-    --sidebar-variant-floating: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
   }
 }
 
@@ -97,29 +91,29 @@
     @apply text-3xl font-semibold tracking-tight text-foreground tabular-nums;
   }
 
-  /* ── Cards — flat, no shadows ── */
+  /* ── Cards — clean flat, no shadows ── */
   .lv-card {
-    @apply rounded-2xl border border-border/40 bg-card p-6 transition-all duration-200 ease-out;
+    @apply rounded-xl border border-border/50 bg-card p-5 transition-all duration-200 ease-out;
   }
   .lv-card-sm {
-    @apply rounded-xl border border-border/40 bg-card p-4 transition-all duration-200 ease-out;
+    @apply rounded-lg border border-border/50 bg-card p-3.5 transition-all duration-200 ease-out;
   }
   .lv-card-interactive {
-    @apply rounded-2xl border border-border/40 bg-card p-6 cursor-pointer transition-all duration-200 ease-out;
+    @apply rounded-xl border border-border/50 bg-card p-5 cursor-pointer transition-all duration-200 ease-out;
   }
   .lv-card-interactive:hover {
-    @apply border-border bg-muted/30;
+    @apply border-border bg-muted/20;
   }
   .lv-card-active {
-    @apply border-primary/30 bg-primary/5;
+    @apply border-primary/25 bg-primary/5;
   }
   .lv-card-flat {
-    @apply rounded-2xl bg-muted/40 p-6;
+    @apply rounded-xl bg-muted/50 p-5;
   }
 
-  /* ── Buttons — blur/glass aesthetic, no shadows ── */
+  /* ── Buttons — clean, no shadows ── */
   .lv-btn-primary {
-    @apply h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer backdrop-blur-sm;
+    @apply h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-btn-primary:hover {
     @apply brightness-110;
@@ -132,51 +126,51 @@
   }
 
   .lv-btn-secondary {
-    @apply h-10 px-5 rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm text-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-9 px-4 rounded-lg border border-border/60 bg-card text-foreground text-[13px] font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-btn-secondary:hover {
-    @apply bg-muted/60 border-border;
+    @apply bg-muted/50 border-border;
   }
   .lv-btn-secondary:active {
     @apply scale-[0.98];
   }
 
   .lv-btn-ghost {
-    @apply h-10 px-4 rounded-xl text-muted-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-9 px-3.5 rounded-lg text-muted-foreground text-[13px] font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-btn-ghost:hover {
-    @apply bg-muted/40 text-foreground;
+    @apply bg-muted/50 text-foreground;
   }
 
   .lv-btn-icon {
-    @apply h-10 w-10 rounded-xl flex items-center justify-center text-muted-foreground transition-all duration-150 cursor-pointer;
+    @apply h-9 w-9 rounded-lg flex items-center justify-center text-muted-foreground transition-all duration-150 cursor-pointer;
   }
   .lv-btn-icon:hover {
-    @apply bg-muted/40 text-foreground;
+    @apply bg-muted/50 text-foreground;
   }
 
   .lv-btn-lg {
-    @apply h-12 px-6 rounded-xl text-sm font-medium;
+    @apply h-11 px-5 rounded-lg text-[13px] font-medium;
   }
 
   /* ── Inputs ── */
   .lv-input {
-    @apply h-10 w-full rounded-xl px-4 bg-muted/50 border border-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
+    @apply h-9 w-full rounded-lg px-3.5 bg-muted/50 border border-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
   }
   .lv-input:focus {
-    @apply bg-background border-border ring-2 ring-primary/20;
+    @apply bg-background border-border ring-2 ring-primary/15;
   }
 
   .lv-textarea {
-    @apply w-full rounded-xl px-4 py-3 bg-muted/50 border border-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
+    @apply w-full rounded-lg px-3.5 py-2.5 bg-muted/50 border border-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
   }
   .lv-textarea:focus {
-    @apply bg-background border-border ring-2 ring-primary/20;
+    @apply bg-background border-border ring-2 ring-primary/15;
   }
 
   /* ── Badges ── */
   .lv-badge {
-    @apply inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium;
+    @apply inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium;
   }
   .lv-badge-primary {
     @apply bg-primary/10 text-primary;
@@ -196,23 +190,23 @@
 
   /* ── Nav items ── */
   .lv-nav-item {
-    @apply flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150;
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150;
   }
   .lv-nav-item-active {
     @apply bg-primary/10 text-primary;
   }
   .lv-nav-item-inactive {
-    @apply text-muted-foreground hover:bg-muted/60 hover:text-foreground;
+    @apply text-muted-foreground hover:bg-muted/50 hover:text-foreground;
   }
 
   /* ── Dividers ── */
   .lv-divider {
-    @apply border-t border-border/60;
+    @apply border-t border-border/50;
   }
 
-  /* ── Pill (rounded-full alternatives) ── */
+  /* ── Pill ── */
   .lv-pill {
-    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-muted/60 text-muted-foreground;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-muted/60 text-muted-foreground;
   }
   .lv-pill-primary {
     @apply bg-primary/10 text-primary;
@@ -220,7 +214,7 @@
 
   /* ── Sheet / Drawer ── */
   .lv-sheet-btn {
-    @apply w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer backdrop-blur-sm;
+    @apply w-full h-11 rounded-lg bg-primary text-primary-foreground font-medium text-[13px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-sheet-btn:hover {
     @apply brightness-110;
@@ -234,10 +228,10 @@
 
   /* ── Empty state ── */
   .lv-empty {
-    @apply rounded-2xl border-2 border-dashed border-border/60 py-16 text-center flex flex-col items-center justify-center gap-4;
+    @apply rounded-xl border-2 border-dashed border-border/50 py-14 text-center flex flex-col items-center justify-center gap-3;
   }
   .lv-empty-icon {
-    @apply h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground;
+    @apply h-14 w-14 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground;
   }
 
   /* ── Scrollbar hide ── */
@@ -249,7 +243,7 @@
     scrollbar-width: none;
   }
 
-  /* ━━━ LEGACY ep-* classes (kept for backward compat during migration) ━━━ */
+  /* ━━━ LEGACY ep-* classes (kept for backward compat) ━━━ */
   .ep-title { @apply lv-heading-xl; }
   .ep-section-title { @apply lv-heading-lg; }
   .ep-subtitle { @apply lv-overline; }
@@ -265,17 +259,17 @@
   .ep-btn-secondary { @apply lv-btn-secondary; }
   .ep-btn-secondary:hover { @apply bg-muted/50; }
   .ep-btn-icon { @apply lv-btn-icon; }
-  .ep-btn-icon:hover { @apply bg-muted/60 text-foreground; }
+  .ep-btn-icon:hover { @apply bg-muted/50 text-foreground; }
   .ep-input { @apply lv-input; }
-  .ep-input:focus-visible { @apply bg-background border-border ring-2 ring-primary/20; }
+  .ep-input:focus-visible { @apply bg-background border-border ring-2 ring-primary/15; }
   .ep-badge { @apply lv-badge; }
   .ep-badge-live { @apply lv-badge-primary; }
   .ep-badge-offline { @apply lv-badge-muted; }
   .ep-empty { @apply lv-empty; }
   .ep-empty-icon { @apply lv-empty-icon; }
   .ep-empty-title { @apply text-xl font-semibold text-muted-foreground; }
-  .ep-sheet-input { @apply lv-input h-12 text-base px-5; }
-  .ep-sheet-input:focus-visible { @apply bg-background border-border ring-2 ring-primary/20; }
+  .ep-sheet-input { @apply lv-input h-11 text-base px-4; }
+  .ep-sheet-input:focus-visible { @apply bg-background border-border ring-2 ring-primary/15; }
   .ep-sheet-label { @apply text-xs font-medium text-foreground tracking-wide ml-1 block mb-1.5; }
   .ep-sheet-btn { @apply lv-sheet-btn; }
   .ep-sheet-btn:hover { @apply brightness-110; }
