@@ -23,43 +23,44 @@ interface Plan {
 // Base plans, terms, UNLIMITED_DEADLINE, useCountdown, formatBRL
 const basePlans = [
   {
-    id: "1_day", name: "1 Dia", price: 9.99, originalPrice: "R$29,97", period: "por dia",
+    id: "1_day", name: "1 Dia", price: 19.90, originalPrice: "R$49,90", period: "por dia",
     description: "Perfeito para testar a extensão antes de se comprometer.",
     features: ["Envios ilimitados por 24h", "Sem descontar créditos", "Ativação imediata", "Suporte via chat"],
   },
   {
-    id: "7_days", name: "7 Dias", price: 49.90, originalPrice: "R$149,70", period: "por semana",
+    id: "7_days", name: "7 Dias", price: 89.90, originalPrice: "R$249,90", period: "por semana",
     description: "Ideal para sprints rápidos ou projetos de curta duração.",
+    popular: true,
     features: ["Envios ilimitados por 7 dias", "Sem descontar créditos", "Ativação imediata", "Suporte prioritário"],
   },
   {
-    id: "1_month", name: "1 Mês", price: 149.90, originalPrice: "R$449,70", period: "por mês",
-    description: "O plano mais escolhido. Ideal para projetos completos.",
-    popular: true,
-    features: ["Envios ilimitados por 30 dias", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte prioritário"],
-  },
-  {
-    id: "12_months", name: "12 Meses", price: 499.00, originalPrice: "R$1.497,00", period: "por tempo indeterminado*",
-    description: "Plano por tempo indeterminado até 12 meses. Acesso completo enquanto a extensão estiver ativa.",
+    id: "lifetime", name: "Vitalício", price: 199.00, originalPrice: "R$499,00", period: "acesso vitalício*",
+    description: "Acesso enquanto a extensão estiver funcional. Serviço considerado concluído após ativação do token.",
     highlight: true,
-    features: ["Acesso por tempo indeterminado (até 12 meses)", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
+    features: [
+      "Acesso vitalício enquanto a extensão funcionar",
+      "Sem descontar créditos",
+      "Suporte VIP dedicado",
+      "Serviço concluído após ativação",
+    ],
   },
 ];
 
 const defaultTerms = [
   "Estamos vendendo acesso à extensão, e não acesso à plataforma Lovable.",
   "A extensão NÃO é oficial e não possui nenhum vínculo com a Lovable.",
-  "Não há reembolso caso a extensão pare de funcionar ou seja limitada, independentemente do tempo restante do plano.",
+  "Não há reembolso em nenhuma hipótese — o serviço é considerado CONCLUÍDO e ENTREGUE a partir do momento da ativação do token.",
   "O cancelamento ou paralisação temporária do serviço não gera direito a indenização de qualquer natureza.",
-  "O serviço é considerado entregue após o envio e ativação do token.",
-  "O cliente assume total responsabilidade pela utilização de uma extensão não oficial, podendo ter projetos, contas bloqueados, suspensos ou excluídos a qualquer momento.",
-  "Não nos responsabilizamos por quaisquer consequências do uso da extensão.",
-  "O plano '12 Meses' oferece acesso por tempo indeterminado, com duração máxima de até 12 meses, enquanto a extensão estiver ativa. A descontinuação do serviço não gera reembolso.",
-  "Nosso método é novo e utiliza a própria plataforma para se comunicar.",
+  "O cliente assume total responsabilidade pela utilização de uma extensão não oficial, estando ciente de que contas, projetos e dados podem ser bloqueados, suspensos ou excluídos pela Lovable a qualquer momento.",
+  "Não nos responsabilizamos por quaisquer consequências do uso da extensão, incluindo mas não se limitando a perda de dados, bloqueio de conta ou suspensão de serviços.",
+  "O plano 'Vitalício' oferece acesso enquanto a extensão estiver funcional. Caso a extensão pare de funcionar, seja limitada ou descontinuada, NÃO temos obrigação de fornecer nova extensão, novo método, créditos ou qualquer tipo de compensação.",
+  "A ativação da extensão será registrada com dados do dispositivo, IP e localização para fins de comprovação de entrega do serviço.",
+  "Nosso método é não oficial e utiliza a própria plataforma para se comunicar. Por ser não oficial, está sob risco constante de suspensão.",
   "Não utilizamos créditos da conta Lovable — todos os projetos, mensagens e planos criados/enviados não descontam créditos.",
+  "Ao ativar a extensão, o cliente reconhece que o serviço foi entregue e declara ciência de todos os riscos envolvidos.",
 ];
 
-const UNLIMITED_DEADLINE = new Date("2026-02-25T23:59:59-03:00").getTime();
+const UNLIMITED_DEADLINE = new Date("2026-03-15T23:59:59-03:00").getTime();
 
 function useCountdown(deadline: number) {
   const [timeLeft, setTimeLeft] = useState(() => {
@@ -343,7 +344,7 @@ export default function Checkout() {
 
             <div className="mt-5 text-center">
               <p className="lv-caption italic">
-                *Tolerância de fim de semana: se seu plano expirar no sábado ou domingo, o acesso é estendido automaticamente até segunda-feira.
+                *Vitalício: acesso enquanto a extensão estiver funcional. Serviço considerado concluído após ativação do token. Não há reembolso.
               </p>
             </div>
           </div>

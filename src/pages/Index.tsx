@@ -9,27 +9,27 @@ import MeshBackground from "@/components/MeshBackground";
 
 const plans = [
   {
-    id: "1_day", name: "1 Dia", price: "R$9,99", originalPrice: "R$29,97", period: "por dia",
+    id: "1_day", name: "1 Dia", price: "R$19,90", originalPrice: "R$49,90", period: "por dia",
     description: "Perfeito para testar a extensão antes de se comprometer.",
     features: ["Envios ilimitados por 24h", "Sem descontar créditos", "Ativação imediata", "Suporte via chat"],
   },
   {
-    id: "7_days", name: "7 Dias", price: "R$49,90", originalPrice: "R$149,70", period: "por semana",
+    id: "7_days", name: "7 Dias", price: "R$89,90", originalPrice: "R$249,90", period: "por semana",
     description: "Ideal para sprints rápidos ou projetos de curta duração.",
-    features: ["Envios ilimitados por 7 dias", "Sem descontar créditos", "Ativação imediata", "Suporte prioritário"],
-  },
-  {
-    id: "1_month", name: "1 Mês", price: "R$149,90", originalPrice: "R$449,70", period: "por mês",
-    description: "O plano mais escolhido. Ideal para projetos completos.",
     popular: true,
-    features: ["Envios ilimitados por 30 dias", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte prioritário"],
+    features: ["Envios ilimitados por 7 dias", "Sem descontar créditos", "Ativação imediata", "Suporte prioritário"],
     badge: "Popular",
   },
   {
-    id: "12_months", name: "12 Meses", price: "R$499,00", originalPrice: "R$1.497,00", period: "por tempo indeterminado*",
-    description: "Plano por tempo indeterminado até 12 meses. Acesso completo enquanto a extensão estiver ativa.",
+    id: "lifetime", name: "Vitalício", price: "R$199,00", originalPrice: "R$499,00", period: "acesso vitalício*",
+    description: "Acesso enquanto a extensão estiver funcional. Serviço concluído após ativação.",
     highlight: true,
-    features: ["Acesso por tempo indeterminado (até 12 meses)", "Sem descontar créditos", "Tolerância de fim de semana*", "Suporte VIP dedicado"],
+    features: [
+      "Acesso vitalício enquanto a extensão funcionar",
+      "Sem descontar créditos",
+      "Suporte VIP dedicado",
+      "Serviço concluído após ativação",
+    ],
     badge: "Melhor custo",
   },
 ];
@@ -42,17 +42,20 @@ const benefits = [
 ];
 
 const faqs = [
-  { q: "Como funciona a extensão?", a: "Após a compra, você recebe acesso à extensão e um token de ativação. Instale a extensão no navegador, ative com o token e comece a usar imediatamente." },
+  { q: "Como funciona a extensão?", a: "Após a compra, você recebe acesso à extensão e um token de ativação. Instale a extensão no navegador, ative com o token e comece a usar imediatamente. A ativação é registrada automaticamente no sistema." },
   { q: "Meus créditos do Lovable são descontados?", a: "Não. Nossa extensão utiliza um método próprio de comunicação. Nenhum crédito da sua conta Lovable é utilizado." },
-  { q: "A extensão é oficial do Lovable?", a: "Não. A extensão NÃO é oficial e não possui nenhum vínculo com a plataforma Lovable." },
-  { q: "E se a extensão parar de funcionar?", a: "Não há reembolso caso a extensão pare de funcionar ou seja limitada. O serviço é considerado entregue após o envio e ativação do token." },
-  { q: "Posso ter minha conta bloqueada?", a: "Sim, existe o risco de bloqueio, suspensão ou exclusão da sua conta Lovable. A utilização da extensão é de sua total responsabilidade." },
-  { q: "Como recebo o token?", a: "Após a confirmação do pagamento, o admin ativará seu token e ele estará disponível na sua área de membro." },
+  { q: "A extensão é oficial do Lovable?", a: "Não. A extensão NÃO é oficial e não possui nenhum vínculo com a plataforma Lovable. Por ser um método não oficial, está sob risco constante de suspensão." },
+  { q: "E se a extensão parar de funcionar?", a: "O serviço é considerado CONCLUÍDO e ENTREGUE a partir do momento da ativação do token. Não há reembolso em nenhuma hipótese. Não temos obrigação de fornecer nova extensão, novo método ou créditos." },
+  { q: "Posso ter minha conta bloqueada?", a: "Sim, existe o risco de bloqueio, suspensão ou exclusão da sua conta Lovable a qualquer momento. A utilização da extensão é de sua total responsabilidade." },
+  { q: "Como recebo o token?", a: "Após a confirmação do pagamento, seu token será ativado automaticamente e estará disponível na sua área de membro." },
   { q: "Posso compartilhar meu token com outras pessoas?", a: "Não. Cada token possui validação de dispositivo, sendo vinculado ao navegador e máquina onde foi ativado pela primeira vez. O compartilhamento não é possível — tentativas de uso em outro dispositivo resultarão em bloqueio automático do token." },
-  { q: "O que significa 'por tempo indeterminado' no plano de 12 meses?", a: "O plano de 12 meses oferece acesso por tempo indeterminado, com duração máxima de até 12 meses. O acesso permanece válido enquanto a extensão estiver ativa e funcional. Caso a extensão seja descontinuada, limitada ou pare de funcionar, não haverá reembolso proporcional ou integral." },
+  { q: "O que significa 'Vitalício'?", a: "O plano Vitalício oferece acesso enquanto a extensão estiver funcional. Caso a extensão pare de funcionar, seja limitada ou descontinuada, não haverá reembolso. Não temos obrigação de fornecer nova extensão, novo método ou créditos. O serviço é considerado concluído após a ativação do token." },
+  { q: "O que é rastreado na ativação?", a: "Ao ativar a extensão, registramos IP, dispositivo e localização para fins de comprovação de entrega do serviço. Isso garante que podemos provar que o serviço foi efetivamente utilizado." },
+  { q: "Posso ser afiliado?", a: "Sim! Acesse a página de afiliados para se inscrever. Você ganha comissões por cada venda realizada através do seu link e ainda recebe desconto nas suas próprias compras." },
+  { q: "O que é White Label?", a: "O programa White Label permite que você revenda a extensão com sua própria marca. Você gerencia seus clientes, define preços e tem seu próprio painel administrativo. Acesse a página de parceiros para mais informações." },
 ];
 
-const UNLIMITED_DEADLINE = new Date("2026-02-25T23:59:59-03:00").getTime();
+const UNLIMITED_DEADLINE = new Date("2026-03-15T23:59:59-03:00").getTime();
 
 function useCountdown(deadline: number) {
   const [timeLeft, setTimeLeft] = useState(() => {
@@ -90,6 +93,7 @@ export default function Index() {
       <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between w-full">
         <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
         <div className="flex items-center gap-2">
+          <Link to="/partners" className="lv-btn-ghost h-9 px-3 text-xs">Parceiros</Link>
           <Link to="/community" className="lv-btn-ghost h-9 px-3 text-xs">Comunidade</Link>
           <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
           <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
@@ -226,7 +230,7 @@ export default function Index() {
 
         <div className="mt-5 max-w-2xl mx-auto text-center">
           <p className="lv-caption italic">
-            *Tolerância de fim de semana: se seu plano expirar no sábado ou domingo, o acesso é estendido automaticamente até segunda-feira.
+            *Vitalício: acesso enquanto a extensão estiver funcional. Serviço considerado concluído após ativação do token.
           </p>
         </div>
 
@@ -234,8 +238,8 @@ export default function Index() {
           <div className="lv-card-sm flex items-start gap-3">
             <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             <p className="lv-caption">
-              <strong className="text-foreground">Importante:</strong> Ao contratar qualquer plano, você concorda que o serviço é considerado
-              entregue após a ativação do token. A extensão é um produto não oficial.
+              <strong className="text-foreground">Importante:</strong> O serviço é considerado CONCLUÍDO após a ativação do token.
+              Não há reembolso. A extensão é não oficial e está sob risco de suspensão a qualquer momento.
             </p>
           </div>
         </div>
