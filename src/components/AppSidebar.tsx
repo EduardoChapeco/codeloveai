@@ -140,6 +140,11 @@ export default function AppSidebar() {
     { to: "/install", label: "Instalar", icon: Download },
   ];
 
+  // Chat action item (not a route, toggles the chat panel)
+  const handleChatClick = () => {
+    if (!isChatOpen) toggleChat();
+  };
+
   const lovableItems = [
     { to: "/lovable/connect", label: "Conectar", icon: Link2 },
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen },
@@ -201,6 +206,12 @@ export default function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {mainItems.map(renderNavItem)}
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={isChatOpen} onClick={handleChatClick} tooltip="Chat AI">
+                  <Bot className="h-4 w-4" />
+                  <span>Chat AI</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
