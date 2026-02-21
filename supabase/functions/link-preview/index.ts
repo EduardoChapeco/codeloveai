@@ -63,6 +63,28 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Block internal/private network addresses (SSRF protection)
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const blockedPatterns = [
+      /^localhost$/i,
+      /^127\.\d+\.\d+\.\d+$/,
+      /^10\.\d+\.\d+\.\d+$/,
+      /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
+      /^192\.168\.\d+\.\d+$/,
+      /^169\.254\.\d+\.\d+$/,
+      /^0\.0\.0\.0$/,
+      /^\[::1?\]$/,
+      /^metadata\.google\.internal$/,
+      /\.internal$/,
+      /\.local$/,
+    ];
+    if (blockedPatterns.some(p => p.test(hostname))) {
+      return new Response(JSON.stringify({ error: "URL não permitida" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const response = await fetch(url, {
       headers: { "User-Agent": "CodeLoveBot/1.0" },
       redirect: "follow",
