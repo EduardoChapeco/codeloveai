@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -61,6 +62,8 @@ interface ChatMessage {
 export default function Profile() {
   const { userId } = useParams<{ userId: string }>();
   const { user, loading: authLoading, signOut } = useAuth();
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "CodeLove AI";
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -312,7 +315,7 @@ export default function Profile() {
 
   const guestNav = !user ? (
     <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
-      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">CodeLove AI</Link>
+      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
       <Link to="/login" className="lv-btn-primary h-9 px-4 text-xs">Entrar</Link>
     </nav>
   ) : null;
