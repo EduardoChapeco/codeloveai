@@ -816,6 +816,67 @@ export type Database = {
           },
         ]
       }
+      ledger_entries: {
+        Row: {
+          affiliate_id: string | null
+          amount: number
+          created_at: string
+          description: string
+          entry_type: string
+          id: string
+          payment_id: string | null
+          reference_user_id: string | null
+          subscription_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          affiliate_id?: string | null
+          amount?: number
+          created_at?: string
+          description?: string
+          entry_type: string
+          id?: string
+          payment_id?: string | null
+          reference_user_id?: string | null
+          subscription_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          affiliate_id?: string | null
+          amount?: number
+          created_at?: string
+          description?: string
+          entry_type?: string
+          id?: string
+          payment_id?: string | null
+          reference_user_id?: string | null
+          subscription_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_entries_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lovable_accounts: {
         Row: {
           created_at: string
@@ -1616,6 +1677,7 @@ export type Database = {
           font_family: string
           id: string
           is_active: boolean
+          is_domain_approved: boolean
           logo_url: string | null
           meta_description: string | null
           meta_title: string | null
@@ -1638,6 +1700,7 @@ export type Database = {
           font_family?: string
           id?: string
           is_active?: boolean
+          is_domain_approved?: boolean
           logo_url?: string | null
           meta_description?: string | null
           meta_title?: string | null
@@ -1660,6 +1723,7 @@ export type Database = {
           font_family?: string
           id?: string
           is_active?: boolean
+          is_domain_approved?: boolean
           logo_url?: string | null
           meta_description?: string | null
           meta_title?: string | null

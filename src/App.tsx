@@ -17,6 +17,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Admin = lazy(() => import("./pages/Admin"));
 const AdminGlobal = lazy(() => import("./pages/AdminGlobal"));
+const TenantAdmin = lazy(() => import("./pages/TenantAdmin"));
 const AffiliateDashboard = lazy(() => import("./pages/AffiliateDashboard"));
 const AffiliateRefPage = lazy(() => import("./pages/AffiliateRefPage"));
 const Checkout = lazy(() => import("./pages/Checkout"));
@@ -52,6 +53,7 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/global" element={<AdminGlobal />} />
+                <Route path="/admin/tenant" element={<TenantAdmin />} />
                 <Route path="/affiliate" element={<AffiliateDashboard />} />
                 <Route path="/ref/:code" element={<AffiliateRefPage />} />
                 <Route path="/checkout" element={<Checkout />} />

@@ -8,6 +8,7 @@ export interface Tenant {
   name: string;
   slug: string;
   domain_custom: string | null;
+  is_domain_approved: boolean;
   logo_url: string | null;
   favicon_url: string | null;
   primary_color: string;
@@ -50,7 +51,7 @@ async function resolveTenantId(userId: string | null): Promise<string> {
   if (hostname !== "localhost" && !hostname.endsWith(".lovable.app")) {
     const { data: domainTenant } = await supabase
       .from("tenants").select("id")
-      .eq("domain_custom", hostname).eq("is_active", true).maybeSingle();
+      .eq("domain_custom", hostname).eq("is_active", true).eq("is_domain_approved", true).maybeSingle();
     if (domainTenant) return domainTenant.id;
   }
 
