@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
-import { LogOut, Shield, Users, MessageCircle, LayoutDashboard, Download, Bot } from "lucide-react";
+import { LogOut, Shield, Users, MessageCircle, LayoutDashboard, Download, Bot, Link2, FolderOpen } from "lucide-react";
 
 export default function AppNav() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -18,6 +18,8 @@ export default function AppNav() {
     { to: "/dashboard", label: "PAINEL", icon: LayoutDashboard, show: true },
     { to: "/community", label: "COMUNIDADE", icon: MessageCircle, show: true },
     { to: "/affiliate", label: "AFILIADO", icon: Users, show: isAffiliate },
+    { to: "/lovable/connect", label: "LOVABLE", icon: Link2, show: true },
+    { to: "/lovable/projects", label: "PROJETOS", icon: FolderOpen, show: true },
     { to: "/admin", label: "ADMIN", icon: Shield, show: isAdmin },
     { to: "/install", label: "INSTALAR", icon: Download, show: true },
   ];

@@ -1,0 +1,162 @@
+#codelove-panel {
+  position: fixed;
+  top: 0;
+  right: -420px;
+  width: 420px;
+  height: 100vh;
+  background: #0a0a0a;
+  color: #e5e5e5;
+  z-index: 99998;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: right 0.3s ease;
+  border-left: 1px solid #222;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+}
+
+#codelove-panel.open {
+  right: 0;
+}
+
+#codelove-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #222;
+}
+
+.codelove-logo {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  color: #fff;
+}
+
+#codelove-close {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+#codelove-close:hover { color: #fff; background: #222; }
+
+#codelove-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid #222;
+  padding: 0 12px;
+}
+
+.codelove-tab {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  padding: 12px 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+.codelove-tab:hover { color: #ccc; }
+.codelove-tab.active { color: #fff; border-bottom-color: #fff; }
+
+#codelove-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.codelove-section h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: #fff;
+}
+
+.codelove-section p {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 12px;
+}
+
+.codelove-section label {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #888;
+  margin-bottom: 6px;
+  margin-top: 12px;
+}
+
+.codelove-section input,
+.codelove-section select,
+.codelove-section textarea {
+  width: 100%;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #e5e5e5;
+  font-size: 12px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.codelove-section input:focus,
+.codelove-section textarea:focus {
+  outline: none;
+  border-color: #555;
+}
+
+.codelove-section button {
+  background: #fff;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.codelove-section button:hover { opacity: 0.8; }
+
+.codelove-section hr {
+  border: none;
+  border-top: 1px solid #222;
+  margin: 16px 0;
+}
+
+#codelove-chat-messages {
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: #111;
+  border-radius: 10px;
+  border: 1px solid #222;
+}
+
+#codelove-chat-input-wrap {
+  display: flex;
+  gap: 8px;
+}
+
+#codelove-chat-input {
+  flex: 1;
+  resize: none;
+  height: 40px;
+}
+
+#codelove-chat-send {
+  width: auto;
+  padding: 8px 20px;
+}

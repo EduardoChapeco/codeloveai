@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "CodeLove AI Extension",
+  "version": "1.0.0",
+  "description": "Extensão CodeLove AI para Lovable — Painel lateral, chat e gestão de projetos.",
+  "permissions": ["storage", "activeTab", "webRequest"],
+  "host_permissions": ["https://*.lovable.app/*", "https://*.lovableproject.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.lovable.app/*", "https://*.lovableproject.com/*"],
+      "js": ["content.js"],
+      "css": ["panel/panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "CodeLove AI"
+  },
+  "icons": {}
+}
