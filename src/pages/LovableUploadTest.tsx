@@ -2,23 +2,20 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
-import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
-import { Loader2, Upload, Download, Check, Image as ImageIcon, Copy } from "lucide-react";
+import { Loader2, Upload, Check, Image as ImageIcon, Copy, Link2, AlertTriangle } from "lucide-react";
 
 export default function LovableUploadTest() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const { invoke } = useLovableProxy();
+  const { invoke, checkConnection } = useLovableProxy();
 
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [connected, setConnected] = useState<boolean | null>(null);
-
-  // Step tracking
+  const [connectionStatus, setConnectionStatus] = useState<"active" | "expired" | "none" | null>(null);
   const [step, setStep] = useState(0);
 
   useEffect(() => {
@@ -28,16 +25,11 @@ export default function LovableUploadTest() {
   useEffect(() => {
     if (!user) return;
     const check = async () => {
-      const { data } = await supabase
-        .from("lovable_accounts")
-        .select("status")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .maybeSingle();
-      setConnected(!!data);
+      const status = await checkConnection(user.id);
+      setConnectionStatus(status);
     };
     check();
-  }, [user]);
+  }, [user, checkConnection]);
 
   const handleUpload = async () => {
     if (!file) return toast.error("Selecione um arquivo.");
@@ -46,13 +38,6 @@ export default function LovableUploadTest() {
 
     try {
       // Step 1: Generate upload URL
-      const uploadData = await invoke({
-        route: "",
-        method: "POST",
-        action: "proxy",
-        payload: { route: "/files/generate-upload-url", method: "POST", payload: { file_name: file.name, content_type: file.type } },
-      });
-      // Fallback: try direct invoke
       const genData = await invoke({
         route: "/files/generate-upload-url",
         method: "POST",
@@ -63,7 +48,7 @@ export default function LovableUploadTest() {
       const fileKey = genData?.file_key || genData?.key || genData?.path;
 
       if (!signedUrl) {
-        toast.error("Não foi possível gerar URL de upload.");
+        toast.error("Não foi possível gerar URL de upload. Verifique sua conexão.");
         return;
       }
 
@@ -77,7 +62,7 @@ export default function LovableUploadTest() {
       });
 
       if (!uploadRes.ok) {
-        toast.error(`Upload falhou: ${uploadRes.status}`);
+        toast.error(`Upload falhou com status ${uploadRes.status}. Tente novamente.`);
         return;
       }
 
@@ -97,7 +82,7 @@ export default function LovableUploadTest() {
       setStep(4);
       toast.success("Upload completo!");
     } catch (err: any) {
-      toast.error("Erro: " + (err?.message || "Falha no upload"));
+      toast.error("Erro: " + (err?.message || "Falha no upload. Tente novamente."));
     } finally {
       setUploading(false);
     }
@@ -105,106 +90,120 @@ export default function LovableUploadTest() {
 
   if (authLoading || !user) return <div className="min-h-screen bg-background" />;
 
-  if (connected === false) {
+  if (connectionStatus === "none" || connectionStatus === "expired") {
     return (
       <AppLayout>
-      <div className="min-h-screen bg-background">
-        <div className="max-w-xl mx-auto px-8 py-20 text-center">
-          <p className="ep-subtitle mb-2">NÃO CONECTADO</p>
-          <button onClick={() => navigate("/lovable/connect")} className="ep-btn-primary h-11 px-8">CONECTAR</button>
+        <div className="max-w-xl mx-auto px-6 py-20 text-center">
+          {connectionStatus === "expired" ? (
+            <>
+              <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
+              <h2 className="lv-heading-sm mb-2">Token expirado</h2>
+              <p className="lv-body mb-6">Reconecte sua conta para fazer uploads.</p>
+            </>
+          ) : (
+            <>
+              <Link2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h2 className="lv-heading-sm mb-2">Não conectado</h2>
+              <p className="lv-body mb-6">Conecte sua conta Lovable primeiro.</p>
+            </>
+          )}
+          <button onClick={() => navigate("/lovable/connect")} className="lv-btn-primary h-11 px-8 text-sm">
+            {connectionStatus === "expired" ? "Reconectar" : "Conectar"}
+          </button>
         </div>
-      </div>
       </AppLayout>
     );
   }
 
   const steps = [
     { label: "Selecionar arquivo", done: step >= 1 },
-    { label: "Gerar URL de upload", done: step >= 2 },
-    { label: "Fazer upload", done: step >= 3 },
-    { label: "Gerar URL de download", done: step >= 4 },
+    { label: "Gerar URL", done: step >= 2 },
+    { label: "Upload", done: step >= 3 },
+    { label: "Download URL", done: step >= 4 },
   ];
 
   return (
     <AppLayout>
-    <div className="min-h-screen bg-background">
-      <div className="max-w-xl mx-auto px-8 py-12">
-        <p className="ep-subtitle mb-1">TESTE</p>
-        <h1 className="ep-section-title text-2xl mb-8">UPLOAD DE ARQUIVOS</h1>
+      <div className="max-w-xl mx-auto px-6 py-10">
+        <p className="lv-overline mb-1">Teste</p>
+        <h1 className="lv-heading-lg mb-2">Upload de Arquivos</h1>
+        <p className="lv-caption mb-8">Teste o fluxo completo de upload via API Lovable</p>
 
-        <div className="ep-card space-y-6">
+        <div className="lv-card space-y-6">
           {/* Steps indicator */}
           <div className="flex gap-2">
             {steps.map((s, i) => (
               <div key={i} className="flex-1 text-center">
-                <div className={`h-8 w-8 rounded-full mx-auto flex items-center justify-center text-xs font-bold mb-1 ${
-                  s.done ? "bg-green-500 text-white" : step === i ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
+                <div className={`h-8 w-8 rounded-full mx-auto flex items-center justify-center text-xs font-bold mb-1 transition-colors ${
+                  s.done ? "bg-green-500 text-white" : step === i ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                 }`}>
                   {s.done ? <Check className="h-3 w-3" /> : i + 1}
                 </div>
-                <p className="text-[8px] font-bold text-muted-foreground">{s.label.toUpperCase()}</p>
+                <p className="lv-caption text-[10px]">{s.label}</p>
               </div>
             ))}
           </div>
 
           {/* File input */}
-          <div>
-            <label className="block w-full border-2 border-dashed border-border rounded-[12px] p-8 text-center cursor-pointer hover:border-foreground/30 transition-colors">
-              <input type="file" className="hidden" accept="image/*" onChange={(e) => { setFile(e.target.files?.[0] || null); setStep(0); setUploadedUrl(null); setDownloadUrl(null); }} />
-              {file ? (
-                <div className="flex items-center justify-center gap-2">
-                  <ImageIcon className="h-5 w-5 text-foreground" />
-                  <span className="text-sm font-bold text-foreground">{file.name}</span>
-                  <span className="text-xs text-muted-foreground">({(file.size / 1024).toFixed(1)} KB)</span>
-                </div>
-              ) : (
-                <div>
-                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Selecione uma imagem</p>
-                </div>
-              )}
-            </label>
-          </div>
+          <label className="block w-full border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/30 transition-colors">
+            <input
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={(e) => { setFile(e.target.files?.[0] || null); setStep(0); setUploadedUrl(null); setDownloadUrl(null); }}
+            />
+            {file ? (
+              <div className="flex items-center justify-center gap-2">
+                <ImageIcon className="h-5 w-5 text-foreground" />
+                <span className="lv-body-strong text-sm">{file.name}</span>
+                <span className="lv-caption">({(file.size / 1024).toFixed(1)} KB)</span>
+              </div>
+            ) : (
+              <div>
+                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="lv-caption">Clique para selecionar uma imagem</p>
+              </div>
+            )}
+          </label>
 
           <button
             onClick={handleUpload}
             disabled={uploading || !file}
-            className="ep-btn-primary w-full h-11 flex items-center justify-center gap-2 disabled:opacity-40"
+            className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            INICIAR UPLOAD
+            Iniciar Upload
           </button>
 
           {/* Results */}
           {uploadedUrl && (
             <div className="space-y-3">
-              <div className="bg-muted/50 rounded-[10px] p-3">
-                <p className="text-[9px] font-bold text-muted-foreground tracking-widest mb-1">URL DE UPLOAD</p>
+              <div className="bg-muted/50 rounded-xl p-3">
+                <p className="lv-caption text-[10px] font-semibold tracking-wider mb-1">URL DE UPLOAD</p>
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-foreground font-mono truncate flex-1">{uploadedUrl}</p>
                   <button onClick={() => { navigator.clipboard.writeText(uploadedUrl); toast.success("Copiado!"); }}>
-                    <Copy className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                    <Copy className="h-3 w-3 text-muted-foreground hover:text-foreground transition-colors" />
                   </button>
                 </div>
               </div>
 
               {downloadUrl && (
-                <div className="bg-muted/50 rounded-[10px] p-3">
-                  <p className="text-[9px] font-bold text-muted-foreground tracking-widest mb-1">URL DE DOWNLOAD</p>
+                <div className="bg-muted/50 rounded-xl p-3">
+                  <p className="lv-caption text-[10px] font-semibold tracking-wider mb-1">URL DE DOWNLOAD</p>
                   <div className="flex items-center gap-2">
                     <p className="text-xs text-foreground font-mono truncate flex-1">{downloadUrl}</p>
                     <button onClick={() => { navigator.clipboard.writeText(downloadUrl); toast.success("Copiado!"); }}>
-                      <Copy className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                      <Copy className="h-3 w-3 text-muted-foreground hover:text-foreground transition-colors" />
                     </button>
                   </div>
-                  <img src={downloadUrl} alt="Preview" className="mt-3 rounded-[8px] max-h-48 object-contain" />
+                  <img src={downloadUrl} alt="Preview" className="mt-3 rounded-lg max-h-48 object-contain" />
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
-    </div>
     </AppLayout>
   );
 }
