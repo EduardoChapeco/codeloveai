@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { TenantProvider } from "@/contexts/TenantContext";
 import { ChatProvider } from "@/contexts/ChatContext";
 import ChatPanel from "@/components/chat/ChatPanel";
 import Index from "./pages/Index";
@@ -38,6 +39,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <TenantProvider>
           <ChatProvider>
             <Suspense fallback={<div className="min-h-screen bg-background" />}>
               <Routes>
@@ -65,6 +67,7 @@ const App = () => (
             </Suspense>
             <ChatPanel />
           </ChatProvider>
+          </TenantProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

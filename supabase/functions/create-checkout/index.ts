@@ -1,9 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const PLANS: Record<string, { title: string; price: number; days: number }> = {
@@ -33,7 +34,6 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Try getClaims first, fallback to getUser
     let userId: string;
     let userEmail: string;
 
@@ -47,7 +47,6 @@ Deno.serve(async (req) => {
         throw new Error("getClaims failed");
       }
     } catch {
-      // Fallback to getUser
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
         return new Response(JSON.stringify({ error: "Usuário não autenticado" }), {
@@ -58,6 +57,15 @@ Deno.serve(async (req) => {
       userId = user.id;
       userEmail = user.email || "";
     }
+
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Resolve tenant
+    const tenantInfo = await resolveTenant(serviceClient, req, userId);
+    const tenantId = tenantInfo.id || tenantInfo.tenant_id;
 
     const { plan, affiliate_code, payment_method } = await req.json();
 
@@ -74,16 +82,12 @@ Deno.serve(async (req) => {
     let finalPrice = planData.price;
     let discountApplied = 0;
 
-    const serviceClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
     // 1. Auto-detect: check if user IS an affiliate and apply their own discount
     const { data: ownAffiliate } = await serviceClient
       .from("affiliates")
       .select("affiliate_code, discount_percent")
       .eq("user_id", userId)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     let validAffiliateCode: string | null = null;
@@ -102,6 +106,7 @@ Deno.serve(async (req) => {
         .from("affiliates")
         .select("affiliate_code, user_id, discount_percent")
         .eq("affiliate_code", sanitizedCode)
+        .eq("tenant_id", tenantId)
         .maybeSingle();
 
       if (aff && aff.user_id !== userId) {
@@ -127,11 +132,12 @@ Deno.serve(async (req) => {
     const externalReference = JSON.stringify({
       user_id: userId, plan, email: userEmail,
       affiliate_code: validAffiliateCode,
+      tenant_id: tenantId,
     });
 
     // ===== PIX DIRECT PAYMENT =====
     if (payment_method === "pix") {
-      console.log(`Creating PIX payment for user ${userId}, plan: ${plan}, price: ${finalPrice}`);
+      console.log(`Creating PIX payment for user ${userId}, plan: ${plan}, price: ${finalPrice}, tenant: ${tenantId}`);
 
       const pixPayload = {
         transaction_amount: finalPrice,
@@ -185,7 +191,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Extract PIX code from response - check multiple possible locations
       const transactionData = pixData.point_of_interaction?.transaction_data;
       const pixCode = transactionData?.qr_code ||
                       pixData.pix_copy_paste ||
@@ -198,7 +203,6 @@ Deno.serve(async (req) => {
 
       if (!pixCode) {
         console.error("PIX code not found in response:", JSON.stringify(pixData).substring(0, 500));
-        // Fallback to ticket_url if available
         if (ticketUrl) {
           return new Response(
             JSON.stringify({
