@@ -97,39 +97,32 @@
     @apply text-3xl font-semibold tracking-tight text-foreground tabular-nums;
   }
 
-  /* ── Cards ── */
+  /* ── Cards — flat, no shadows ── */
   .lv-card {
-    @apply rounded-2xl border border-border/60 bg-card p-6 transition-all duration-200 ease-out;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    @apply rounded-2xl border border-border/40 bg-card p-6 transition-all duration-200 ease-out;
   }
   .lv-card-sm {
-    @apply rounded-xl border border-border/60 bg-card p-4 transition-all duration-200 ease-out;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.04);
+    @apply rounded-xl border border-border/40 bg-card p-4 transition-all duration-200 ease-out;
   }
   .lv-card-interactive {
-    @apply rounded-2xl border border-border/60 bg-card p-6 cursor-pointer transition-all duration-200 ease-out;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    @apply rounded-2xl border border-border/40 bg-card p-6 cursor-pointer transition-all duration-200 ease-out;
   }
   .lv-card-interactive:hover {
-    box-shadow: 0 2px 6px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
-    @apply border-border;
+    @apply border-border bg-muted/30;
   }
   .lv-card-active {
-    @apply border-primary/40;
-    box-shadow: 0 0 0 1px hsl(252 85% 60% / 0.15), 0 4px 12px rgba(0,0,0,0.06);
+    @apply border-primary/30 bg-primary/5;
   }
   .lv-card-flat {
-    @apply rounded-2xl bg-muted/50 p-6;
+    @apply rounded-2xl bg-muted/40 p-6;
   }
 
-  /* ── Buttons ── */
+  /* ── Buttons — blur/glass aesthetic, no shadows ── */
   .lv-btn-primary {
-    @apply h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px hsl(252 85% 60% / 0.25);
+    @apply h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer backdrop-blur-sm;
   }
   .lv-btn-primary:hover {
     @apply brightness-110;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08), 0 4px 12px hsl(252 85% 60% / 0.3);
   }
   .lv-btn-primary:active {
     @apply scale-[0.98];
@@ -139,10 +132,10 @@
   }
 
   .lv-btn-secondary {
-    @apply h-10 px-5 rounded-xl border border-border/80 bg-transparent text-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
+    @apply h-10 px-5 rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm text-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-btn-secondary:hover {
-    @apply bg-muted/50 border-border;
+    @apply bg-muted/60 border-border;
   }
   .lv-btn-secondary:active {
     @apply scale-[0.98];
@@ -152,14 +145,14 @@
     @apply h-10 px-4 rounded-xl text-muted-foreground text-sm font-medium transition-all duration-150 ease-out flex items-center justify-center gap-2 cursor-pointer;
   }
   .lv-btn-ghost:hover {
-    @apply bg-muted/60 text-foreground;
+    @apply bg-muted/40 text-foreground;
   }
 
   .lv-btn-icon {
     @apply h-10 w-10 rounded-xl flex items-center justify-center text-muted-foreground transition-all duration-150 cursor-pointer;
   }
   .lv-btn-icon:hover {
-    @apply bg-muted/60 text-foreground;
+    @apply bg-muted/40 text-foreground;
   }
 
   .lv-btn-lg {
@@ -227,8 +220,7 @@
 
   /* ── Sheet / Drawer ── */
   .lv-sheet-btn {
-    @apply w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px hsl(252 85% 60% / 0.25);
+    @apply w-full h-12 rounded-xl bg-primary text-primary-foreground font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer backdrop-blur-sm;
   }
   .lv-sheet-btn:hover {
     @apply brightness-110;

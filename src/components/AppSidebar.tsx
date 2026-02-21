@@ -55,6 +55,11 @@ export default function AppSidebar() {
   const isAdminPage = location.pathname === "/admin";
   const currentAdminTab = searchParams.get("tab") || "members";
 
+  // Shared button styles — glass/blur aesthetic, no shadows
+  const navBtnBase = "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-150";
+  const navBtnActive = "bg-primary/8 text-primary font-medium backdrop-blur-sm";
+  const navBtnInactive = "text-muted-foreground hover:bg-muted/40 hover:text-foreground";
+
   // ─── Admin contextual sidebar ───
   if (isAdminPage && isAdmin) {
     return (
@@ -62,13 +67,13 @@ export default function AppSidebar() {
         <SidebarHeader className="p-3 flex flex-row items-center justify-between">
           <button
             onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm"
+            className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-sm"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Voltar ao painel</span>}
           </button>
           {!collapsed && (
-            <button onClick={toggleSidebar} className="text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={toggleSidebar} className="text-muted-foreground/60 hover:text-foreground transition-colors">
               <PanelLeftClose className="h-4 w-4" />
             </button>
           )}
@@ -76,7 +81,7 @@ export default function AppSidebar() {
 
         <SidebarContent className="px-2 py-3">
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/60 px-2 mb-1">
+            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/50 px-3 mb-1">
               Administração
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -86,9 +91,9 @@ export default function AppSidebar() {
                     <SidebarMenuButton
                       isActive={currentAdminTab === tab.id}
                       onClick={() => setSearchParams({ tab: tab.id })}
-                      className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm cursor-pointer"
+                      className={`${navBtnBase} cursor-pointer ${currentAdminTab === tab.id ? navBtnActive : navBtnInactive}`}
                     >
-                      <tab.icon className="h-4 w-4 shrink-0" />
+                      <tab.icon className={`h-4 w-4 shrink-0 ${currentAdminTab === tab.id ? "text-primary" : ""}`} />
                       {!collapsed && <span>{tab.label}</span>}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -98,24 +103,22 @@ export default function AppSidebar() {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="p-3 border-t border-border/20 space-y-1">
+        <SidebarFooter className="p-3 border-t border-border/10 space-y-0.5">
           {collapsed && (
-            <button onClick={toggleSidebar} className="w-full flex items-center justify-center py-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+            <button onClick={toggleSidebar} className="w-full flex items-center justify-center py-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
               <PanelLeft className="h-4 w-4" />
             </button>
           )}
           <button
             onClick={toggleChat}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors hover:bg-accent ${
-              isChatOpen ? "bg-primary/10 text-primary" : "text-muted-foreground"
-            }`}
+            className={`w-full ${navBtnBase} ${isChatOpen ? navBtnActive : navBtnInactive}`}
           >
-            <Bot className="h-4 w-4 shrink-0" />
+            <Bot className={`h-4 w-4 shrink-0 ${isChatOpen ? "text-primary" : ""}`} />
             {!collapsed && <span>CodeLove AI</span>}
           </button>
           <button
             onClick={signOut}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            className={`w-full ${navBtnBase} text-muted-foreground hover:bg-destructive/8 hover:text-destructive`}
           >
             <LogOut className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Sair</span>}
@@ -149,6 +152,20 @@ export default function AppSidebar() {
   const lovableActive = lovableItems.some(i => isActive(i.to));
   const accountActive = accountItems.some(i => isActive(i.to));
 
+  const renderNavItem = (item: { to: string; label: string; icon: any }) => {
+    const active = isActive(item.to);
+    return (
+      <SidebarMenuItem key={item.to}>
+        <SidebarMenuButton asChild isActive={active}>
+          <NavLink to={item.to} className={`${navBtnBase} ${active ? navBtnActive : navBtnInactive}`}>
+            <item.icon className={`h-4 w-4 shrink-0 ${active ? "text-primary" : ""}`} />
+            {!collapsed && <span>{item.label}</span>}
+          </NavLink>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-3 flex flex-row items-center justify-between">
@@ -157,7 +174,7 @@ export default function AppSidebar() {
           {collapsed && <span className="text-xs font-bold">CL</span>}
         </NavLink>
         {!collapsed && (
-          <button onClick={toggleSidebar} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={toggleSidebar} className="text-muted-foreground/60 hover:text-foreground transition-colors">
             <PanelLeftClose className="h-4 w-4" />
           </button>
         )}
@@ -166,21 +183,12 @@ export default function AppSidebar() {
       <SidebarContent className="px-2 py-3">
         {/* Principal */}
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/60 px-2 mb-1">
+          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/50 px-3 mb-1">
             Principal
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map(item => (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton asChild isActive={isActive(item.to)}>
-                    <NavLink to={item.to} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm">
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span>{item.label}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {mainItems.map(renderNavItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -189,7 +197,7 @@ export default function AppSidebar() {
         <Collapsible defaultOpen={lovableActive} className="group/collapsible">
           <SidebarGroup>
             <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/60 px-2 flex items-center justify-between cursor-pointer hover:text-foreground transition-colors">
+              <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/50 px-3 flex items-center justify-between cursor-pointer hover:text-foreground transition-colors">
                 Lovable
                 {!collapsed && (
                   <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]/collapsible:rotate-180" />
@@ -199,16 +207,7 @@ export default function AppSidebar() {
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {lovableItems.map(item => (
-                    <SidebarMenuItem key={item.to}>
-                      <SidebarMenuButton asChild isActive={isActive(item.to)}>
-                        <NavLink to={item.to} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm">
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          {!collapsed && <span>{item.label}</span>}
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {lovableItems.map(renderNavItem)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
@@ -219,7 +218,7 @@ export default function AppSidebar() {
         <Collapsible defaultOpen={accountActive} className="group/collapsible">
           <SidebarGroup>
             <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/60 px-2 flex items-center justify-between cursor-pointer hover:text-foreground transition-colors">
+              <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/50 px-3 flex items-center justify-between cursor-pointer hover:text-foreground transition-colors">
                 Conta
                 {!collapsed && (
                   <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]/collapsible:rotate-180" />
@@ -229,16 +228,7 @@ export default function AppSidebar() {
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {accountItems.map(item => (
-                    <SidebarMenuItem key={item.to}>
-                      <SidebarMenuButton asChild isActive={isActive(item.to)}>
-                        <NavLink to={item.to} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm">
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          {!collapsed && <span>{item.label}</span>}
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {accountItems.map(renderNavItem)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
@@ -248,45 +238,34 @@ export default function AppSidebar() {
         {/* Admin */}
         {adminItems.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/60 px-2 mb-1">
+            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/50 px-3 mb-1">
               Administração
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {adminItems.map(item => (
-                  <SidebarMenuItem key={item.to}>
-                    <SidebarMenuButton asChild isActive={isActive(item.to)}>
-                      <NavLink to={item.to} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm">
-                        <item.icon className="h-4 w-4 shrink-0" />
-                        {!collapsed && <span>{item.label}</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                {adminItems.map(renderNavItem)}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-3 border-t border-border/20 space-y-1">
+      <SidebarFooter className="p-3 border-t border-border/10 space-y-0.5">
         {collapsed && (
-          <button onClick={toggleSidebar} className="w-full flex items-center justify-center py-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+          <button onClick={toggleSidebar} className="w-full flex items-center justify-center py-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
             <PanelLeft className="h-4 w-4" />
           </button>
         )}
         <button
           onClick={toggleChat}
-          className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors hover:bg-accent ${
-            isChatOpen ? "bg-primary/10 text-primary" : "text-muted-foreground"
-          }`}
+          className={`w-full ${navBtnBase} ${isChatOpen ? navBtnActive : navBtnInactive}`}
         >
-          <Bot className="h-4 w-4 shrink-0" />
+          <Bot className={`h-4 w-4 shrink-0 ${isChatOpen ? "text-primary" : ""}`} />
           {!collapsed && <span>CodeLove AI</span>}
         </button>
         <button
           onClick={signOut}
-          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          className={`w-full ${navBtnBase} text-muted-foreground hover:bg-destructive/8 hover:text-destructive`}
         >
           <LogOut className="h-4 w-4 shrink-0" />
           {!collapsed && <span>Sair</span>}
