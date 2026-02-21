@@ -1,9 +1,10 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
+import { useSupportChat } from "@/contexts/SupportChatContext";
 import { useTenant } from "@/contexts/TenantContext";
 import {
-  LayoutDashboard, MessageCircle, Users, Download, Bot,
+  LayoutDashboard, MessageCircle, Users, Download, Bot, Headphones,
   Link2, FolderOpen, Shield, LogOut, User, ChevronDown,
   ArrowLeft, Bell, Send, Gift, Upload, FileText, Coins, Unlock,
   PanelLeftClose, PanelLeft, Building2,
@@ -47,6 +48,7 @@ export default function AppSidebar() {
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
+  const { toggleSupport, isOpen: isSupportOpen, unreadCount } = useSupportChat();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -112,10 +114,23 @@ export default function AppSidebar() {
               </SidebarMenuItem>
             )}
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
-                <Bot className="h-4 w-4" />
-                <span>{brandName} AI</span>
-              </SidebarMenuButton>
+            <SidebarMenuButton isActive={isSupportOpen} onClick={toggleSupport} tooltip="Suporte">
+              <span className="relative">
+                <Headphones className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-3.5 min-w-[14px] rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground flex items-center justify-center px-0.5">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </span>
+              <span>Suporte</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
+              <Bot className="h-4 w-4" />
+              <span>{brandName} AI</span>
+            </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -281,6 +296,19 @@ export default function AppSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={isSupportOpen} onClick={toggleSupport} tooltip="Suporte">
+              <span className="relative">
+                <Headphones className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-3.5 min-w-[14px] rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground flex items-center justify-center px-0.5">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </span>
+              <span>Suporte</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
               <Bot className="h-4 w-4" />
