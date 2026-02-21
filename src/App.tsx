@@ -33,6 +33,7 @@ const LovableProjects = lazy(() => import("./pages/LovableProjects"));
 const LovablePreview = lazy(() => import("./pages/LovablePreview"));
 const LovableUploadTest = lazy(() => import("./pages/LovableUploadTest"));
 const WhiteLabelRefPage = lazy(() => import("./pages/WhiteLabelRefPage"));
+const WlAffiliateDashboard = lazy(() => import("./pages/WlAffiliateDashboard"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -61,6 +62,7 @@ const App = () => (
                 <Route path="/affiliate" element={<AffiliateDashboard />} />
                 <Route path="/ref/:code" element={<AffiliateRefPage />} />
                 <Route path="/white-label/ref/:code" element={<WhiteLabelRefPage />} />
+                <Route path="/white-label/affiliate" element={<WlAffiliateDashboard />} />
                 <Route path="/checkout" element={<Checkout />} />
                 {/* /free route removed */}
                 <Route path="/community" element={<Community />} />

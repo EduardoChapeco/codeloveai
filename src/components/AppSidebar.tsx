@@ -168,6 +168,7 @@ export default function AppSidebar() {
   const accountItems = [
     { to: `/profile/${user.id}`, label: "Perfil", icon: User },
     ...(isAffiliate ? [{ to: "/affiliate", label: "Afiliado", icon: Users }] : []),
+    { to: "/white-label/affiliate", label: "WL Afiliado", icon: Building2 },
   ];
 
   const adminItems = isAdmin
