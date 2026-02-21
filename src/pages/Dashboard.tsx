@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
-import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, ChevronRight, Zap, Monitor, Key, ArrowRight } from "lucide-react";
+import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, ChevronRight, Zap, Monitor, Key, ArrowRight, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -36,7 +36,7 @@ interface Message {
 
 export default function Dashboard() {
   const { user, loading: authLoading, signOut } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant, isTenantAdmin } = useTenant();
   const brandName = tenant?.name || "CodeLove AI";
   useSEO({ title: "Dashboard" });
   const { isAdmin, loading: adminLoading } = useIsAdmin();
@@ -361,6 +361,22 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+
+        {/* Admin Tenant Card */}
+        {(isTenantAdmin || isAdmin) && (
+          <Link to="/admin/tenant" className="lv-card flex items-center justify-between group hover:border-primary/30 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="lv-body-strong">Administrar Tenant</p>
+                <p className="lv-caption">Gerencie marca, membros, tokens e financeiro do {tenant?.name || "seu tenant"}</p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+          </Link>
+        )}
 
         {/* SSO Status */}
         {tokens.some(t => t.is_active) && (

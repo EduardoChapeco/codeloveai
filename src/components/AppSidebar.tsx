@@ -165,18 +165,21 @@ export default function AppSidebar() {
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen },
   ];
 
+  const { isTenantAdmin } = useTenant();
+
   const accountItems = [
     { to: `/profile/${user.id}`, label: "Perfil", icon: User },
     ...(isAffiliate ? [{ to: "/affiliate", label: "Afiliado", icon: Users }] : []),
     { to: "/white-label/affiliate", label: "WL Afiliado", icon: Building2 },
   ];
 
-  const adminItems = isAdmin
-    ? [
-        { to: "/admin", label: "Admin Tenant", icon: Shield },
-        { to: "/admin/global", label: "Admin Global", icon: Building2 },
-      ]
-    : [];
+  const adminItems = [
+    ...(isTenantAdmin || isAdmin ? [{ to: "/admin/tenant", label: "Admin Tenant", icon: Shield }] : []),
+    ...(isAdmin ? [
+      { to: "/admin", label: "Admin Operacional", icon: Shield },
+      { to: "/admin/global", label: "Admin Global", icon: Building2 },
+    ] : []),
+  ];
 
   const lovableActive = lovableItems.some(i => isActive(i.to));
   const accountActive = accountItems.some(i => isActive(i.to));

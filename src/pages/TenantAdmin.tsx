@@ -48,6 +48,18 @@ interface WalletTransaction {
 
 type Tab = "brand" | "users" | "tokens" | "finances";
 
+// Add member state
+interface AddMemberState {
+  email: string;
+  role: string;
+}
+
+// Generate token state
+interface GenTokenState {
+  email: string;
+  plan: string;
+}
+
 export default function TenantAdmin() {
   const { user, loading: authLoading } = useAuth();
   const { tenant, isTenantAdmin, isGlobalAdmin, tenantLoading } = useTenant();
@@ -67,6 +79,14 @@ export default function TenantAdmin() {
   } | null>(null);
   
   const [topupPix, setTopupPix] = useState<{ code: string; qr_base64?: string } | null>(null);
+  const [addMember, setAddMember] = useState<AddMemberState>({ email: "", role: "tenant_member" });
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [addMemberLoading, setAddMemberLoading] = useState(false);
+  const [genTokenOpen, setGenTokenOpen] = useState(false);
+  const [genToken, setGenToken] = useState<GenTokenState>({ email: "", plan: "days_30" });
+  const [genTokenLoading, setGenTokenLoading] = useState(false);
+  const [topupOpen, setTopupOpen] = useState(false);
+  const [topupAmount, setTopupAmount] = useState("");
 
   // Brand form
   const [brandForm, setBrandForm] = useState({
@@ -209,7 +229,8 @@ export default function TenantAdmin() {
     toast.success("Token copiado!");
   };
 
-  const handleTopup = async (amount: number) => {
+  const handleTopup = async () => {
+    const amount = Number(topupAmount);
     if (!tenant || amount < 5) return toast.error("Mínimo R$5,00");
     const { data, error } = await supabase.functions.invoke("tenant-topup", {
       body: { tenant_id: tenant.id, amount_brl: amount, payment_method: "pix" }
@@ -217,41 +238,75 @@ export default function TenantAdmin() {
     if (error || data?.error) return toast.error(data?.error || "Erro ao gerar recarga");
     
     setTopupPix({ code: data.pix_code, qr_base64: data.pix_qr_base64 });
+    setTopupOpen(false);
     toast.success("PIX gerado! Pague para creditar.");
   };
 
-  const handleGenerateToken = async (email: string) => {
+  const handleGenerateToken = async () => {
     if (!tenant || !wallet) return;
+    setGenTokenLoading(true);
     const cost = Number(tenant.token_cost);
-    if (wallet.balance < cost) return toast.error("Saldo insuficiente");
+    if (wallet.balance < cost && cost > 0) {
+      setGenTokenLoading(false);
+      return toast.error("Saldo insuficiente");
+    }
 
-    // 1. Check if user exists
-    const { data: profiles } = await supabase.from("profiles").select("user_id").eq("email", email).maybeSingle();
-    if (!profiles) return toast.error("Usuário não encontrado");
+    const { data: profiles } = await supabase.from("profiles").select("user_id").eq("email", genToken.email.trim().toLowerCase()).maybeSingle();
+    if (!profiles) {
+      setGenTokenLoading(false);
+      return toast.error("Usuário não encontrado");
+    }
 
-    // 2. Generate token (this consumes balance via backend logic ideally, but for now we do it here)
-    // IMPORTANT: Ideally admin-token-actions should handle debit. 
-    // We will assume admin-token-actions handles debit if tenant_id is passed.
     const { data, error } = await supabase.functions.invoke("admin-token-actions", {
       body: {
         action: "generate",
-        email,
-        name: email.split("@")[0],
-        plan: "days_30", // Default plan for manual generation
+        email: genToken.email.trim().toLowerCase(),
+        name: genToken.email.split("@")[0],
+        plan: genToken.plan,
         user_id: profiles.user_id,
         tenant_id: tenant.id
       }
     });
 
+    setGenTokenLoading(false);
     if (error || data?.error) return toast.error(data?.error || "Erro ao gerar token");
     
-    // Debit wallet manually for now if backend doesn't (we updated webhook but not token-actions yet)
-    // Ideally token-actions should verify balance.
-    // For safety, let's debit via client (RLS allows tenant admin to update own wallet? No, only specific fields?)
-    // Actually RLS prevents update balance directly maybe? 
-    // Let's assume admin-token-actions needs update to handle debit.
-    
+    setGenTokenOpen(false);
+    setGenToken({ email: "", plan: "days_30" });
     toast.success("Token gerado com sucesso!");
+    fetchAll();
+  };
+
+  const handleAddMember = async () => {
+    if (!tenant || !addMember.email) return toast.error("Informe o email");
+    setAddMemberLoading(true);
+    
+    const { data: profile } = await supabase.from("profiles").select("user_id").eq("email", addMember.email.trim().toLowerCase()).maybeSingle();
+    if (!profile) {
+      setAddMemberLoading(false);
+      return toast.error("Usuário não encontrado. O usuário precisa ter uma conta.");
+    }
+
+    // Check if already member
+    const { data: existing } = await supabase.from("tenant_users").select("id").eq("user_id", profile.user_id).eq("tenant_id", tenant.id).maybeSingle();
+    if (existing) {
+      setAddMemberLoading(false);
+      return toast.error("Usuário já é membro deste tenant");
+    }
+
+    const { error } = await supabase.from("tenant_users").insert({
+      tenant_id: tenant.id,
+      user_id: profile.user_id,
+      role: addMember.role as any,
+      is_primary: false,
+    });
+
+    setAddMemberLoading(false);
+    if (error) return toast.error(error.message);
+    
+    setAddMemberOpen(false);
+    setAddMember({ email: "", role: "tenant_member" });
+    toast.success("Membro adicionado!");
     fetchAll();
   };
 
@@ -385,7 +440,12 @@ export default function TenantAdmin() {
           {/* ─── USERS TAB ─── */}
           {tab === "users" && (
             <div className="space-y-4">
-              <p className="lv-body-strong">{members.length} membro(s)</p>
+              <div className="flex items-center justify-between">
+                <p className="lv-body-strong">{members.length} membro(s)</p>
+                <button onClick={() => setAddMemberOpen(true)} className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-2">
+                  <Plus className="h-3.5 w-3.5" /> Adicionar Membro
+                </button>
+              </div>
               <div className="space-y-3">
                 {members.map(m => (
                   <div key={m.id} className="lv-card flex items-center justify-between">
@@ -425,21 +485,13 @@ export default function TenantAdmin() {
                     <p className="lv-caption">Saldo: R${Number(wallet.balance).toFixed(2)} • Custo/token: R${Number(tenant?.token_cost || 0).toFixed(2)}</p>
                   )}
                   <button
-                    onClick={() => {
-                      const amount = prompt("Valor para recarga (R$):", "50");
-                      if (!amount) return;
-                      handleTopup(Number(amount));
-                    }}
+                    onClick={() => setTopupOpen(true)}
                     className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-2"
                   >
                     <Wallet className="h-3.5 w-3.5" /> Recarregar
                   </button>
                   <button
-                    onClick={() => {
-                      const email = prompt("Email do usuário para gerar token:");
-                      if (!email) return;
-                      handleGenerateToken(email);
-                    }}
+                    onClick={() => setGenTokenOpen(true)}
                     className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-2"
                   >
                     <Plus className="h-3.5 w-3.5" /> Gerar Token
@@ -535,6 +587,94 @@ export default function TenantAdmin() {
           )}
         </div>
       </div>
+      {/* Add Member Sheet */}
+      <Sheet open={addMemberOpen} onOpenChange={setAddMemberOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Adicionar Membro</SheetTitle>
+            <SheetDescription>Adicione um usuário existente como membro deste tenant.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 mt-6">
+            <div>
+              <label className="lv-caption block mb-1">Email do usuário *</label>
+              <input className="lv-input w-full" value={addMember.email} onChange={e => setAddMember({ ...addMember, email: e.target.value })} placeholder="usuario@email.com" />
+            </div>
+            <div>
+              <label className="lv-caption block mb-1">Papel</label>
+              <select className="lv-input w-full" value={addMember.role} onChange={e => setAddMember({ ...addMember, role: e.target.value })}>
+                <option value="tenant_member">Membro</option>
+                <option value="tenant_support">Suporte</option>
+                <option value="tenant_admin">Admin</option>
+              </select>
+            </div>
+            <button onClick={handleAddMember} disabled={addMemberLoading} className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2">
+              {addMemberLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Adicionar
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Generate Token Sheet */}
+      <Sheet open={genTokenOpen} onOpenChange={setGenTokenOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Gerar Token</SheetTitle>
+            <SheetDescription>Gere um token para um membro do tenant. Custo: R${Number(tenant?.token_cost || 0).toFixed(2)} por token.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 mt-6">
+            <div>
+              <label className="lv-caption block mb-1">Email do usuário *</label>
+              <input className="lv-input w-full" value={genToken.email} onChange={e => setGenToken({ ...genToken, email: e.target.value })} placeholder="usuario@email.com" />
+            </div>
+            <div>
+              <label className="lv-caption block mb-1">Plano</label>
+              <select className="lv-input w-full" value={genToken.plan} onChange={e => setGenToken({ ...genToken, plan: e.target.value })}>
+                <option value="test_5h">Teste 5h</option>
+                <option value="test_1d">Teste 1 dia</option>
+                <option value="days_15">15 dias</option>
+                <option value="days_30">30 dias</option>
+                <option value="days_90">90 dias</option>
+              </select>
+            </div>
+            {wallet && (
+              <div className="lv-card-sm bg-muted/50">
+                <p className="lv-caption">Saldo disponível: <strong className="text-foreground">R${Number(wallet.balance).toFixed(2)}</strong></p>
+                <p className="lv-caption">Custo por token: <strong className="text-foreground">R${Number(tenant?.token_cost || 0).toFixed(2)}</strong></p>
+              </div>
+            )}
+            <button onClick={handleGenerateToken} disabled={genTokenLoading} className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2">
+              {genTokenLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+              Gerar Token
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Topup Sheet */}
+      <Sheet open={topupOpen} onOpenChange={setTopupOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Recarregar Saldo</SheetTitle>
+            <SheetDescription>Adicione créditos ao wallet do tenant via PIX.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 mt-6">
+            <div>
+              <label className="lv-caption block mb-1">Valor (R$) *</label>
+              <input type="number" className="lv-input w-full" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} min={5} step={1} placeholder="50" />
+              <p className="lv-caption mt-1">Mínimo: R$5,00</p>
+            </div>
+            {wallet && (
+              <div className="lv-card-sm bg-muted/50">
+                <p className="lv-caption">Saldo atual: <strong className="text-foreground">R${Number(wallet.balance).toFixed(2)}</strong></p>
+              </div>
+            )}
+            <button onClick={handleTopup} className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2">
+              <Wallet className="h-4 w-4" /> Gerar PIX
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </AppLayout>
   );
 }

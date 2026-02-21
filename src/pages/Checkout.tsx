@@ -46,7 +46,7 @@ const basePlans = [
   },
 ];
 
-const terms = [
+const defaultTerms = [
   "Estamos vendendo acesso à extensão, e não acesso à plataforma Lovable.",
   "A extensão NÃO é oficial e não possui nenhum vínculo com a Lovable.",
   "Não há reembolso caso a extensão pare de funcionar ou seja limitada, independentemente do tempo restante do plano.",
@@ -372,7 +372,7 @@ export default function Checkout() {
             </div>
 
             <div className="lv-card space-y-4">
-              {terms.map((term, i) => (
+              {(tenant?.terms_template ? tenant.terms_template.split("\n").filter(Boolean) : defaultTerms).map((term, i) => (
                 <div key={i} className="flex items-start gap-3">
                   <span className="lv-caption font-medium mt-0.5 shrink-0">{String(i + 1).padStart(2, "0")}.</span>
                   <p className="lv-body">{term}</p>
