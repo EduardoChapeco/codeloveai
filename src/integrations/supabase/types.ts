@@ -1758,6 +1758,57 @@ export type Database = {
           },
         ]
       }
+      token_activations: {
+        Row: {
+          activated_at: string
+          device_info: Json | null
+          id: string
+          ip_address: string | null
+          location: string | null
+          tenant_id: string | null
+          token_id: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          activated_at?: string
+          device_info?: Json | null
+          id?: string
+          ip_address?: string | null
+          location?: string | null
+          tenant_id?: string | null
+          token_id: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          activated_at?: string
+          device_info?: Json | null
+          id?: string
+          ip_address?: string | null
+          location?: string | null
+          tenant_id?: string | null
+          token_id?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_activations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "token_activations_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "tokens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tokens: {
         Row: {
           created_at: string
@@ -2233,7 +2284,12 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "member" | "affiliate"
-      subscription_plan: "1_day" | "7_days" | "1_month" | "12_months"
+      subscription_plan:
+        | "1_day"
+        | "7_days"
+        | "1_month"
+        | "12_months"
+        | "lifetime"
       subscription_status: "active" | "expired" | "cancelled"
       tenant_role:
         | "tenant_owner"
@@ -2368,7 +2424,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "member", "affiliate"],
-      subscription_plan: ["1_day", "7_days", "1_month", "12_months"],
+      subscription_plan: [
+        "1_day",
+        "7_days",
+        "1_month",
+        "12_months",
+        "lifetime",
+      ],
       subscription_status: ["active", "expired", "cancelled"],
       tenant_role: [
         "tenant_owner",

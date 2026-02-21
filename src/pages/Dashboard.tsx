@@ -237,7 +237,8 @@ export default function Dashboard() {
     "1_day": "1 Dia",
     "7_days": "7 Dias",
     "1_month": "1 Mês",
-    "12_months": "12 Meses (Tempo Indeterminado)",
+    "12_months": "12 Meses",
+    "lifetime": "Vitalício",
   };
 
   if (authLoading) {

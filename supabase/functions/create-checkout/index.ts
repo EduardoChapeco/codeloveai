@@ -8,10 +8,9 @@ const corsHeaders = {
 };
 
 const PLANS: Record<string, { title: string; price: number; days: number }> = {
-  "1_day": { title: "Plano 1 Dia", price: 9.99, days: 1 },
-  "7_days": { title: "Plano 7 Dias", price: 49.9, days: 7 },
-  "1_month": { title: "Plano 1 Mês", price: 149.9, days: 30 },
-  "12_months": { title: "Plano 12 Meses", price: 499.0, days: 365 },
+  "1_day": { title: "Plano 1 Dia", price: 19.9, days: 1 },
+  "7_days": { title: "Plano 7 Dias", price: 89.9, days: 7 },
+  "lifetime": { title: "Plano Vitalício", price: 199.0, days: 3650 },
 };
 
 Deno.serve(async (req) => {
@@ -70,7 +69,7 @@ Deno.serve(async (req) => {
     const { plan, affiliate_code, payment_method } = await req.json();
 
     // Validate plan input
-    const validPlans = ["1_day", "7_days", "1_month", "12_months"];
+    const validPlans = ["1_day", "7_days", "lifetime"];
     if (!plan || typeof plan !== "string" || !validPlans.includes(plan)) {
       return new Response(JSON.stringify({ error: "Plano inválido" }), {
         status: 400,
