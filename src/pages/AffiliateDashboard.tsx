@@ -56,7 +56,7 @@ const planLabels: Record<string, string> = {
 };
 
 const invoiceStatusLabel: Record<string, string> = {
-  open: "EM ABERTO", closed: "FECHADA", paid: "PAGA", cancelled: "CANCELADA",
+  open: "Em aberto", closed: "Fechada", paid: "Paga", cancelled: "Cancelada",
 };
 
 export default function AffiliateDashboard() {
@@ -119,13 +119,11 @@ export default function AffiliateDashboard() {
     supabase.from("tokens").select("*").eq("user_id", user.id).eq("is_active", true)
       .then(({ data }) => setTokens(data || []));
 
-    // Fetch invoices
     supabase.from("affiliate_invoices").select("*")
       .eq("affiliate_id", affiliateData.id)
       .order("week_start", { ascending: false })
       .then(({ data }) => setInvoices(data || []));
 
-    // Fetch bank info
     supabase.from("affiliate_bank_info").select("*").eq("affiliate_id", affiliateData.id).maybeSingle()
       .then(({ data }) => {
         if (data) {
@@ -173,25 +171,25 @@ export default function AffiliateDashboard() {
 
   if (authLoading || affLoading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
-      <p className="ep-subtitle">CARREGANDO...</p>
+      <p className="lv-overline">Carregando...</p>
     </div>;
   }
 
   return (
     <AppLayout>
-    <div className="min-h-screen bg-background">
+    <div className="min-h-full">
 
-      <div className="max-w-4xl mx-auto px-8 py-12 space-y-8">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-5">
         <div>
-          <p className="ep-subtitle mb-2">PAINEL DO AFILIADO</p>
-          <h1 className="ep-section-title">{affiliateData?.display_name || "AFILIADO"}</h1>
+          <p className="lv-overline mb-1">Painel do afiliado</p>
+          <h1 className="lv-heading-lg">{affiliateData?.display_name || "Afiliado"}</h1>
         </div>
 
         {/* Sub-tabs */}
         <div className="flex gap-2 flex-wrap">
-          {([["overview", "VISÃO GERAL"], ["financeiro", "FINANCEIRO"], ["indicacoes", "INDICAÇÕES"], ["banco", "DADOS BANCÁRIOS"]] as [AffTab, string][]).map(([t, label]) => (
+          {([[ "overview", "Visão geral"], [ "financeiro", "Financeiro"], [ "indicacoes", "Indicações"], [ "banco", "Dados bancários"]] as [AffTab, string][]).map(([t, label]) => (
             <button key={t} onClick={() => setAffTab(t)}
-              className={`ep-btn-secondary h-10 px-6 text-[9px] ${affTab === t ? "bg-foreground text-background" : ""}`}>
+              className={`lv-btn-secondary h-9 px-4 text-xs ${affTab === t ? "bg-foreground text-background" : ""}`}>
               {label}
             </button>
           ))}
@@ -202,67 +200,67 @@ export default function AffiliateDashboard() {
           <>
             {/* Counters */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="ep-card text-center">
-                <Coins className="h-6 w-6 mx-auto mb-2 text-foreground" />
-                <p className="ep-value text-3xl">{coins?.balance || 0}</p>
-                <p className="ep-subtitle mt-1">CODECOINS</p>
+              <div className="lv-card text-center">
+                <Coins className="h-5 w-5 mx-auto mb-2 text-primary" />
+                <p className="lv-stat text-2xl">{coins?.balance || 0}</p>
+                <p className="lv-caption mt-1">CodeCoins</p>
               </div>
-              <div className="ep-card text-center">
-                <Users className="h-6 w-6 mx-auto mb-2 text-foreground" />
-                <p className="ep-value text-3xl">{referrals.filter(r => r.confirmed).length}</p>
-                <p className="ep-subtitle mt-1">VENDAS CONFIRMADAS</p>
+              <div className="lv-card text-center">
+                <Users className="h-5 w-5 mx-auto mb-2 text-primary" />
+                <p className="lv-stat text-2xl">{referrals.filter(r => r.confirmed).length}</p>
+                <p className="lv-caption mt-1">Vendas confirmadas</p>
               </div>
-              <div className="ep-card text-center">
-                <DollarSign className="h-6 w-6 mx-auto mb-2 text-foreground" />
-                <p className="ep-value text-2xl text-green-600">R${totalCommission.toFixed(2)}</p>
-                <p className="ep-subtitle mt-1">COMISSÃO TOTAL</p>
+              <div className="lv-card text-center">
+                <DollarSign className="h-5 w-5 mx-auto mb-2 text-green-500" />
+                <p className="lv-stat text-2xl text-green-600">R${totalCommission.toFixed(2)}</p>
+                <p className="lv-caption mt-1">Comissão total</p>
               </div>
-              <div className="ep-card text-center">
-                <Shield className="h-6 w-6 mx-auto mb-2 text-foreground" />
-                <p className="ep-value text-3xl">{daysRemaining}</p>
-                <p className="ep-subtitle mt-1">DIAS RESTANTES</p>
+              <div className="lv-card text-center">
+                <Shield className="h-5 w-5 mx-auto mb-2 text-primary" />
+                <p className="lv-stat text-2xl">{daysRemaining}</p>
+                <p className="lv-caption mt-1">Dias restantes</p>
               </div>
             </div>
 
             {/* Magic Link */}
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">SEU LINK DE INDICAÇÃO</p>
+            <div className="lv-card">
+              <p className="lv-overline mb-3">Seu link de indicação</p>
               <div className="flex items-center gap-3">
-                <code className="font-mono text-xs bg-muted px-4 py-3 rounded-[8px] flex-1 truncate">
+                <code className="font-mono text-xs bg-muted/60 px-4 py-3 rounded-lg flex-1 truncate">
                   {magicLink}
                 </code>
-                <button onClick={() => copyToClipboard(magicLink)} className="ep-btn-secondary h-12 px-4 text-[9px]">
-                  <Copy className="h-4 w-4" />
+                <button onClick={() => copyToClipboard(magicLink)} className="lv-btn-secondary h-10 px-4 text-xs flex items-center gap-1.5">
+                  <Copy className="h-3.5 w-3.5" /> Copiar
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground font-medium mt-3">
-                Código: <strong>{affiliateData?.affiliate_code}</strong> · Comissão: <strong>30%</strong> · Desconto próprio: <strong>{affiliateData?.discount_percent}%</strong>
+              <p className="lv-caption mt-3">
+                Código: <strong className="text-foreground">{affiliateData?.affiliate_code}</strong> · Comissão: <strong className="text-foreground">30%</strong> · Desconto próprio: <strong className="text-foreground">{affiliateData?.discount_percent}%</strong>
               </p>
             </div>
 
             {/* WhatsApp Templates */}
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">MENSAGENS RÁPIDAS (WHATSAPP)</p>
+            <div className="lv-card">
+              <p className="lv-overline mb-4">Mensagens rápidas (WhatsApp)</p>
               <div className="space-y-3">
                 {[
                   { label: "Convite Geral", text: `🚀 Quer enviar mensagens ilimitadas no Lovable sem gastar créditos? Conheça o CodeLove AI!\n\n✅ Sem descontar créditos\n✅ 24/7 sem parar\n✅ Ativação imediata\n\n🔗 Acesse: ${magicLink}` },
                   { label: "Promoção", text: `⚡ PROMOÇÃO CODELOVE AI!\n\nA partir de R$9,99 você tem acesso ilimitado ao Lovable.\nSem gastar nenhum crédito da sua conta!\n\n👉 ${magicLink}` },
                   { label: "Dev para Dev", text: `Fala dev! 👋\n\nTô usando uma extensão sensacional pro Lovable que permite envios ilimitados. Testei e tá funcionando muito bem.\n\nDá uma olhada: ${magicLink}` },
                 ].map((tmpl, i) => (
-                  <div key={i} className="ep-card-sm">
+                  <div key={i} className="lv-card-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-bold text-foreground">{tmpl.label}</p>
+                      <p className="lv-body-strong text-xs">{tmpl.label}</p>
                       <div className="flex gap-2">
-                        <button onClick={() => copyToClipboard(tmpl.text)} className="ep-btn-secondary h-7 px-2 text-[8px]">
+                        <button onClick={() => copyToClipboard(tmpl.text)} className="lv-btn-secondary h-7 px-2 text-xs">
                           <Copy className="h-3 w-3" />
                         </button>
                         <a
                           href={`https://wa.me/?text=${encodeURIComponent(tmpl.text)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="ep-btn-primary h-7 px-3 text-[8px] inline-flex items-center"
+                          className="lv-btn-primary h-7 px-3 text-xs inline-flex items-center"
                         >
-                          ENVIAR
+                          Enviar
                         </a>
                       </div>
                     </div>
@@ -279,38 +277,38 @@ export default function AffiliateDashboard() {
           <>
             {/* Summary */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="ep-card text-center">
-                <p className="ep-subtitle mb-2">A RECEBER</p>
-                <p className="ep-value text-2xl text-yellow-600">R${openInvoicesTotal.toFixed(2)}</p>
+              <div className="lv-card text-center">
+                <p className="lv-caption mb-2">A receber</p>
+                <p className="lv-stat text-2xl text-yellow-600">R${openInvoicesTotal.toFixed(2)}</p>
               </div>
-              <div className="ep-card text-center">
-                <p className="ep-subtitle mb-2">JÁ RECEBIDO</p>
-                <p className="ep-value text-2xl text-green-600">R${paidTotal.toFixed(2)}</p>
+              <div className="lv-card text-center">
+                <p className="lv-caption mb-2">Já recebido</p>
+                <p className="lv-stat text-2xl text-green-600">R${paidTotal.toFixed(2)}</p>
               </div>
-              <div className="ep-card text-center">
-                <p className="ep-subtitle mb-2">COMISSÃO TOTAL</p>
-                <p className="ep-value text-2xl">R${totalCommission.toFixed(2)}</p>
+              <div className="lv-card text-center">
+                <p className="lv-caption mb-2">Comissão total</p>
+                <p className="lv-stat text-2xl">R${totalCommission.toFixed(2)}</p>
               </div>
             </div>
 
             {!bankInfoSaved && (
-              <div className="ep-card border-yellow-500/30">
-                <p className="text-sm font-bold text-foreground mb-1">⚠ Cadastre seus dados bancários</p>
-                <p className="text-xs text-muted-foreground">Para receber suas comissões via PIX, cadastre seus dados na aba "Dados Bancários".</p>
+              <div className="lv-card border-yellow-500/30">
+                <p className="lv-body-strong mb-1">⚠ Cadastre seus dados bancários</p>
+                <p className="lv-caption">Para receber suas comissões via PIX, cadastre seus dados na aba "Dados Bancários".</p>
               </div>
             )}
 
             {/* Invoices */}
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">FATURAS SEMANAIS</p>
+            <div className="lv-card">
+              <p className="lv-overline mb-4">Faturas semanais</p>
               {invoices.length === 0 ? (
-                <p className="text-sm text-muted-foreground font-medium">Nenhuma fatura ainda. As faturas são geradas automaticamente a cada venda.</p>
+                <p className="lv-body">Nenhuma fatura ainda. As faturas são geradas automaticamente a cada venda.</p>
               ) : (
                 <div className="space-y-3">
                   {invoices.map((inv) => (
                     <div key={inv.id} className={`${inv.status === "cancelled" ? "opacity-50" : ""}`}>
                       <div
-                        className="ep-card-sm flex items-center justify-between cursor-pointer"
+                        className="lv-card-sm flex items-center justify-between cursor-pointer"
                         onClick={async () => {
                           if (expandedInvoice === inv.id) {
                             setExpandedInvoice(null);
@@ -326,10 +324,10 @@ export default function AffiliateDashboard() {
                         }}
                       >
                         <div>
-                          <p className="text-sm font-bold text-foreground">
+                          <p className="lv-body-strong">
                             Semana {inv.week_start} → {inv.week_end}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="lv-caption">
                             {inv.total_sales} venda(s) · R${Number(inv.total_commission).toFixed(2)}
                           </p>
                           {inv.paid_at && (
@@ -340,11 +338,11 @@ export default function AffiliateDashboard() {
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`ep-badge text-[8px] ${
-                            inv.status === "open" ? "ep-badge-live" :
-                            inv.status === "closed" ? "bg-yellow-500/20 text-yellow-700" :
-                            inv.status === "paid" ? "bg-green-500/20 text-green-700" :
-                            "ep-badge-offline"
+                          <span className={`lv-badge text-[10px] ${
+                            inv.status === "open" ? "lv-badge-primary" :
+                            inv.status === "closed" ? "lv-badge-warning" :
+                            inv.status === "paid" ? "lv-badge-success" :
+                            "lv-badge-muted"
                           }`}>
                             {invoiceStatusLabel[inv.status] || inv.status}
                           </span>
@@ -355,17 +353,17 @@ export default function AffiliateDashboard() {
                       {/* Expanded invoice detail */}
                       {expandedInvoice === inv.id && (
                         <div className="mt-2 ml-4 space-y-2">
-                          <div className="ep-card-sm bg-muted/30">
-                            <p className="text-[10px] font-bold text-foreground mb-2 tracking-widest">DETALHES DA FATURA</p>
+                          <div className="lv-card-sm bg-muted/30">
+                            <p className="lv-overline mb-2">Detalhes da fatura</p>
                             {invoiceItems.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">Nenhum detalhe disponível (vendas anteriores à atualização).</p>
+                              <p className="lv-caption">Nenhum detalhe disponível (vendas anteriores à atualização).</p>
                             ) : (
                               <div className="space-y-2">
                                 {invoiceItems.map((item) => (
                                   <div key={item.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
                                     <div>
-                                      <p className="text-xs font-bold text-foreground">{item.client_email || "—"}</p>
-                                      <p className="text-[10px] text-muted-foreground">
+                                      <p className="lv-body-strong text-xs">{item.client_email || "—"}</p>
+                                      <p className="lv-caption">
                                         {item.client_name && `${item.client_name} · `}
                                         {planLabels[item.plan] || item.plan} · Venda: R${Number(item.sale_amount).toFixed(2)}
                                       </p>
@@ -376,8 +374,8 @@ export default function AffiliateDashboard() {
                                   </div>
                                 ))}
                                 <div className="flex justify-between pt-2 border-t border-foreground/10">
-                                  <span className="text-xs font-bold text-foreground">TOTAL</span>
-                                  <span className="text-xs font-bold text-foreground">R${Number(inv.total_commission).toFixed(2)}</span>
+                                  <span className="lv-body-strong text-xs">Total</span>
+                                  <span className="lv-body-strong text-xs">R${Number(inv.total_commission).toFixed(2)}</span>
                                 </div>
                               </div>
                             )}
@@ -395,47 +393,47 @@ export default function AffiliateDashboard() {
         {/* Indicações */}
         {affTab === "indicacoes" && (
           <>
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">INDICAÇÕES ({referrals.length})</p>
+            <div className="lv-card">
+              <p className="lv-overline mb-4">Indicações ({referrals.length})</p>
               {referrals.length > 0 ? (
                 <div className="space-y-2">
                   {referrals.map((r) => (
-                    <div key={r.id} className="ep-card-sm flex items-center justify-between">
+                    <div key={r.id} className="lv-card-sm flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-bold text-foreground">
+                        <p className="lv-body-strong">
                           {r.referred_email || r.referred_user_id.slice(0, 8) + "..."}
                         </p>
                         {r.referred_name && (
-                          <p className="text-xs text-muted-foreground font-medium">{r.referred_name}</p>
+                          <p className="lv-caption">{r.referred_name}</p>
                         )}
-                        <p className="text-xs text-muted-foreground">
+                        <p className="lv-caption">
                           {format(new Date(r.created_at), "dd/MM/yyyy HH:mm")}
                           {r.subscription_plan && ` · ${planLabels[r.subscription_plan] || r.subscription_plan}`}
                           {r.sale_amount && r.sale_amount > 0 && ` · Venda: R$${Number(r.sale_amount).toFixed(2)}`}
                           {r.commission_amount && r.commission_amount > 0 && ` · Comissão: R$${Number(r.commission_amount).toFixed(2)}`}
                         </p>
                       </div>
-                      <span className={`ep-badge ${r.confirmed ? "ep-badge-live" : "ep-badge-offline"}`}>
-                        {r.confirmed ? "CONFIRMADO" : "PENDENTE"}
+                      <span className={`lv-badge ${r.confirmed ? "lv-badge-success" : "lv-badge-muted"}`}>
+                        {r.confirmed ? "Confirmado" : "Pendente"}
                       </span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground font-medium">Nenhuma indicação ainda.</p>
+                <p className="lv-body">Nenhuma indicação ainda.</p>
               )}
             </div>
 
             {/* CodeCoins History */}
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">HISTÓRICO DE CODECOINS</p>
+            <div className="lv-card">
+              <p className="lv-overline mb-4">Histórico de CodeCoins</p>
               {transactions.length > 0 ? (
                 <div className="space-y-2">
                   {transactions.map((t) => (
-                    <div key={t.id} className="ep-card-sm flex items-center justify-between">
+                    <div key={t.id} className="lv-card-sm flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-bold text-foreground">{t.description}</p>
-                        <p className="text-xs text-muted-foreground">{format(new Date(t.created_at), "dd/MM/yyyy HH:mm")}</p>
+                        <p className="lv-body-strong">{t.description}</p>
+                        <p className="lv-caption">{format(new Date(t.created_at), "dd/MM/yyyy HH:mm")}</p>
                       </div>
                       <span className={`text-sm font-bold ${t.amount > 0 ? "text-green-600" : "text-red-500"}`}>
                         {t.amount > 0 ? "+" : ""}{t.amount}
@@ -444,7 +442,7 @@ export default function AffiliateDashboard() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground font-medium">Nenhuma transação ainda.</p>
+                <p className="lv-body">Nenhuma transação ainda.</p>
               )}
             </div>
           </>
@@ -452,17 +450,17 @@ export default function AffiliateDashboard() {
 
         {/* Dados Bancários */}
         {affTab === "banco" && (
-          <div className="ep-card">
-            <p className="ep-subtitle mb-4">DADOS PARA RECEBIMENTO (PIX)</p>
-            <p className="text-xs text-muted-foreground font-medium mb-6">
+          <div className="lv-card">
+            <p className="lv-overline mb-4">Dados para recebimento (PIX)</p>
+            <p className="lv-body mb-6">
               Cadastre seus dados bancários para receber as comissões semanais via PIX.
               O admin fechará a fatura semanal e realizará o pagamento.
             </p>
             <div className="space-y-4 max-w-md">
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">TIPO DA CHAVE PIX</label>
+                <label className="lv-caption font-medium block mb-1.5">Tipo da chave PIX</label>
                 <select value={pixKeyType} onChange={(e) => setPixKeyType(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border w-full">
+                  className="lv-input">
                   <option value="cpf">CPF</option>
                   <option value="cnpj">CNPJ</option>
                   <option value="email">E-mail</option>
@@ -471,37 +469,37 @@ export default function AffiliateDashboard() {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">CHAVE PIX</label>
+                <label className="lv-caption font-medium block mb-1.5">Chave PIX</label>
                 <input value={pixKey} onChange={(e) => setPixKey(e.target.value)}
                   placeholder="Sua chave PIX..."
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border w-full" />
+                  className="lv-input" />
               </div>
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">NOME DO TITULAR</label>
+                <label className="lv-caption font-medium block mb-1.5">Nome do titular</label>
                 <input value={holderName} onChange={(e) => setHolderName(e.target.value)}
                   placeholder="Nome completo do titular..."
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border w-full" />
+                  className="lv-input" />
               </div>
               <div>
-                <label className="text-xs font-bold text-foreground block mb-1">BANCO (OPCIONAL)</label>
+                <label className="lv-caption font-medium block mb-1.5">Banco (opcional)</label>
                 <input value={bankName} onChange={(e) => setBankName(e.target.value)}
                   placeholder="Nome do banco..."
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border w-full" />
+                  className="lv-input" />
               </div>
-              <button onClick={saveBankInfo} className="ep-btn-primary h-12 px-8 text-[9px]">
-                <Save className="h-4 w-4 mr-2" /> SALVAR DADOS BANCÁRIOS
+              <button onClick={saveBankInfo} className="lv-btn-primary h-11 px-6 text-sm flex items-center gap-2">
+                <Save className="h-4 w-4" /> Salvar dados bancários
               </button>
             </div>
           </div>
         )}
 
         {/* Buy with discount */}
-        <div className="ep-card">
-          <p className="ep-subtitle mb-4">COMPRAR COM DESCONTO</p>
-          <p className="text-sm text-muted-foreground font-medium mb-4">
-            Como afiliado, você tem <strong>{affiliateData?.discount_percent}% de desconto</strong> em todos os planos.
+        <div className="lv-card">
+          <p className="lv-overline mb-3">Comprar com desconto</p>
+          <p className="lv-body mb-4">
+            Como afiliado, você tem <strong className="text-foreground">{affiliateData?.discount_percent}% de desconto</strong> em todos os planos.
           </p>
-          <Link to="/#plans" className="ep-btn-primary inline-flex text-[9px]">VER PLANOS</Link>
+          <Link to="/#plans" className="lv-btn-primary h-10 px-5 text-sm inline-flex items-center">Ver planos</Link>
         </div>
       </div>
     </div>
