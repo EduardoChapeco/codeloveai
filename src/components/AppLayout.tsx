@@ -1,5 +1,6 @@
 import { SidebarProvider } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/AppSidebar";
+import MeshBackground from "@/components/MeshBackground";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -11,8 +12,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
-      {/* Single full-screen surface — Apple iCloud style */}
-      <div className="h-screen w-full flex overflow-hidden bg-[hsl(0_0%_97%)]">
+      {/* Animated mesh gradient — Layer 0 */}
+      <MeshBackground />
+
+      {/* Full-screen surface — Apple iCloud style */}
+      <div className="h-screen w-full flex overflow-hidden relative">
         {/* Sidebar — glass panel */}
         <AppSidebar />
 

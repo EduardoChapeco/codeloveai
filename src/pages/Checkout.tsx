@@ -212,9 +212,10 @@ export default function Checkout() {
   const selectedPlanData = plans.find((p) => p.id === selectedPlan);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen relative">
+      {/* Nav — glass */}
+      <nav className="sticky top-0 z-20 px-6 py-3">
+        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
         <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
         <button
           onClick={() => {
@@ -226,6 +227,7 @@ export default function Checkout() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Voltar
         </button>
+        </div>
       </nav>
 
       <div className="max-w-4xl mx-auto px-6 py-10">

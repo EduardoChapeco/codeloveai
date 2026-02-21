@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
 import AppLayout from "@/components/AppLayout";
+import MeshBackground from "@/components/MeshBackground";
 
 const plans = [
   {
@@ -85,22 +86,27 @@ export default function Index() {
   useSEO({ title: tenant?.meta_title || brandName, description: tenant?.meta_description || "A melhor plataforma de envios ilimitados para Lovable. 24/7, sem descontar créditos." });
 
   const guestNav = !authLoading && !user ? (
-    <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
-      <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
-      <div className="flex items-center gap-2">
-        <Link to="/community" className="lv-btn-ghost">Comunidade</Link>
-        <Link to="/login" className="lv-btn-secondary">Entrar</Link>
-        <Link to="/register" className="lv-btn-primary">Criar conta</Link>
+    <nav className="sticky top-0 z-20 px-6 py-3 flex items-center justify-between">
+      <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between w-full">
+        <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
+        <div className="flex items-center gap-2">
+          <Link to="/community" className="lv-btn-ghost h-9 px-3 text-xs">Comunidade</Link>
+          <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+          <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+        </div>
       </div>
     </nav>
   ) : null;
 
   const content = (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen relative">
+      {/* Mesh background for guests */}
+      {!authLoading && !user && <MeshBackground />}
+
       {guestNav}
 
       {/* Hero */}
-      <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center">
+      <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center animate-fade-in">
         <p className="lv-overline mb-4">Extensão não oficial para Lovable</p>
         <h1 className="lv-heading-xl mb-6">
           A melhor plataforma de envios infinitos
@@ -120,8 +126,8 @@ export default function Index() {
         <p className="lv-overline text-center mb-3">Por que escolher</p>
         <h2 className="lv-heading-lg text-center mb-12">{brandName}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {benefits.map((b) => (
-            <div key={b.title} className="lv-card flex flex-col items-start gap-4">
+          {benefits.map((b, i) => (
+            <div key={b.title} className="lv-card flex flex-col items-start gap-4" style={{ animationDelay: `${i * 100}ms` }}>
               <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
                 <b.icon className="h-5 w-5 text-primary" />
               </div>
@@ -255,7 +261,7 @@ export default function Index() {
                 />
               </div>
               {openFaq === i && (
-                <p className="mt-3 lv-body">{faq.a}</p>
+                <p className="mt-3 lv-body animate-fade-in">{faq.a}</p>
               )}
             </div>
           ))}
@@ -263,7 +269,7 @@ export default function Index() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border/60 px-6 py-6 text-center">
+      <footer className="border-t border-border/50 px-6 py-6 text-center">
         <p className="lv-caption">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
       </footer>
     </div>

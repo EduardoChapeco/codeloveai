@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
+import MeshBackground from "@/components/MeshBackground";
 
 export default function Login() {
   const { user, loading: authLoading } = useAuth();
@@ -42,10 +43,16 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center px-6 relative">
+      <MeshBackground />
+
+      <div className="w-full max-w-sm animate-fade-in">
         <Link to="/" className="block text-center mb-10">
-          <span className="text-lg font-semibold tracking-tight text-foreground">{brandName}</span>
+          {tenant?.logo_url ? (
+            <img src={tenant.logo_url} alt={brandName} className="h-8 mx-auto" />
+          ) : (
+            <span className="text-lg font-semibold tracking-tight text-foreground">{brandName}</span>
+          )}
         </Link>
 
         <div className="lv-card p-8">
@@ -79,7 +86,7 @@ export default function Login() {
           </form>
 
           <div className="mt-5 text-center space-y-2">
-            <Link to="/forgot-password" className="lv-caption hover:text-foreground transition-colors">
+            <Link to="/forgot-password" className="lv-caption hover:text-foreground transition-colors block">
               Esqueceu a senha?
             </Link>
             <p className="lv-caption">
