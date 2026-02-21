@@ -769,8 +769,12 @@ export default function Community() {
     if (!authLoading && !user) navigate("/login?returnTo=/community");
   }, [user, authLoading, navigate]);
 
+  const userIdRef = useRef<string | undefined>(user?.id);
+  userIdRef.current = user?.id;
+
   const fetchPosts = useCallback(async (reset = false) => {
-    if (!user) {
+    const currentUserId = userIdRef.current;
+    if (!currentUserId) {
       setLoading(false);
       return;
     }
@@ -815,9 +819,9 @@ export default function Community() {
         setProfiles(prev => ({ ...prev, ...profileMap }));
       }
 
-      if (user && postsList.length > 0) {
+      if (postsList.length > 0) {
         const postIds = postsList.map(p => p.id);
-        const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", user.id).in("post_id", postIds);
+        const { data: likes } = await supabase.from("post_likes").select("post_id").eq("user_id", currentUserId).in("post_id", postIds);
         const likedSet = new Set((likes || []).map(l => l.post_id));
         postsList.forEach(p => (p as any).liked = likedSet.has(p.id));
       }
@@ -825,7 +829,12 @@ export default function Community() {
       if (reset) {
         setPosts(postsList);
       } else {
-        setPosts(prev => [...prev, ...postsList]);
+        setPosts(prev => {
+          // Deduplicate by id
+          const existingIds = new Set(prev.map(p => p.id));
+          const newPosts = postsList.filter(p => !existingIds.has(p.id));
+          return [...prev, ...newPosts];
+        });
       }
       pageRef.current = page + 1;
     } catch (err) { console.error("Error fetching posts:", err); }
@@ -834,25 +843,35 @@ export default function Community() {
       setLoadingMore(false);
       fetchingRef.current = false;
     }
-  }, [filterType, user]);
+  }, [filterType]);
 
-  // Reset on filter or user change
+  // Reset on filter or user change — use stable user.id
+  const userId = user?.id;
   useEffect(() => {
-    if (user) fetchPosts(true);
-  }, [fetchPosts, user]);
+    if (userId) fetchPosts(true);
+  }, [fetchPosts, userId]);
 
-  // Infinite scroll observer
+  // Stable refs for intersection observer
+  const fetchPostsRef = useRef(fetchPosts);
+  fetchPostsRef.current = fetchPosts;
+  const hasMoreRef = useRef(hasMore);
+  hasMoreRef.current = hasMore;
+  const loadingStateRef = useRef({ loading, loadingMore });
+  loadingStateRef.current = { loading, loadingMore };
+
+  // Infinite scroll observer — stable, no re-subscription
   useEffect(() => {
     const el = loadMoreRef.current;
     if (!el) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && hasMore && !loading && !loadingMore && !fetchingRef.current) {
-        fetchPosts(false);
+      const { loading: l, loadingMore: lm } = loadingStateRef.current;
+      if (entries[0].isIntersecting && hasMoreRef.current && !l && !lm && !fetchingRef.current) {
+        fetchPostsRef.current(false);
       }
     }, { threshold: 0.1 });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, fetchPosts]);
+  }, []);
 
   useEffect(() => { supabase.from("hashtags").select("*").order("posts_count", { ascending: false }).limit(20).then(({ data }) => setHashtags(data || [])); }, []);
 
