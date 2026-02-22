@@ -12,6 +12,73 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Require admin authentication OR a valid CODELOVE_ADMIN_SECRET header (for cron jobs)
+    const adminSecret = Deno.env.get("CODELOVE_ADMIN_SECRET");
+    const providedSecret = req.headers.get("x-admin-secret");
+
+    let isAuthorized = false;
+
+    // Path 1: Admin secret for cron/automation
+    if (adminSecret && providedSecret && providedSecret === adminSecret) {
+      isAuthorized = true;
+    }
+
+    // Path 2: JWT-based admin auth
+    if (!isAuthorized) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: "Não autenticado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+
+      const token = authHeader.replace("Bearer ", "");
+      const { data, error } = await supabase.auth.getClaims(token);
+      if (error || !data?.claims) {
+        return new Response(JSON.stringify({ error: "Não autenticado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const userId = data.claims.sub as string;
+
+      // Verify admin role
+      const serviceCheck = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: roleData } = await serviceCheck
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (!roleData) {
+        return new Response(JSON.stringify({ error: "Acesso negado — requer admin" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -82,7 +149,7 @@ Deno.serve(async (req) => {
 
         if (snapshot?.snapshot_hash === currentHash) {
           results.push({ project_id: job.project_id, synced: true });
-          continue; // No changes
+          continue;
         }
 
         // Find new migrations (not in tables_migrated)
@@ -90,7 +157,6 @@ Deno.serve(async (req) => {
         const newMigrations = migrationFiles.filter((f: { path: string }) => !alreadyMigrated.has(f.path));
 
         if (newMigrations.length === 0) {
-          // Update hash only
           await serviceClient.from("project_source_snapshots").upsert({
             project_id: job.project_id,
             snapshot_hash: currentHash,
@@ -100,7 +166,10 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Apply new migrations to destination
+        // NOTE: Raw SQL execution via exec_sql RPC is used here for migration sync.
+        // This is restricted to admin-only access and only processes pre-validated
+        // Lovable migration files (not user input). The destination database credentials
+        // are stored encrypted in the migration job record.
         const destClient = createClient(job.dest_supabase_url!, job.dest_service_role_key_encrypted!);
         const newlyMigrated: string[] = [];
 

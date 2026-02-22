@@ -32,6 +32,30 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Validate email format to prevent injection
+    const sanitizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(sanitizedEmail) || sanitizedEmail.length > 254) {
+      return new Response(
+        JSON.stringify({ error: "Email inválido" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Validate idToken format (must be non-empty string, reasonable length)
+    if (typeof idToken !== "string" || idToken.length < 10 || idToken.length > 10000) {
+      return new Response(
+        JSON.stringify({ error: "Token inválido" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -70,7 +94,6 @@ Deno.serve(async (req) => {
           uid: user.id,
           email: user.email,
           name: profile?.name || user.email?.split("@")[0] || "",
-          licenseToken: tokenData?.token || null,
           licenseActive: tokenData?.is_active || false,
           workspaceId: workspaceId || null,
         }),
@@ -80,7 +103,7 @@ Deno.serve(async (req) => {
 
     // If not a valid Supabase token, try to find user by email
     // and verify the idToken against their license token
-    const sanitizedEmail = email.trim().toLowerCase();
+    // sanitizedEmail already declared above from input validation
 
     const { data: profileByEmail } = await serviceClient
       .from("profiles")
@@ -123,7 +146,6 @@ Deno.serve(async (req) => {
         uid: profileByEmail.user_id,
         email: sanitizedEmail,
         name: profileByEmail.name || sanitizedEmail.split("@")[0],
-        licenseToken: tokenMatch.token,
         licenseActive: true,
         workspaceId: workspaceId || null,
       }),
