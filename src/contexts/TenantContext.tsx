@@ -75,55 +75,84 @@ async function resolveTenantId(userId: string | null): Promise<string> {
   return DEFAULT_TENANT_ID;
 }
 
+/** CSS custom properties that are COLOR tokens — must NOT be overridden
+ *  by light presets when in dark mode, because inline styles on :root
+ *  beat the `.dark` class selectors from index.css. */
+const COLOR_TOKEN_KEYS = new Set([
+  "--background", "--foreground",
+  "--card", "--card-foreground",
+  "--popover", "--popover-foreground",
+  "--primary", "--primary-foreground",
+  "--secondary", "--secondary-foreground",
+  "--muted", "--muted-foreground",
+  "--accent", "--accent-foreground",
+  "--destructive", "--destructive-foreground",
+  "--border", "--input", "--ring",
+  "--sidebar-background", "--sidebar-foreground",
+  "--sidebar-primary", "--sidebar-primary-foreground",
+  "--sidebar-accent", "--sidebar-accent-foreground",
+  "--sidebar-border", "--sidebar-ring",
+  "--glass-bg", "--glass-border",
+]);
+
+const DARK_NATIVE_PRESETS = new Set(["midnight", "neon-cyber"]);
+
+/** Keys we have previously set as inline styles so we can clean them up */
+let _prevInlineKeys: string[] = [];
+
 /** Apply full tenant theme to document */
 function applyTenantTheme(tenant: Tenant) {
   const root = document.documentElement;
   const isDark = root.classList.contains("dark");
 
-  // 1. Apply theme preset variables
+  // ── 0. Clear ALL previous inline CSS custom properties we set ──
+  for (const key of _prevInlineKeys) {
+    root.style.removeProperty(key);
+  }
+  _prevInlineKeys = [];
+
+  // Helper to set and track an inline property
+  const setVar = (key: string, value: string) => {
+    root.style.setProperty(key, value);
+    _prevInlineKeys.push(key);
+  };
+
+  // ── 1. Apply theme preset variables ──
   const preset = getThemePreset(tenant.theme_preset);
   if (preset) {
-    // Dark-native presets can be applied directly; for light presets in dark mode, skip color tokens
-    const isDarkPreset = ["midnight", "neon-cyber"].includes(preset.id);
-    const darkSkipKeys = new Set([
-      "--background", "--foreground", "--card", "--card-foreground",
-      "--popover", "--popover-foreground", "--muted", "--muted-foreground",
-      "--accent", "--accent-foreground", "--border", "--input",
-      "--sidebar-background", "--sidebar-foreground", "--sidebar-accent",
-      "--sidebar-accent-foreground", "--sidebar-border",
-      "--glass-bg", "--glass-border",
-    ]);
+    const isDarkPreset = DARK_NATIVE_PRESETS.has(preset.id);
 
     Object.entries(preset.variables).forEach(([key, value]) => {
-      // In dark mode, only apply color-token overrides from dark-native presets
-      if (isDark && !isDarkPreset && darkSkipKeys.has(key)) return;
-      root.style.setProperty(key, value);
+      // In dark mode with a LIGHT preset → skip ALL color tokens
+      // (they would override the .dark {} definitions from index.css)
+      if (isDark && !isDarkPreset && COLOR_TOKEN_KEYS.has(key)) return;
+      setVar(key, value);
     });
   }
 
-  // 2. Apply tenant-specific primary/secondary/accent colors (override preset)
+  // ── 2. Tenant-specific primary / accent colors ──
   if (tenant.primary_color) {
     const hsl = hexToHSL(tenant.primary_color);
-    root.style.setProperty("--primary", hsl);
-    root.style.setProperty("--ring", hsl);
-    root.style.setProperty("--sidebar-primary", hsl);
-    root.style.setProperty("--sidebar-ring", hsl);
+    setVar("--primary", hsl);
+    setVar("--ring", hsl);
+    setVar("--sidebar-primary", hsl);
+    setVar("--sidebar-ring", hsl);
   }
   if (tenant.accent_color) {
     const hsl = hexToHSL(tenant.accent_color);
-    // Only override accent if not a dark theme preset
-    if (preset && !["midnight", "neon-cyber"].includes(preset.id)) {
-      root.style.setProperty("--accent", hsl.replace(/(\d+)%$/, (_, l) => `${Math.min(Number(l) + 40, 96)}%`));
-      root.style.setProperty("--accent-foreground", hsl.replace(/(\d+)%$/, (_, l) => `${Math.max(Number(l) - 15, 20)}%`));
+    const presetId = preset?.id ?? "";
+    if (!DARK_NATIVE_PRESETS.has(presetId)) {
+      setVar("--accent", hsl.replace(/(\d+)%$/, (_, l) => `${Math.min(Number(l) + 40, 96)}%`));
+      setVar("--accent-foreground", hsl.replace(/(\d+)%$/, (_, l) => `${Math.max(Number(l) - 15, 20)}%`));
     }
   }
 
-  // 3. Border radius
+  // ── 3. Border radius ──
   if (tenant.border_radius) {
-    root.style.setProperty("--radius", tenant.border_radius);
+    setVar("--radius", tenant.border_radius);
   }
 
-  // 4. Font family
+  // ── 4. Font family ──
   if (tenant.font_family && tenant.font_family !== "system") {
     const fontMap: Record<string, string> = {
       inter: "'Inter', system-ui, sans-serif",
@@ -138,17 +167,17 @@ function applyTenantTheme(tenant: Tenant) {
     document.body.style.fontFamily = "";
   }
 
-  // 5. Tenant CSS vars for custom usage
-  root.style.setProperty("--tenant-primary", tenant.primary_color);
-  root.style.setProperty("--tenant-secondary", tenant.secondary_color);
+  // ── 5. Tenant CSS vars for custom usage ──
+  setVar("--tenant-primary", tenant.primary_color);
+  setVar("--tenant-secondary", tenant.secondary_color);
 
-  // 6. Favicon
+  // ── 6. Favicon ──
   if (tenant.favicon_url) {
     const link = document.querySelector("link[rel='icon']") as HTMLLinkElement;
     if (link) link.href = tenant.favicon_url;
   }
 
-  // 7. Document title
+  // ── 7. Document title ──
   if (tenant.meta_title) {
     document.title = tenant.meta_title;
   }
