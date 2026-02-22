@@ -61,12 +61,18 @@ export default function BrainPage() {
   }, [conversations]);
 
   const checkBrainStatus = async () => {
-    const { data, error } = await supabase.functions.invoke("loveai-brain", {
-      body: { action: "status" },
-    });
-    if (!error && data) {
-      setBrainActive(data.active);
-    } else {
+    try {
+      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+        body: { action: "status" },
+      });
+      if (!error && data) {
+        setBrainActive(data.active);
+      } else {
+        console.warn("Brain status check failed:", error);
+        setBrainActive(false);
+      }
+    } catch (err) {
+      console.warn("Brain status error:", err);
       setBrainActive(false);
     }
   };
@@ -86,7 +92,10 @@ export default function BrainPage() {
       const { data, error } = await supabase.functions.invoke("loveai-brain", {
         body: { action: "setup" },
       });
-      if (error) throw { message: (data as any)?.error || error.message };
+      if (error) {
+        const errorMsg = (data as any)?.error || error.message || "Erro ao ativar Brain";
+        throw { message: errorMsg };
+      }
       if (data?.error) throw { message: data.error };
 
       setBrainActive(true);

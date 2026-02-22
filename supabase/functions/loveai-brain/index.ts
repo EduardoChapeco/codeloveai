@@ -97,7 +97,20 @@ Deno.serve(async (req) => {
         headers: { Authorization: `Bearer ${lovableToken}` },
       });
       if (!wsRes.ok) {
-        return new Response(JSON.stringify({ error: "Falha ao obter workspaces" }), {
+        const wsStatus = wsRes.status;
+        console.error("Workspace fetch failed:", wsStatus, await wsRes.text().catch(() => ""));
+        // If 401, mark token as expired
+        if (wsStatus === 401) {
+          await serviceClient
+            .from("lovable_accounts")
+            .update({ status: "expired" })
+            .eq("user_id", user.id);
+          return new Response(JSON.stringify({ error: "Token Lovable expirado. Reconecte sua conta em Configurações > Lovable." }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ error: "Falha ao obter workspaces do Lovable. Tente novamente." }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
