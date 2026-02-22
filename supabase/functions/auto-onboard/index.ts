@@ -8,9 +8,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Default deadline: Feb 20, 2026 18:00 BRT (21:00 UTC)
-const ONBOARD_DEADLINE = new Date("2026-02-20T21:00:00Z").getTime();
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -61,29 +58,7 @@ Deno.serve(async (req) => {
     const tenantInfo = await resolveTenant(serviceClient, req, userId);
     const tenantId = tenantInfo.id || tenantInfo.tenant_id;
 
-    // Check if onboarding is active: deadline not passed OR admin override exists
-    const now = Date.now();
-    let onboardActive = now < ONBOARD_DEADLINE;
-
-    if (!onboardActive) {
-      // Check for admin override: admin_notifications with type "onboard_override" and is_read=false
-      const { data: override } = await serviceClient
-        .from("admin_notifications")
-        .select("id")
-        .eq("type", "onboard_override")
-        .eq("is_read", false)
-        .limit(1);
-
-      onboardActive = !!(override && override.length > 0);
-    }
-
-    if (!onboardActive) {
-      return new Response(JSON.stringify({ status: "onboard_disabled" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Check if user already has ANY subscription (paid or trial)
+    // Check if user already has ANY subscription
     const { data: existingSubs } = await serviceClient
       .from("subscriptions")
       .select("id")
@@ -110,9 +85,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create 5-hour trial subscription
+    // Create 365-day free subscription
     const startsAt = new Date();
-    const expiresAt = new Date(startsAt.getTime() + 5 * 60 * 60 * 1000); // 5 hours
+    const expiresAt = new Date(startsAt.getTime() + 365 * 24 * 60 * 60 * 1000); // 365 days
 
     const { error: insertError } = await serviceClient
       .from("subscriptions")
@@ -122,28 +97,19 @@ Deno.serve(async (req) => {
         status: "active",
         starts_at: startsAt.toISOString(),
         expires_at: expiresAt.toISOString(),
-        payment_id: `onboard_${userId.substring(0, 8)}`,
+        payment_id: `free_${userId.substring(0, 8)}`,
         tenant_id: tenantId,
       });
 
     if (insertError) {
       console.error("Insert error:", insertError);
-      return new Response(JSON.stringify({ error: "Erro ao ativar trial" }), {
+      return new Response(JSON.stringify({ error: "Erro ao ativar acesso gratuito" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Notify admin
-    await serviceClient.from("admin_notifications").insert({
-      type: "onboarding",
-      title: "Novo trial de 5h ativado",
-      description: `Usuário ${userEmail || userId} recebeu trial automático de 5 horas.`,
-      user_id: userId,
-      tenant_id: tenantId,
-    });
-
-    // Call external webhook for token generation (5h = test_5h or test_1d as fallback)
+    // Generate token via webhook
     let generatedToken: string | null = null;
     const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
     if (webhookSecret) {
@@ -152,9 +118,8 @@ Deno.serve(async (req) => {
           webhookSecret,
           email: userEmail || "",
           name: userEmail?.split("@")[0] || "",
-          plan: "test_5h",
+          plan: "days_365",
         };
-        console.log(`Auto-onboard: calling webhook for ${userEmail}, plan: test_5h`);
 
         const webhookResponse = await fetch(
           "https://codelove-fix-api.eusoueduoficial.workers.dev/webhook/purchase",
@@ -166,7 +131,6 @@ Deno.serve(async (req) => {
         );
 
         const responseText = await webhookResponse.text();
-        console.log(`Webhook response: ${webhookResponse.status}, body: ${responseText}`);
 
         if (webhookResponse.ok) {
           try {
@@ -183,25 +147,20 @@ Deno.serve(async (req) => {
                 is_active: true,
                 tenant_id: tenantId,
               });
-              console.log(`Onboard token stored for ${userId} in tenant ${tenantId}`);
             }
-          } catch (parseErr) {
-            console.error(`Failed to parse webhook response: ${responseText}`);
+          } catch {
+            console.error(`Failed to parse webhook response`);
           }
-        } else {
-          console.error(`Webhook error ${webhookResponse.status}: ${responseText}`);
         }
       } catch (webhookErr) {
         console.error("Webhook network error:", webhookErr);
       }
-    } else {
-      console.warn("CODELOVE_WEBHOOK_SECRET not configured");
     }
 
     return new Response(
       JSON.stringify({
         status: "activated",
-        trial_hours: 5,
+        days: 365,
         expires_at: expiresAt.toISOString(),
         has_token: !!generatedToken,
       }),

@@ -1,13 +1,13 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
+import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useSupportChat } from "@/contexts/SupportChatContext";
 import { useTenant } from "@/contexts/TenantContext";
 import {
-  LayoutDashboard, MessageCircle, Users, Download, Bot, Headphones,
+  LayoutDashboard, MessageCircle, Download, Bot, Headphones,
   Link2, FolderOpen, Shield, LogOut, User, ChevronDown,
-  ArrowLeft, Bell, Send, Gift, Upload, FileText, Coins, Unlock,
-  PanelLeftClose, PanelLeft, Building2, StickyNote, Brain,
+  ArrowLeft, Bell, Send, Upload,
+  PanelLeftClose, PanelLeft, Building2, StickyNote, Brain, Users, Unlock, FileText,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -31,8 +31,6 @@ import {
 
 const adminTabs = [
   { id: "members", label: "Membros", icon: Users },
-  { id: "affiliates", label: "Afiliados", icon: Coins },
-  { id: "invoices", label: "Faturas", icon: FileText },
   { id: "worker-tokens", label: "Tokens API", icon: Unlock },
   { id: "extension", label: "Extensão", icon: Upload },
   { id: "notifications", label: "Notificações", icon: Bell },
@@ -42,10 +40,9 @@ const adminTabs = [
 export default function AppSidebar() {
   const { user, signOut } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const brandName = tenant?.name || "CodeLove AI";
-  const brandInitials = brandName.substring(0, 2).toUpperCase();
+  const brandName = "Code Lovable Oficial";
+  const brandInitials = "CL";
   const { isAdmin } = useIsAdmin();
-  const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
   const { toggleSupport, isOpen: isSupportOpen, unreadCount } = useSupportChat();
   const location = useLocation();
@@ -113,23 +110,23 @@ export default function AppSidebar() {
               </SidebarMenuItem>
             )}
             <SidebarMenuItem>
-            <SidebarMenuButton isActive={isSupportOpen} onClick={toggleSupport} tooltip="Suporte">
-              <span className="relative">
-                <Headphones className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1.5 h-3.5 min-w-[14px] rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground flex items-center justify-center px-0.5">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
-              </span>
-              <span>Suporte</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
-              <Bot className="h-4 w-4" />
-              <span>{brandName} AI</span>
-            </SidebarMenuButton>
+              <SidebarMenuButton isActive={isSupportOpen} onClick={toggleSupport} tooltip="Suporte">
+                <span className="relative">
+                  <Headphones className="h-4 w-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1.5 h-3.5 min-w-[14px] rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground flex items-center justify-center px-0.5">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </span>
+                <span>Suporte</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
+                <Bot className="h-4 w-4" />
+                <span>{brandName} AI</span>
+              </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -156,21 +153,13 @@ export default function AppSidebar() {
     { to: "/install", label: "Instalar", icon: Download },
   ];
 
-  // Chat action item (not a route, toggles the chat panel)
-  const handleChatClick = () => {
-    if (!isChatOpen) toggleChat();
-  };
-
   const lovableItems = [
     { to: "/lovable/connect", label: "Conectar", icon: Link2 },
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen },
   ];
 
-
   const accountItems = [
     { to: `/profile/${user.id}`, label: "Perfil", icon: User },
-    ...(isAffiliate ? [{ to: "/affiliate", label: "Afiliado", icon: Users }] : []),
-    { to: "/white-label/affiliate", label: "WL Afiliado", icon: Building2 },
   ];
 
   const adminItems = [
