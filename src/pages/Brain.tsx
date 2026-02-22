@@ -198,11 +198,14 @@ export default function BrainPage() {
       setSending(false);
       setCapturing(true);
 
-      // Client-side polling — check every 3s for up to 120s
-      const maxPolls = 40;
+      // Client-side polling — check every 5s for up to 180s
+      // First 30s: wait without polling (Lovable needs time to process)
+      await new Promise(r => setTimeout(r, 15000));
+      
+      const maxPolls = 33; // 33 polls × 5s = 165s + 15s initial = 180s total
       let captured = false;
       for (let i = 0; i < maxPolls; i++) {
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 5000));
         try {
           const { data: captureData } = await supabase.functions.invoke("loveai-brain", {
             body: { action: "capture", conversation_id: conversationId, brain_project_id: brainProjectId },
@@ -228,7 +231,7 @@ export default function BrainPage() {
         setAllConversations(prev =>
           prev.map(c => c.id === conversationId ? { ...c, status: "timeout" } : c)
         );
-        toast.error("Brain não respondeu a tempo (120s). Tente novamente.");
+        toast.error("Brain não respondeu a tempo (180s). Tente novamente.");
       }
     } catch (err: any) {
       setAllConversations(prev =>
@@ -467,7 +470,7 @@ export default function BrainPage() {
             </div>
             {capturing && (
               <p className="text-center text-xs text-muted-foreground mt-2 animate-pulse">
-                ⏳ Aguardando resposta do Brain (até 120s)...
+                ⏳ Aguardando resposta do Brain (até 180s)...
               </p>
             )}
           </div>
