@@ -430,39 +430,100 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       const msgId = generateTypeId("umsg");
       const aiMsgId = generateTypeId("aimsg");
 
-      const fixRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat`, {
+      const fixPayload = JSON.stringify({
+        id: msgId,
+        message: prompt,
+        intent: "security_fix_v2",
+        chat_only: false,
+        agent_mode_enabled: true,
+        ai_message_id: aiMsgId,
+        thread_id: "main",
+        view: "security",
+        view_description: "The user is currently viewing the security view for their project.",
+        model: null,
+        files: [],
+        optimisticImageUrls: [],
+        selected_elements: [],
+        debug_mode: false,
+        session_replay: "[]",
+        client_logs: [],
+        network_requests: [],
+        runtime_errors: [],
+        integration_metadata: {
+          browser: { preview_viewport_width: 1536, preview_viewport_height: 730 },
+        },
+      });
+
+      let currentLovableToken = lovableToken;
+
+      let fixRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${lovableToken}`,
+          Authorization: `Bearer ${currentLovableToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          id: msgId,
-          message: prompt,
-          intent: "security_fix_v2",
-          chat_only: false,
-          ai_message_id: aiMsgId,
-          thread_id: "main",
-          view: "security",
-          view_description: "The user is currently viewing the security view for their project.",
-          model: null,
-          files: [],
-          optimisticImageUrls: [],
-          selected_elements: [],
-          debug_mode: false,
-          session_replay: "[]",
-          client_logs: [],
-          network_requests: [],
-          runtime_errors: [],
-          integration_metadata: {
-            browser: { preview_viewport_width: 1536, preview_viewport_height: 730 },
-          },
-        }),
+        body: fixPayload,
       });
+
+      // Auto-refresh token on 401
+      if (fixRes.status === 401) {
+        const firebaseApiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
+        const { data: fullAccount } = await serviceClient
+          .from("lovable_accounts")
+          .select("refresh_token_encrypted, auto_refresh_enabled")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (firebaseApiKey && fullAccount?.refresh_token_encrypted && fullAccount?.auto_refresh_enabled) {
+          try {
+            const refreshRes = await fetch(
+              `https://securetoken.googleapis.com/v1/token?key=${firebaseApiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(fullAccount.refresh_token_encrypted)}`,
+              }
+            );
+
+            if (refreshRes.ok) {
+              const refreshData = await refreshRes.json();
+              if (refreshData.id_token) {
+                const expiresIn = parseInt(refreshData.expires_in || "3600", 10);
+                await serviceClient
+                  .from("lovable_accounts")
+                  .update({
+                    token_encrypted: refreshData.id_token,
+                    refresh_token_encrypted: refreshData.refresh_token || fullAccount.refresh_token_encrypted,
+                    token_expires_at: new Date(Date.now() + (expiresIn - 300) * 1000).toISOString(),
+                    last_verified_at: new Date().toISOString(),
+                    status: "active",
+                    refresh_failure_count: 0,
+                  })
+                  .eq("user_id", user.id);
+
+                currentLovableToken = refreshData.id_token;
+                console.log("[Brain] Token auto-refreshed, retrying Fix V2...");
+
+                // Retry with new token
+                fixRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat`, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${currentLovableToken}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: fixPayload,
+                });
+              }
+            }
+          } catch (refreshErr) {
+            console.error("[Brain] Auto-refresh failed:", refreshErr);
+          }
+        }
+      }
 
       if (!fixRes.ok) {
         const errText = await fixRes.text();
-        console.error("Fix V2 failed:", errText);
+        console.error("Fix V2 failed:", fixRes.status, errText.substring(0, 500));
         if (fixRes.status === 401 || fixRes.status === 403) {
           await serviceClient
             .from("lovable_accounts")
@@ -481,6 +542,8 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      console.log("[Brain] Fix V2 sent successfully for project:", brainProjectId);
 
       // Save conversation
       const { data: convo } = await serviceClient.from("loveai_conversations").insert({
@@ -520,6 +583,17 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         });
       }
 
+      // Re-fetch latest token (might have been refreshed by a previous send/proxy call)
+      const { data: latestAccount } = await serviceClient
+        .from("lovable_accounts")
+        .select("token_encrypted, status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const captureToken = (latestAccount?.status === "active" && latestAccount?.token_encrypted) 
+        ? latestAccount.token_encrypted 
+        : lovableToken;
+
       // Get previous snapshot hash
       const { data: snapshot } = await serviceClient
         .from("project_source_snapshots")
@@ -532,7 +606,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       let response: string | null = null;
       try {
         const srcRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
-          headers: { Authorization: `Bearer ${lovableToken}` },
+          headers: { Authorization: `Bearer ${captureToken}` },
         });
 
         if (srcRes.ok) {
@@ -542,7 +616,24 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
 
           let srcData: any;
           try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
-          const files = srcData?.files || srcData;
+          
+          // Handle multiple source-code API response formats
+          let files: any = null;
+          if (srcData?.files) {
+            files = srcData.files;
+          } else if (srcData?.data?.files) {
+            files = srcData.data.files;
+          } else if (srcData?.source?.files) {
+            files = srcData.source.files;
+          } else if (Array.isArray(srcData)) {
+            files = srcData;
+          } else if (typeof srcData === "object" && !srcData.files) {
+            // Maybe the response IS the file map directly
+            files = srcData;
+          }
+
+          console.log("[Brain Capture] Hash comparison:", { previousHash: previousHash?.substring(0, 12), currentHash: currentHash.substring(0, 12), changed: previousHash !== currentHash });
+          console.log("[Brain Capture] Files type:", Array.isArray(files) ? `array(${files.length})` : typeof files);
 
           // If hash hasn't changed, still processing
           if (previousHash && currentHash === previousHash) {
@@ -552,103 +643,115 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
           }
 
           // Source code changed! Extract the response.
-          // Strategy 1: Check brain-output.json (preferred, may have response text)
+          // Strategy 1: Check brain-output.json (preferred)
           let outputContent: string | null = null;
           if (Array.isArray(files)) {
-            const outputFile = files.find((f: { path: string }) =>
-              f.path === "src/brain-output.json" || f.path === "/src/brain-output.json"
+            const outputFile = files.find((f: any) =>
+              f.path === "src/brain-output.json" || 
+              f.path === "/src/brain-output.json" ||
+              f.name === "brain-output.json"
             );
             if (outputFile?.content) outputContent = outputFile.content;
-          } else if (typeof files === "object") {
-            outputContent = files["src/brain-output.json"] || null;
+            else if (outputFile?.source) outputContent = outputFile.source;
+          } else if (files && typeof files === "object") {
+            outputContent = files["src/brain-output.json"] || files["/src/brain-output.json"] || null;
           }
+
+          console.log("[Brain Capture] brain-output.json found:", !!outputContent, outputContent ? outputContent.substring(0, 200) : "null");
 
           if (outputContent) {
             try {
-              const parsed = JSON.parse(outputContent);
-              if (parsed.status === "done" && parsed.response) {
+              // Clean potential markdown wrapping
+              let cleanContent = outputContent.trim();
+              if (cleanContent.startsWith("```")) {
+                cleanContent = cleanContent.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+              }
+              const parsed = JSON.parse(cleanContent);
+              if (parsed.response && parsed.response.length > 0) {
                 response = parsed.response;
+                console.log("[Brain Capture] Extracted response from brain-output.json, length:", response!.length);
               }
             } catch {
               // Not valid JSON — try extracting text directly
-              // Maybe Lovable wrote markdown or plain text instead of JSON
               const cleaned = outputContent.trim();
-              if (cleaned.length > 10 && cleaned !== '{"response":"","timestamp":0,"status":"idle"}') {
+              if (cleaned.length > 20 && !cleaned.includes('"status":"idle"') && cleaned !== '{"response":"","timestamp":0,"status":"idle"}') {
                 response = cleaned;
+                console.log("[Brain Capture] Used raw brain-output.json content as response");
               }
             }
           }
 
-          // Strategy 2: If brain-output.json didn't have it, look at ALL changed files
-          if (!response) {
-            const changedFiles: string[] = [];
+          // Strategy 2: Look at ALL files for response markers
+          if (!response && files) {
             const ignorePaths = new Set([
-              "src/brain-config.md",
-              "package.json",
-              "tsconfig.json",
-              "vite.config.ts",
-              "index.html",
-              "tailwind.config.ts",
-              "postcss.config.js",
-              "eslint.config.js",
-              "components.json",
+              "src/brain-config.md", "package.json", "tsconfig.json", "vite.config.ts",
+              "index.html", "tailwind.config.ts", "postcss.config.js", "eslint.config.js", "components.json",
             ]);
 
+            const fileEntries: Array<{ path: string; content: string }> = [];
             if (Array.isArray(files)) {
               for (const f of files) {
-                if (f.path && f.content && !ignorePaths.has(f.path)) {
-                  // Collect all file contents that might have the response
-                  changedFiles.push(`--- ${f.path} ---\n${f.content}`);
+                const path = f.path || f.name || "";
+                const content = f.content || f.source || "";
+                if (path && content && !ignorePaths.has(path)) {
+                  fileEntries.push({ path, content });
                 }
               }
             } else if (typeof files === "object") {
               for (const [path, content] of Object.entries(files)) {
                 if (!ignorePaths.has(path) && typeof content === "string") {
-                  changedFiles.push(`--- ${path} ---\n${content}`);
+                  fileEntries.push({ path, content });
                 }
               }
             }
 
-            // Look for any file that contains our response markers or meaningful content
-            const allContent = changedFiles.join("\n\n");
-
-            // Try to find response in any file that looks like brain output
-            for (const fileBlock of changedFiles) {
-              // Check if file contains response markers
-              if (fileBlock.includes('"status":"done"') || fileBlock.includes('"status": "done"')) {
-                const match = fileBlock.match(/"response"\s*:\s*"([\s\S]*?)"\s*,\s*"timestamp"/);
-                if (match?.[1]) {
-                  response = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-                  break;
-                }
-              }
-            }
-
-      // Strategy 3: If still nothing, check if there are new/modified .tsx/.ts/.md files
-            // that contain the actual AI-generated content
-            if (!response && previousHash && currentHash !== previousHash) {
-              // Source changed but we couldn't extract a clean response
-              // Return ALL changed source as a fallback (the AI did respond, just not in our expected format)
-              const relevantContent: string[] = [];
-              if (Array.isArray(files)) {
-                for (const f of files) {
-                  if (f.path && f.content && !ignorePaths.has(f.path) &&
-                    (f.path.endsWith(".tsx") || f.path.endsWith(".ts") || f.path.endsWith(".json") || f.path.endsWith(".md")) &&
-                    f.path !== "src/brain-config.md") {
-                    relevantContent.push(`**${f.path}:**\n\`\`\`\n${f.content.substring(0, 3000)}\n\`\`\``);
+            // Check all files for response JSON markers
+            for (const { content } of fileEntries) {
+              if (content.includes('"status"') && (content.includes('"done"') || content.includes('"response"'))) {
+                try {
+                  let cleanContent = content.trim();
+                  if (cleanContent.startsWith("```")) {
+                    cleanContent = cleanContent.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+                  }
+                  const parsed = JSON.parse(cleanContent);
+                  if (parsed.response && parsed.response.length > 0) {
+                    response = parsed.response;
+                    console.log("[Brain Capture] Found response in file via JSON parse");
+                    break;
+                  }
+                } catch {
+                  // Try regex extraction
+                  const match = content.match(/"response"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                  if (match?.[1] && match[1].length > 5) {
+                    response = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+                    console.log("[Brain Capture] Found response via regex extraction");
+                    break;
                   }
                 }
               }
+            }
+
+            // Strategy 3: Fallback - return changed source files
+            if (!response && previousHash && currentHash !== previousHash) {
+              const relevantContent: string[] = [];
+              for (const { path, content } of fileEntries) {
+                if ((path.endsWith(".tsx") || path.endsWith(".ts") || path.endsWith(".json") || path.endsWith(".md")) &&
+                  path !== "src/brain-config.md") {
+                  relevantContent.push(`**${path}:**\n\`\`\`\n${content.substring(0, 3000)}\n\`\`\``);
+                }
+              }
               if (relevantContent.length > 0) {
-                response = `O Brain processou sua solicitação. Aqui estão as alterações no código do projeto:\n\n${relevantContent.join("\n\n")}`;
+                response = `O Brain processou sua solicitação. Aqui estão as alterações:\n\n${relevantContent.join("\n\n")}`;
               }
             }
 
-            // Strategy 4: If hash changed but no extractable content, mark as completed with generic message
+            // Strategy 4: Generic fallback
             if (!response && previousHash && currentHash !== previousHash) {
-              response = "O Brain processou sua solicitação, mas a resposta não pôde ser extraída no formato esperado. Verifique o projeto Brain diretamente.";
+              response = "O Brain processou sua solicitação, mas a resposta não pôde ser extraída no formato esperado.";
             }
           }
+        } else {
+          console.error("[Brain Capture] Source code fetch failed:", srcRes.status, await srcRes.text().catch(() => ""));
         }
       } catch (pollErr) {
         console.warn("Check error:", pollErr);
@@ -664,7 +767,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         // Update snapshot hash to current state
         try {
           const srcRes2 = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
-            headers: { Authorization: `Bearer ${lovableToken}` },
+            headers: { Authorization: `Bearer ${captureToken}` },
           });
           if (srcRes2.ok) {
             const newRawText = await srcRes2.text();
@@ -682,7 +785,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
           await fetch(`${LOVABLE_API}/projects/${brain_project_id}/edit-code`, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${lovableToken}`,
+              Authorization: `Bearer ${captureToken}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
