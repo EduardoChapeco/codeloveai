@@ -8,10 +8,42 @@ const corsHeaders = {
 
 const LOVABLE_API = "https://api.lovable.dev";
 
-function generateId(prefix: "umsg" | "aimsg"): string {
-  const ts = Date.now().toString(36);
-  const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-  return `${prefix}_${ts}${rand}`;
+// Crockford's Base32 alphabet
+const CROCKFORD = "0123456789abcdefghjkmnpqrstvwxyz";
+
+function generateTypeId(prefix: string): string {
+  const now = BigInt(Date.now());
+  const bytes = new Uint8Array(16);
+  // UUIDv7: 48-bit timestamp (big-endian) in first 6 bytes
+  bytes[0] = Number((now >> 40n) & 0xFFn);
+  bytes[1] = Number((now >> 32n) & 0xFFn);
+  bytes[2] = Number((now >> 24n) & 0xFFn);
+  bytes[3] = Number((now >> 16n) & 0xFFn);
+  bytes[4] = Number((now >> 8n) & 0xFFn);
+  bytes[5] = Number(now & 0xFFn);
+  // Random bytes for the rest
+  const randBytes = new Uint8Array(10);
+  crypto.getRandomValues(randBytes);
+  bytes[6] = (0x70 | (randBytes[0] & 0x0F)); // version 7
+  bytes[7] = randBytes[1];
+  bytes[8] = (0x80 | (randBytes[2] & 0x3F)); // variant
+  bytes[9] = randBytes[3];
+  bytes[10] = randBytes[4];
+  bytes[11] = randBytes[5];
+  bytes[12] = randBytes[6];
+  bytes[13] = randBytes[7];
+  bytes[14] = randBytes[8];
+  bytes[15] = randBytes[9];
+
+  // Encode 128 bits into 26 base32 chars
+  let val = 0n;
+  for (const b of bytes) val = (val << 8n) | BigInt(b);
+  const chars: string[] = [];
+  for (let i = 0; i < 26; i++) {
+    chars.unshift(CROCKFORD[Number(val & 31n)]);
+    val >>= 5n;
+  }
+  return `${prefix}_${chars.join("")}`;
 }
 
 async function hashText(text: string): Promise<string> {
@@ -159,21 +191,32 @@ Deno.serve(async (req) => {
         });
       }
       const wsBody = await wsRes.json();
-      // Handle multiple response formats: array, { workspaces: [...] }, { data: [...] }
-      const wsList = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || []);
+      console.log("Workspace API raw response:", JSON.stringify(wsBody).substring(0, 500));
+      // Handle multiple response formats: array, { workspaces: [...] }, { data: [...] }, or { results: [...] }
+      let wsList: any[] = [];
+      if (Array.isArray(wsBody)) {
+        wsList = wsBody;
+      } else if (wsBody && typeof wsBody === "object") {
+        // Try all known keys
+        wsList = wsBody.workspaces || wsBody.data || wsBody.results || wsBody.items || [];
+        // If still empty but wsBody has an 'id' field, it might be a single workspace object
+        if (wsList.length === 0 && wsBody.id) {
+          wsList = [wsBody];
+        }
+      }
       const workspaceId = wsList?.[0]?.id;
       if (!workspaceId) {
-        console.error("No workspace found. API response shape:", JSON.stringify(Object.keys(wsBody || {})));
-
-        return new Response(JSON.stringify({ error: "Nenhum workspace encontrado" }), {
+        console.error("No workspace found. Full response:", JSON.stringify(wsBody).substring(0, 1000));
+        return new Response(JSON.stringify({ error: "Nenhum workspace encontrado", debug_keys: Object.keys(wsBody || {}) }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       // Create project with minimal message
-      const msgId = generateId("umsg");
-      const aiMsgId = generateId("aimsg");
+      const msgId = generateTypeId("umsg");
+      const aiMsgId = generateTypeId("aimsg");
+      console.log("Generated IDs - msgId:", msgId, "aiMsgId:", aiMsgId);
 
       const createRes = await fetch(`${LOVABLE_API}/workspaces/${workspaceId}/projects`, {
         method: "POST",
@@ -369,8 +412,8 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       }
 
       // Send Fix V2 message
-      const msgId = generateId("umsg");
-      const aiMsgId = generateId("aimsg");
+      const msgId = generateTypeId("umsg");
+      const aiMsgId = generateTypeId("aimsg");
 
       const fixRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat`, {
         method: "POST",
