@@ -16,7 +16,6 @@ import Index from "./pages/Index";
 function lazyRetry(importFn: () => Promise<any>) {
   return lazy(() =>
     importFn().catch(() => {
-      // If chunk fails, reload the page once
       const key = 'clf_chunk_retry';
       if (!sessionStorage.getItem(key)) {
         sessionStorage.setItem(key, '1');
@@ -36,21 +35,14 @@ const Dashboard = lazyRetry(() => import("./pages/Dashboard"));
 const Admin = lazyRetry(() => import("./pages/Admin"));
 const AdminGlobal = lazyRetry(() => import("./pages/AdminGlobal"));
 const TenantAdmin = lazyRetry(() => import("./pages/TenantAdmin"));
-const AffiliateDashboard = lazyRetry(() => import("./pages/AffiliateDashboard"));
-const AffiliateRefPage = lazyRetry(() => import("./pages/AffiliateRefPage"));
-const Checkout = lazyRetry(() => import("./pages/Checkout"));
 const Community = lazyRetry(() => import("./pages/Community"));
 const Profile = lazyRetry(() => import("./pages/Profile"));
 const Notes = lazyRetry(() => import("./pages/Notes"));
-const AffiliatesPage = lazyRetry(() => import("./pages/AffiliatesPage"));
 const Install = lazyRetry(() => import("./pages/Install"));
 const LovableConnect = lazyRetry(() => import("./pages/LovableConnect"));
 const LovableProjects = lazyRetry(() => import("./pages/LovableProjects"));
 const LovablePreview = lazyRetry(() => import("./pages/LovablePreview"));
 const LovableUploadTest = lazyRetry(() => import("./pages/LovableUploadTest"));
-const WhiteLabelRefPage = lazyRetry(() => import("./pages/WhiteLabelRefPage"));
-const WlAffiliateDashboard = lazyRetry(() => import("./pages/WlAffiliateDashboard"));
-const PartnersLanding = lazyRetry(() => import("./pages/PartnersLanding"));
 const Brain = lazyRetry(() => import("./pages/Brain"));
 const ProjectEditor = lazyRetry(() => import("./pages/ProjectEditor"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
@@ -78,25 +70,16 @@ const App = () => (
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/global" element={<AdminGlobal />} />
                 <Route path="/admin/tenant" element={<TenantAdmin />} />
-                <Route path="/affiliate" element={<AffiliateDashboard />} />
-                <Route path="/ref/:code" element={<AffiliateRefPage />} />
-                <Route path="/white-label/ref/:code" element={<WhiteLabelRefPage />} />
-                <Route path="/white-label/affiliate" element={<WlAffiliateDashboard />} />
-                <Route path="/checkout" element={<Checkout />} />
-                {/* /free route removed */}
                 <Route path="/community" element={<Community />} />
                 <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/notes" element={<Notes />} />
-                <Route path="/affiliates" element={<AffiliatesPage />} />
                 <Route path="/install" element={<Install />} />
                 <Route path="/lovable/connect" element={<LovableConnect />} />
                 <Route path="/lovable/projects" element={<LovableProjects />} />
                 <Route path="/lovable/preview" element={<LovablePreview />} />
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
-                <Route path="/partners" element={<PartnersLanding />} />
                 <Route path="/brain" element={<Brain />} />
                 <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
-                {/* Lovable Cloud Admin moved to AdminGlobal tab: /admin/global?tab=lovable_cloud */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

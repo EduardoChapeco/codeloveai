@@ -1,25 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
+import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
 import {
-  Copy, Download, Shield, Users, CheckCircle, XCircle, Clock,
+  Copy, Download, Shield, CheckCircle, Clock,
   ChevronRight, Zap, Monitor, Key, Building2, Puzzle, StickyNote, Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import AppLayout from "@/components/AppLayout";
-
-interface Subscription {
-  id: string;
-  plan: string;
-  status: string;
-  starts_at: string;
-  expires_at: string;
-}
 
 interface Token {
   id: string;
@@ -30,45 +22,29 @@ interface Token {
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = "Code Lovable Oficial";
   useSEO({ title: "Dashboard" });
   const { isAdmin, loading: adminLoading } = useIsAdmin();
-  const { isAffiliate } = useIsAffiliate();
   const [tokensLoaded, setTokensLoaded] = useState(false);
   const [extensionDetected, setExtensionDetected] = useState(false);
   const [notesCount, setNotesCount] = useState(0);
   const [lovableStatus, setLovableStatus] = useState<"active" | "expired" | "none">("none");
+  const [tokenGenerating, setTokenGenerating] = useState(false);
 
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
   const [latestExt, setLatestExt] = useState<{ file_url: string; version: string; instructions: string } | null>(null);
-
-  const paymentStatus = searchParams.get("payment");
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (paymentStatus) {
-      const timer = setTimeout(() => {
-        setSearchParams({}, { replace: true });
-      }, 10000);
-      return () => clearTimeout(timer);
-    }
-  }, [paymentStatus, setSearchParams]);
-
-  useEffect(() => {
     if (!user) return;
 
     supabase.from("profiles").select("name, email").eq("user_id", user.id).single()
       .then(({ data }) => setProfile(data));
-
-    supabase.from("subscriptions").select("*").eq("user_id", user.id).order("created_at", { ascending: false })
-      .then(({ data }) => setSubscriptions(data || []));
 
     supabase.from("tokens").select("*").eq("user_id", user.id)
       .then(({ data }) => {
@@ -108,21 +84,23 @@ export default function Dashboard() {
       });
   }, [user]);
 
-  // Auto-generate 1000-day token for admin ONLY ONCE
+  // Auto-generate 365-day token for ALL users
   useEffect(() => {
-    if (!user || adminLoading || !isAdmin || !tokensLoaded) return;
+    if (!user || !tokensLoaded || tokenGenerating) return;
     const hasActiveToken = tokens.some((t) => t.is_active);
     if (hasActiveToken) return;
 
-    const adminTokenKey = `clf_admin_token_created_${user.id}`;
-    if (localStorage.getItem(adminTokenKey) === "true") return;
+    const tokenKey = `clf_auto_token_${user.id}`;
+    if (localStorage.getItem(tokenKey) === "true") return;
 
-    const generateAdminToken = async () => {
+    setTokenGenerating(true);
+    const generateToken = async () => {
       try {
         const { data: existingTokens } = await supabase
           .from("tokens").select("id").eq("user_id", user.id).eq("is_active", true).limit(1);
         if (existingTokens && existingTokens.length > 0) {
-          localStorage.setItem(adminTokenKey, "true");
+          localStorage.setItem(tokenKey, "true");
+          setTokenGenerating(false);
           return;
         }
 
@@ -130,13 +108,13 @@ export default function Dashboard() {
           body: {
             action: "generate",
             email: user.email,
-            name: user.user_metadata?.name || user.email?.split("@")[0] || "Admin",
-            plan: "days_1000",
+            name: user.user_metadata?.name || user.email?.split("@")[0] || "Usuário",
+            plan: "days_365",
             user_id: user.id,
           },
         });
         if (!error && data?.token) {
-          setTokens([{ id: "admin-auto", token: data.token, is_active: true }]);
+          setTokens([{ id: "auto", token: data.token, is_active: true }]);
           supabase.auth.getSession().then(({ data: sessionData }) => {
             const jwt = sessionData?.session?.access_token;
             if (jwt) {
@@ -146,13 +124,14 @@ export default function Dashboard() {
               window.postMessage({ type: 'clf_sso_token', token: jwt, email: user.email, name: user.user_metadata?.name || '' }, window.location.origin);
             }
           });
-          toast.success("Token admin de 1000 dias gerado automaticamente!");
+          toast.success("Token de 1 ano gerado automaticamente! 🎉");
         }
-        localStorage.setItem(adminTokenKey, "true");
+        localStorage.setItem(tokenKey, "true");
       } catch { /* retry next time */ }
+      setTokenGenerating(false);
     };
-    generateAdminToken();
-  }, [user, isAdmin, adminLoading, tokensLoaded, tokens]);
+    generateToken();
+  }, [user, tokensLoaded, tokens, tokenGenerating]);
 
   // Detect extension
   useEffect(() => {
@@ -173,17 +152,11 @@ export default function Dashboard() {
       .then(({ count }) => setNotesCount(count || 0));
   }, [user]);
 
-  const activeSubscription = subscriptions.find((s) => s.status === "active" && new Date(s.expires_at) > new Date());
   const activeTokens = tokens.filter(t => t.is_active);
 
   const copyToken = (token: string) => {
     navigator.clipboard.writeText(token);
     toast.success("Token copiado!");
-  };
-
-  const planLabels: Record<string, string> = {
-    "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês",
-    "12_months": "12 Meses", "lifetime": "Vitalício",
   };
 
   if (authLoading) {
@@ -200,57 +173,27 @@ export default function Dashboard() {
           <div>
             <p className="lv-overline mb-1">Área do membro</p>
             <h1 className="lv-heading-lg">Dashboard</h1>
+            <p className="lv-body mt-1">Plataforma 100% gratuita — mensagens ilimitadas</p>
           </div>
-
-          {/* Payment feedback banner */}
-          {paymentStatus && (
-            <div className={`lv-card flex items-center gap-4 ${
-              paymentStatus === "success" ? "border-green-500/30" :
-              paymentStatus === "failure" ? "border-destructive/30" : "border-yellow-500/30"
-            }`}>
-              {paymentStatus === "success" && <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />}
-              {paymentStatus === "failure" && <XCircle className="h-5 w-5 text-destructive shrink-0" />}
-              {paymentStatus === "pending" && <Clock className="h-5 w-5 text-yellow-500 shrink-0" />}
-              <div>
-                <p className="lv-body-strong">
-                  {paymentStatus === "success" && "Pagamento aprovado! 🎉"}
-                  {paymentStatus === "failure" && "Pagamento não aprovado."}
-                  {paymentStatus === "pending" && "Pagamento pendente."}
-                </p>
-                <p className="lv-caption mt-0.5">
-                  {paymentStatus === "success" && "Seu plano foi ativado! Seu token de acesso será gerado automaticamente em instantes."}
-                  {paymentStatus === "failure" && "Houve um problema com o pagamento. Tente novamente ou entre em contato com o suporte."}
-                  {paymentStatus === "pending" && "Estamos aguardando a confirmação do pagamento. Isso pode levar alguns minutos."}
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* ━━━ BENTO GRID ━━━ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-            {/* Subscription Status — full width */}
+            {/* Status — full width */}
             <div className="lv-card md:col-span-2">
-              <p className="lv-overline mb-3">Status da assinatura</p>
-              {activeSubscription ? (
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="lv-stat text-2xl">{planLabels[activeSubscription.plan] || activeSubscription.plan}</p>
-                    <p className="lv-body mt-1">
-                      Expira em {format(new Date(activeSubscription.expires_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                    </p>
-                  </div>
-                  <span className="lv-badge lv-badge-success">Ativo</span>
+              <p className="lv-overline mb-3">Status do acesso</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="lv-stat text-2xl">Acesso Gratuito</p>
+                  <p className="lv-body mt-1">
+                    {activeTokens.length > 0 ? "Seu acesso está ativo — 1 ano de uso incluído" : tokenGenerating ? "Gerando seu token..." : "Token será gerado automaticamente"}
+                  </p>
                 </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <p className="lv-body">Nenhuma assinatura ativa.</p>
-                  <Link to="/checkout" className="lv-btn-primary h-10 px-5 text-sm">Ver Planos</Link>
-                </div>
-              )}
+                <span className="lv-badge lv-badge-success">Grátis</span>
+              </div>
             </div>
 
-            {/* Token de Acesso (ativo) */}
+            {/* Token de Acesso */}
             <div className="lv-card">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -276,48 +219,46 @@ export default function Dashboard() {
                   </button>
                 </div>
               ) : (
-                <p className="lv-caption">Nenhum token ativo</p>
+                <p className="lv-caption">{tokenGenerating ? "Gerando..." : "Nenhum token ativo"}</p>
               )}
             </div>
 
-            {/* Extensão — card único (download + status) */}
-            {(activeSubscription || activeTokens.length > 0) && (
-              <div className="lv-card">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${extensionDetected ? 'bg-green-500/10' : 'bg-primary/10'}`}>
-                    <Puzzle className={`h-5 w-5 ${extensionDetected ? 'text-green-600' : 'text-primary'}`} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="lv-body-strong">
-                      Extensão{latestExt ? ` v${latestExt.version}` : ""}
-                    </p>
-                    <p className="lv-caption">
-                      {extensionDetected ? 'Conectada e ativa' : 'Não detectada'}
-                    </p>
-                  </div>
-                  {extensionDetected && (
-                    <span className="lv-badge lv-badge-success">✓</span>
-                  )}
+            {/* Extensão */}
+            <div className="lv-card">
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${extensionDetected ? 'bg-green-500/10' : 'bg-primary/10'}`}>
+                  <Puzzle className={`h-5 w-5 ${extensionDetected ? 'text-green-600' : 'text-primary'}`} />
                 </div>
-                {extensionDetected ? (
-                  <p className="lv-caption text-green-600">Extensão detectada no navegador.</p>
-                ) : (
-                  <button
-                    className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2"
-                    disabled={!latestExt}
-                    onClick={async () => {
-                      if (!latestExt) return;
-                      const { data } = await supabase.storage.from("extensions").createSignedUrl(latestExt.file_url, 300);
-                      if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-                    }}
-                  >
-                    <Download className="h-4 w-4" /> Baixar Extensão
-                  </button>
+                <div className="flex-1">
+                  <p className="lv-body-strong">
+                    Extensão{latestExt ? ` v${latestExt.version}` : ""}
+                  </p>
+                  <p className="lv-caption">
+                    {extensionDetected ? 'Conectada e ativa' : 'Não detectada'}
+                  </p>
+                </div>
+                {extensionDetected && (
+                  <span className="lv-badge lv-badge-success">✓</span>
                 )}
               </div>
-            )}
+              {extensionDetected ? (
+                <p className="lv-caption text-green-600">Extensão detectada no navegador.</p>
+              ) : (
+                <button
+                  className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2"
+                  disabled={!latestExt}
+                  onClick={async () => {
+                    if (!latestExt) return;
+                    const { data } = await supabase.storage.from("extensions").createSignedUrl(latestExt.file_url, 300);
+                    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                  }}
+                >
+                  <Download className="h-4 w-4" /> Baixar Extensão
+                </button>
+              )}
+            </div>
 
-            {/* Notes Summary */}
+            {/* Notes */}
             <div className="lv-card">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -379,7 +320,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="lv-body-strong">Administrar Tenant</p>
-                  <p className="lv-caption">Gerencie marca, membros, tokens e financeiro do {tenant?.name || "seu tenant"}</p>
+                  <p className="lv-caption">Gerencie membros, tokens e configurações</p>
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -418,45 +359,6 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-
-          {/* Subscription History */}
-          <div className="lv-card">
-            <p className="lv-overline mb-4">Histórico de planos</p>
-            {subscriptions.length > 0 ? (
-              <div className="space-y-2">
-                {subscriptions.map((s) => (
-                  <div key={s.id} className="lv-card-sm flex items-center justify-between">
-                    <div>
-                      <p className="lv-body-strong">{planLabels[s.plan] || s.plan}</p>
-                      <p className="lv-caption mt-0.5">
-                        {format(new Date(s.starts_at), "dd/MM/yyyy")} — {format(new Date(s.expires_at), "dd/MM/yyyy")}
-                      </p>
-                    </div>
-                    <span className={`lv-badge ${s.status === "active" && new Date(s.expires_at) > new Date() ? "lv-badge-success" : "lv-badge-muted"}`}>
-                      {s.status === "active" && new Date(s.expires_at) > new Date() ? "Ativo" : "Expirado"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="lv-body">Nenhum plano adquirido.</p>
-            )}
-          </div>
-
-          {/* Become Affiliate CTA */}
-          {!isAffiliate && activeSubscription && (
-            <div className="lv-card flex items-center justify-between">
-              <div>
-                <p className="lv-overline mb-1">Programa de Afiliados</p>
-                <p className="lv-body">
-                  Ganhe 30% de comissão indicando o {brandName} + 20% de desconto nos seus planos.
-                </p>
-              </div>
-              <Link to="/affiliates" className="lv-btn-primary h-10 px-5 text-sm shrink-0">
-                Quero ser afiliado
-              </Link>
-            </div>
-          )}
         </div>
       </div>
     </AppLayout>
