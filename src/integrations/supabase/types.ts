@@ -816,66 +816,6 @@ export type Database = {
           },
         ]
       }
-      note_folders: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      notes: {
-        Row: {
-          id: string
-          user_id: string
-          title: string
-          text: string
-          folder: string
-          color: string
-          pinned: boolean
-          ts: number
-          updated: number
-          created_at: string
-        }
-        Insert: {
-          id: string
-          user_id: string
-          title?: string
-          text?: string
-          folder?: string
-          color?: string
-          pinned?: boolean
-          ts?: number
-          updated?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          text?: string
-          folder?: string
-          color?: string
-          pinned?: boolean
-          ts?: number
-          updated?: number
-          created_at?: string
-        }
-        Relationships: []
-      }
       ledger_entries: {
         Row: {
           affiliate_id: string | null
