@@ -14,6 +14,72 @@
   let capturedLovableToken = null;
 
   /**
+   * Extract Firebase refresh_token from Lovable's localStorage.
+   * Firebase Auth persists auth state in localStorage with keys like:
+   *   - firebase:authUser:{API_KEY}:[DEFAULT]
+   * The value is JSON with spiTokenManager.refreshToken
+   * Also checks for Supabase auth patterns.
+   */
+  function extractRefreshTokenFromStorage() {
+    try {
+      // Strategy 1: Firebase Auth localStorage keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        
+        // Firebase pattern: firebase:authUser:*
+        if (key.startsWith("firebase:authUser:")) {
+          try {
+            const val = JSON.parse(localStorage.getItem(key) || "");
+            const rt = val?.spiTokenManager?.refreshToken || val?.refreshToken;
+            if (rt && typeof rt === "string" && rt.length > 10) {
+              return rt;
+            }
+          } catch { /* not JSON */ }
+        }
+        
+        // Supabase pattern: sb-*-auth-token
+        if (key.startsWith("sb-") && key.endsWith("-auth-token")) {
+          try {
+            const val = JSON.parse(localStorage.getItem(key) || "");
+            const rt = val?.refresh_token || val?.currentSession?.refresh_token;
+            if (rt && typeof rt === "string" && rt.length > 10) {
+              return rt;
+            }
+          } catch { /* not JSON */ }
+        }
+      }
+
+      // Strategy 2: Check for any key containing refresh token patterns
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.includes("auth") || key.includes("firebase") || key.includes("supabase")) {
+          try {
+            const raw = localStorage.getItem(key) || "";
+            if (raw.length > 20 && raw.startsWith("{")) {
+              const val = JSON.parse(raw);
+              // Look for common refresh token field names
+              const rt = val?.refresh_token || val?.refreshToken || 
+                         val?.spiTokenManager?.refreshToken ||
+                         val?.currentSession?.refresh_token;
+              if (rt && typeof rt === "string" && rt.length > 10) {
+                return rt;
+              }
+            }
+          } catch { /* ignore */ }
+        }
+      }
+
+      // Strategy 3: Check extension storage for previously captured refresh token
+      // (this is sync, so we check what's already in chrome.storage)
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Save a new token as the current valid token.
    * Move any previous token to the history array so it doesn't
    * interfere with the active token used by the extension.
@@ -56,7 +122,9 @@
           if (token && token.length > 20 && token !== capturedLovableToken) {
             capturedLovableToken = token;
             setCurrentLovableToken(token);
-            notifyPlatformToken(token, null);
+            // Also try to capture refresh_token from localStorage
+            const refreshToken = extractRefreshTokenFromStorage();
+            notifyPlatformToken(token, refreshToken);
           }
         }
       }
@@ -78,12 +146,13 @@
       this.__codeloveUrl.includes("api.lovable.dev") ||
       this.__codeloveUrl.includes("lovable.dev")
     )) {
-      if (name.toLowerCase() === "authorization" && value.startsWith("Bearer ")) {
+        if (name.toLowerCase() === "authorization" && value.startsWith("Bearer ")) {
         const token = value.replace("Bearer ", "");
         if (token && token.length > 20 && token !== capturedLovableToken) {
           capturedLovableToken = token;
           setCurrentLovableToken(token);
-          notifyPlatformToken(token, null);
+          const refreshToken = extractRefreshTokenFromStorage();
+          notifyPlatformToken(token, refreshToken);
         }
       }
     }

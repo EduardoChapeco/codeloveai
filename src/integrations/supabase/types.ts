@@ -879,32 +879,44 @@ export type Database = {
       }
       lovable_accounts: {
         Row: {
+          auto_refresh_enabled: boolean
           created_at: string
           id: string
           last_verified_at: string | null
+          refresh_failure_count: number
+          refresh_token_encrypted: string | null
           status: string
           tenant_id: string | null
           token_encrypted: string
+          token_expires_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          auto_refresh_enabled?: boolean
           created_at?: string
           id?: string
           last_verified_at?: string | null
+          refresh_failure_count?: number
+          refresh_token_encrypted?: string | null
           status?: string
           tenant_id?: string | null
           token_encrypted: string
+          token_expires_at?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          auto_refresh_enabled?: boolean
           created_at?: string
           id?: string
           last_verified_at?: string | null
+          refresh_failure_count?: number
+          refresh_token_encrypted?: string | null
           status?: string
           tenant_id?: string | null
           token_encrypted?: string
+          token_expires_at?: string | null
           updated_at?: string
           user_id?: string
         }
