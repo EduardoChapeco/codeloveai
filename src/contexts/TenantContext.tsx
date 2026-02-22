@@ -78,11 +78,25 @@ async function resolveTenantId(userId: string | null): Promise<string> {
 /** Apply full tenant theme to document */
 function applyTenantTheme(tenant: Tenant) {
   const root = document.documentElement;
+  const isDark = root.classList.contains("dark");
 
   // 1. Apply theme preset variables
   const preset = getThemePreset(tenant.theme_preset);
   if (preset) {
+    // Dark-native presets can be applied directly; for light presets in dark mode, skip color tokens
+    const isDarkPreset = ["midnight", "neon-cyber"].includes(preset.id);
+    const darkSkipKeys = new Set([
+      "--background", "--foreground", "--card", "--card-foreground",
+      "--popover", "--popover-foreground", "--muted", "--muted-foreground",
+      "--accent", "--accent-foreground", "--border", "--input",
+      "--sidebar-background", "--sidebar-foreground", "--sidebar-accent",
+      "--sidebar-accent-foreground", "--sidebar-border",
+      "--glass-bg", "--glass-border",
+    ]);
+
     Object.entries(preset.variables).forEach(([key, value]) => {
+      // In dark mode, only apply color-token overrides from dark-native presets
+      if (isDark && !isDarkPreset && darkSkipKeys.has(key)) return;
       root.style.setProperty(key, value);
     });
   }
