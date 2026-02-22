@@ -9,10 +9,10 @@ import remarkGfm from "remark-gfm";
 import {
   Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
   Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon,
-  MessageSquare, ChevronLeft, ChevronRight,
+  MessageSquare, ChevronLeft, ChevronRight, Bug, Globe,
 } from "lucide-react";
 
-type BrainType = "general" | "design" | "code" | "scraper" | "migration";
+type BrainType = "general" | "design" | "code" | "scraper" | "migration" | "error" | "seo";
 type ConvoStatus = "pending" | "processing" | "completed" | "timeout" | "failed";
 
 interface Conversation {
@@ -31,6 +31,8 @@ const brainTypes: { id: BrainType; label: string; icon: typeof BrainIcon; desc: 
   { id: "code", label: "Code", icon: Code2, desc: "Geração de código" },
   { id: "scraper", label: "Scraper", icon: Search, desc: "Scripts de scraping" },
   { id: "migration", label: "Migration", icon: Database, desc: "Scripts de migração SQL" },
+  { id: "error", label: "Error Fix", icon: Bug, desc: "Correção de erros de runtime (gratuito)" },
+  { id: "seo", label: "SEO Fix", icon: Globe, desc: "Correção de SEO via PageSpeed (gratuito)" },
 ];
 
 function groupByDate(convos: Conversation[]): Record<string, Conversation[]> {
@@ -73,13 +75,6 @@ export default function BrainPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Current conversation messages
-  const currentMessages = useMemo(() => {
-    if (!currentConvoId) return allConversations.filter(c => !c.id.includes("-"));
-    return allConversations.filter(c => c.id === currentConvoId);
-  }, [allConversations, currentConvoId]);
-
-  // History for sidebar - unique conversations from DB (completed ones)
   const historyConvos = useMemo(() => {
     return allConversations.filter(c => c.status === "completed" || c.status === "timeout" || c.status === "failed");
   }, [allConversations]);
@@ -202,6 +197,7 @@ export default function BrainPage() {
 
       const conversationId = data.conversation_id;
       const brainProjectId = data.brain_project_id;
+      const chatMode = data.chat_mode || "security_fix";
 
       setAllConversations(prev =>
         prev.map(c => c.id === tempId ? { ...c, id: conversationId } : c)
@@ -211,11 +207,10 @@ export default function BrainPage() {
       setSending(false);
       setCapturing(true);
 
-      // Client-side polling — check every 4s for up to 180s
-      // First 8s: wait without polling (Lovable needs time to start processing)
+      // Polling — wait 8s initially, then poll every 4s for up to 180s
       await new Promise(r => setTimeout(r, 8000));
       
-      const maxPolls = 43; // 43 polls × 4s = 172s + 8s initial = 180s total
+      const maxPolls = 43;
       let captured = false;
       for (let i = 0; i < maxPolls; i++) {
         await new Promise(r => setTimeout(r, 4000));
@@ -240,7 +235,6 @@ export default function BrainPage() {
             captured = true;
             break;
           }
-          // If still "processing", continue polling
         } catch {
           // Network error, retry
         }
@@ -311,7 +305,7 @@ export default function BrainPage() {
             O Brain é sua IA pessoal alimentada pelo Lovable.
           </p>
           <p className="text-sm text-muted-foreground/70 mb-8">
-            Funciona via Fix V2 — sem gastar créditos do Lovable.
+            Funciona via modos gratuitos — sem gastar créditos do Lovable.
           </p>
           <button onClick={setupBrain} disabled={settingUp} className="lv-btn-primary h-12 px-8 text-sm inline-flex items-center gap-2">
             {settingUp ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando Brain...</> : <><Power className="h-4 w-4" /> Ativar LoveAI Brain</>}
@@ -331,7 +325,6 @@ export default function BrainPage() {
     );
   }
 
-  // Active conversations to display
   const displayConvos = currentConvoId
     ? allConversations.filter(c => c.id === currentConvoId)
     : allConversations.filter(c => c.status === "processing");
@@ -385,17 +378,18 @@ export default function BrainPage() {
               <p className="text-sm font-semibold">LoveAI Brain</p>
               <p className="text-[11px] text-muted-foreground">🟢 Ativo</p>
             </div>
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex items-center gap-1 flex-wrap justify-end">
               {brainTypes.map(bt => (
                 <button
                   key={bt.id}
                   onClick={() => setBrainType(bt.id)}
-                  className={`h-8 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                  title={bt.desc}
+                  className={`h-7 px-2.5 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors ${
                     brainType === bt.id ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
                   }`}
                 >
-                  <bt.icon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{bt.label}</span>
+                  <bt.icon className="h-3 w-3" />
+                  <span className="hidden lg:inline">{bt.label}</span>
                 </button>
               ))}
             </div>
@@ -407,9 +401,14 @@ export default function BrainPage() {
               <div className="text-center py-20">
                 <BrainIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/20" />
                 <p className="font-medium mb-1">Inicie uma conversa</p>
-                <p className="text-sm text-muted-foreground">
-                  Envie uma mensagem e o Brain processará via Lovable Fix V2.
+                <p className="text-sm text-muted-foreground mb-4">
+                  Envie uma mensagem e o Brain processará via modos gratuitos do Lovable.
                 </p>
+                <div className="flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
+                  <span className="px-2 py-1 rounded-md bg-muted/50">🔒 Security Fix</span>
+                  <span className="px-2 py-1 rounded-md bg-muted/50">🐛 Error Fix</span>
+                  <span className="px-2 py-1 rounded-md bg-muted/50">🌐 SEO Fix</span>
+                </div>
               </div>
             )}
 

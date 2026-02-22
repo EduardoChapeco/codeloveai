@@ -14,19 +14,17 @@ const CROCKFORD = "0123456789abcdefghjkmnpqrstvwxyz";
 function generateTypeId(prefix: string): string {
   const now = BigInt(Date.now());
   const bytes = new Uint8Array(16);
-  // UUIDv7: 48-bit timestamp (big-endian) in first 6 bytes
   bytes[0] = Number((now >> 40n) & 0xFFn);
   bytes[1] = Number((now >> 32n) & 0xFFn);
   bytes[2] = Number((now >> 24n) & 0xFFn);
   bytes[3] = Number((now >> 16n) & 0xFFn);
   bytes[4] = Number((now >> 8n) & 0xFFn);
   bytes[5] = Number(now & 0xFFn);
-  // Random bytes for the rest
   const randBytes = new Uint8Array(10);
   crypto.getRandomValues(randBytes);
-  bytes[6] = (0x70 | (randBytes[0] & 0x0F)); // version 7
+  bytes[6] = (0x70 | (randBytes[0] & 0x0F));
   bytes[7] = randBytes[1];
-  bytes[8] = (0x80 | (randBytes[2] & 0x3F)); // variant
+  bytes[8] = (0x80 | (randBytes[2] & 0x3F));
   bytes[9] = randBytes[3];
   bytes[10] = randBytes[4];
   bytes[11] = randBytes[5];
@@ -35,7 +33,6 @@ function generateTypeId(prefix: string): string {
   bytes[14] = randBytes[8];
   bytes[15] = randBytes[9];
 
-  // Encode 128 bits into 26 base32 chars
   let val = 0n;
   for (const b of bytes) val = (val << 8n) | BigInt(b);
   const chars: string[] = [];
@@ -51,6 +48,223 @@ async function hashText(text: string): Promise<string> {
   const data = encoder.encode(text);
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ─── Helper: get fresh token, auto-refresh on 401 ───
+async function getLovableToken(serviceClient: any, userId: string): Promise<{ token: string; expired: boolean }> {
+  const { data: account } = await serviceClient
+    .from("lovable_accounts")
+    .select("token_encrypted, status, refresh_token_encrypted, auto_refresh_enabled")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!account || account.status !== "active") {
+    return { token: "", expired: true };
+  }
+  return { token: account.token_encrypted, expired: false };
+}
+
+async function tryRefreshToken(serviceClient: any, userId: string, currentToken: string): Promise<string | null> {
+  const firebaseApiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
+  const { data: acct } = await serviceClient
+    .from("lovable_accounts")
+    .select("refresh_token_encrypted, auto_refresh_enabled")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!firebaseApiKey || !acct?.refresh_token_encrypted || !acct?.auto_refresh_enabled) return null;
+
+  try {
+    const refreshRes = await fetch(
+      `https://securetoken.googleapis.com/v1/token?key=${firebaseApiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(acct.refresh_token_encrypted)}`,
+      }
+    );
+    if (refreshRes.ok) {
+      const rd = await refreshRes.json();
+      if (rd.id_token) {
+        const expiresIn = parseInt(rd.expires_in || "3600", 10);
+        await serviceClient.from("lovable_accounts").update({
+          token_encrypted: rd.id_token,
+          refresh_token_encrypted: rd.refresh_token || acct.refresh_token_encrypted,
+          token_expires_at: new Date(Date.now() + (expiresIn - 300) * 1000).toISOString(),
+          last_verified_at: new Date().toISOString(),
+          status: "active",
+          refresh_failure_count: 0,
+        }).eq("user_id", userId);
+        console.log("[Brain] Token auto-refreshed successfully");
+        return rd.id_token;
+      }
+    }
+  } catch (e) {
+    console.error("[Brain] Auto-refresh failed:", e);
+  }
+  return null;
+}
+
+// ─── Helper: Lovable API call with auto-retry on 401 ───
+async function lovableFetch(
+  url: string,
+  options: RequestInit,
+  serviceClient: any,
+  userId: string,
+  token: string
+): Promise<{ res: Response; token: string }> {
+  const headers: any = { ...options.headers, Authorization: `Bearer ${token}` };
+  let res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401) {
+    const newToken = await tryRefreshToken(serviceClient, userId, token);
+    if (newToken) {
+      headers.Authorization = `Bearer ${newToken}`;
+      res = await fetch(url, { ...options, headers });
+      return { res, token: newToken };
+    }
+  }
+  return { res, token };
+}
+
+// ─── Build payload for different free modes ───
+type ChatMode = "security_fix" | "error_fix" | "seo_fix";
+
+function buildChatPayload(
+  mode: ChatMode,
+  prompt: string,
+  msgId: string,
+  aiMsgId: string,
+  extra?: { view_description?: string; seo_results?: any }
+): any {
+  const base = {
+    id: msgId,
+    ai_message_id: aiMsgId,
+    thread_id: "main",
+    model: null,
+    session_replay: "[]",
+    client_logs: [],
+    network_requests: [],
+    runtime_errors: [],
+  };
+
+  if (mode === "security_fix") {
+    return {
+      ...base,
+      message: prompt,
+      intent: "security_fix_v2",
+      chat_only: false,
+      agent_mode_enabled: true,
+      view: "security",
+      view_description: extra?.view_description || "The user is currently viewing the security view for their project.",
+      files: [],
+      selected_elements: [],
+      integration_metadata: {
+        browser: { preview_viewport_width: 1536, preview_viewport_height: 730 },
+      },
+    };
+  }
+
+  if (mode === "error_fix") {
+    // mode=instant, view=error — free runtime error fix
+    const errorMessage = `For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n\`\`\`\n${prompt}\n\`\`\``;
+    return {
+      ...base,
+      message: errorMessage,
+      mode: "instant",
+      debug_mode: false,
+      view: "error",
+      view_description: "The user is currently viewing the error for their project. This shows a static version of the code, with a diff view available. Editing is only possible for paid users and for the latest edit. It shows the actual error in their code at the top.",
+    };
+  }
+
+  if (mode === "seo_fix") {
+    const seoMessage = `SEO Audit Issue (error): ${prompt}
+
+IMPORTANT INSTRUCTIONS FOR FIXING THIS SEO ISSUE:
+- STRICTLY preserve the existing functional behavior, design, and UX of the application
+- ONLY make changes that are absolutely necessary to fix this specific SEO issue
+- DO NOT modify the application's visual design, layout, or user experience unless it's essential for the SEO fix
+- Focus on technical SEO fixes like meta tags, HTML structure, accessibility attributes, etc. that don't affect the user experience
+
+Please analyze this SEO issue and implement only the minimal necessary changes to improve the website's SEO performance without affecting the application's functionality or user experience.`;
+
+    return {
+      ...base,
+      message: seoMessage,
+      intent: "seo_fix",
+      chat_only: false,
+      view: "seo",
+      view_description: extra?.view_description || "The user is currently viewing the Page Speed analysis view for their project.",
+    };
+  }
+
+  // Fallback to security_fix
+  return { ...base, message: prompt, intent: "security_fix_v2", chat_only: false, view: "security", view_description: "The user is currently viewing the security view for their project." };
+}
+
+// ─── Build brain prompt based on brain_type ───
+function buildBrainPrompt(brainType: string, message: string): string {
+  const ts = Date.now();
+  const prompts: Record<string, string> = {
+    general: `Analise e corrija os seguintes problemas encontrados no scan de segurança:
+
+SISTEMA CODELOVE BRAIN — INSTRUÇÃO:
+Você é LoveAI, assistente de código e design da plataforma CodeLove.
+O usuário solicitou: "${message}"
+
+REGRAS DE RESPOSTA:
+- Responda SOMENTE com o que foi pedido, sem criar páginas ou alterar o projeto
+- Se for uma pergunta técnica: responda em texto claro e objetivo
+- Se for um prompt de design/código: retorne um prompt estruturado e completo
+- Formato: plaintext legível
+- NÃO diga "vou criar", "adicionei" — apenas RESPONDA
+- RESPONDA EM PORTUGUÊS (Brasil)
+
+IMPORTANTE: Escreva sua resposta COMPLETA no arquivo src/brain-output.json no formato:
+{"response": "SUA_RESPOSTA_AQUI", "timestamp": ${ts}, "status": "done"}`,
+
+    design: `Analise e corrija os seguintes problemas de design encontrados:
+
+SISTEMA CODELOVE BRAIN — MODO DESIGN:
+O usuário quer: "${message}"
+Retorne um prompt de design COMPLETO e DETALHADO. Inclua: paleta de cores (hex), tipografia, espaçamentos, componentes, layout grid, sombras, bordas, animações, responsividade, tema light/dark.
+Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
+
+    code: `Analise e corrija os seguintes problemas de código encontrados:
+
+SISTEMA CODELOVE BRAIN — MODO CODE:
+O usuário quer: "${message}"
+Retorne APENAS o código necessário. Formato: arquivos separados com caminho completo.
+Priorize: TypeScript, React, TailwindCSS, shadcn/ui, Supabase.
+Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
+
+    scraper: `Analise e corrija os seguintes problemas encontrados no scraper:
+
+SISTEMA CODELOVE BRAIN — MODO SCRAPER:
+O usuário quer extrair dados de: "${message}"
+Retorne um script completo para captura dos dados. Inclua tratamento de erros e formato JSON.
+Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
+
+    migration: `Analise e corrija os seguintes problemas de migração encontrados:
+
+SISTEMA CODELOVE BRAIN — MODO MIGRATION:
+O usuário quer migrar: "${message}"
+Gere o script SQL completo de migração incluindo: schemas, tabelas, RLS policies, triggers, functions e seed data.
+Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
+  };
+
+  return prompts[brainType] || prompts.general;
+}
+
+// ─── Map brain_type to best Lovable chat mode ───
+function brainTypeToMode(brainType: string): ChatMode {
+  // All modes use security_fix by default (most flexible, accepts any prompt)
+  // error_fix is used only when explicitly requested
+  // seo_fix is used only for seo brain_type
+  if (brainType === "seo") return "seo_fix";
+  if (brainType === "error") return "error_fix";
+  return "security_fix";
 }
 
 Deno.serve(async (req) => {
@@ -83,31 +297,21 @@ Deno.serve(async (req) => {
       });
     }
 
-    const user = { id: claimsData.claims.sub as string };
+    const userId = claimsData.claims.sub as string;
 
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get Lovable token
-    const { data: account } = await serviceClient
-      .from("lovable_accounts")
-      .select("token_encrypted, status")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
     const body = await req.json();
     const action = body.action;
 
-    // For status and history actions, don't require Lovable connection
+    // ─── ACTION: status ───
     if (action === "status") {
-      if (!account || account.status !== "active") {
-        return new Response(JSON.stringify({
-          active: false,
-          connected: false,
-          reason: !account ? "no_account" : "token_expired",
-        }), {
+      const { token: lt, expired } = await getLovableToken(serviceClient, userId);
+      if (expired) {
+        return new Response(JSON.stringify({ active: false, connected: false, reason: "token_expired" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -115,25 +319,22 @@ Deno.serve(async (req) => {
       const { data: brain } = await serviceClient
         .from("user_brain_projects")
         .select("lovable_project_id, status, last_message_at, created_at")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("status", "active")
         .maybeSingle();
 
-      return new Response(JSON.stringify({
-        active: !!brain,
-        connected: true,
-        brain: brain || null,
-      }), {
+      return new Response(JSON.stringify({ active: !!brain, connected: true, brain: brain || null }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // ─── ACTION: history ───
     if (action === "history") {
       const limit = Math.min(body.limit || 50, 100);
       const { data } = await supabase
         .from("loveai_conversations")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(limit);
 
@@ -142,199 +343,192 @@ Deno.serve(async (req) => {
       });
     }
 
-    // All other actions require active Lovable connection
-    if (!account || account.status !== "active") {
+    // ─── All other actions require Lovable connection ───
+    const { token: lovableToken, expired } = await getLovableToken(serviceClient, userId);
+    if (expired || !lovableToken) {
       return new Response(JSON.stringify({ error: "Lovable não conectado. Conecte primeiro.", code: "not_connected" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const lovableToken = account.token_encrypted;
-
     // ─── ACTION: setup — Create brain project ───
     if (action === "setup") {
-      // Check if already exists
       const { data: existing } = await serviceClient
         .from("user_brain_projects")
         .select("lovable_project_id, status")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("status", "active")
         .maybeSingle();
 
       if (existing) {
-        return new Response(JSON.stringify({
-          success: true,
-          brain_project_id: existing.lovable_project_id,
-          already_exists: true,
-        }), {
+        return new Response(JSON.stringify({ success: true, brain_project_id: existing.lovable_project_id, already_exists: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Get workspace ID
-      const wsRes = await fetch(`${LOVABLE_API}/user/workspaces`, {
-        headers: { Authorization: `Bearer ${lovableToken}` },
-      });
+      // Get workspace
+      const { res: wsRes, token: t1 } = await lovableFetch(
+        `${LOVABLE_API}/user/workspaces`, { method: "GET" }, serviceClient, userId, lovableToken
+      );
       if (!wsRes.ok) {
-        const wsStatus = wsRes.status;
-        console.error("Workspace fetch failed:", wsStatus, await wsRes.text().catch(() => ""));
-        if (wsStatus === 401) {
-          await serviceClient
-            .from("lovable_accounts")
-            .update({ status: "expired" })
-            .eq("user_id", user.id);
-          return new Response(JSON.stringify({ error: "Token Lovable expirado. Reconecte sua conta em Configurações > Lovable." }), {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+        if (wsRes.status === 401) {
+          await serviceClient.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
+          return new Response(JSON.stringify({ error: "Token Lovable expirado. Reconecte.", code: "token_expired" }), {
+            status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        return new Response(JSON.stringify({ error: "Falha ao obter workspaces do Lovable. Tente novamente." }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return new Response(JSON.stringify({ error: "Falha ao obter workspaces do Lovable." }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const wsBody = await wsRes.json();
-      console.log("Workspace API raw response:", JSON.stringify(wsBody).substring(0, 500));
-      // Handle multiple response formats: array, { workspaces: [...] }, { data: [...] }, or { results: [...] }
-      let wsList: any[] = [];
-      if (Array.isArray(wsBody)) {
-        wsList = wsBody;
-      } else if (wsBody && typeof wsBody === "object") {
-        // Try all known keys
-        wsList = wsBody.workspaces || wsBody.data || wsBody.results || wsBody.items || [];
-        // If still empty but wsBody has an 'id' field, it might be a single workspace object
-        if (wsList.length === 0 && wsBody.id) {
-          wsList = [wsBody];
-        }
-      }
+      let wsList: any[] = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || wsBody?.results || wsBody?.items || []);
+      if (wsList.length === 0 && wsBody?.id) wsList = [wsBody];
       const workspaceId = wsList?.[0]?.id;
       if (!workspaceId) {
-        console.error("No workspace found. Full response:", JSON.stringify(wsBody).substring(0, 1000));
-        return new Response(JSON.stringify({ error: "Nenhum workspace encontrado", debug_keys: Object.keys(wsBody || {}) }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return new Response(JSON.stringify({ error: "Nenhum workspace encontrado" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Create project with minimal message
       const msgId = generateTypeId("umsg");
       const aiMsgId = generateTypeId("aimsg");
-      console.log("Generated IDs - msgId:", msgId, "aiMsgId:", aiMsgId);
 
-      const createRes = await fetch(`${LOVABLE_API}/workspaces/${workspaceId}/projects`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableToken}`,
-          "Content-Type": "application/json",
+      const { res: createRes, token: t2 } = await lovableFetch(
+        `${LOVABLE_API}/workspaces/${workspaceId}/projects`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            description: "CodeLove Brain - AI Assistant",
+            visibility: "private",
+            env_vars: {},
+            metadata: { chat_mode_enabled: false },
+            initial_message: {
+              id: msgId,
+              message: "Crie uma pagina em branco com um div id='brain-response' vazio",
+              files: [],
+              optimisticImageUrls: [],
+              chat_only: false,
+              agent_mode_enabled: false,
+              ai_message_id: aiMsgId,
+            },
+          }),
         },
-        body: JSON.stringify({
-          description: "CodeLove Brain - AI Assistant",
-          visibility: "private",
-          env_vars: {},
-          metadata: { chat_mode_enabled: false },
-          initial_message: {
-            id: msgId,
-            message: "Crie uma pagina em branco com um div id='brain-response' vazio",
-            files: [],
-            optimisticImageUrls: [],
-            chat_only: false,
-            agent_mode_enabled: false,
-            ai_message_id: aiMsgId,
-          },
-        }),
-      });
+        serviceClient, userId, t1
+      );
 
       if (!createRes.ok) {
-        const errText = await createRes.text();
-        console.error("Create project failed:", errText);
         return new Response(JSON.stringify({ error: "Falha ao criar Brain project" }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       const project = await createRes.json();
       const brainProjectId = project?.id || project?.project_id;
-
       if (!brainProjectId) {
         return new Response(JSON.stringify({ error: "ID do projeto não retornado" }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Cancel the initial message to save credits
+      // Cancel initial message
       try {
-        await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat/${msgId}/cancel`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${lovableToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        });
-      } catch (cancelErr) {
-        console.warn("Cancel failed (non-critical):", cancelErr);
-      }
+        await lovableFetch(
+          `${LOVABLE_API}/projects/${brainProjectId}/chat/${msgId}/cancel`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
+          serviceClient, userId, t2
+        );
+      } catch { /* non-critical */ }
 
       // Save brain project
       await serviceClient.from("user_brain_projects").insert({
-        user_id: user.id,
+        user_id: userId,
         lovable_project_id: brainProjectId,
         lovable_workspace_id: workspaceId,
         status: "active",
       });
 
-      // Inject brain system file via edit-code
+      // Inject brain config
       try {
-        await fetch(`${LOVABLE_API}/projects/${brainProjectId}/edit-code`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${lovableToken}`,
-            "Content-Type": "application/json",
+        await lovableFetch(
+          `${LOVABLE_API}/projects/${brainProjectId}/edit-code`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              changes: [
+                {
+                  path: "src/brain-config.md",
+                  content: `# CodeLove Brain System\n\nEste projeto é o Brain da plataforma CodeLove.\nQuando receber mensagens via chat, responda SOMENTE com o resultado solicitado.\nNÃO crie páginas, componentes ou código a menos que explicitamente solicitado.\nFormato de resposta padrão: texto puro ou JSON conforme instruído no prompt.\n\nRESPONDA SEMPRE EM PORTUGUÊS (Brasil).`,
+                },
+                {
+                  path: "src/brain-output.json",
+                  content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }),
+                },
+              ],
+            }),
           },
-          body: JSON.stringify({
-            changes: [
-              {
-                path: "src/brain-config.md",
-                content: `# CodeLove Brain System
+          serviceClient, userId, t2
+        );
+      } catch { /* non-critical */ }
 
-Este projeto é o Brain da plataforma CodeLove.
-Quando receber mensagens via chat, responda SOMENTE com o resultado solicitado.
-NÃO crie páginas, componentes ou código a menos que explicitamente solicitado.
-Formato de resposta padrão: texto puro ou JSON conforme instruído no prompt.
-
-RESPONDA SEMPRE EM PORTUGUÊS (Brasil).`,
-              },
-              {
-                path: "src/brain-output.json",
-                content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }),
-              },
-            ],
-          }),
-        });
-      } catch (injectErr) {
-        console.warn("Inject failed (non-critical):", injectErr);
-      }
-
-      return new Response(JSON.stringify({
-        success: true,
-        brain_project_id: brainProjectId,
-        workspace_id: workspaceId,
-      }), {
+      return new Response(JSON.stringify({ success: true, brain_project_id: brainProjectId, workspace_id: workspaceId }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ─── ACTION: send — Send message to Brain via Fix V2 ───
+    // ─── ACTION: page_speed — Run Lighthouse analysis (free) ───
+    if (action === "page_speed") {
+      const { project_id, strategy = "desktop", categories = ["seo"] } = body;
+      const targetProject = project_id;
+
+      if (!targetProject) {
+        // Use brain project if no project specified
+        const { data: brain } = await serviceClient
+          .from("user_brain_projects")
+          .select("lovable_project_id")
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .maybeSingle();
+        if (!brain) {
+          return new Response(JSON.stringify({ error: "Nenhum projeto especificado" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const pid = targetProject;
+      const { res: speedRes, token: t } = await lovableFetch(
+        `${LOVABLE_API}/projects/${pid}/preview-page-speed`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url_source: "publish", strategy, categories }),
+        },
+        serviceClient, userId, lovableToken
+      );
+
+      if (!speedRes.ok) {
+        return new Response(JSON.stringify({ error: "Falha ao executar PageSpeed" }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const speedData = await speedRes.json();
+      return new Response(JSON.stringify({ success: true, ...speedData }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── ACTION: send — Send message to Brain ───
     if (action === "send") {
-      const { message, brain_type = "general", target_project_id } = body;
+      const { message, brain_type = "general", target_project_id, chat_mode: requestedMode } = body;
 
       if (!message || typeof message !== "string" || message.length < 1 || message.length > 10000) {
         return new Response(JSON.stringify({ error: "Mensagem inválida (1-10000 chars)" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -342,212 +536,77 @@ RESPONDA SEMPRE EM PORTUGUÊS (Brasil).`,
       const { data: brain } = await serviceClient
         .from("user_brain_projects")
         .select("lovable_project_id")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("status", "active")
         .maybeSingle();
 
       if (!brain) {
         return new Response(JSON.stringify({ error: "Brain não configurado. Execute setup primeiro." }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       const brainProjectId = brain.lovable_project_id;
 
-      // Build system prompt based on brain_type
-      // IMPORTANT: All prompts MUST start with "Fix" to trigger Lovable to process and respond
-      const systemPrompts: Record<string, string> = {
-        general: `Fix the file src/brain-output.json with the following content:
+      // Determine chat mode
+      const chatMode: ChatMode = (requestedMode as ChatMode) || brainTypeToMode(brain_type);
+      
+      // Build the prompt
+      const prompt = buildBrainPrompt(brain_type, message);
 
-SISTEMA CODELOVE BRAIN — INSTRUÇÃO:
-Você é LoveAI, assistente de código e design da plataforma CodeLove.
-O usuário solicitou: "${message}"
-
-REGRAS DE RESPOSTA:
-- Responda SOMENTE com o que foi pedido, sem criar páginas ou alterar o projeto
-- Se for uma pergunta técnica: responda em texto claro e objetivo
-- Se for um prompt de design/código: retorne um prompt estruturado e completo
-- Formato: plaintext legível
-- NÃO diga "vou criar", "adicionei" — apenas RESPONDA
-- RESPONDA EM PORTUGUÊS (Brasil)
-
-IMPORTANTE: Escreva sua resposta COMPLETA no arquivo src/brain-output.json no formato:
-{"response": "SUA_RESPOSTA_AQUI", "timestamp": ${Date.now()}, "status": "done"}`,
-
-        design: `Fix the file src/brain-output.json with the following content:
-
-SISTEMA CODELOVE BRAIN — MODO DESIGN:
-O usuário quer: "${message}"
-Retorne um prompt de design COMPLETO e DETALHADO. Inclua: paleta de cores (hex), tipografia, espaçamentos, componentes, layout grid, sombras, bordas, animações, responsividade, tema light/dark.
-Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
-
-        code: `Fix the file src/brain-output.json with the following content:
-
-SISTEMA CODELOVE BRAIN — MODO CODE:
-O usuário quer: "${message}"
-Retorne APENAS o código necessário. Formato: arquivos separados com caminho completo.
-Priorize: TypeScript, React, TailwindCSS, shadcn/ui, Supabase.
-Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
-
-        scraper: `Fix the file src/brain-output.json with the following content:
-
-SISTEMA CODELOVE BRAIN — MODO SCRAPER:
-O usuário quer extrair dados de: "${message}"
-Retorne um script completo para captura dos dados. Inclua tratamento de erros e formato JSON.
-Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
-
-        migration: `Fix the file src/brain-output.json with the following content:
-
-SISTEMA CODELOVE BRAIN — MODO MIGRATION:
-O usuário quer migrar: "${message}"
-Gere o script SQL completo de migração incluindo: schemas, tabelas, RLS policies, triggers, functions e seed data.
-Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
-      };
-
-      const prompt = systemPrompts[brain_type] || systemPrompts.general;
-
-      // Take source snapshot before sending
-      let snapshotBefore: string | null = null;
+      // Take source snapshot
       try {
-        const srcRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/source-code`, {
-          headers: { Authorization: `Bearer ${lovableToken}` },
-        });
+        const { res: srcRes } = await lovableFetch(
+          `${LOVABLE_API}/projects/${brainProjectId}/source-code`,
+          { method: "GET" }, serviceClient, userId, lovableToken
+        );
         if (srcRes.ok) {
           const srcText = await srcRes.text();
-          snapshotBefore = await hashText(srcText);
+          const snapshotHash = await hashText(srcText);
           await serviceClient.from("project_source_snapshots").upsert({
             project_id: brainProjectId,
-            snapshot_hash: snapshotBefore,
+            snapshot_hash: snapshotHash,
             last_checked: new Date().toISOString(),
           }, { onConflict: "project_id" });
         }
-      } catch (e) {
-        console.warn("Snapshot failed:", e);
-      }
+      } catch { /* non-critical */ }
 
-      // Send Fix V2 message
+      // Build and send payload
       const msgId = generateTypeId("umsg");
       const aiMsgId = generateTypeId("aimsg");
+      const payload = buildChatPayload(chatMode, prompt, msgId, aiMsgId);
 
-      const fixPayload = JSON.stringify({
-        id: msgId,
-        message: prompt,
-        intent: "security_fix_v2",
-        chat_only: false,
-        agent_mode_enabled: true,
-        ai_message_id: aiMsgId,
-        thread_id: "main",
-        view: "security",
-        view_description: "The user is currently viewing the security view for their project.",
-        model: null,
-        files: [],
-        optimisticImageUrls: [],
-        selected_elements: [],
-        debug_mode: false,
-        session_replay: "[]",
-        client_logs: [],
-        network_requests: [],
-        runtime_errors: [],
-        integration_metadata: {
-          browser: { preview_viewport_width: 1536, preview_viewport_height: 730 },
+      console.log(`[Brain] Sending via mode=${chatMode}, brain_type=${brain_type}, project=${brainProjectId}`);
+
+      const { res: fixRes, token: usedToken } = await lovableFetch(
+        `${LOVABLE_API}/projects/${brainProjectId}/chat`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         },
-      });
-
-      let currentLovableToken = lovableToken;
-
-      let fixRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${currentLovableToken}`,
-          "Content-Type": "application/json",
-        },
-        body: fixPayload,
-      });
-
-      // Auto-refresh token on 401
-      if (fixRes.status === 401) {
-        const firebaseApiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
-        const { data: fullAccount } = await serviceClient
-          .from("lovable_accounts")
-          .select("refresh_token_encrypted, auto_refresh_enabled")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (firebaseApiKey && fullAccount?.refresh_token_encrypted && fullAccount?.auto_refresh_enabled) {
-          try {
-            const refreshRes = await fetch(
-              `https://securetoken.googleapis.com/v1/token?key=${firebaseApiKey}`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(fullAccount.refresh_token_encrypted)}`,
-              }
-            );
-
-            if (refreshRes.ok) {
-              const refreshData = await refreshRes.json();
-              if (refreshData.id_token) {
-                const expiresIn = parseInt(refreshData.expires_in || "3600", 10);
-                await serviceClient
-                  .from("lovable_accounts")
-                  .update({
-                    token_encrypted: refreshData.id_token,
-                    refresh_token_encrypted: refreshData.refresh_token || fullAccount.refresh_token_encrypted,
-                    token_expires_at: new Date(Date.now() + (expiresIn - 300) * 1000).toISOString(),
-                    last_verified_at: new Date().toISOString(),
-                    status: "active",
-                    refresh_failure_count: 0,
-                  })
-                  .eq("user_id", user.id);
-
-                currentLovableToken = refreshData.id_token;
-                console.log("[Brain] Token auto-refreshed, retrying Fix V2...");
-
-                // Retry with new token
-                fixRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat`, {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${currentLovableToken}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: fixPayload,
-                });
-              }
-            }
-          } catch (refreshErr) {
-            console.error("[Brain] Auto-refresh failed:", refreshErr);
-          }
-        }
-      }
+        serviceClient, userId, lovableToken
+      );
 
       if (!fixRes.ok) {
-        const errText = await fixRes.text();
-        console.error("Fix V2 failed:", fixRes.status, errText.substring(0, 500));
+        const errText = await fixRes.text().catch(() => "");
+        console.error(`[Brain] Chat failed (${chatMode}):`, fixRes.status, errText.substring(0, 500));
         if (fixRes.status === 401 || fixRes.status === 403) {
-          await serviceClient
-            .from("lovable_accounts")
-            .update({ status: "expired" })
-            .eq("user_id", user.id);
-          return new Response(JSON.stringify({ 
-            error: "Token Lovable expirado. Reconecte sua conta em Configurações > Lovable.",
-            code: "token_expired" 
-          }), {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          await serviceClient.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
+          return new Response(JSON.stringify({ error: "Token Lovable expirado. Reconecte.", code: "token_expired" }), {
+            status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         return new Response(JSON.stringify({ error: "Falha ao enviar para o Brain. Tente novamente." }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      console.log("[Brain] Fix V2 sent successfully for project:", brainProjectId);
+      console.log(`[Brain] ✅ Message sent successfully via ${chatMode}`);
 
       // Save conversation
       const { data: convo } = await serviceClient.from("loveai_conversations").insert({
-        user_id: user.id,
+        user_id: userId,
         target_project_id: target_project_id || null,
         brain_message_id: msgId,
         brain_type,
@@ -556,10 +615,9 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       }).select("id").single();
 
       // Update last_message_at
-      await serviceClient
-        .from("user_brain_projects")
+      await serviceClient.from("user_brain_projects")
         .update({ last_message_at: new Date().toISOString() })
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("status", "active");
 
       return new Response(JSON.stringify({
@@ -567,144 +625,113 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         conversation_id: convo?.id,
         brain_message_id: msgId,
         brain_project_id: brainProjectId,
+        chat_mode: chatMode,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ─── ACTION: capture — Extract response using chat message endpoints ───
+    // ─── ACTION: capture — Extract response ───
     if (action === "capture") {
       const { conversation_id, brain_project_id, brain_message_id } = body;
 
       if (!conversation_id || !brain_project_id) {
         return new Response(JSON.stringify({ error: "conversation_id e brain_project_id obrigatórios" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Re-fetch latest token (might have been refreshed by a previous send/proxy call)
-      const { data: latestAccount } = await serviceClient
-        .from("lovable_accounts")
-        .select("token_encrypted, status")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      const captureToken = (latestAccount?.status === "active" && latestAccount?.token_encrypted) 
-        ? latestAccount.token_encrypted 
-        : lovableToken;
+      // Get fresh token
+      const { token: captureToken, expired: tokenExpired } = await getLovableToken(serviceClient, userId);
+      const activeToken = tokenExpired ? lovableToken : captureToken;
 
       let response: string | null = null;
 
-      // ═══ STRATEGY 1: Read latest message from Lovable chat (most reliable) ═══
+      // ═══ STRATEGY 1: latest-message ═══
       try {
-        const latestMsgRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/latest-message`, {
-          headers: { Authorization: `Bearer ${captureToken}` },
-        });
-        
+        const { res: latestMsgRes } = await lovableFetch(
+          `${LOVABLE_API}/projects/${brain_project_id}/latest-message`,
+          { method: "GET" }, serviceClient, userId, activeToken
+        );
         if (latestMsgRes.ok) {
           const latestMsg = await latestMsgRes.json();
-          console.log("[Brain Capture] latest-message response:", JSON.stringify(latestMsg).substring(0, 500));
+          console.log("[Brain Capture] latest-message keys:", Object.keys(latestMsg || {}));
           
-          // Check if the AI has responded (the latest message should be from the AI, not the user)
           if (latestMsg) {
-            // Multiple possible structures: { role, content, status } or { message, sender } etc.
-            const msgRole = latestMsg.role || latestMsg.sender || latestMsg.type || "";
+            const isStreaming = latestMsg.is_streaming === true;
             const msgContent = latestMsg.content || latestMsg.message || latestMsg.text || "";
-            const msgStatus = latestMsg.status || "";
-            
-            // If the latest message is from AI and has content
-            const isAiMessage = msgRole === "assistant" || msgRole === "ai" || msgRole === "bot" || 
-                                latestMsg.is_ai === true || latestMsg.from_ai === true;
-            
-            // Check if processing is still ongoing
-            const isProcessing = msgStatus === "pending" || msgStatus === "processing" || 
-                                 msgStatus === "streaming" || msgStatus === "in_progress";
-            
-            if (isProcessing) {
-              console.log("[Brain Capture] Message still processing via latest-message");
-              // Don't return yet - try other strategies
-            } else if (isAiMessage && msgContent && msgContent.length > 5) {
-              response = msgContent;
-              console.log("[Brain Capture] ✅ Got response via /latest-message, length:", response!.length);
-            } else if (msgContent && msgContent.length > 5 && !isProcessing) {
-              // Maybe the structure is flat - try to use content directly
-              // Only if it doesn't look like our sent message
+            const msgRole = latestMsg.role || latestMsg.sender || latestMsg.type || "";
+            const isAi = msgRole === "assistant" || msgRole === "ai" || msgRole === "bot" || latestMsg.is_ai === true;
+            const status = latestMsg.status || "";
+            const isProcessing = status === "pending" || status === "processing" || status === "streaming" || status === "in_progress" || isStreaming;
+
+            if (!isProcessing && msgContent && msgContent.length > 10) {
+              // Check it's not our sent message
               const { data: convoData } = await serviceClient
                 .from("loveai_conversations")
                 .select("user_message")
                 .eq("id", conversation_id)
                 .maybeSingle();
-              
-              if (convoData && msgContent !== convoData.user_message && !msgContent.startsWith("Fix the file")) {
+
+              const sentMsg = convoData?.user_message || "";
+              if (!msgContent.startsWith("Analise e corrija") && !msgContent.startsWith("For the code present") && !msgContent.startsWith("SEO Audit Issue") && msgContent !== sentMsg) {
                 response = msgContent;
-                console.log("[Brain Capture] ✅ Got response via /latest-message (flat structure), length:", response!.length);
+                console.log("[Brain Capture] ✅ Got response via /latest-message, length:", response!.length);
               }
+            } else if (isProcessing) {
+              console.log("[Brain Capture] Still processing (latest-message)");
             }
           }
-        } else {
-          console.warn("[Brain Capture] latest-message failed:", latestMsgRes.status);
         }
       } catch (e) {
         console.warn("[Brain Capture] latest-message error:", e);
       }
 
-      // ═══ STRATEGY 2: Read messages list (gets full conversation) ═══
+      // ═══ STRATEGY 2: messages list ═══
       if (!response) {
         try {
-          const msgsRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/messages?limit=5&order=desc`, {
-            headers: { Authorization: `Bearer ${captureToken}` },
-          });
-          
+          const { res: msgsRes } = await lovableFetch(
+            `${LOVABLE_API}/projects/${brain_project_id}/messages?limit=5&order=desc`,
+            { method: "GET" }, serviceClient, userId, activeToken
+          );
           if (msgsRes.ok) {
             const msgsData = await msgsRes.json();
-            console.log("[Brain Capture] messages response type:", typeof msgsData, Array.isArray(msgsData) ? `array(${msgsData.length})` : "");
+            const messages = Array.isArray(msgsData) ? msgsData : (msgsData?.messages || msgsData?.data || msgsData?.items || []);
             
-            const messages = Array.isArray(msgsData) ? msgsData : 
-                            (msgsData?.messages || msgsData?.data || msgsData?.items || []);
-            
-            // Find the latest AI message
             for (const msg of messages) {
               const role = msg.role || msg.sender || msg.type || "";
               const content = msg.content || msg.message || msg.text || "";
-              const isAi = role === "assistant" || role === "ai" || role === "bot" || 
-                          msg.is_ai === true || msg.from_ai === true;
+              const isAi = role === "assistant" || role === "ai" || role === "bot" || msg.is_ai === true;
               
-              if (isAi && content && content.length > 5) {
+              if (isAi && content && content.length > 10) {
                 response = content;
                 console.log("[Brain Capture] ✅ Got response via /messages, length:", response!.length);
                 break;
               }
             }
-          } else {
-            console.warn("[Brain Capture] messages failed:", msgsRes.status);
           }
         } catch (e) {
           console.warn("[Brain Capture] messages error:", e);
         }
       }
 
-      // ═══ STRATEGY 3: Read chat-history ═══
+      // ═══ STRATEGY 3: chat-history ═══
       if (!response) {
         try {
-          const histRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/chat-history?limit=5`, {
-            headers: { Authorization: `Bearer ${captureToken}` },
-          });
-          
+          const { res: histRes } = await lovableFetch(
+            `${LOVABLE_API}/projects/${brain_project_id}/chat-history?limit=5`,
+            { method: "GET" }, serviceClient, userId, activeToken
+          );
           if (histRes.ok) {
             const histData = await histRes.json();
-            console.log("[Brain Capture] chat-history response:", JSON.stringify(histData).substring(0, 500));
-            
-            const items = Array.isArray(histData) ? histData : 
-                         (histData?.messages || histData?.history || histData?.data || histData?.items || []);
+            const items = Array.isArray(histData) ? histData : (histData?.messages || histData?.history || histData?.data || histData?.items || []);
             
             for (const item of items) {
               const role = item.role || item.sender || item.type || "";
               const content = item.content || item.message || item.text || item.response || "";
-              const isAi = role === "assistant" || role === "ai" || role === "bot" || 
-                          item.is_ai === true || item.from_ai === true;
+              const isAi = role === "assistant" || role === "ai" || role === "bot" || item.is_ai === true;
               
-              if (isAi && content && content.length > 5) {
+              if (isAi && content && content.length > 10) {
                 response = content;
                 console.log("[Brain Capture] ✅ Got response via /chat-history, length:", response!.length);
                 break;
@@ -716,7 +743,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         }
       }
 
-      // ═══ STRATEGY 4: Fallback to source-code parsing (original approach) ═══
+      // ═══ STRATEGY 4: source-code fallback ═══
       if (!response) {
         try {
           const { data: snapshot } = await serviceClient
@@ -727,32 +754,29 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
 
           const previousHash = snapshot?.snapshot_hash || null;
 
-          const srcRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
-            headers: { Authorization: `Bearer ${captureToken}` },
-          });
+          const { res: srcRes } = await lovableFetch(
+            `${LOVABLE_API}/projects/${brain_project_id}/source-code`,
+            { method: "GET" }, serviceClient, userId, activeToken
+          );
 
           if (srcRes.ok) {
             const rawText = await srcRes.text();
             const currentHash = await hashText(rawText);
 
-            // If hash hasn't changed, still processing
             if (previousHash && currentHash === previousHash) {
               return new Response(JSON.stringify({ success: true, status: "processing" }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
               });
             }
 
-            // Source changed - try to find brain-output.json
             let srcData: any;
             try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
             
-            let files: any = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
+            const files: any = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
             
             let outputContent: string | null = null;
             if (Array.isArray(files)) {
-              const outputFile = files.find((f: any) =>
-                f.path === "src/brain-output.json" || f.name === "brain-output.json"
-              );
+              const outputFile = files.find((f: any) => f.path === "src/brain-output.json" || f.name === "brain-output.json");
               outputContent = outputFile?.content || outputFile?.source || null;
             } else if (files && typeof files === "object") {
               outputContent = files["src/brain-output.json"] || null;
@@ -774,14 +798,11 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
               }
             }
 
-            // Update snapshot
             await serviceClient.from("project_source_snapshots").upsert({
               project_id: brain_project_id,
               snapshot_hash: currentHash,
               last_checked: new Date().toISOString(),
             }, { onConflict: "project_id" });
-          } else {
-            console.warn("[Brain Capture] source-code fetch failed:", srcRes.status);
           }
         } catch (e) {
           console.warn("[Brain Capture] source-code fallback error:", e);
@@ -789,39 +810,28 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       }
 
       if (response) {
-        // Update conversation with response
         await serviceClient.from("loveai_conversations").update({
           ai_response: response,
           status: "completed",
         }).eq("id", conversation_id);
 
-        return new Response(JSON.stringify({
-          success: true,
-          response,
-          status: "completed",
-        }), {
+        return new Response(JSON.stringify({ success: true, response, status: "completed" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Not ready yet — client should poll again
-      return new Response(JSON.stringify({
-        success: true,
-        status: "processing",
-      }), {
+      return new Response(JSON.stringify({ success: true, status: "processing" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ error: "Ação não reconhecida" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("LoveAI Brain error:", error);
     return new Response(JSON.stringify({ error: "Erro interno" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
