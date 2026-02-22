@@ -785,8 +785,8 @@
 
   .lv-pill {
     @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium;
-    background: rgba(255, 255, 255, 0.75);
-    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    background: var(--clf-bg-glass);
+    border: 0.5px solid var(--clf-border);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     color: var(--clf-muted-fg);
@@ -821,12 +821,7 @@
   }
   .lv-nav-item-inactive:hover {
     @apply text-foreground;
-    background: rgba(255, 255, 255, 0.6);
-  }
-  @media (prefers-color-scheme: dark) {
-    .lv-nav-item-inactive:hover {
-      background: rgba(58, 58, 60, 0.6);
-    }
+    background: var(--clf-muted);
   }
 
   /* ─────────────────────────────────
@@ -887,7 +882,7 @@
   }
   .lv-empty-icon {
     @apply h-14 w-14 rounded-[18px] flex items-center justify-center text-muted-foreground;
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--clf-muted);
   }
 
   /* ─────────────────────────────────

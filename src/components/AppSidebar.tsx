@@ -102,7 +102,7 @@ export default function AppSidebar() {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-black/[0.04]">
+        <SidebarFooter className="border-t border-sidebar-border">
           <SidebarMenu>
             {collapsed && (
               <SidebarMenuItem>
@@ -290,7 +290,7 @@ export default function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-black/[0.04]">
+      <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
           {collapsed && (
             <SidebarMenuItem>
