@@ -79,7 +79,16 @@ async function tryRefreshToken(sc: any, uid: string): Promise<string | null> {
 }
 
 async function lovableFetch(url: string, opts: RequestInit, sc: any, uid: string, token: string): Promise<{ res: Response; token: string }> {
-  const h: any = { ...opts.headers, Authorization: `Bearer ${token}` };
+  // HAR-required headers: Origin + Referer are mandatory for Lovable API
+  const h: any = {
+    ...opts.headers,
+    Authorization: `Bearer ${token}`,
+    "Origin": "https://lovable.dev",
+    "Referer": "https://lovable.dev/",
+  };
+  if (!h["Content-Type"] && opts.method === "POST") {
+    h["Content-Type"] = "application/json";
+  }
   let res = await fetch(url, { ...opts, headers: h });
   if (res.status === 401) {
     const nt = await tryRefreshToken(sc, uid);
@@ -617,9 +626,21 @@ Deno.serve(async (req) => {
       const { token: captureToken, expired: te } = await getLovableToken(sc, userId);
       const activeToken = te ? lovableToken : captureToken;
 
+      // Helper: check if content is our own sent prompt (not AI response)
+      const isOwnPrompt = (text: string): boolean => {
+        if (!text || text.length < 10) return true;
+        const markers = [
+          "SISTEMA CODELOVE BRAIN",
+          "REGRAS DE RESPOSTA:",
+          "Escreva sua resposta no arquivo src/brain-output.json",
+          '"status":"idle"',
+        ];
+        return markers.some(m => text.includes(m));
+      };
+
       let response: string | null = null;
 
-      // ═══ STRATEGY 1: latest-message (is_streaming check from HAR) ═══
+      // ═══ STRATEGY 1: latest-message ═══
       try {
         const { res: r } = await lovableFetch(
           `${LOVABLE_API}/projects/${brain_project_id}/latest-message`,
@@ -627,33 +648,31 @@ Deno.serve(async (req) => {
         );
         if (r.ok) {
           const msg = await r.json();
-          console.log("[Capture] latest-message keys:", Object.keys(msg || {}));
+          console.log("[Capture] latest-message:", JSON.stringify({
+            keys: Object.keys(msg || {}),
+            is_streaming: msg?.is_streaming,
+            has_content: !!(msg?.content || msg?.message),
+            content_len: (msg?.content || msg?.message || "").length,
+            role: msg?.role,
+            type: msg?.type,
+          }));
 
           if (msg) {
             const isStreaming = msg.is_streaming === true;
             const content = msg.content || msg.message || msg.text || "";
             const status = msg.status || "";
+            const role = msg.role || msg.type || msg.sender || "";
             const isProcessing = isStreaming || status === "pending" || status === "processing" || status === "streaming" || status === "in_progress";
 
             // HAR pattern: !is_streaming && content = done
-            if (!isProcessing && content && content.length > 10) {
-              // Verify it's not our sent prompt
-              const { data: cd } = await sc.from("loveai_conversations")
-                .select("user_message").eq("id", conversation_id).maybeSingle();
-              const sent = cd?.user_message || "";
-              // Filter out our own prompts
-              if (
-                !content.startsWith("Analise e corrija") &&
-                !content.startsWith("For the code present") &&
-                !content.startsWith("SEO Audit Issue") &&
-                content !== sent &&
-                !content.includes("SISTEMA CODELOVE BRAIN")
-              ) {
-                response = content;
-                console.log("[Capture] ✅ via /latest-message, len:", response!.length);
-              }
+            // Also check role — only accept AI responses, not our sent user messages
+            const isAiMessage = role === "assistant" || role === "ai" || role === "bot" || msg.is_ai === true || role === "";
+            
+            if (!isProcessing && content.length > 10 && isAiMessage && !isOwnPrompt(content)) {
+              response = content;
+              console.log("[Capture] ✅ via /latest-message, len:", response!.length);
             } else if (isProcessing) {
-              console.log("[Capture] Still streaming...");
+              console.log("[Capture] Still streaming/processing...");
             }
           }
         }
@@ -669,11 +688,12 @@ Deno.serve(async (req) => {
           if (r.ok) {
             const d = await r.json();
             const msgs = Array.isArray(d) ? d : (d?.messages || d?.data || d?.items || []);
+            console.log("[Capture] messages count:", msgs.length);
             for (const m of msgs) {
               const role = m.role || m.sender || m.type || "";
               const c = m.content || m.message || m.text || "";
               const isAi = role === "assistant" || role === "ai" || role === "bot" || m.is_ai === true;
-              if (isAi && c && c.length > 10 && !c.includes("SISTEMA CODELOVE BRAIN")) {
+              if (isAi && c.length > 10 && !isOwnPrompt(c)) {
                 response = c;
                 console.log("[Capture] ✅ via /messages, len:", response!.length);
                 break;
@@ -697,7 +717,7 @@ Deno.serve(async (req) => {
               const role = it.role || it.sender || it.type || "";
               const c = it.content || it.message || it.text || it.response || "";
               const isAi = role === "assistant" || role === "ai" || role === "bot" || it.is_ai === true;
-              if (isAi && c && c.length > 10 && !c.includes("SISTEMA CODELOVE BRAIN")) {
+              if (isAi && c.length > 10 && !isOwnPrompt(c)) {
                 response = c;
                 console.log("[Capture] ✅ via /chat-history, len:", response!.length);
                 break;
@@ -744,7 +764,7 @@ Deno.serve(async (req) => {
                 let clean = outputContent.trim();
                 if (clean.startsWith("```")) clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
                 const parsed = JSON.parse(clean);
-                if (parsed.response && parsed.response.length > 0) {
+                if (parsed.response && parsed.response.length > 0 && parsed.status === "done") {
                   response = parsed.response;
                   console.log("[Capture] ✅ via source-code brain-output.json");
                 }
