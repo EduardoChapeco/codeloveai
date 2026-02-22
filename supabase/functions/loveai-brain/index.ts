@@ -626,21 +626,10 @@ Deno.serve(async (req) => {
       const { token: captureToken, expired: te } = await getLovableToken(sc, userId);
       const activeToken = te ? lovableToken : captureToken;
 
-      // Helper: check if content is our own sent prompt (not AI response)
-      const isOwnPrompt = (text: string): boolean => {
-        if (!text || text.length < 10) return true;
-        const markers = [
-          "SISTEMA CODELOVE BRAIN",
-          "REGRAS DE RESPOSTA:",
-          "Escreva sua resposta no arquivo src/brain-output.json",
-          '"status":"idle"',
-        ];
-        return markers.some(m => text.includes(m));
-      };
-
       let response: string | null = null;
 
-      // ═══ STRATEGY 1: latest-message ═══
+      // ═══ STRATEGY 1: latest-message (HAR-exact pattern) ═══
+      // HAR pattern: just check !is_streaming && content — that's it
       try {
         const { res: r } = await lovableFetch(
           `${LOVABLE_API}/projects/${brain_project_id}/latest-message`,
@@ -648,35 +637,24 @@ Deno.serve(async (req) => {
         );
         if (r.ok) {
           const msg = await r.json();
-          console.log("[Capture] latest-message:", JSON.stringify({
-            keys: Object.keys(msg || {}),
+          console.log("[Capture] S1 latest-message:", JSON.stringify({
             is_streaming: msg?.is_streaming,
-            has_content: !!(msg?.content || msg?.message),
             content_len: (msg?.content || msg?.message || "").length,
             role: msg?.role,
-            type: msg?.type,
+            keys: Object.keys(msg || {}),
           }));
 
-          if (msg) {
-            const isStreaming = msg.is_streaming === true;
+          if (msg && !msg.is_streaming) {
             const content = msg.content || msg.message || msg.text || "";
-            const status = msg.status || "";
-            const role = msg.role || msg.type || msg.sender || "";
-            const isProcessing = isStreaming || status === "pending" || status === "processing" || status === "streaming" || status === "in_progress";
-
-            // HAR pattern: !is_streaming && content = done
-            // Also check role — only accept AI responses, not our sent user messages
-            const isAiMessage = role === "assistant" || role === "ai" || role === "bot" || msg.is_ai === true || role === "";
-            
-            if (!isProcessing && content.length > 10 && isAiMessage && !isOwnPrompt(content)) {
+            if (content.length > 10) {
               response = content;
-              console.log("[Capture] ✅ via /latest-message, len:", response!.length);
-            } else if (isProcessing) {
-              console.log("[Capture] Still streaming/processing...");
+              console.log("[Capture] ✅ S1 /latest-message, len:", response!.length);
             }
+          } else if (msg?.is_streaming) {
+            console.log("[Capture] S1 still streaming...");
           }
         }
-      } catch (e) { console.warn("[Capture] latest-message err:", e); }
+      } catch (e) { console.warn("[Capture] S1 err:", e); }
 
       // ═══ STRATEGY 2: messages list ═══
       if (!response) {
@@ -688,19 +666,21 @@ Deno.serve(async (req) => {
           if (r.ok) {
             const d = await r.json();
             const msgs = Array.isArray(d) ? d : (d?.messages || d?.data || d?.items || []);
-            console.log("[Capture] messages count:", msgs.length);
+            console.log("[Capture] S2 messages count:", msgs.length);
+            // Find first AI message (not user message)
             for (const m of msgs) {
-              const role = m.role || m.sender || m.type || "";
               const c = m.content || m.message || m.text || "";
-              const isAi = role === "assistant" || role === "ai" || role === "bot" || m.is_ai === true;
-              if (isAi && c.length > 10 && !isOwnPrompt(c)) {
+              const role = m.role || m.type || "";
+              // Skip if this looks like our sent user prompt
+              if (role === "user" || role === "human") continue;
+              if (c.length > 10) {
                 response = c;
-                console.log("[Capture] ✅ via /messages, len:", response!.length);
+                console.log("[Capture] ✅ S2 /messages, len:", response!.length);
                 break;
               }
             }
           }
-        } catch (e) { console.warn("[Capture] messages err:", e); }
+        } catch (e) { console.warn("[Capture] S2 err:", e); }
       }
 
       // ═══ STRATEGY 3: chat-history ═══
@@ -714,17 +694,17 @@ Deno.serve(async (req) => {
             const d = await r.json();
             const items = Array.isArray(d) ? d : (d?.messages || d?.history || d?.data || d?.items || []);
             for (const it of items) {
-              const role = it.role || it.sender || it.type || "";
               const c = it.content || it.message || it.text || it.response || "";
-              const isAi = role === "assistant" || role === "ai" || role === "bot" || it.is_ai === true;
-              if (isAi && c.length > 10 && !isOwnPrompt(c)) {
+              const role = it.role || it.type || "";
+              if (role === "user" || role === "human") continue;
+              if (c.length > 10) {
                 response = c;
-                console.log("[Capture] ✅ via /chat-history, len:", response!.length);
+                console.log("[Capture] ✅ S3 /chat-history, len:", response!.length);
                 break;
               }
             }
           }
-        } catch (e) { console.warn("[Capture] chat-history err:", e); }
+        } catch (e) { console.warn("[Capture] S3 err:", e); }
       }
 
       // ═══ STRATEGY 4: source-code diff (brain-output.json) ═══
