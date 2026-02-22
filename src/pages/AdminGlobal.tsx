@@ -9,12 +9,14 @@ import {
   Building2, Plus, Pencil, Trash2, DollarSign, Wallet, Users,
   BarChart3, CheckCircle, XCircle, Loader2, Save, ArrowLeft,
   Globe, Palette, FileText, Eye, EyeOff, RefreshCw, Shield, BookOpen, LogIn,
-  Package, UserPlus, Copy, Link as LinkIcon
+  Package, UserPlus, Copy, Link as LinkIcon, CloudLightning, Key, Activity,
+  ShieldAlert, Unlink, ExternalLink, Webhook,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import AppLayout from "@/components/AppLayout";
+import LovableCloudTab from "@/components/admin/LovableCloudTab";
 
 interface TenantRow {
   id: string;
@@ -105,7 +107,7 @@ interface WlSubscription {
   created_at: string;
 }
 
-type Tab = "tenants" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs";
+type Tab = "tenants" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -319,6 +321,7 @@ export default function AdminGlobal() {
           <div className="flex gap-2 flex-wrap">
             {([
               { id: "tenants", label: "Tenants", icon: Building2 },
+              { id: "lovable_cloud", label: "Lovable Cloud", icon: CloudLightning },
               { id: "wl_plans", label: "Planos WL", icon: Package },
               { id: "wl_affiliates", label: "Afiliados WL", icon: UserPlus },
               { id: "wl_subs", label: "Assinaturas WL", icon: FileText },
@@ -536,6 +539,9 @@ export default function AdminGlobal() {
               </div>
             </div>
           )}
+
+          {/* ─── LOVABLE CLOUD TAB ─── */}
+          {tab === "lovable_cloud" && <LovableCloudTab />}
 
           {/* ─── OPERATIONS TAB ─── */}
           {tab === "operations" && (
