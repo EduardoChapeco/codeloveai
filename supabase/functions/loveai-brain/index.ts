@@ -492,7 +492,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       });
     }
 
-    // ─── ACTION: capture — Single check for brain response (client polls) ───
+    // ─── ACTION: capture — Extract response from source code changes ───
     if (action === "capture") {
       const { conversation_id, brain_project_id } = body;
 
@@ -503,7 +503,15 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         });
       }
 
-      // Single check — no server-side loop
+      // Get previous snapshot hash
+      const { data: snapshot } = await serviceClient
+        .from("project_source_snapshots")
+        .select("snapshot_hash")
+        .eq("project_id", brain_project_id)
+        .maybeSingle();
+
+      const previousHash = snapshot?.snapshot_hash || null;
+
       let response: string | null = null;
       try {
         const srcRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
@@ -513,15 +521,26 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         if (srcRes.ok) {
           const srcData = await srcRes.json();
           const files = srcData?.files || srcData;
-          let outputContent: string | null = null;
 
+          // Check current source hash to detect ANY change
+          const currentSrcText = JSON.stringify(files);
+          const currentHash = await hashText(currentSrcText);
+
+          // If hash hasn't changed, still processing
+          if (previousHash && currentHash === previousHash) {
+            return new Response(JSON.stringify({ success: true, status: "processing" }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          // Source code changed! Extract the response.
+          // Strategy 1: Check brain-output.json (preferred, may have response text)
+          let outputContent: string | null = null;
           if (Array.isArray(files)) {
             const outputFile = files.find((f: { path: string }) =>
               f.path === "src/brain-output.json" || f.path === "/src/brain-output.json"
             );
-            if (outputFile?.content) {
-              outputContent = outputFile.content;
-            }
+            if (outputFile?.content) outputContent = outputFile.content;
           } else if (typeof files === "object") {
             outputContent = files["src/brain-output.json"] || null;
           }
@@ -533,7 +552,78 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
                 response = parsed.response;
               }
             } catch {
-              // Not valid JSON yet
+              // Not valid JSON — try extracting text directly
+              // Maybe Lovable wrote markdown or plain text instead of JSON
+              const cleaned = outputContent.trim();
+              if (cleaned.length > 10 && cleaned !== '{"response":"","timestamp":0,"status":"idle"}') {
+                response = cleaned;
+              }
+            }
+          }
+
+          // Strategy 2: If brain-output.json didn't have it, look at ALL changed files
+          if (!response) {
+            const changedFiles: string[] = [];
+            const ignorePaths = new Set([
+              "src/brain-config.md",
+              "package.json",
+              "tsconfig.json",
+              "vite.config.ts",
+              "index.html",
+              "tailwind.config.ts",
+              "postcss.config.js",
+              "eslint.config.js",
+              "components.json",
+            ]);
+
+            if (Array.isArray(files)) {
+              for (const f of files) {
+                if (f.path && f.content && !ignorePaths.has(f.path)) {
+                  // Collect all file contents that might have the response
+                  changedFiles.push(`--- ${f.path} ---\n${f.content}`);
+                }
+              }
+            } else if (typeof files === "object") {
+              for (const [path, content] of Object.entries(files)) {
+                if (!ignorePaths.has(path) && typeof content === "string") {
+                  changedFiles.push(`--- ${path} ---\n${content}`);
+                }
+              }
+            }
+
+            // Look for any file that contains our response markers or meaningful content
+            const allContent = changedFiles.join("\n\n");
+
+            // Try to find response in any file that looks like brain output
+            for (const fileBlock of changedFiles) {
+              // Check if file contains response markers
+              if (fileBlock.includes('"status":"done"') || fileBlock.includes('"status": "done"')) {
+                const match = fileBlock.match(/"response"\s*:\s*"([\s\S]*?)"\s*,\s*"timestamp"/);
+                if (match?.[1]) {
+                  response = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+                  break;
+                }
+              }
+            }
+
+            // Strategy 3: If still nothing, check if there are new/modified .tsx/.ts/.md files
+            // that contain the actual AI-generated content
+            if (!response && previousHash && currentHash !== previousHash) {
+              // Source changed but we couldn't extract a clean response
+              // Return ALL changed source as a fallback (the AI did respond, just not in our expected format)
+              const relevantContent: string[] = [];
+              if (Array.isArray(files)) {
+                for (const f of files) {
+                  if (f.path && f.content && !ignorePaths.has(f.path) &&
+                    (f.path.endsWith(".tsx") || f.path.endsWith(".ts") || f.path.endsWith(".json") || f.path.endsWith(".md")) &&
+                    f.path !== "src/brain-config.md") {
+                    relevantContent.push(`**${f.path}:**\n\`\`\`\n${f.content.substring(0, 3000)}\n\`\`\``);
+                  }
+                }
+              }
+              if (relevantContent.length > 0) {
+                response = `O Brain processou sua solicitação. Aqui estão as alterações no código do projeto:\n\n${relevantContent.join("\n\n")}`;
+              }
             }
           }
         }
@@ -542,10 +632,26 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       }
 
       if (response) {
+        // Update conversation with response
         await serviceClient.from("loveai_conversations").update({
           ai_response: response,
           status: "completed",
         }).eq("id", conversation_id);
+
+        // Update snapshot hash to current state
+        try {
+          const srcRes2 = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
+            headers: { Authorization: `Bearer ${lovableToken}` },
+          });
+          if (srcRes2.ok) {
+            const newHash = await hashText(await srcRes2.text());
+            await serviceClient.from("project_source_snapshots").upsert({
+              project_id: brain_project_id,
+              snapshot_hash: newHash,
+              last_checked: new Date().toISOString(),
+            }, { onConflict: "project_id" });
+          }
+        } catch { /* non-critical */ }
 
         // Reset brain-output.json for next use
         try {
@@ -562,9 +668,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
               }],
             }),
           });
-        } catch {
-          // Non-critical
-        }
+        } catch { /* non-critical */ }
 
         return new Response(JSON.stringify({
           success: true,
