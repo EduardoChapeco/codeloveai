@@ -352,8 +352,11 @@ RESPONDA SEMPRE EM PORTUGUÊS (Brasil).`,
       const brainProjectId = brain.lovable_project_id;
 
       // Build system prompt based on brain_type
+      // IMPORTANT: All prompts MUST start with "Fix" to trigger Lovable to process and respond
       const systemPrompts: Record<string, string> = {
-        general: `SISTEMA CODELOVE BRAIN — INSTRUÇÃO:
+        general: `Fix the file src/brain-output.json with the following content:
+
+SISTEMA CODELOVE BRAIN — INSTRUÇÃO:
 Você é LoveAI, assistente de código e design da plataforma CodeLove.
 O usuário solicitou: "${message}"
 
@@ -368,23 +371,31 @@ REGRAS DE RESPOSTA:
 IMPORTANTE: Escreva sua resposta COMPLETA no arquivo src/brain-output.json no formato:
 {"response": "SUA_RESPOSTA_AQUI", "timestamp": ${Date.now()}, "status": "done"}`,
 
-        design: `SISTEMA CODELOVE BRAIN — MODO DESIGN:
+        design: `Fix the file src/brain-output.json with the following content:
+
+SISTEMA CODELOVE BRAIN — MODO DESIGN:
 O usuário quer: "${message}"
 Retorne um prompt de design COMPLETO e DETALHADO. Inclua: paleta de cores (hex), tipografia, espaçamentos, componentes, layout grid, sombras, bordas, animações, responsividade, tema light/dark.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
 
-        code: `SISTEMA CODELOVE BRAIN — MODO CODE:
+        code: `Fix the file src/brain-output.json with the following content:
+
+SISTEMA CODELOVE BRAIN — MODO CODE:
 O usuário quer: "${message}"
 Retorne APENAS o código necessário. Formato: arquivos separados com caminho completo.
 Priorize: TypeScript, React, TailwindCSS, shadcn/ui, Supabase.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
 
-        scraper: `SISTEMA CODELOVE BRAIN — MODO SCRAPER:
+        scraper: `Fix the file src/brain-output.json with the following content:
+
+SISTEMA CODELOVE BRAIN — MODO SCRAPER:
 O usuário quer extrair dados de: "${message}"
 Retorne um script completo para captura dos dados. Inclua tratamento de erros e formato JSON.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
 
-        migration: `SISTEMA CODELOVE BRAIN — MODO MIGRATION:
+        migration: `Fix the file src/brain-output.json with the following content:
+
+SISTEMA CODELOVE BRAIN — MODO MIGRATION:
 O usuário quer migrar: "${message}"
 Gere o script SQL completo de migração incluindo: schemas, tabelas, RLS policies, triggers, functions e seed data.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
@@ -424,7 +435,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         body: JSON.stringify({
           id: msgId,
           message: prompt,
-          intent: "security_fix_v2",
+          intent: "fix",
           chat_only: false,
           ai_message_id: aiMsgId,
           thread_id: "main",
