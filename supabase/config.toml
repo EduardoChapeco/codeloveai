@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.tenant-topup]
 verify_jwt = false
+
+[functions.loveai-brain]
+verify_jwt = false

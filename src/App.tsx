@@ -36,6 +36,7 @@ const LovableUploadTest = lazy(() => import("./pages/LovableUploadTest"));
 const WhiteLabelRefPage = lazy(() => import("./pages/WhiteLabelRefPage"));
 const WlAffiliateDashboard = lazy(() => import("./pages/WlAffiliateDashboard"));
 const PartnersLanding = lazy(() => import("./pages/PartnersLanding"));
+const Brain = lazy(() => import("./pages/Brain"));
 // LovableCloudAdmin moved to AdminGlobal tab
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -78,6 +79,7 @@ const App = () => (
                 <Route path="/lovable/preview" element={<LovablePreview />} />
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
                 <Route path="/partners" element={<PartnersLanding />} />
+                <Route path="/brain" element={<Brain />} />
                 {/* Lovable Cloud Admin moved to AdminGlobal tab: /admin/global?tab=lovable_cloud */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

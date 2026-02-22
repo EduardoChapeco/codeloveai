@@ -1018,6 +1018,56 @@ export type Database = {
           },
         ]
       }
+      loveai_conversations: {
+        Row: {
+          ai_response: string | null
+          brain_message_id: string | null
+          brain_type: string
+          created_at: string
+          id: string
+          response_applied: boolean
+          status: string
+          target_project_id: string | null
+          tenant_id: string | null
+          user_id: string
+          user_message: string
+        }
+        Insert: {
+          ai_response?: string | null
+          brain_message_id?: string | null
+          brain_type?: string
+          created_at?: string
+          id?: string
+          response_applied?: boolean
+          status?: string
+          target_project_id?: string | null
+          tenant_id?: string | null
+          user_id: string
+          user_message: string
+        }
+        Update: {
+          ai_response?: string | null
+          brain_message_id?: string | null
+          brain_type?: string
+          created_at?: string
+          id?: string
+          response_applied?: boolean
+          status?: string
+          target_project_id?: string | null
+          tenant_id?: string | null
+          user_id?: string
+          user_message?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loveai_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
@@ -1406,6 +1456,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      project_source_snapshots: {
+        Row: {
+          last_checked: string
+          project_id: string
+          snapshot_hash: string | null
+        }
+        Insert: {
+          last_checked?: string
+          project_id: string
+          snapshot_hash?: string | null
+        }
+        Update: {
+          last_checked?: string
+          project_id?: string
+          snapshot_hash?: string | null
+        }
+        Relationships: []
       }
       subscriptions: {
         Row: {
@@ -1919,6 +1987,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_brain_projects: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          lovable_project_id: string
+          lovable_workspace_id: string
+          status: string
+          tenant_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          lovable_project_id: string
+          lovable_workspace_id: string
+          status?: string
+          tenant_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          lovable_project_id?: string
+          lovable_workspace_id?: string
+          status?: string
+          tenant_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_brain_projects_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
