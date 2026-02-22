@@ -7,7 +7,7 @@ import {
   LayoutDashboard, MessageCircle, Users, Download, Bot, Headphones,
   Link2, FolderOpen, Shield, LogOut, User, ChevronDown,
   ArrowLeft, Bell, Send, Gift, Upload, FileText, Coins, Unlock,
-  PanelLeftClose, PanelLeft, Building2, StickyNote, CloudLightning,
+  PanelLeftClose, PanelLeft, Building2, StickyNote,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -177,7 +177,6 @@ export default function AppSidebar() {
     ...(isAdmin ? [
       { to: "/admin", label: "Admin Operacional", icon: Shield },
       { to: "/admin/global", label: "Admin Global", icon: Building2 },
-      { to: "/admin/lovable-cloud", label: "Lovable Cloud", icon: CloudLightning },
     ] : []),
   ];
 
@@ -225,12 +224,6 @@ export default function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {mainItems.map(renderNavItem)}
-              <SidebarMenuItem>
-                <SidebarMenuButton isActive={isChatOpen} onClick={handleChatClick} tooltip="Chat AI">
-                  <Bot className="h-4 w-4" />
-                  <span>Chat AI</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
