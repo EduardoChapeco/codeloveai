@@ -44,3 +44,15 @@ verify_jwt = false
 
 [functions.loveai-brain]
 verify_jwt = false
+
+[functions.supabase-migrate-start]
+verify_jwt = false
+
+[functions.supabase-sync-cron]
+verify_jwt = false
+
+[functions.lovable-token-refresh]
+verify_jwt = false
+
+[functions.lovable-projects-sync]
+verify_jwt = false
