@@ -52,6 +52,7 @@ const WhiteLabelRefPage = lazyRetry(() => import("./pages/WhiteLabelRefPage"));
 const WlAffiliateDashboard = lazyRetry(() => import("./pages/WlAffiliateDashboard"));
 const PartnersLanding = lazyRetry(() => import("./pages/PartnersLanding"));
 const Brain = lazyRetry(() => import("./pages/Brain"));
+const ProjectEditor = lazyRetry(() => import("./pages/ProjectEditor"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -94,6 +95,7 @@ const App = () => (
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
                 <Route path="/partners" element={<PartnersLanding />} />
                 <Route path="/brain" element={<Brain />} />
+                <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
                 {/* Lovable Cloud Admin moved to AdminGlobal tab: /admin/global?tab=lovable_cloud */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

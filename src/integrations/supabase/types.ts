@@ -1522,6 +1522,65 @@ export type Database = {
           },
         ]
       }
+      supabase_migration_jobs: {
+        Row: {
+          created_at: string
+          dest_service_role_key_encrypted: string | null
+          dest_supabase_url: string | null
+          error_log: string | null
+          id: string
+          last_sync_at: string | null
+          project_id: string
+          source_supabase_url: string | null
+          status: string
+          sync_active: boolean
+          tables_migrated: Json | null
+          tenant_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dest_service_role_key_encrypted?: string | null
+          dest_supabase_url?: string | null
+          error_log?: string | null
+          id?: string
+          last_sync_at?: string | null
+          project_id: string
+          source_supabase_url?: string | null
+          status?: string
+          sync_active?: boolean
+          tables_migrated?: Json | null
+          tenant_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dest_service_role_key_encrypted?: string | null
+          dest_supabase_url?: string | null
+          error_log?: string | null
+          id?: string
+          last_sync_at?: string | null
+          project_id?: string
+          source_supabase_url?: string | null
+          status?: string
+          sync_active?: boolean
+          tables_migrated?: Json | null
+          tenant_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supabase_migration_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_extensions: {
         Row: {
           activation_cost: number
