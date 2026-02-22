@@ -536,12 +536,13 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         });
 
         if (srcRes.ok) {
-          const srcData = await srcRes.json();
-          const files = srcData?.files || srcData;
+          // IMPORTANT: hash the raw text to be consistent with the hash taken during "send"
+          const rawText = await srcRes.text();
+          const currentHash = await hashText(rawText);
 
-          // Check current source hash to detect ANY change
-          const currentSrcText = JSON.stringify(files);
-          const currentHash = await hashText(currentSrcText);
+          let srcData: any;
+          try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
+          const files = srcData?.files || srcData;
 
           // If hash hasn't changed, still processing
           if (previousHash && currentHash === previousHash) {
@@ -666,7 +667,8 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
             headers: { Authorization: `Bearer ${lovableToken}` },
           });
           if (srcRes2.ok) {
-            const newHash = await hashText(await srcRes2.text());
+            const newRawText = await srcRes2.text();
+            const newHash = await hashText(newRawText);
             await serviceClient.from("project_source_snapshots").upsert({
               project_id: brain_project_id,
               snapshot_hash: newHash,
