@@ -572,9 +572,9 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       });
     }
 
-    // ─── ACTION: capture — Extract response from source code changes ───
+    // ─── ACTION: capture — Extract response using chat message endpoints ───
     if (action === "capture") {
-      const { conversation_id, brain_project_id } = body;
+      const { conversation_id, brain_project_id, brain_message_id } = body;
 
       if (!conversation_id || !brain_project_id) {
         return new Response(JSON.stringify({ error: "conversation_id e brain_project_id obrigatórios" }), {
@@ -594,167 +594,198 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         ? latestAccount.token_encrypted 
         : lovableToken;
 
-      // Get previous snapshot hash
-      const { data: snapshot } = await serviceClient
-        .from("project_source_snapshots")
-        .select("snapshot_hash")
-        .eq("project_id", brain_project_id)
-        .maybeSingle();
-
-      const previousHash = snapshot?.snapshot_hash || null;
-
       let response: string | null = null;
+
+      // ═══ STRATEGY 1: Read latest message from Lovable chat (most reliable) ═══
       try {
-        const srcRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
+        const latestMsgRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/latest-message`, {
           headers: { Authorization: `Bearer ${captureToken}` },
         });
-
-        if (srcRes.ok) {
-          // IMPORTANT: hash the raw text to be consistent with the hash taken during "send"
-          const rawText = await srcRes.text();
-          const currentHash = await hashText(rawText);
-
-          let srcData: any;
-          try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
+        
+        if (latestMsgRes.ok) {
+          const latestMsg = await latestMsgRes.json();
+          console.log("[Brain Capture] latest-message response:", JSON.stringify(latestMsg).substring(0, 500));
           
-          // Handle multiple source-code API response formats
-          let files: any = null;
-          if (srcData?.files) {
-            files = srcData.files;
-          } else if (srcData?.data?.files) {
-            files = srcData.data.files;
-          } else if (srcData?.source?.files) {
-            files = srcData.source.files;
-          } else if (Array.isArray(srcData)) {
-            files = srcData;
-          } else if (typeof srcData === "object" && !srcData.files) {
-            // Maybe the response IS the file map directly
-            files = srcData;
-          }
-
-          console.log("[Brain Capture] Hash comparison:", { previousHash: previousHash?.substring(0, 12), currentHash: currentHash.substring(0, 12), changed: previousHash !== currentHash });
-          console.log("[Brain Capture] Files type:", Array.isArray(files) ? `array(${files.length})` : typeof files);
-
-          // If hash hasn't changed, still processing
-          if (previousHash && currentHash === previousHash) {
-            return new Response(JSON.stringify({ success: true, status: "processing" }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-
-          // Source code changed! Extract the response.
-          // Strategy 1: Check brain-output.json (preferred)
-          let outputContent: string | null = null;
-          if (Array.isArray(files)) {
-            const outputFile = files.find((f: any) =>
-              f.path === "src/brain-output.json" || 
-              f.path === "/src/brain-output.json" ||
-              f.name === "brain-output.json"
-            );
-            if (outputFile?.content) outputContent = outputFile.content;
-            else if (outputFile?.source) outputContent = outputFile.source;
-          } else if (files && typeof files === "object") {
-            outputContent = files["src/brain-output.json"] || files["/src/brain-output.json"] || null;
-          }
-
-          console.log("[Brain Capture] brain-output.json found:", !!outputContent, outputContent ? outputContent.substring(0, 200) : "null");
-
-          if (outputContent) {
-            try {
-              // Clean potential markdown wrapping
-              let cleanContent = outputContent.trim();
-              if (cleanContent.startsWith("```")) {
-                cleanContent = cleanContent.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+          // Check if the AI has responded (the latest message should be from the AI, not the user)
+          if (latestMsg) {
+            // Multiple possible structures: { role, content, status } or { message, sender } etc.
+            const msgRole = latestMsg.role || latestMsg.sender || latestMsg.type || "";
+            const msgContent = latestMsg.content || latestMsg.message || latestMsg.text || "";
+            const msgStatus = latestMsg.status || "";
+            
+            // If the latest message is from AI and has content
+            const isAiMessage = msgRole === "assistant" || msgRole === "ai" || msgRole === "bot" || 
+                                latestMsg.is_ai === true || latestMsg.from_ai === true;
+            
+            // Check if processing is still ongoing
+            const isProcessing = msgStatus === "pending" || msgStatus === "processing" || 
+                                 msgStatus === "streaming" || msgStatus === "in_progress";
+            
+            if (isProcessing) {
+              console.log("[Brain Capture] Message still processing via latest-message");
+              // Don't return yet - try other strategies
+            } else if (isAiMessage && msgContent && msgContent.length > 5) {
+              response = msgContent;
+              console.log("[Brain Capture] ✅ Got response via /latest-message, length:", response!.length);
+            } else if (msgContent && msgContent.length > 5 && !isProcessing) {
+              // Maybe the structure is flat - try to use content directly
+              // Only if it doesn't look like our sent message
+              const { data: convoData } = await serviceClient
+                .from("loveai_conversations")
+                .select("user_message")
+                .eq("id", conversation_id)
+                .maybeSingle();
+              
+              if (convoData && msgContent !== convoData.user_message && !msgContent.startsWith("Fix the file")) {
+                response = msgContent;
+                console.log("[Brain Capture] ✅ Got response via /latest-message (flat structure), length:", response!.length);
               }
-              const parsed = JSON.parse(cleanContent);
-              if (parsed.response && parsed.response.length > 0) {
-                response = parsed.response;
-                console.log("[Brain Capture] Extracted response from brain-output.json, length:", response!.length);
-              }
-            } catch {
-              // Not valid JSON — try extracting text directly
-              const cleaned = outputContent.trim();
-              if (cleaned.length > 20 && !cleaned.includes('"status":"idle"') && cleaned !== '{"response":"","timestamp":0,"status":"idle"}') {
-                response = cleaned;
-                console.log("[Brain Capture] Used raw brain-output.json content as response");
-              }
-            }
-          }
-
-          // Strategy 2: Look at ALL files for response markers
-          if (!response && files) {
-            const ignorePaths = new Set([
-              "src/brain-config.md", "package.json", "tsconfig.json", "vite.config.ts",
-              "index.html", "tailwind.config.ts", "postcss.config.js", "eslint.config.js", "components.json",
-            ]);
-
-            const fileEntries: Array<{ path: string; content: string }> = [];
-            if (Array.isArray(files)) {
-              for (const f of files) {
-                const path = f.path || f.name || "";
-                const content = f.content || f.source || "";
-                if (path && content && !ignorePaths.has(path)) {
-                  fileEntries.push({ path, content });
-                }
-              }
-            } else if (typeof files === "object") {
-              for (const [path, content] of Object.entries(files)) {
-                if (!ignorePaths.has(path) && typeof content === "string") {
-                  fileEntries.push({ path, content });
-                }
-              }
-            }
-
-            // Check all files for response JSON markers
-            for (const { content } of fileEntries) {
-              if (content.includes('"status"') && (content.includes('"done"') || content.includes('"response"'))) {
-                try {
-                  let cleanContent = content.trim();
-                  if (cleanContent.startsWith("```")) {
-                    cleanContent = cleanContent.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-                  }
-                  const parsed = JSON.parse(cleanContent);
-                  if (parsed.response && parsed.response.length > 0) {
-                    response = parsed.response;
-                    console.log("[Brain Capture] Found response in file via JSON parse");
-                    break;
-                  }
-                } catch {
-                  // Try regex extraction
-                  const match = content.match(/"response"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-                  if (match?.[1] && match[1].length > 5) {
-                    response = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-                    console.log("[Brain Capture] Found response via regex extraction");
-                    break;
-                  }
-                }
-              }
-            }
-
-            // Strategy 3: Fallback - return changed source files
-            if (!response && previousHash && currentHash !== previousHash) {
-              const relevantContent: string[] = [];
-              for (const { path, content } of fileEntries) {
-                if ((path.endsWith(".tsx") || path.endsWith(".ts") || path.endsWith(".json") || path.endsWith(".md")) &&
-                  path !== "src/brain-config.md") {
-                  relevantContent.push(`**${path}:**\n\`\`\`\n${content.substring(0, 3000)}\n\`\`\``);
-                }
-              }
-              if (relevantContent.length > 0) {
-                response = `O Brain processou sua solicitação. Aqui estão as alterações:\n\n${relevantContent.join("\n\n")}`;
-              }
-            }
-
-            // Strategy 4: Generic fallback
-            if (!response && previousHash && currentHash !== previousHash) {
-              response = "O Brain processou sua solicitação, mas a resposta não pôde ser extraída no formato esperado.";
             }
           }
         } else {
-          console.error("[Brain Capture] Source code fetch failed:", srcRes.status, await srcRes.text().catch(() => ""));
+          console.warn("[Brain Capture] latest-message failed:", latestMsgRes.status);
         }
-      } catch (pollErr) {
-        console.warn("Check error:", pollErr);
+      } catch (e) {
+        console.warn("[Brain Capture] latest-message error:", e);
+      }
+
+      // ═══ STRATEGY 2: Read messages list (gets full conversation) ═══
+      if (!response) {
+        try {
+          const msgsRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/messages?limit=5&order=desc`, {
+            headers: { Authorization: `Bearer ${captureToken}` },
+          });
+          
+          if (msgsRes.ok) {
+            const msgsData = await msgsRes.json();
+            console.log("[Brain Capture] messages response type:", typeof msgsData, Array.isArray(msgsData) ? `array(${msgsData.length})` : "");
+            
+            const messages = Array.isArray(msgsData) ? msgsData : 
+                            (msgsData?.messages || msgsData?.data || msgsData?.items || []);
+            
+            // Find the latest AI message
+            for (const msg of messages) {
+              const role = msg.role || msg.sender || msg.type || "";
+              const content = msg.content || msg.message || msg.text || "";
+              const isAi = role === "assistant" || role === "ai" || role === "bot" || 
+                          msg.is_ai === true || msg.from_ai === true;
+              
+              if (isAi && content && content.length > 5) {
+                response = content;
+                console.log("[Brain Capture] ✅ Got response via /messages, length:", response!.length);
+                break;
+              }
+            }
+          } else {
+            console.warn("[Brain Capture] messages failed:", msgsRes.status);
+          }
+        } catch (e) {
+          console.warn("[Brain Capture] messages error:", e);
+        }
+      }
+
+      // ═══ STRATEGY 3: Read chat-history ═══
+      if (!response) {
+        try {
+          const histRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/chat-history?limit=5`, {
+            headers: { Authorization: `Bearer ${captureToken}` },
+          });
+          
+          if (histRes.ok) {
+            const histData = await histRes.json();
+            console.log("[Brain Capture] chat-history response:", JSON.stringify(histData).substring(0, 500));
+            
+            const items = Array.isArray(histData) ? histData : 
+                         (histData?.messages || histData?.history || histData?.data || histData?.items || []);
+            
+            for (const item of items) {
+              const role = item.role || item.sender || item.type || "";
+              const content = item.content || item.message || item.text || item.response || "";
+              const isAi = role === "assistant" || role === "ai" || role === "bot" || 
+                          item.is_ai === true || item.from_ai === true;
+              
+              if (isAi && content && content.length > 5) {
+                response = content;
+                console.log("[Brain Capture] ✅ Got response via /chat-history, length:", response!.length);
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[Brain Capture] chat-history error:", e);
+        }
+      }
+
+      // ═══ STRATEGY 4: Fallback to source-code parsing (original approach) ═══
+      if (!response) {
+        try {
+          const { data: snapshot } = await serviceClient
+            .from("project_source_snapshots")
+            .select("snapshot_hash")
+            .eq("project_id", brain_project_id)
+            .maybeSingle();
+
+          const previousHash = snapshot?.snapshot_hash || null;
+
+          const srcRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
+            headers: { Authorization: `Bearer ${captureToken}` },
+          });
+
+          if (srcRes.ok) {
+            const rawText = await srcRes.text();
+            const currentHash = await hashText(rawText);
+
+            // If hash hasn't changed, still processing
+            if (previousHash && currentHash === previousHash) {
+              return new Response(JSON.stringify({ success: true, status: "processing" }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+
+            // Source changed - try to find brain-output.json
+            let srcData: any;
+            try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
+            
+            let files: any = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
+            
+            let outputContent: string | null = null;
+            if (Array.isArray(files)) {
+              const outputFile = files.find((f: any) =>
+                f.path === "src/brain-output.json" || f.name === "brain-output.json"
+              );
+              outputContent = outputFile?.content || outputFile?.source || null;
+            } else if (files && typeof files === "object") {
+              outputContent = files["src/brain-output.json"] || null;
+            }
+
+            if (outputContent) {
+              try {
+                let clean = outputContent.trim();
+                if (clean.startsWith("```")) clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+                const parsed = JSON.parse(clean);
+                if (parsed.response && parsed.response.length > 0) {
+                  response = parsed.response;
+                  console.log("[Brain Capture] ✅ Got response via source-code brain-output.json");
+                }
+              } catch {
+                if (outputContent.length > 20 && !outputContent.includes('"status":"idle"')) {
+                  response = outputContent.trim();
+                }
+              }
+            }
+
+            // Update snapshot
+            await serviceClient.from("project_source_snapshots").upsert({
+              project_id: brain_project_id,
+              snapshot_hash: currentHash,
+              last_checked: new Date().toISOString(),
+            }, { onConflict: "project_id" });
+          } else {
+            console.warn("[Brain Capture] source-code fetch failed:", srcRes.status);
+          }
+        } catch (e) {
+          console.warn("[Brain Capture] source-code fallback error:", e);
+        }
       }
 
       if (response) {
@@ -763,39 +794,6 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
           ai_response: response,
           status: "completed",
         }).eq("id", conversation_id);
-
-        // Update snapshot hash to current state
-        try {
-          const srcRes2 = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
-            headers: { Authorization: `Bearer ${captureToken}` },
-          });
-          if (srcRes2.ok) {
-            const newRawText = await srcRes2.text();
-            const newHash = await hashText(newRawText);
-            await serviceClient.from("project_source_snapshots").upsert({
-              project_id: brain_project_id,
-              snapshot_hash: newHash,
-              last_checked: new Date().toISOString(),
-            }, { onConflict: "project_id" });
-          }
-        } catch { /* non-critical */ }
-
-        // Reset brain-output.json for next use
-        try {
-          await fetch(`${LOVABLE_API}/projects/${brain_project_id}/edit-code`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${captureToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              changes: [{
-                path: "src/brain-output.json",
-                content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }),
-              }],
-            }),
-          });
-        } catch { /* non-critical */ }
 
         return new Response(JSON.stringify({
           success: true,

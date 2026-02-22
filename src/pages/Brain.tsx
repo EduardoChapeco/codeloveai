@@ -221,7 +221,7 @@ export default function BrainPage() {
         await new Promise(r => setTimeout(r, 4000));
         try {
           const { data: captureData, error: captureError } = await supabase.functions.invoke("loveai-brain", {
-            body: { action: "capture", conversation_id: conversationId, brain_project_id: brainProjectId },
+            body: { action: "capture", conversation_id: conversationId, brain_project_id: brainProjectId, brain_message_id: data.brain_message_id },
           });
           
           if (captureError) {
