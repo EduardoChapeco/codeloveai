@@ -93,20 +93,26 @@ export default function Dashboard() {
         const tokenList = data || [];
         setTokens(tokenList);
         setTokensLoaded(true);
-        // SSO Bridge: notify extension of active token
+        // SSO Bridge: notify extension with Supabase session JWT (NOT license token)
         const activeToken = tokenList.find((t: Token) => t.is_active);
         if (activeToken) {
           const email = user.email || "";
           const name = user.user_metadata?.name || email.split("@")[0] || "";
-          localStorage.setItem('clf_token', activeToken.token);
-          localStorage.setItem('clf_email', email);
-          localStorage.setItem('clf_name', name);
-          window.postMessage({
-            type: 'clf_sso_token',
-            token: activeToken.token,
-            email: email,
-            name: name,
-          }, window.location.origin);
+          // Store Supabase JWT for extension API calls (auth to edge functions)
+          supabase.auth.getSession().then(({ data: sessionData }) => {
+            const jwt = sessionData?.session?.access_token;
+            if (jwt) {
+              localStorage.setItem('clf_token', jwt);
+              localStorage.setItem('clf_email', email);
+              localStorage.setItem('clf_name', name);
+              window.postMessage({
+                type: 'clf_sso_token',
+                token: jwt,
+                email: email,
+                name: name,
+              }, window.location.origin);
+            }
+          });
         }
       });
 
@@ -165,10 +171,16 @@ export default function Dashboard() {
         if (!error && data?.token) {
           setTokens([{ id: "admin-auto", token: data.token, is_active: true }]);
           // SSO Bridge
-          localStorage.setItem('clf_token', data.token);
-          localStorage.setItem('clf_email', user.email || '');
-          localStorage.setItem('clf_name', user.user_metadata?.name || '');
-          window.postMessage({ type: 'clf_sso_token', token: data.token, email: user.email, name: user.user_metadata?.name || '' }, window.location.origin);
+          // Store Supabase JWT for extension (not license token)
+          supabase.auth.getSession().then(({ data: sessionData }) => {
+            const jwt = sessionData?.session?.access_token;
+            if (jwt) {
+              localStorage.setItem('clf_token', jwt);
+              localStorage.setItem('clf_email', user.email || '');
+              localStorage.setItem('clf_name', user.user_metadata?.name || '');
+              window.postMessage({ type: 'clf_sso_token', token: jwt, email: user.email, name: user.user_metadata?.name || '' }, window.location.origin);
+            }
+          });
           toast.success("Token admin de 1000 dias gerado automaticamente!");
         }
         localStorage.setItem(adminTokenKey, "true");
