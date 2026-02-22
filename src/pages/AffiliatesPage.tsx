@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
+import MeshBackground from "@/components/MeshBackground";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
@@ -68,18 +69,21 @@ export default function AffiliatesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
-        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
-        <div className="flex items-center gap-3">
-          {!authLoading && user ? (
-            <Link to="/dashboard" className="lv-btn-secondary h-9 px-4 text-xs">Dashboard</Link>
-          ) : (
-            <>
-              <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
-              <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
-            </>
-          )}
+    <div className="min-h-screen relative">
+      <MeshBackground />
+      <nav className="sticky top-0 z-20 px-6 py-3">
+        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+          <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
+          <div className="flex items-center gap-3">
+            {!authLoading && user ? (
+              <Link to="/dashboard" className="lv-btn-secondary h-9 px-4 text-xs">Dashboard</Link>
+            ) : (
+              <>
+                <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+                <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+              </>
+            )}
+          </div>
         </div>
       </nav>
 

@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Check, Zap, Clock, MessageSquare, Shield, Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
+import MeshBackground from "@/components/MeshBackground";
 
 interface WlPlan {
   id: string;
@@ -130,18 +131,21 @@ export default function WhiteLabelRefPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen relative">
+      <MeshBackground />
       {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-primary" />
-          <span className="text-base font-semibold tracking-tight text-foreground">
-            White Label — {brandName}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
-          <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+      <nav className="sticky top-0 z-20 px-6 py-3">
+        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            <span className="text-base font-semibold tracking-tight text-foreground">
+              White Label — {brandName}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+            <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+          </div>
         </div>
       </nav>
 

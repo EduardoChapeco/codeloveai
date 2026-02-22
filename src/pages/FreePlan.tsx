@@ -60,9 +60,11 @@ export default function FreePlan() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
-        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
+    <div className="min-h-screen relative">
+      <nav className="sticky top-0 z-20 px-6 py-3">
+        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+          <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
+        </div>
       </nav>
 
       <div className="max-w-md mx-auto px-6 py-20 text-center">

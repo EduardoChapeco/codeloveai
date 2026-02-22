@@ -663,7 +663,7 @@ export default function Dashboard() {
 
       {/* Chat panel */}
       {chatOpen && (
-        <div className="fixed bottom-24 right-6 z-30 w-[360px] max-h-[500px] bg-card border border-border/60 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed bottom-24 right-6 z-30 w-[360px] max-h-[500px] lv-card border-border/60 shadow-2xl flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-border/60">
             <p className="lv-body-strong text-xs">Suporte</p>
             <p className="lv-caption">Chat com o administrador</p>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useTenant } from "@/contexts/TenantContext";
+import MeshBackground from "@/components/MeshBackground";
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
@@ -32,8 +33,9 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center px-6 relative">
+      <MeshBackground />
+      <div className="w-full max-w-sm animate-fade-in">
         <Link to="/" className="block text-center mb-10">
           <span className="text-lg font-semibold tracking-tight text-foreground">{brandName}</span>
         </Link>
