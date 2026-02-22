@@ -184,8 +184,21 @@ export default function BrainPage() {
       const { data, error } = await supabase.functions.invoke("loveai-brain", {
         body: { action: "send", message: userMsg, brain_type: brainType },
       });
-      if (error) throw { message: (data as any)?.error || error.message };
-      if (data?.error) throw { message: data.error };
+      if (error) {
+        const errData = data as any;
+        if (errData?.code === "token_expired") {
+          setLovableConnected(false);
+          setBrainActive(false);
+        }
+        throw { message: errData?.error || error.message };
+      }
+      if (data?.error) {
+        if (data?.code === "token_expired") {
+          setLovableConnected(false);
+          setBrainActive(false);
+        }
+        throw { message: data.error };
+      }
 
       const conversationId = data.conversation_id;
       const brainProjectId = data.brain_project_id;

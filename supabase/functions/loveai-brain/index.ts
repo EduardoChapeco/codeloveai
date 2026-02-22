@@ -463,7 +463,20 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       if (!fixRes.ok) {
         const errText = await fixRes.text();
         console.error("Fix V2 failed:", errText);
-        return new Response(JSON.stringify({ error: "Falha ao enviar para o Brain" }), {
+        if (fixRes.status === 401 || fixRes.status === 403) {
+          await serviceClient
+            .from("lovable_accounts")
+            .update({ status: "expired" })
+            .eq("user_id", user.id);
+          return new Response(JSON.stringify({ 
+            error: "Token Lovable expirado. Reconecte sua conta em Configurações > Lovable.",
+            code: "token_expired" 
+          }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ error: "Falha ao enviar para o Brain. Tente novamente." }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
