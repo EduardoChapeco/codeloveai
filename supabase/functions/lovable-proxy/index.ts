@@ -147,6 +147,7 @@ Deno.serve(async (req) => {
     // ─── Handle token management actions ───
     if (action === "save-token") {
       const tokenValue = body.token;
+      const refreshTokenValue = body.refreshToken || null;
       if (!tokenValue || typeof tokenValue !== "string" || tokenValue.length < 10) {
         return new Response(JSON.stringify({ error: "Token inválido" }), {
           status: 400,
@@ -155,15 +156,13 @@ Deno.serve(async (req) => {
       }
 
       // Verify token against Lovable API
-      // Try /user/workspaces as a reliable verification endpoint
       let tokenValid = false;
       try {
         const verifyRes = await fetch(`${LOVABLE_API_BASE}/user/workspaces`, {
           headers: { Authorization: `Bearer ${tokenValue}` },
         });
-        tokenValid = verifyRes.ok || verifyRes.status === 403; // 403 = authenticated but no access
+        tokenValid = verifyRes.ok || verifyRes.status === 403;
         
-        // If /user/workspaces fails, try /permissions as fallback
         if (!tokenValid) {
           const permRes = await fetch(`${LOVABLE_API_BASE}/permissions`, {
             headers: { Authorization: `Bearer ${tokenValue}` },
@@ -172,8 +171,6 @@ Deno.serve(async (req) => {
         }
       } catch (fetchErr) {
         console.error("Token verification fetch error:", fetchErr);
-        // Network error — allow saving as "unverified" to not block users
-        // The token will be marked expired on first actual API call if invalid
         tokenValid = true;
         console.warn("Token saved without external verification due to network error");
       }
@@ -185,12 +182,27 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Calculate token expiration (Firebase ID tokens expire in 1 hour)
+      const tokenExpiresAt = new Date(Date.now() + 55 * 60 * 1000).toISOString(); // 55 min (safe margin)
+
+      const upsertData: Record<string, unknown> = {
+        user_id: userId,
+        token_encrypted: tokenValue,
+        status: "active",
+        last_verified_at: new Date().toISOString(),
+        token_expires_at: tokenExpiresAt,
+        refresh_failure_count: 0,
+        auto_refresh_enabled: true,
+      };
+
+      // Store refresh_token if provided
+      if (refreshTokenValue && typeof refreshTokenValue === "string" && refreshTokenValue.length > 10) {
+        upsertData.refresh_token_encrypted = refreshTokenValue;
+      }
+
       const { error: upsertError } = await serviceClient
         .from("lovable_accounts")
-        .upsert(
-          { user_id: userId, token_encrypted: tokenValue, status: "active", last_verified_at: new Date().toISOString() },
-          { onConflict: "user_id" }
-        );
+        .upsert(upsertData, { onConflict: "user_id" });
 
       if (upsertError) {
         console.error("Upsert error:", upsertError);
@@ -203,7 +215,7 @@ Deno.serve(async (req) => {
       const duration = Date.now() - startTime;
       await logApiCall(serviceClient, userId, "save-token", "POST", 200, duration);
 
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, hasRefreshToken: !!refreshTokenValue }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -263,14 +275,20 @@ Deno.serve(async (req) => {
     }
 
     // ─── Proxy to Lovable API ───
-    const lovableToken = await getLovableToken(serviceClient, userId);
-    if (!lovableToken) {
+    const { data: accountData } = await serviceClient
+      .from("lovable_accounts")
+      .select("token_encrypted, refresh_token_encrypted, status, auto_refresh_enabled")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!accountData || accountData.status !== "active") {
       return new Response(JSON.stringify({ error: "Token Lovable não configurado. Conecte sua conta primeiro." }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    let lovableToken = accountData.token_encrypted;
     const apiUrl = `${LOVABLE_API_BASE}${lovableRoute}`;
 
     const fetchOptions: RequestInit = {
@@ -285,11 +303,80 @@ Deno.serve(async (req) => {
       fetchOptions.body = JSON.stringify(lovableBody);
     }
 
-    const apiRes = await fetch(apiUrl, fetchOptions);
+    let apiRes = await fetch(apiUrl, fetchOptions);
     const duration = Date.now() - startTime;
 
-    // Handle 401 from Lovable — mark token as expired
+    // Handle 401 from Lovable — try auto-refresh before marking expired
     if (apiRes.status === 401) {
+      const firebaseApiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
+
+      if (
+        accountData.auto_refresh_enabled &&
+        accountData.refresh_token_encrypted &&
+        firebaseApiKey
+      ) {
+        // Attempt Firebase token refresh
+        try {
+          const refreshRes = await fetch(
+            `https://securetoken.googleapis.com/v1/token?key=${firebaseApiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(accountData.refresh_token_encrypted)}`,
+            }
+          );
+
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            if (refreshData.id_token) {
+              // Update DB with new tokens
+              const expiresIn = parseInt(refreshData.expires_in || "3600", 10);
+              await serviceClient
+                .from("lovable_accounts")
+                .update({
+                  token_encrypted: refreshData.id_token,
+                  refresh_token_encrypted: refreshData.refresh_token || accountData.refresh_token_encrypted,
+                  token_expires_at: new Date(Date.now() + (expiresIn - 300) * 1000).toISOString(),
+                  last_verified_at: new Date().toISOString(),
+                  status: "active",
+                  refresh_failure_count: 0,
+                })
+                .eq("user_id", userId);
+
+              // Retry the original API call with the new token
+              lovableToken = refreshData.id_token;
+              const retryOptions: RequestInit = {
+                method: lovableMethod,
+                headers: {
+                  Authorization: `Bearer ${lovableToken}`,
+                  "Content-Type": "application/json",
+                },
+              };
+              if (lovableBody && lovableMethod !== "GET") {
+                retryOptions.body = JSON.stringify(lovableBody);
+              }
+
+              apiRes = await fetch(apiUrl, retryOptions);
+              console.log(`[Proxy] Token auto-refreshed for user ${userId}, retry status: ${apiRes.status}`);
+
+              if (apiRes.status !== 401) {
+                // Refresh worked! Continue with the response below
+                await logApiCall(serviceClient, userId, lovableRoute, lovableMethod, apiRes.status, Date.now() - startTime);
+                const contentType = apiRes.headers.get("content-type") || "application/json";
+                const responseBody = await apiRes.text();
+                return new Response(responseBody, {
+                  status: apiRes.status,
+                  headers: { ...corsHeaders, "Content-Type": contentType },
+                });
+              }
+            }
+          }
+        } catch (refreshErr) {
+          console.error("[Proxy] Auto-refresh failed:", refreshErr);
+        }
+      }
+
+      // Refresh failed or not available — mark expired
       await markTokenExpired(serviceClient, userId);
       await logApiCall(serviceClient, userId, lovableRoute, lovableMethod, 401, duration);
       return new Response(JSON.stringify({ error: "Token Lovable expirado. Reconecte sua conta." }), {
