@@ -65,6 +65,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
 
+        // SSO bridge: sync token to extension via localStorage + postMessage
+        if (session?.access_token) {
+          try {
+            localStorage.setItem('clf_token', session.access_token);
+            localStorage.setItem('clf_email', session.user?.email || '');
+            localStorage.setItem('clf_name', session.user?.user_metadata?.name || '');
+            window.postMessage({
+              type: 'clf_sso_login',
+              token: session.access_token,
+              email: session.user?.email || '',
+              name: session.user?.user_metadata?.name || '',
+            }, window.location.origin);
+          } catch { /* silent */ }
+        }
+
         if (session?.user) {
           // Dispatch role check after callback to avoid deadlock
           setTimeout(() => checkRoles(session.user.id), 0);
@@ -85,6 +100,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mountedRef.current) return;
         setSession(session);
         setUser(session?.user ?? null);
+
+        // SSO bridge: set token on initial load too
+        if (session?.access_token) {
+          try {
+            localStorage.setItem('clf_token', session.access_token);
+            localStorage.setItem('clf_email', session.user?.email || '');
+            localStorage.setItem('clf_name', session.user?.user_metadata?.name || '');
+          } catch { /* silent */ }
+        }
 
         if (session?.user) {
           await checkRoles(session.user.id);

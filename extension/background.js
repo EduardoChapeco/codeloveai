@@ -1,8 +1,8 @@
 // CodeLove AI Extension — Background Service Worker
 // Handles message routing, token relay, and auto-save
 
-// ✅ CORRECT Supabase project: rvazulqdwutrhxqahocg (Waesy OS)
-const DEFAULT_PLATFORM_URL = "https://rvazulqdwutrhxqahocg.supabase.co/functions/v1";
+// ✅ CORRECT Supabase project: qlhhmmboxlufvdtpbrsm (CodeLove AI)
+const DEFAULT_PLATFORM_URL = "https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[CodeLove AI] Extension installed");
@@ -27,7 +27,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "GET_AUTH") {
-    chrome.storage.local.get(["clf_token", "clf_email", "lovable_api_token", "lovable_refresh_token"], (data) => {
+    chrome.storage.local.get(["clf_token", "clf_email", "lovable_api_token", "lovable_refresh_token", "lovable_token_history", "lovable_token_updated_at"], (data) => {
       sendResponse(data);
     });
     return true;
