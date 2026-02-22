@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
-import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, ChevronRight, Zap, Monitor, Key, ArrowRight, Building2, Puzzle, StickyNote } from "lucide-react";
+import { Copy, Download, LogOut, Shield, Users, MessageSquare, Send, CheckCircle, XCircle, Clock, X, ChevronRight, Zap, Monitor, Key, ArrowRight, Building2, Puzzle, StickyNote, Link2, CloudLightning } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -44,6 +44,7 @@ export default function Dashboard() {
   const [tokensLoaded, setTokensLoaded] = useState(false);
   const [extensionDetected, setExtensionDetected] = useState(false);
   const [notesCount, setNotesCount] = useState(0);
+  const [lovableStatus, setLovableStatus] = useState<"active" | "expired" | "none">("none");
   
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -112,6 +113,14 @@ export default function Dashboard() {
     supabase.from("extension_files").select("file_url, version, instructions")
       .eq("is_latest", true).maybeSingle()
       .then(({ data }) => setLatestExt(data));
+
+    // Lovable account status
+    supabase.from("lovable_accounts").select("status").eq("user_id", user.id).maybeSingle()
+      .then(({ data }) => {
+        if (data?.status === "active") setLovableStatus("active");
+        else if (data?.status === "expired" || data?.status === "error") setLovableStatus("expired");
+        else setLovableStatus("none");
+      });
 
     // Find admin user for chat
     supabase.from("user_roles").select("user_id").eq("role", "admin").limit(1)
@@ -439,9 +448,63 @@ export default function Dashboard() {
               <StickyNote className="h-3.5 w-3.5" /> {notesCount > 0 ? 'Ver notas' : 'Criar nota'}
             </Link>
           </div>
+
+          {/* Lovable Cloud Status Card */}
+          <div className="lv-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div
+                className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{
+                  background: lovableStatus === "active" ? "rgba(52,199,89,0.12)" :
+                    lovableStatus === "expired" ? "rgba(255,59,48,0.10)" : "rgba(0,113,227,0.10)",
+                }}
+              >
+                <Link2
+                  className="h-5 w-5"
+                  style={{
+                    color: lovableStatus === "active" ? "#34c759" :
+                      lovableStatus === "expired" ? "#ff3b30" : "#0071e3",
+                  }}
+                />
+              </div>
+              <div>
+                <p className="lv-body-strong">Lovable</p>
+                <p className="lv-caption">
+                  {lovableStatus === "active" && "Token ativo"}
+                  {lovableStatus === "expired" && "Token expirado"}
+                  {lovableStatus === "none" && "Não conectado"}
+                </p>
+              </div>
+            </div>
+            {lovableStatus === "active" ? (
+              <span className="lv-badge lv-badge-success">✓ Conectado</span>
+            ) : lovableStatus === "expired" ? (
+              <Link to="/lovable/connect" className="lv-btn-secondary h-9 px-3 text-xs inline-flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5" /> Reconectar
+              </Link>
+            ) : (
+              <Link to="/lovable/connect" className="lv-btn-secondary h-9 px-3 text-xs inline-flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5" /> Conectar
+              </Link>
+            )}
+          </div>
         </div>
 
-        {/* Admin Tenant Card */}
+        {/* Admin shortcuts */}
+        {isAdmin && (
+          <Link to="/admin/lovable-cloud" className="lv-card flex items-center justify-between group hover:border-primary/30 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(94,92,230,0.12)" }}>
+                <CloudLightning className="h-5 w-5" style={{ color: "#5e5ce6" }} />
+              </div>
+              <div>
+                <p className="lv-body-strong">Lovable Cloud</p>
+                <p className="lv-caption">Gerencie contas, tokens e logs do proxy</p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+          </Link>
+        )}
         {(isTenantAdmin || isAdmin) && (
           <Link to="/admin/tenant" className="lv-card flex items-center justify-between group hover:border-primary/30 transition-colors">
             <div className="flex items-center gap-3">
