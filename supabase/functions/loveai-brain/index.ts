@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const LOVABLE_API = "https://api.lovable.dev";
@@ -61,16 +61,60 @@ Deno.serve(async (req) => {
       .eq("user_id", user.id)
       .maybeSingle();
 
+    const body = await req.json();
+    const action = body.action;
+
+    // For status and history actions, don't require Lovable connection
+    if (action === "status") {
+      if (!account || account.status !== "active") {
+        return new Response(JSON.stringify({
+          active: false,
+          connected: false,
+          reason: !account ? "no_account" : "token_expired",
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: brain } = await serviceClient
+        .from("user_brain_projects")
+        .select("lovable_project_id, status, last_message_at, created_at")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      return new Response(JSON.stringify({
+        active: !!brain,
+        connected: true,
+        brain: brain || null,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "history") {
+      const limit = Math.min(body.limit || 50, 100);
+      const { data } = await supabase
+        .from("loveai_conversations")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      return new Response(JSON.stringify({ conversations: data || [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // All other actions require active Lovable connection
     if (!account || account.status !== "active") {
-      return new Response(JSON.stringify({ error: "Lovable não conectado. Conecte primeiro." }), {
+      return new Response(JSON.stringify({ error: "Lovable não conectado. Conecte primeiro.", code: "not_connected" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const lovableToken = account.token_encrypted;
-    const body = await req.json();
-    const action = body.action;
 
     // ─── ACTION: setup — Create brain project ───
     if (action === "setup") {
@@ -99,7 +143,6 @@ Deno.serve(async (req) => {
       if (!wsRes.ok) {
         const wsStatus = wsRes.status;
         console.error("Workspace fetch failed:", wsStatus, await wsRes.text().catch(() => ""));
-        // If 401, mark token as expired
         if (wsStatus === 401) {
           await serviceClient
             .from("lovable_accounts")
@@ -293,6 +336,11 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
 O usuário quer extrair dados de: "${message}"
 Retorne um script completo para captura dos dados. Inclua tratamento de erros e formato JSON.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
+
+        migration: `SISTEMA CODELOVE BRAIN — MODO MIGRATION:
+O usuário quer migrar: "${message}"
+Gere o script SQL completo de migração incluindo: schemas, tabelas, RLS policies, triggers, functions e seed data.
+Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${Date.now()}, "status": "done"}`,
       };
 
       const prompt = systemPrompts[brain_type] || systemPrompts.general;
@@ -409,7 +457,6 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
 
           if (srcRes.ok) {
             const srcData = await srcRes.json();
-            // Look for brain-output.json in the source files
             const files = srcData?.files || srcData;
             let outputContent: string | null = null;
 
@@ -440,7 +487,6 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
           console.warn("Poll error:", pollErr);
         }
 
-        // Wait 2 seconds before next poll
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
@@ -493,38 +539,6 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       }
     }
 
-    // ─── ACTION: history — Get conversation history ───
-    if (action === "history") {
-      const limit = Math.min(body.limit || 50, 100);
-      const { data } = await supabase
-        .from("loveai_conversations")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(limit);
-
-      return new Response(JSON.stringify({ conversations: data || [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // ─── ACTION: status — Check brain status ───
-    if (action === "status") {
-      const { data: brain } = await serviceClient
-        .from("user_brain_projects")
-        .select("lovable_project_id, status, last_message_at, created_at")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .maybeSingle();
-
-      return new Response(JSON.stringify({
-        active: !!brain,
-        brain: brain || null,
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     return new Response(JSON.stringify({ error: "Ação não reconhecida" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -537,4 +551,3 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
     });
   }
 });
-

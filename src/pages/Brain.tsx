@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
@@ -7,11 +7,11 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search,
-  Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, ChevronDown,
+  Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
+  Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon,
 } from "lucide-react";
 
-type BrainType = "general" | "design" | "code" | "scraper";
+type BrainType = "general" | "design" | "code" | "scraper" | "migration";
 type ConvoStatus = "pending" | "processing" | "completed" | "timeout" | "failed";
 
 interface Conversation {
@@ -29,6 +29,7 @@ const brainTypes: { id: BrainType; label: string; icon: typeof BrainIcon; desc: 
   { id: "design", label: "Design", icon: Palette, desc: "Prompts de design detalhados" },
   { id: "code", label: "Code", icon: Code2, desc: "Geração de código" },
   { id: "scraper", label: "Scraper", icon: Search, desc: "Scripts de scraping" },
+  { id: "migration", label: "Migration", icon: Database, desc: "Scripts de migração SQL" },
 ];
 
 export default function BrainPage() {
@@ -36,6 +37,7 @@ export default function BrainPage() {
   const navigate = useNavigate();
 
   const [brainActive, setBrainActive] = useState<boolean | null>(null);
+  const [lovableConnected, setLovableConnected] = useState<boolean | null>(null);
   const [settingUp, setSettingUp] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [message, setMessage] = useState("");
@@ -48,14 +50,12 @@ export default function BrainPage() {
     if (!authLoading && !user) navigate("/login?returnTo=/brain");
   }, [user, authLoading, navigate]);
 
-  // Check brain status on mount
   useEffect(() => {
     if (!user) return;
     checkBrainStatus();
     loadHistory();
   }, [user]);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [conversations]);
@@ -67,9 +67,17 @@ export default function BrainPage() {
       });
       if (!error && data) {
         setBrainActive(data.active);
+        setLovableConnected(data.connected !== false);
       } else {
-        console.warn("Brain status check failed:", error);
-        setBrainActive(false);
+        // Check if it's a connection error
+        const errorMsg = (data as any)?.error || "";
+        if (errorMsg.includes("não conectado") || errorMsg.includes("not_connected")) {
+          setLovableConnected(false);
+          setBrainActive(false);
+        } else {
+          setBrainActive(false);
+          setLovableConnected(null);
+        }
       }
     } catch (err) {
       console.warn("Brain status error:", err);
@@ -78,11 +86,15 @@ export default function BrainPage() {
   };
 
   const loadHistory = async () => {
-    const { data, error } = await supabase.functions.invoke("loveai-brain", {
-      body: { action: "history", limit: 50 },
-    });
-    if (!error && data?.conversations) {
-      setConversations(data.conversations.reverse());
+    try {
+      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+        body: { action: "history", limit: 50 },
+      });
+      if (!error && data?.conversations) {
+        setConversations(data.conversations.reverse());
+      }
+    } catch {
+      // Silent — history load is not critical
     }
   };
 
@@ -114,7 +126,6 @@ export default function BrainPage() {
     setMessage("");
     setSending(true);
 
-    // Optimistic add
     const tempId = crypto.randomUUID();
     const tempConvo: Conversation = {
       id: tempId,
@@ -137,7 +148,6 @@ export default function BrainPage() {
       const conversationId = data.conversation_id;
       const brainProjectId = data.brain_project_id;
 
-      // Update temp with real ID
       setConversations(prev =>
         prev.map(c => c.id === tempId ? { ...c, id: conversationId } : c)
       );
@@ -145,7 +155,6 @@ export default function BrainPage() {
       setSending(false);
       setCapturing(true);
 
-      // Now capture the response (polls for up to 60s)
       const { data: captureData, error: captureErr } = await supabase.functions.invoke("loveai-brain", {
         body: { action: "capture", conversation_id: conversationId, brain_project_id: brainProjectId },
       });
@@ -189,6 +198,33 @@ export default function BrainPage() {
 
   if (authLoading || !user) return <div className="min-h-screen bg-background" />;
 
+  // Lovable not connected — show connect prompt
+  if (lovableConnected === false) {
+    return (
+      <AppLayout>
+        <div className="max-w-lg mx-auto px-6 py-20 text-center">
+          <div className="h-20 w-20 rounded-3xl bg-destructive/10 flex items-center justify-center mx-auto mb-6">
+            <LinkIcon className="h-10 w-10 text-destructive" />
+          </div>
+          <h1 className="text-2xl font-bold mb-3">Lovable não conectado</h1>
+          <p className="text-muted-foreground mb-2">
+            Para usar o LoveAI Brain, você precisa conectar sua conta Lovable primeiro.
+          </p>
+          <p className="text-sm text-muted-foreground/70 mb-8">
+            O Brain utiliza o Lovable como motor de processamento. Conecte seu token nas configurações.
+          </p>
+          <Link
+            to="/lovable/connect"
+            className="lv-btn-primary h-12 px-8 text-sm inline-flex items-center gap-2"
+          >
+            <LinkIcon className="h-4 w-4" />
+            Conectar Lovable
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
+
   // Brain not active — setup screen
   if (brainActive === false) {
     return (
@@ -197,12 +233,12 @@ export default function BrainPage() {
           <div className="h-20 w-20 rounded-3xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
             <BrainIcon className="h-10 w-10 text-primary" />
           </div>
-          <h1 className="lv-heading-lg mb-3">LoveAI Brain</h1>
-          <p className="lv-body mb-2">
+          <h1 className="text-2xl font-bold mb-3">LoveAI Brain</h1>
+          <p className="text-muted-foreground mb-2">
             O Brain é sua IA pessoal alimentada pelo Lovable. Ele cria um projeto privado
             na sua conta que funciona como "cérebro" para processar suas perguntas.
           </p>
-          <p className="lv-caption mb-8">
+          <p className="text-sm text-muted-foreground/70 mb-8">
             Funciona via Fix V2 — sem gastar créditos do Lovable.
           </p>
           <button
@@ -269,8 +305,8 @@ export default function BrainPage() {
           {conversations.length === 0 && (
             <div className="text-center py-20">
               <BrainIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/20" />
-              <p className="lv-body-strong mb-1">Inicie uma conversa</p>
-              <p className="lv-caption">
+              <p className="font-medium mb-1">Inicie uma conversa</p>
+              <p className="text-sm text-muted-foreground">
                 Envie uma mensagem e o Brain processará via Lovable Fix V2.
               </p>
             </div>
@@ -350,7 +386,7 @@ export default function BrainPage() {
                 placeholder={`Pergunte algo ao Brain (${brainTypes.find(b => b.id === brainType)?.label})...`}
                 rows={1}
                 disabled={sending || capturing}
-                className="lv-input w-full min-h-[44px] max-h-[160px] py-3 px-4 pr-12 resize-none text-sm"
+                className="w-full min-h-[44px] max-h-[160px] py-3 px-4 pr-12 resize-none text-sm rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
                 style={{ height: "auto", overflow: "hidden" }}
                 onInput={(e) => {
                   const t = e.currentTarget;
@@ -362,7 +398,7 @@ export default function BrainPage() {
             <button
               onClick={sendMessage}
               disabled={!message.trim() || sending || capturing}
-              className="lv-btn-primary h-11 w-11 flex items-center justify-center shrink-0 rounded-xl"
+              className="h-11 w-11 flex items-center justify-center shrink-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {sending || capturing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
