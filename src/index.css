@@ -461,6 +461,10 @@
     border: 0.5px solid rgba(255, 255, 255, 0.82);
     box-shadow: var(--clf-shadow-glass);
   }
+  .dark .lv-glass {
+      background: rgba(22, 22, 24, 0.85);
+      border: 0.5px solid rgba(255, 255, 255, 0.05);
+  }
 
   .lv-card {
     @apply rounded-[18px] p-5 transition-all duration-300 ease-out relative overflow-hidden;
@@ -488,6 +492,9 @@
   .dark .lv-card-sm {
       background: rgba(22, 22, 24, 0.78);
       border: 0.5px solid rgba(255, 255, 255, 0.04);
+      box-shadow:
+        0 1px 4px rgba(0, 0, 0, 0.3),
+        0 0.5px 0 rgba(255, 255, 255, 0.03) inset;
   }
 
   .lv-card-interactive {
@@ -650,6 +657,9 @@
     @apply text-foreground;
     background: rgba(255, 255, 255, 0.55);
   }
+  .dark .lv-btn-icon:hover {
+      background: rgba(30, 30, 34, 0.6);
+  }
 
   .lv-btn-lg {
     @apply h-12 px-6 rounded-[14px] text-[15px] font-semibold;
@@ -705,6 +715,15 @@
     background: var(--clf-bg-solid);
     border-color: rgba(0, 113, 227, 0.45);
     box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.08);
+  }
+  .dark .lv-textarea {
+      background: rgba(18, 18, 20, 0.85);
+      border: 1px solid var(--clf-border-dark);
+  }
+  .dark .lv-textarea:focus {
+      background: rgba(26, 26, 30, 0.95);
+      border-color: rgba(10, 132, 255, 0.55);
+      box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.1);
   }
 
   /* ─────────────────────────────────
@@ -772,6 +791,11 @@
       0 1px 4px rgba(0, 0, 0, 0.05),
       0 0.5px 0 rgba(255, 255, 255, 0.9) inset;
     transition: all 0.18s;
+  }
+  .dark .lv-pill {
+      box-shadow:
+        0 1px 4px rgba(0, 0, 0, 0.3),
+        0 0.5px 0 rgba(255, 255, 255, 0.04) inset;
   }
   .lv-pill:hover {
     transform: translateY(-1px);
