@@ -59,9 +59,11 @@ export default function LovableConnect() {
     }
   }, [saving, connectionStatus, saveToken]);
 
-  // Listen for token from extension via postMessage
-  // NOTE: The extension content.js runs on lovable.dev (different origin) so we CANNOT
-  // block by origin — we need to accept messages from any trusted source.
+  // Listen for token from extension via postMessage.
+  // Two event types supported:
+  //   1. clf_lovable_token  — legacy path (clf_request_lovable_token response)
+  //   2. clf_token_bridge   — native path (extension popup "Integrar" button sends this)
+  // NOTE: extension runs on lovable.dev (cross-origin) — we CANNOT filter by origin strictly.
   useEffect(() => {
     const ALLOWED_ORIGINS = [
       window.location.origin,
@@ -69,12 +71,27 @@ export default function LovableConnect() {
       "https://www.lovable.dev",
     ];
     const handler = (event: MessageEvent) => {
-      // Accept from same origin OR known Lovable origins
-      if (event.origin && !ALLOWED_ORIGINS.includes(event.origin) && !event.origin.endsWith(".lovable.dev")) {
+      // Accept from same origin OR known Lovable origins OR extension (null/empty origin)
+      if (
+        event.origin &&
+        !ALLOWED_ORIGINS.includes(event.origin) &&
+        !event.origin.endsWith(".lovable.dev")
+      ) {
         return;
       }
+
+      // Legacy path: clf_lovable_token { token: string }
       if (event.data?.type === "clf_lovable_token" && event.data.token) {
+        console.log("[CodeLove] clf_lovable_token received");
         handleAutoToken(event.data.token);
+        return;
+      }
+
+      // Native bridge path: clf_token_bridge { idToken, refreshToken, uid, email }
+      // This is emitted when the extension popup "Integrar" button is clicked
+      if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
+        console.log("[CodeLove] clf_token_bridge received — idToken present");
+        handleAutoToken(event.data.idToken);
       }
     };
     window.addEventListener("message", handler);

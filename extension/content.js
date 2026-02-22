@@ -32,7 +32,7 @@
             capturedLovableToken = token;
             // Save to chrome.storage so background.js can relay it
             chrome.storage.local.set({ lovable_api_token: token });
-            notifyPlatformToken(token);
+            notifyPlatformToken(token, null);
           }
         }
       }
@@ -59,18 +59,24 @@
         if (token && token.length > 20 && token !== capturedLovableToken) {
           capturedLovableToken = token;
           chrome.storage.local.set({ lovable_api_token: token });
-          notifyPlatformToken(token);
+          notifyPlatformToken(token, null);
         }
       }
     }
     return origXHRSetHeader.call(this, name, value);
   };
 
-  function notifyPlatformToken(token) {
+  /**
+   * Notify background and platform of a captured token.
+   * @param {string} token - The Firebase ID token (Bearer)
+   * @param {string|null} refreshToken - Firebase refresh token (may be null)
+   */
+  function notifyPlatformToken(token, refreshToken) {
     // Send to background script — it will auto-save to platform via lovable-proxy
     chrome.runtime.sendMessage({
       type: "LOVABLE_TOKEN_CAPTURED",
       token,
+      refreshToken: refreshToken || null,
     });
 
     // Also try auto-save if user has clf_token in storage (logged in to platform)
@@ -79,6 +85,7 @@
         chrome.runtime.sendMessage({
           type: "AUTO_SAVE_LOVABLE_TOKEN",
           lovableToken: token,
+          refreshToken: refreshToken || null,
           supabaseJwt: data.clf_token,
         });
       }
@@ -86,7 +93,6 @@
   }
 
   // ─── SSO Bridge: capture CodeLove platform token from localStorage ───
-  // This runs on lovable.dev pages; the platform token may have been injected via postMessage
   function captureCodeLoveToken() {
     try {
       const token = localStorage.getItem("clf_token") ||
@@ -100,7 +106,7 @@
     } catch(e) { /* silent */ }
   }
 
-  // ─── Listen for messages from the page (including platform pages) ───
+  // ─── Listen for messages from the page ───
   window.addEventListener("message", (event) => {
     // SSO login from platform
     if (event.data?.type === "clf_sso_login" && event.data.token) {
@@ -116,20 +122,41 @@
       chrome.storage.local.remove(["clf_token", "clf_email", "clf_name"]);
     }
 
-    // Platform requesting current Lovable token (same-origin only for security)
+    // ── NEW: Handle clf_token_bridge (fired by extension popup "Integrar" button) ──
+    // This is the native format from the extension popup/options page when user clicks "Integrar"
+    if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
+      console.log("[CodeLove AI] clf_token_bridge received — saving idToken + refreshToken");
+      const { idToken, refreshToken } = event.data;
+      chrome.storage.local.set({
+        lovable_api_token: idToken,
+        lovable_refresh_token: refreshToken || null,
+      });
+      notifyPlatformToken(idToken, refreshToken || null);
+    }
+
+    // ── NEW: Also handle clf_token_bridge dispatched as postMessage from same-window ──
+    // Relay clf_lovable_token back to the page so LovableConnect.tsx receives it
     if (event.data?.type === "clf_request_lovable_token") {
-      chrome.storage.local.get("lovable_api_token", (data) => {
+      chrome.storage.local.get(["lovable_api_token", "lovable_refresh_token"], (data) => {
         if (data.lovable_api_token) {
-          // Respond to the page that sent the request
-          // Use "*" because the codeloveai platform and lovable.dev have different origins
-          const target = event.source || window;
+          // Send clf_lovable_token (legacy path) AND clf_token_bridge (new path)
+          const target = /** @type {Window} */ (event.source || window);
+          const targetOrigin = event.origin || "*";
           try {
-            (target as Window).postMessage({
+            target.postMessage({
               type: "clf_lovable_token",
               token: data.lovable_api_token,
-            }, event.origin || "*");
+            }, targetOrigin);
+
+            // Also send as clf_token_bridge so the new handler on LovableConnect picks it up
+            target.postMessage({
+              type: "clf_token_bridge",
+              idToken: data.lovable_api_token,
+              refreshToken: data.lovable_refresh_token || null,
+              source: "extension_storage",
+              version: "0.0.1-beta",
+            }, targetOrigin);
           } catch(e) {
-            // Fallback: post to current window if cross-origin fails
             window.postMessage({
               type: "clf_lovable_token",
               token: data.lovable_api_token,
@@ -137,9 +164,9 @@
           }
         } else {
           // No token yet — tell the platform
-          const target = event.source || window;
+          const target = /** @type {Window} */ (event.source || window);
           try {
-            (target as Window).postMessage({ type: "clf_lovable_token_missing" }, event.origin || "*");
+            target.postMessage({ type: "clf_lovable_token_missing" }, event.origin || "*");
           } catch(e) { /* silent */ }
         }
       });
@@ -147,12 +174,25 @@
 
     // Platform ping to detect extension
     if (event.data?.type === "clf_ping") {
-      const target = event.source || window;
+      const target = /** @type {Window} */ (event.source || window);
       try {
-        (target as Window).postMessage({ type: "clf_pong" }, event.origin || "*");
+        target.postMessage({ type: "clf_pong" }, event.origin || "*");
       } catch(e) {
         window.postMessage({ type: "clf_pong" }, window.location.origin);
       }
+    }
+  });
+
+  // ─── Also listen for clf_token_bridge as a CustomEvent (dispatched on document) ───
+  document.addEventListener("clf_token_bridge", (event) => {
+    const detail = /** @type {CustomEvent} */ (event).detail;
+    if (detail?.idToken) {
+      console.log("[CodeLove AI] clf_token_bridge CustomEvent received");
+      chrome.storage.local.set({
+        lovable_api_token: detail.idToken,
+        lovable_refresh_token: detail.refreshToken || null,
+      });
+      notifyPlatformToken(detail.idToken, detail.refreshToken || null);
     }
   });
 
@@ -207,27 +247,32 @@
     document.body.appendChild(panel);
 
     // Tab switching
-    panel.querySelectorAll(".codelove-tab").forEach((tab) => {
-      tab.addEventListener("click", () => {
-        panel.querySelectorAll(".codelove-tab").forEach((t) => t.classList.remove("active"));
-        tab.classList.add("active");
-        panel.querySelectorAll(".codelove-section").forEach((s) => ((s as HTMLElement).style.display = "none"));
-        (panel.querySelector(`[data-section="${(tab as HTMLElement).dataset.tab}"]`) as HTMLElement).style.display = "block";
-      });
-    });
+        panel.querySelectorAll(".codelove-tab").forEach((tab) => {
+          tab.addEventListener("click", () => {
+            panel.querySelectorAll(".codelove-tab").forEach((t) => t.classList.remove("active"));
+            tab.classList.add("active");
+            panel.querySelectorAll(".codelove-section").forEach((s) => { s.style.display = "none"; });
+            const section = panel.querySelector(`[data-section="${tab.dataset.tab}"]`);
+            if (section) section.style.display = "block";
+          });
+        });
 
     document.getElementById("codelove-close")?.addEventListener("click", togglePanel);
 
     document.getElementById("codelove-save-settings")?.addEventListener("click", () => {
-      const url = (document.getElementById("codelove-platform-url") as HTMLInputElement)?.value;
-      const mode = (document.getElementById("codelove-intercept-mode") as HTMLSelectElement)?.value;
+      const urlEl = /** @type {HTMLInputElement} */ (document.getElementById("codelove-platform-url"));
+      const modeEl = /** @type {HTMLSelectElement} */ (document.getElementById("codelove-intercept-mode"));
+      const url = urlEl?.value;
+      const mode = modeEl?.value;
       chrome.storage.local.set({ platformUrl: url, interceptMode: mode });
       alert("Configurações salvas!");
     });
 
     chrome.storage.local.get(["platformUrl", "interceptMode"], (data) => {
-      if (data.platformUrl) (document.getElementById("codelove-platform-url") as HTMLInputElement).value = data.platformUrl;
-      if (data.interceptMode) (document.getElementById("codelove-intercept-mode") as HTMLSelectElement).value = data.interceptMode;
+      const urlEl = /** @type {HTMLInputElement} */ (document.getElementById("codelove-platform-url"));
+      const modeEl = /** @type {HTMLSelectElement} */ (document.getElementById("codelove-intercept-mode"));
+      if (data.platformUrl && urlEl) urlEl.value = data.platformUrl;
+      if (data.interceptMode && modeEl) modeEl.value = data.interceptMode;
     });
 
     updateTokenStatusUI();
@@ -238,12 +283,12 @@
     const el = document.getElementById("codelove-token-status");
     const elPlatform = document.getElementById("codelove-platform-status");
     if (!el) return;
-    chrome.storage.local.get(["lovable_api_token", "clf_token"], (data) => {
+    chrome.storage.local.get(["lovable_api_token", "lovable_refresh_token", "clf_token"], (data) => {
       if (data.lovable_api_token) {
         el.style.background = "#0a2a0a";
         el.style.border = "1px solid #1a4a1a";
         el.style.color = "#4ade80";
-        el.textContent = "✅ Token Lovable capturado automaticamente";
+        el.textContent = `✅ Token Lovable capturado${data.lovable_refresh_token ? " (com refresh)" : ""}`;
       } else {
         el.style.background = "#2a1a0a";
         el.style.border = "1px solid #4a3a1a";
@@ -268,7 +313,7 @@
 
   // Listen for storage changes to update UI
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes.lovable_api_token || changes.clf_token) {
+    if (changes.lovable_api_token || changes.clf_token || changes.lovable_refresh_token) {
       updateTokenStatusUI();
     }
   });

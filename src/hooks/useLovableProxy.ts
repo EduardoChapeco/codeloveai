@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 interface ProxyOptions {
   route: string;
   method?: string;
-  payload?: any;
+  payload?: unknown;
   action?: string;
 }
 
@@ -17,7 +17,7 @@ interface ProxyError {
 export function useLovableProxy() {
   const [isTokenExpired, setIsTokenExpired] = useState(false);
 
-  const invoke = useCallback(async <T = any>(options: ProxyOptions): Promise<T> => {
+  const invoke = useCallback(async <T = unknown>(options: ProxyOptions): Promise<T> => {
     const body: Record<string, unknown> = {
       route: options.route,
       method: options.method || "GET",
@@ -33,7 +33,7 @@ export function useLovableProxy() {
     // parsed response body in `data` and sets a generic `error.message`.
     // We read the real message from `data.error` (set by lovable-proxy).
     if (error) {
-      const realMessage = data?.error || error.message || "Erro na comunicação com o proxy";
+      const realMessage = (data as { error?: string })?.error || error.message || "Erro na comunicação com o proxy";
       const isExpired = realMessage.includes("expirado") || realMessage.includes("expired");
       if (isExpired) setIsTokenExpired(true);
       const proxyError: ProxyError = {
@@ -44,11 +44,12 @@ export function useLovableProxy() {
     }
 
     // Check for error in response body (Edge Function returned 200 but with error field)
-    if (data?.error) {
-      const isExpired = data.error.includes("expirado") || data.error.includes("expired");
+    if ((data as { error?: string })?.error) {
+      const msg = (data as { error: string }).error;
+      const isExpired = msg.includes("expirado") || msg.includes("expired");
       if (isExpired) setIsTokenExpired(true);
       const proxyError: ProxyError = {
-        message: data.error,
+        message: msg,
         isTokenExpired: isExpired,
       };
       throw proxyError;
@@ -62,7 +63,7 @@ export function useLovableProxy() {
       body: { action: "save-token", token },
     });
     if (error) throw { message: error.message || "Erro ao salvar token" };
-    if (data?.error) throw { message: data.error };
+    if ((data as { error?: string })?.error) throw { message: (data as { error: string }).error };
     setIsTokenExpired(false);
     return data;
   }, []);
@@ -72,7 +73,18 @@ export function useLovableProxy() {
       body: { action: "delete-token" },
     });
     if (error) throw { message: error.message || "Erro ao desconectar" };
-    if (data?.error) throw { message: data.error };
+    if ((data as { error?: string })?.error) throw { message: (data as { error: string }).error };
+    return data;
+  }, []);
+
+  /** Trigger a server-side Firebase token refresh using the stored refreshToken */
+  const refreshToken = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("lovable-proxy", {
+      body: { action: "refresh-token" },
+    });
+    if (error) throw { message: error.message || "Erro ao renovar token" };
+    if ((data as { error?: string })?.error) throw { message: (data as { error: string }).error };
+    setIsTokenExpired(false);
     return data;
   }, []);
 
@@ -87,5 +99,5 @@ export function useLovableProxy() {
     return "expired";
   }, []);
 
-  return { invoke, saveToken, deleteToken, checkConnection, isTokenExpired };
+  return { invoke, saveToken, deleteToken, refreshToken, checkConnection, isTokenExpired };
 }

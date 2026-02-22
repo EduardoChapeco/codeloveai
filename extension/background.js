@@ -27,7 +27,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "GET_AUTH") {
-    chrome.storage.local.get(["clf_token", "clf_email", "lovable_api_token"], (data) => {
+    chrome.storage.local.get(["clf_token", "clf_email", "lovable_api_token", "lovable_refresh_token"], (data) => {
       sendResponse(data);
     });
     return true;
@@ -35,10 +35,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "LOVABLE_TOKEN_CAPTURED") {
     console.log("[CodeLove AI] Lovable API token captured automatically");
+    // Save refresh token if provided
+    if (message.refreshToken) {
+      chrome.storage.local.set({ lovable_refresh_token: message.refreshToken });
+    }
     // Auto-save if user is logged into platform
     chrome.storage.local.get("clf_token", (data) => {
       if (data.clf_token && message.token) {
-        autoSaveLovableToken(message.token, data.clf_token).then((res) => {
+        autoSaveLovableToken(message.token, message.refreshToken || null, data.clf_token).then((res) => {
           if (res?.success || res?.ok) {
             console.log("[CodeLove AI] Token auto-saved to platform");
           }
@@ -50,7 +54,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "AUTO_SAVE_LOVABLE_TOKEN") {
-    autoSaveLovableToken(message.lovableToken, message.supabaseJwt)
+    autoSaveLovableToken(message.lovableToken, message.refreshToken || null, message.supabaseJwt)
       .then(sendResponse)
       .catch((err) => sendResponse({ error: err.message }));
     return true;
@@ -100,7 +104,7 @@ async function handleProxyRequest({ route, method = "GET", body, supabaseJwt }) 
   return res.json();
 }
 
-async function autoSaveLovableToken(lovableToken, supabaseJwt) {
+async function autoSaveLovableToken(lovableToken, refreshToken, supabaseJwt) {
   const baseUrl = await getPlatformUrl();
 
   try {
@@ -110,16 +114,22 @@ async function autoSaveLovableToken(lovableToken, supabaseJwt) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${supabaseJwt}`,
       },
-      body: JSON.stringify({ action: "save-token", token: lovableToken }),
+      body: JSON.stringify({
+        action: "save-token",
+        token: lovableToken,
+        refreshToken: refreshToken || null,
+      }),
     });
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
+      console.error("[CodeLove AI] Token save failed:", data.error || res.status);
       return { error: data.error || `Status ${res.status}` };
     }
 
     return await res.json();
   } catch (e) {
+    console.error("[CodeLove AI] Token save error:", e.message);
     return { error: e.message };
   }
 }
