@@ -13,6 +13,31 @@
   // ─── Automatic Lovable Token Capture via XHR/Fetch interception ───
   let capturedLovableToken = null;
 
+  /**
+   * Save a new token as the current valid token.
+   * Move any previous token to the history array so it doesn't
+   * interfere with the active token used by the extension.
+   */
+  function setCurrentLovableToken(token) {
+    chrome.storage.local.get(["lovable_api_token", "lovable_token_history"], (data) => {
+      const history = data.lovable_token_history || [];
+      // Archive old token if different
+      if (data.lovable_api_token && data.lovable_api_token !== token) {
+        history.unshift({
+          token: data.lovable_api_token,
+          archivedAt: new Date().toISOString(),
+        });
+        // Keep only last 20 entries
+        if (history.length > 20) history.length = 20;
+      }
+      chrome.storage.local.set({
+        lovable_api_token: token,
+        lovable_token_history: history,
+        lovable_token_updated_at: new Date().toISOString(),
+      });
+    });
+  }
+
   // Intercept fetch to capture Bearer tokens to api.lovable.dev
   const origFetch = window.fetch;
   window.fetch = function (...args) {
@@ -30,8 +55,7 @@
           const token = authHeader.replace("Bearer ", "");
           if (token && token.length > 20 && token !== capturedLovableToken) {
             capturedLovableToken = token;
-            // Save to chrome.storage so background.js can relay it
-            chrome.storage.local.set({ lovable_api_token: token });
+            setCurrentLovableToken(token);
             notifyPlatformToken(token, null);
           }
         }
@@ -58,7 +82,7 @@
         const token = value.replace("Bearer ", "");
         if (token && token.length > 20 && token !== capturedLovableToken) {
           capturedLovableToken = token;
-          chrome.storage.local.set({ lovable_api_token: token });
+          setCurrentLovableToken(token);
           notifyPlatformToken(token, null);
         }
       }
@@ -122,15 +146,14 @@
       chrome.storage.local.remove(["clf_token", "clf_email", "clf_name"]);
     }
 
-    // ── NEW: Handle clf_token_bridge (fired by extension popup "Integrar" button) ──
-    // This is the native format from the extension popup/options page when user clicks "Integrar"
+    // ── Handle clf_token_bridge (fired by extension popup "Integrar" button) ──
     if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
       console.log("[CodeLove AI] clf_token_bridge received — saving idToken + refreshToken");
       const { idToken, refreshToken } = event.data;
-      chrome.storage.local.set({
-        lovable_api_token: idToken,
-        lovable_refresh_token: refreshToken || null,
-      });
+      setCurrentLovableToken(idToken);
+      if (refreshToken) {
+        chrome.storage.local.set({ lovable_refresh_token: refreshToken });
+      }
       notifyPlatformToken(idToken, refreshToken || null);
     }
 
@@ -188,10 +211,10 @@
     const detail = /** @type {CustomEvent} */ (event).detail;
     if (detail?.idToken) {
       console.log("[CodeLove AI] clf_token_bridge CustomEvent received");
-      chrome.storage.local.set({
-        lovable_api_token: detail.idToken,
-        lovable_refresh_token: detail.refreshToken || null,
-      });
+      setCurrentLovableToken(detail.idToken);
+      if (detail.refreshToken) {
+        chrome.storage.local.set({ lovable_refresh_token: detail.refreshToken });
+      }
       notifyPlatformToken(detail.idToken, detail.refreshToken || null);
     }
   });
@@ -283,12 +306,16 @@
     const el = document.getElementById("codelove-token-status");
     const elPlatform = document.getElementById("codelove-platform-status");
     if (!el) return;
-    chrome.storage.local.get(["lovable_api_token", "lovable_refresh_token", "clf_token"], (data) => {
+    chrome.storage.local.get(["lovable_api_token", "lovable_refresh_token", "clf_token", "lovable_token_history", "lovable_token_updated_at"], (data) => {
+      const historyCount = (data.lovable_token_history || []).length;
       if (data.lovable_api_token) {
         el.style.background = "#0a2a0a";
         el.style.border = "1px solid #1a4a1a";
         el.style.color = "#4ade80";
-        el.textContent = `✅ Token Lovable capturado${data.lovable_refresh_token ? " (com refresh)" : ""}`;
+        const refreshInfo = data.lovable_refresh_token ? " (com refresh)" : "";
+        const updatedInfo = data.lovable_token_updated_at ? ` — ${new Date(data.lovable_token_updated_at).toLocaleTimeString()}` : "";
+        const historyInfo = historyCount > 0 ? ` | ${historyCount} antigo(s) no histórico` : "";
+        el.textContent = `✅ Token ativo${refreshInfo}${updatedInfo}${historyInfo}`;
       } else {
         el.style.background = "#2a1a0a";
         el.style.border = "1px solid #4a3a1a";
