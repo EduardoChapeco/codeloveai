@@ -7,7 +7,7 @@ import {
   LayoutDashboard, MessageCircle, Users, Download, Bot, Headphones,
   Link2, FolderOpen, Shield, LogOut, User, ChevronDown,
   ArrowLeft, Bell, Send, Gift, Upload, FileText, Coins, Unlock,
-  PanelLeftClose, PanelLeft, Building2, StickyNote,
+  PanelLeftClose, PanelLeft, Building2, StickyNote, Brain,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -150,6 +150,7 @@ export default function AppSidebar() {
   // ─── Default sidebar ───
   const mainItems = [
     { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
+    { to: "/brain", label: "LoveAI Brain", icon: Brain },
     { to: "/notes", label: "Notas", icon: StickyNote },
     { to: "/community", label: "Comunidade", icon: MessageCircle },
     { to: "/install", label: "Instalar", icon: Download },
