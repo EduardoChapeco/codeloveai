@@ -112,8 +112,7 @@
   }
 
   /* ━━━ DARK MODE ━━━ */
-  @media (prefers-color-scheme: dark) {
-    :root {
+  .dark {
       --background: 240 6% 11%;
       --foreground: 240 5% 96%;
       --card: 240 4% 16%;
@@ -172,7 +171,6 @@
       --mesh-1: 211 80% 22%;
       --mesh-2: 199 70% 18%;
       --mesh-3: 263 50% 20%;
-    }
   }
 }
 
@@ -353,11 +351,9 @@
     -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.01);
     border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
   }
-  @media (prefers-color-scheme: dark) {
-    .clf-glass-nav {
+  .dark .clf-glass-nav {
       background: rgba(28, 28, 30, 0.9);
       border-bottom: 0.5px solid rgba(255, 255, 255, 0.07);
-    }
   }
 
   /* Level 2 — Modals / Sheets */
@@ -368,11 +364,9 @@
     border: 0.5px solid rgba(255, 255, 255, 0.8);
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.12);
   }
-  @media (prefers-color-scheme: dark) {
-    .clf-glass-modal {
+  .dark .clf-glass-modal {
       background: rgba(44, 44, 46, 0.96);
       border: 0.5px solid rgba(255, 255, 255, 0.07);
-    }
   }
 
   /* Level 3 — Cards (main) */
@@ -383,11 +377,9 @@
     border: 0.5px solid rgba(255, 255, 255, 0.82);
     box-shadow: var(--clf-shadow-glass);
   }
-  @media (prefers-color-scheme: dark) {
-    .clf-glass {
+  .dark .clf-glass {
       background: rgba(44, 44, 46, 0.8);
       border: 0.5px solid rgba(255, 255, 255, 0.07);
-    }
   }
 
   /* Level 4 — Chips / Buttons */
@@ -398,11 +390,9 @@
     border: 0.5px solid rgba(255, 255, 255, 0.72);
     box-shadow: var(--clf-shadow-glass);
   }
-  @media (prefers-color-scheme: dark) {
-    .clf-glass-sm {
+  .dark .clf-glass-sm {
       background: rgba(44, 44, 46, 0.68);
       border: 0.5px solid rgba(255, 255, 255, 0.07);
-    }
   }
 
   /* ─────────────────────────────────
@@ -480,11 +470,9 @@
     -webkit-backdrop-filter: blur(20px) saturate(160%);
     box-shadow: var(--clf-shadow-glass);
   }
-  @media (prefers-color-scheme: dark) {
-    .lv-card {
+  .dark .lv-card {
       background: rgba(44, 44, 46, 0.8);
       border: 0.5px solid rgba(255, 255, 255, 0.07);
-    }
   }
 
   .lv-card-sm {
@@ -497,11 +485,9 @@
       0 1px 4px rgba(0, 0, 0, 0.05),
       0 0.5px 0 rgba(255, 255, 255, 0.9) inset;
   }
-  @media (prefers-color-scheme: dark) {
-    .lv-card-sm {
+  .dark .lv-card-sm {
       background: rgba(44, 44, 46, 0.75);
       border: 0.5px solid rgba(255, 255, 255, 0.06);
-    }
   }
 
   .lv-card-interactive {
@@ -520,14 +506,12 @@
       0 1px 0 rgba(255, 255, 255, 0.95) inset;
     transform: translateY(-2px);
   }
-  @media (prefers-color-scheme: dark) {
-    .lv-card-interactive {
+  .dark .lv-card-interactive {
       background: rgba(44, 44, 46, 0.8);
       border: 0.5px solid rgba(255, 255, 255, 0.07);
-    }
-    .lv-card-interactive:hover {
+  }
+  .dark .lv-card-interactive:hover {
       background: rgba(58, 58, 60, 0.9);
-    }
   }
 
   .lv-card-active {
@@ -602,15 +586,13 @@
     opacity: 0.45;
     cursor: not-allowed;
   }
-  @media (prefers-color-scheme: dark) {
-    .lv-btn-secondary {
+  .dark .lv-btn-secondary {
       background: rgba(58, 58, 60, 0.72);
       border: 0.5px solid rgba(255, 255, 255, 0.08);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    }
-    .lv-btn-secondary:hover:not(:disabled) {
+  }
+  .dark .lv-btn-secondary:hover:not(:disabled) {
       background: rgba(72, 72, 74, 0.9);
-    }
   }
 
   /* ACCENT / PREMIUM — Indigo gradient */
@@ -656,10 +638,8 @@
     @apply text-foreground;
     background: rgba(255, 255, 255, 0.55);
   }
-  @media (prefers-color-scheme: dark) {
-    .lv-btn-ghost:hover {
+  .dark .lv-btn-ghost:hover {
       background: rgba(58, 58, 60, 0.55);
-    }
   }
 
   /* ICON */
@@ -706,16 +686,14 @@
     border-color: rgba(0, 113, 227, 0.45);
     box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.08);
   }
-  @media (prefers-color-scheme: dark) {
-    .lv-input {
+  .dark .lv-input {
       background: rgba(44, 44, 46, 0.8);
       border: 1px solid var(--clf-border-dark);
-    }
-    .lv-input:focus {
+  }
+  .dark .lv-input:focus {
       background: rgba(58, 58, 60, 0.9);
       border-color: rgba(10, 132, 255, 0.55);
       box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.1);
-    }
   }
 
   .lv-textarea {
