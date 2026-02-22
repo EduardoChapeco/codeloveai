@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
     const lovableMethod = body.method || "GET";
     const lovableBody = body.payload || null;
 
-    if (!lovableRoute && action !== "save-token" && action !== "delete-token" && action !== "verify") {
+    if (!lovableRoute && action !== "save-token" && action !== "delete-token" && action !== "verify" && action !== "refresh-token") {
       return new Response(JSON.stringify({ error: "Route é obrigatória" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -211,6 +211,51 @@ Deno.serve(async (req) => {
       const duration = Date.now() - startTime;
       await logApiCall(serviceClient, userId, "delete-token", "POST", 200, duration);
       return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── Handle refresh-token action ───
+    if (action === "refresh-token") {
+      // Re-verify the existing token against Lovable API
+      const existingToken = await getLovableToken(serviceClient, userId);
+      if (!existingToken) {
+        return new Response(JSON.stringify({ error: "Nenhum token configurado para renovar." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Verify if the token is still valid
+      let tokenValid = false;
+      try {
+        const verifyRes = await fetch(`${LOVABLE_API_BASE}/user/workspaces`, {
+          headers: { Authorization: `Bearer ${existingToken}` },
+        });
+        tokenValid = verifyRes.ok || verifyRes.status === 403;
+      } catch {
+        tokenValid = false;
+      }
+
+      if (!tokenValid) {
+        await markTokenExpired(serviceClient, userId);
+        const duration = Date.now() - startTime;
+        await logApiCall(serviceClient, userId, "refresh-token", "POST", 401, duration);
+        return new Response(JSON.stringify({ error: "Token expirado. Reconecte sua conta." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Token is still valid — update last_verified_at
+      await serviceClient
+        .from("lovable_accounts")
+        .update({ status: "active", last_verified_at: new Date().toISOString() })
+        .eq("user_id", userId);
+
+      const duration = Date.now() - startTime;
+      await logApiCall(serviceClient, userId, "refresh-token", "POST", 200, duration);
+      return new Response(JSON.stringify({ success: true, refreshed: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
