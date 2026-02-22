@@ -44,8 +44,9 @@ export default function LovableUploadTest() {
         payload: { file_name: file.name, content_type: file.type },
       });
 
-      const signedUrl = genData?.signed_url || genData?.url || genData?.upload_url;
-      const fileKey = genData?.file_key || genData?.key || genData?.path;
+      const gd = genData as any;
+      const signedUrl = gd?.signed_url || gd?.url || gd?.upload_url;
+      const fileKey = gd?.file_key || gd?.key || gd?.path;
 
       if (!signedUrl) {
         toast.error("Não foi possível gerar URL de upload. Verifique sua conexão.");
@@ -76,7 +77,8 @@ export default function LovableUploadTest() {
           method: "POST",
           payload: { file_key: fileKey },
         });
-        setDownloadUrl(dlData?.url || dlData?.download_url || null);
+        const dd = dlData as any;
+        setDownloadUrl(dd?.url || dd?.download_url || null);
       }
 
       setStep(4);

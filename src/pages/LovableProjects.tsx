@@ -60,7 +60,7 @@ export default function LovableProjects() {
     if (connectionStatus !== "active") return;
     const loadWorkspaces = async () => {
       try {
-        const data = await invoke({ route: "/user/workspaces" });
+        const data = await invoke({ route: "/user/workspaces" }) as any;
         const wsList = Array.isArray(data) ? data : data?.workspaces || [];
         setWorkspaces(wsList);
         if (wsList.length > 0) setSelectedWs(wsList[0].id);
@@ -97,7 +97,7 @@ export default function LovableProjects() {
     if (!selectedWs) return;
     setLoading(true);
     try {
-      const data = await invoke({ route: `/workspaces/${selectedWs}/projects` });
+      const data = await invoke({ route: `/workspaces/${selectedWs}/projects` }) as any;
       const projectsList = Array.isArray(data) ? data : data?.projects || [];
       setProjects(projectsList);
       await syncProjectsToDb(projectsList);
@@ -122,7 +122,7 @@ export default function LovableProjects() {
       const data = await invoke({
         route: `/projects/${projectId}/deployments?async=true`,
         method: "POST",
-      });
+      }) as any;
       if (user) {
         await supabase.from("deployments_log").insert({
           user_id: user.id,
@@ -167,7 +167,7 @@ export default function LovableProjects() {
   const handleAnalytics = async (projectId: string) => {
     setAnalyticsLoading(projectId);
     try {
-      const data = await invoke({ route: `/projects/${projectId}/analytics` });
+      const data = await invoke({ route: `/projects/${projectId}/analytics` }) as any;
       setAnalyticsData({ projectId, ...data });
     } catch (err: any) {
       toast.error("Analytics indisponível para este projeto");
