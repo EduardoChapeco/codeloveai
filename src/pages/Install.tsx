@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import AppLayout from "@/components/AppLayout";
+import MeshBackground from "@/components/MeshBackground";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -46,14 +47,17 @@ export default function Install() {
   const isAndroid = /Android/.test(navigator.userAgent);
 
   const guestNav = !user ? (
-    <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex items-center justify-between">
-      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
-      <Link to="/login" className="lv-btn-secondary">Entrar</Link>
+    <nav className="sticky top-0 z-20 px-6 py-3 flex items-center justify-between">
+      <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between w-full">
+        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
+        <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+      </div>
     </nav>
   ) : null;
 
   const content = (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen relative">
+      {!user && <MeshBackground />}
       {guestNav}
 
       {/* Gate: user without active access */}

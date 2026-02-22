@@ -1,5 +1,6 @@
 import { useLocation, Link } from "react-router-dom";
 import { useEffect } from "react";
+import MeshBackground from "@/components/MeshBackground";
 
 const NotFound = () => {
   const location = useLocation();
@@ -9,8 +10,9 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
+    <div className="flex min-h-screen items-center justify-center relative">
+      <MeshBackground />
+      <div className="text-center animate-fade-in">
         <p className="lv-stat text-7xl mb-4">404</p>
         <h1 className="lv-heading-lg mb-2">Página não encontrada</h1>
         <p className="lv-body mb-8">A página que você procura não existe ou foi movida.</p>

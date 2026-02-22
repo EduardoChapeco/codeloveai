@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Check, Zap, Clock, MessageSquare, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useTenant } from "@/contexts/TenantContext";
+import MeshBackground from "@/components/MeshBackground";
 
 const plans = [
   { id: "1_day", name: "1 Dia", price: 9.99, priceLabel: "R$9,99", period: "por dia" },
@@ -87,12 +88,15 @@ export default function AffiliateRefPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
-        <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
-        <div className="flex items-center gap-3">
-          <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
-          <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+    <div className="min-h-screen relative">
+      <MeshBackground />
+      <nav className="sticky top-0 z-20 px-6 py-3">
+        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+          <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
+          <div className="flex items-center gap-3">
+            <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+            <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+          </div>
         </div>
       </nav>
 

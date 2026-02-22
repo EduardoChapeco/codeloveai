@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import AppLayout from "@/components/AppLayout";
+import MeshBackground from "@/components/MeshBackground";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -314,9 +315,11 @@ export default function Profile() {
   const showListModal = showFollowers || showFollowing;
 
   const guestNav = !user ? (
-    <nav className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-border/60 px-6 py-4 flex items-center justify-between">
-      <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
-      <Link to="/login" className="lv-btn-primary h-9 px-4 text-xs">Entrar</Link>
+    <nav className="sticky top-0 z-20 px-6 py-3">
+      <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
+        <Link to="/login" className="lv-btn-primary h-9 px-4 text-xs">Entrar</Link>
+      </div>
     </nav>
   ) : null;
 
