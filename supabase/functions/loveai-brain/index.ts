@@ -158,9 +158,13 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const workspaces = await wsRes.json();
-      const workspaceId = workspaces?.[0]?.id;
+      const wsBody = await wsRes.json();
+      // Handle multiple response formats: array, { workspaces: [...] }, { data: [...] }
+      const wsList = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || []);
+      const workspaceId = wsList?.[0]?.id;
       if (!workspaceId) {
+        console.error("No workspace found. API response shape:", JSON.stringify(Object.keys(wsBody || {})));
+
         return new Response(JSON.stringify({ error: "Nenhum workspace encontrado" }), {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
