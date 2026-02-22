@@ -1066,6 +1066,88 @@ export type Database = {
           },
         ]
       }
+      note_folders: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          tenant_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          tenant_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          tenant_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_folders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notes: {
+        Row: {
+          color: string
+          created_at: string
+          folder: string
+          id: string
+          pinned: boolean
+          tenant_id: string | null
+          text: string
+          title: string
+          ts: number
+          updated: number
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          folder?: string
+          id: string
+          pinned?: boolean
+          tenant_id?: string | null
+          text?: string
+          title?: string
+          ts?: number
+          updated?: number
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          folder?: string
+          id?: string
+          pinned?: boolean
+          tenant_id?: string | null
+          text?: string
+          title?: string
+          ts?: number
+          updated?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_comments: {
         Row: {
           content: string

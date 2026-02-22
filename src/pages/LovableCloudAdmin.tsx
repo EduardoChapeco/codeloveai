@@ -89,7 +89,7 @@ export default function LovableCloudAdmin() {
       .select("*, profiles(name, email)")
       .order("created_at", { ascending: false })
       .limit(100);
-    setAccounts((accs as LovableAccount[]) || []);
+    setAccounts((accs as unknown as LovableAccount[]) || []);
     setLoadingAccounts(false);
 
     // API call logs
