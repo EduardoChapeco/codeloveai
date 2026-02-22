@@ -46,14 +46,16 @@ async function markTokenExpired(serviceClient: any, userId: string) {
     .eq("user_id", userId);
 }
 
-async function getUserIdFromJwt(authHeader: string): Promise<string | null> {
+async function getUserIdFromJwt(authHeader: string, supabaseUrl: string, anonKey: string): Promise<string | null> {
   try {
-    // Decode JWT payload (no signature verification here — Supabase already does it)
+    // Use getClaims for proper JWT verification instead of manual decode
     const token = authHeader.replace("Bearer ", "");
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return payload.sub || null;
+    const client = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data, error } = await client.auth.getClaims(token);
+    if (error || !data?.claims) return null;
+    return (data.claims.sub as string) || null;
   } catch {
     return null;
   }
@@ -81,14 +83,14 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get userId: try fast JWT decode first, fallback to getUser()
-    let userId = await getUserIdFromJwt(authHeader);
+    // Get userId via verified JWT claims, fallback to getUser()
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    let userId = await getUserIdFromJwt(authHeader, supabaseUrl, supabaseAnonKey);
     if (!userId) {
-      const anonClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } }
-      );
+      const anonClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
       const { data: { user }, error } = await anonClient.auth.getUser();
       if (error || !user) {
         return new Response(JSON.stringify({ error: "Não autenticado" }), {

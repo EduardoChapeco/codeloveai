@@ -14,6 +14,73 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Require admin authentication OR a valid CODELOVE_ADMIN_SECRET header (for cron jobs)
+    const adminSecret = Deno.env.get("CODELOVE_ADMIN_SECRET");
+    const providedSecret = req.headers.get("x-admin-secret");
+
+    let isAuthorized = false;
+
+    // Path 1: Admin secret for cron/automation
+    if (adminSecret && providedSecret && providedSecret === adminSecret) {
+      isAuthorized = true;
+    }
+
+    // Path 2: JWT-based admin auth
+    if (!isAuthorized) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: "Não autenticado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+
+      const token = authHeader.replace("Bearer ", "");
+      const { data, error } = await supabase.auth.getClaims(token);
+      if (error || !data?.claims) {
+        return new Response(JSON.stringify({ error: "Não autenticado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const userId = data.claims.sub as string;
+
+      // Verify admin role
+      const serviceCheck = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: roleData } = await serviceCheck
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (!roleData) {
+        return new Response(JSON.stringify({ error: "Acesso negado — requer admin" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -51,7 +118,6 @@ Deno.serve(async (req) => {
         }
 
         const wsBody = await wsRes.json();
-        // Handle multiple response formats: array, { workspaces: [...] }, { data: [...] }
         const workspaces = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || []);
 
         for (const ws of workspaces) {
@@ -70,7 +136,6 @@ Deno.serve(async (req) => {
               const projectId = proj.id || proj.project_id;
               if (!projectId) continue;
 
-              // Upsert project
               await serviceClient
                 .from("lovable_projects")
                 .upsert({
