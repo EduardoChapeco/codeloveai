@@ -7,7 +7,7 @@ import {
   LayoutDashboard, MessageCircle, Users, Download, Bot, Headphones,
   Link2, FolderOpen, Shield, LogOut, User, ChevronDown,
   ArrowLeft, Bell, Send, Gift, Upload, FileText, Coins, Unlock,
-  PanelLeftClose, PanelLeft, Building2, StickyNote,
+  PanelLeftClose, PanelLeft, Building2, StickyNote, CloudLightning,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -37,12 +37,11 @@ const adminTabs = [
   { id: "extension", label: "Extensão", icon: Upload },
   { id: "notifications", label: "Notificações", icon: Bell },
   { id: "messages", label: "Mensagens", icon: Send },
-  
 ];
 
 export default function AppSidebar() {
   const { user, signOut } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant, isTenantAdmin } = useTenant();
   const brandName = tenant?.name || "CodeLove AI";
   const brandInitials = brandName.substring(0, 2).toUpperCase();
   const { isAdmin } = useIsAdmin();
@@ -166,7 +165,6 @@ export default function AppSidebar() {
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen },
   ];
 
-  const { isTenantAdmin } = useTenant();
 
   const accountItems = [
     { to: `/profile/${user.id}`, label: "Perfil", icon: User },
@@ -179,13 +177,14 @@ export default function AppSidebar() {
     ...(isAdmin ? [
       { to: "/admin", label: "Admin Operacional", icon: Shield },
       { to: "/admin/global", label: "Admin Global", icon: Building2 },
+      { to: "/admin/lovable-cloud", label: "Lovable Cloud", icon: CloudLightning },
     ] : []),
   ];
 
   const lovableActive = lovableItems.some(i => isActive(i.to));
   const accountActive = accountItems.some(i => isActive(i.to));
 
-  const renderNavItem = (item: { to: string; label: string; icon: any }) => {
+  const renderNavItem = (item: { to: string; label: string; icon: React.ElementType }) => {
     const active = isActive(item.to);
     return (
       <SidebarMenuItem key={item.to}>

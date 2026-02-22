@@ -36,6 +36,7 @@ const LovableUploadTest = lazy(() => import("./pages/LovableUploadTest"));
 const WhiteLabelRefPage = lazy(() => import("./pages/WhiteLabelRefPage"));
 const WlAffiliateDashboard = lazy(() => import("./pages/WlAffiliateDashboard"));
 const PartnersLanding = lazy(() => import("./pages/PartnersLanding"));
+const LovableCloudAdmin = lazy(() => import("./pages/LovableCloudAdmin"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -77,6 +78,7 @@ const App = () => (
                 <Route path="/lovable/preview" element={<LovablePreview />} />
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
                 <Route path="/partners" element={<PartnersLanding />} />
+                <Route path="/admin/lovable-cloud" element={<LovableCloudAdmin />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
