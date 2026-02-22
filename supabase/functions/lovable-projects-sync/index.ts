@@ -50,7 +50,9 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const workspaces = await wsRes.json();
+        const wsBody = await wsRes.json();
+        // Handle multiple response formats: array, { workspaces: [...] }, { data: [...] }
+        const workspaces = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || []);
 
         for (const ws of workspaces) {
           try {
