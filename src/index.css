@@ -189,7 +189,6 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     letter-spacing: -0.01em;
-    background-color: var(--clf-bg);
   }
 
   /* ── Global custom scrollbar ── */
