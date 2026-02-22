@@ -322,8 +322,28 @@ Deno.serve(async (req) => {
 
     // ─── STATUS ───
     if (action === "status") {
-      const { expired } = await getLovableToken(sc, userId);
-      if (expired) return json({ active: false, connected: false, reason: "token_expired" });
+      const { token: lToken, expired } = await getLovableToken(sc, userId);
+      if (expired || !lToken) return json({ active: false, connected: false, reason: "token_expired" });
+
+      // Actually validate the token against the Lovable API
+      let tokenValid = true;
+      try {
+        const { res: validateRes } = await lovableFetch(
+          `${LOVABLE_API}/user/workspaces`,
+          { method: "GET" }, sc, userId, lToken
+        );
+        if (validateRes.status === 401 || validateRes.status === 403) {
+          // Token is invalid on Lovable's side — mark as expired
+          await sc.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
+          tokenValid = false;
+        }
+      } catch {
+        // Network error — don't mark as expired, just report unknown
+      }
+
+      if (!tokenValid) {
+        return json({ active: false, connected: false, reason: "token_expired" });
+      }
 
       const { data: brain } = await sc.from("user_brain_projects")
         .select("lovable_project_id, status, last_message_at, created_at")
