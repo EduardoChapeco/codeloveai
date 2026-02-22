@@ -175,7 +175,6 @@ export default function Dashboard() {
 
   const activeSubscription = subscriptions.find((s) => s.status === "active" && new Date(s.expires_at) > new Date());
   const activeTokens = tokens.filter(t => t.is_active);
-  const inactiveTokens = tokens.filter(t => !t.is_active);
 
   const copyToken = (token: string) => {
     navigator.clipboard.writeText(token);
@@ -395,26 +394,6 @@ export default function Dashboard() {
                 <strong className="text-foreground">Login automático ativo</strong> — Seu token foi sincronizado com a extensão.
               </p>
               <span className="lv-badge lv-badge-primary">Sync</span>
-            </div>
-          )}
-
-          {/* Token History (inactive tokens only) */}
-          {inactiveTokens.length > 0 && (
-            <div className="lv-card">
-              <p className="lv-overline mb-3">Histórico de tokens ({inactiveTokens.length})</p>
-              <div className="space-y-2">
-                {inactiveTokens.map((t) => (
-                  <div key={t.id} className="lv-card-sm flex items-center justify-between">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Key className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <code className="font-mono text-xs text-foreground truncate">
-                        {t.token.substring(0, 10)}••••{t.token.substring(t.token.length - 4)}
-                      </code>
-                    </div>
-                    <span className="lv-badge lv-badge-muted">Inativo</span>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
