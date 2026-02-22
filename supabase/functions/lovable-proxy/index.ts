@@ -83,22 +83,15 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get userId via verified JWT claims, fallback to getUser()
+    // Get userId via verified JWT claims
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    let userId = await getUserIdFromJwt(authHeader, supabaseUrl, supabaseAnonKey);
+    const userId = await getUserIdFromJwt(authHeader, supabaseUrl, supabaseAnonKey);
     if (!userId) {
-      const anonClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: authHeader } },
+      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-      const { data: { user }, error } = await anonClient.auth.getUser();
-      if (error || !user) {
-        return new Response(JSON.stringify({ error: "Não autenticado" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      userId = user.id;
     }
 
     const body = req.method !== "GET" ? await req.json().catch(() => ({})) : {};

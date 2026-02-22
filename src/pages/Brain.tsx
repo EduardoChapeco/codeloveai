@@ -198,18 +198,24 @@ export default function BrainPage() {
       setSending(false);
       setCapturing(true);
 
-      // Client-side polling — check every 5s for up to 180s
-      // First 30s: wait without polling (Lovable needs time to process)
-      await new Promise(r => setTimeout(r, 15000));
+      // Client-side polling — check every 4s for up to 180s
+      // First 8s: wait without polling (Lovable needs time to start processing)
+      await new Promise(r => setTimeout(r, 8000));
       
-      const maxPolls = 33; // 33 polls × 5s = 165s + 15s initial = 180s total
+      const maxPolls = 43; // 43 polls × 4s = 172s + 8s initial = 180s total
       let captured = false;
       for (let i = 0; i < maxPolls; i++) {
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 4000));
         try {
-          const { data: captureData } = await supabase.functions.invoke("loveai-brain", {
+          const { data: captureData, error: captureError } = await supabase.functions.invoke("loveai-brain", {
             body: { action: "capture", conversation_id: conversationId, brain_project_id: brainProjectId },
           });
+          
+          if (captureError) {
+            console.warn("Capture poll error:", captureError);
+            continue;
+          }
+          
           if (captureData?.status === "completed" && captureData?.response) {
             setAllConversations(prev =>
               prev.map(c =>
