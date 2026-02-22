@@ -467,7 +467,7 @@ export default function BrainPage() {
             </div>
             {capturing && (
               <p className="text-center text-xs text-muted-foreground mt-2 animate-pulse">
-                ⏳ Aguardando resposta do Brain (até 60s)...
+                ⏳ Aguardando resposta do Brain (até 120s)...
               </p>
             )}
           </div>
