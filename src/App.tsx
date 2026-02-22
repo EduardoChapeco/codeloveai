@@ -12,33 +12,47 @@ import ChatPanel from "@/components/chat/ChatPanel";
 import SupportChatPanel from "@/components/chat/SupportChatPanel";
 import Index from "./pages/Index";
 
-const Login = lazy(() => import("./pages/Login"));
-const Register = lazy(() => import("./pages/Register"));
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Admin = lazy(() => import("./pages/Admin"));
-const AdminGlobal = lazy(() => import("./pages/AdminGlobal"));
-const TenantAdmin = lazy(() => import("./pages/TenantAdmin"));
-const AffiliateDashboard = lazy(() => import("./pages/AffiliateDashboard"));
-const AffiliateRefPage = lazy(() => import("./pages/AffiliateRefPage"));
-const Checkout = lazy(() => import("./pages/Checkout"));
-// FreePlan removed
-const Community = lazy(() => import("./pages/Community"));
-const Profile = lazy(() => import("./pages/Profile"));
-const Notes = lazy(() => import("./pages/Notes"));
-const AffiliatesPage = lazy(() => import("./pages/AffiliatesPage"));
-const Install = lazy(() => import("./pages/Install"));
-const LovableConnect = lazy(() => import("./pages/LovableConnect"));
-const LovableProjects = lazy(() => import("./pages/LovableProjects"));
-const LovablePreview = lazy(() => import("./pages/LovablePreview"));
-const LovableUploadTest = lazy(() => import("./pages/LovableUploadTest"));
-const WhiteLabelRefPage = lazy(() => import("./pages/WhiteLabelRefPage"));
-const WlAffiliateDashboard = lazy(() => import("./pages/WlAffiliateDashboard"));
-const PartnersLanding = lazy(() => import("./pages/PartnersLanding"));
-const Brain = lazy(() => import("./pages/Brain"));
-// LovableCloudAdmin moved to AdminGlobal tab
-const NotFound = lazy(() => import("./pages/NotFound"));
+// Retry dynamic imports once on failure (stale chunk after deploy)
+function lazyRetry(importFn: () => Promise<any>) {
+  return lazy(() =>
+    importFn().catch(() => {
+      // If chunk fails, reload the page once
+      const key = 'clf_chunk_retry';
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        window.location.reload();
+      }
+      sessionStorage.removeItem(key);
+      return importFn();
+    })
+  );
+}
+
+const Login = lazyRetry(() => import("./pages/Login"));
+const Register = lazyRetry(() => import("./pages/Register"));
+const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazyRetry(() => import("./pages/ResetPassword"));
+const Dashboard = lazyRetry(() => import("./pages/Dashboard"));
+const Admin = lazyRetry(() => import("./pages/Admin"));
+const AdminGlobal = lazyRetry(() => import("./pages/AdminGlobal"));
+const TenantAdmin = lazyRetry(() => import("./pages/TenantAdmin"));
+const AffiliateDashboard = lazyRetry(() => import("./pages/AffiliateDashboard"));
+const AffiliateRefPage = lazyRetry(() => import("./pages/AffiliateRefPage"));
+const Checkout = lazyRetry(() => import("./pages/Checkout"));
+const Community = lazyRetry(() => import("./pages/Community"));
+const Profile = lazyRetry(() => import("./pages/Profile"));
+const Notes = lazyRetry(() => import("./pages/Notes"));
+const AffiliatesPage = lazyRetry(() => import("./pages/AffiliatesPage"));
+const Install = lazyRetry(() => import("./pages/Install"));
+const LovableConnect = lazyRetry(() => import("./pages/LovableConnect"));
+const LovableProjects = lazyRetry(() => import("./pages/LovableProjects"));
+const LovablePreview = lazyRetry(() => import("./pages/LovablePreview"));
+const LovableUploadTest = lazyRetry(() => import("./pages/LovableUploadTest"));
+const WhiteLabelRefPage = lazyRetry(() => import("./pages/WhiteLabelRefPage"));
+const WlAffiliateDashboard = lazyRetry(() => import("./pages/WlAffiliateDashboard"));
+const PartnersLanding = lazyRetry(() => import("./pages/PartnersLanding"));
+const Brain = lazyRetry(() => import("./pages/Brain"));
+const NotFound = lazyRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
