@@ -198,23 +198,37 @@ export default function BrainPage() {
       setSending(false);
       setCapturing(true);
 
-      const { data: captureData, error: captureErr } = await supabase.functions.invoke("loveai-brain", {
-        body: { action: "capture", conversation_id: conversationId, brain_project_id: brainProjectId },
-      });
+      // Client-side polling — check every 3s for up to 120s
+      const maxPolls = 40;
+      let captured = false;
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const { data: captureData } = await supabase.functions.invoke("loveai-brain", {
+            body: { action: "capture", conversation_id: conversationId, brain_project_id: brainProjectId },
+          });
+          if (captureData?.status === "completed" && captureData?.response) {
+            setAllConversations(prev =>
+              prev.map(c =>
+                c.id === conversationId
+                  ? { ...c, ai_response: captureData.response, status: "completed" }
+                  : c
+              )
+            );
+            captured = true;
+            break;
+          }
+          // If still "processing", continue polling
+        } catch {
+          // Network error, retry
+        }
+      }
 
-      if (captureErr || captureData?.error) {
+      if (!captured) {
         setAllConversations(prev =>
           prev.map(c => c.id === conversationId ? { ...c, status: "timeout" } : c)
         );
-        toast.error("Brain não respondeu a tempo. Tente novamente.");
-      } else if (captureData?.response) {
-        setAllConversations(prev =>
-          prev.map(c =>
-            c.id === conversationId
-              ? { ...c, ai_response: captureData.response, status: "completed" }
-              : c
-          )
-        );
+        toast.error("Brain não respondeu a tempo (120s). Tente novamente.");
       }
     } catch (err: any) {
       setAllConversations(prev =>

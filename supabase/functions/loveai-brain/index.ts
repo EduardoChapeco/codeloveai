@@ -481,7 +481,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
       });
     }
 
-    // ─── ACTION: capture — Poll for brain response ───
+    // ─── ACTION: capture — Single check for brain response (client polls) ───
     if (action === "capture") {
       const { conversation_id, brain_project_id } = body;
 
@@ -492,52 +492,44 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         });
       }
 
-      // Poll source code for brain-output.json changes
-      const maxAttempts = 30; // 60s total (2s intervals)
+      // Single check — no server-side loop
       let response: string | null = null;
+      try {
+        const srcRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
+          headers: { Authorization: `Bearer ${lovableToken}` },
+        });
 
-      for (let i = 0; i < maxAttempts; i++) {
-        try {
-          const srcRes = await fetch(`${LOVABLE_API}/projects/${brain_project_id}/source-code`, {
-            headers: { Authorization: `Bearer ${lovableToken}` },
-          });
+        if (srcRes.ok) {
+          const srcData = await srcRes.json();
+          const files = srcData?.files || srcData;
+          let outputContent: string | null = null;
 
-          if (srcRes.ok) {
-            const srcData = await srcRes.json();
-            const files = srcData?.files || srcData;
-            let outputContent: string | null = null;
-
-            if (Array.isArray(files)) {
-              const outputFile = files.find((f: { path: string }) =>
-                f.path === "src/brain-output.json" || f.path === "/src/brain-output.json"
-              );
-              if (outputFile?.content) {
-                outputContent = outputFile.content;
-              }
-            } else if (typeof files === "object") {
-              outputContent = files["src/brain-output.json"] || null;
+          if (Array.isArray(files)) {
+            const outputFile = files.find((f: { path: string }) =>
+              f.path === "src/brain-output.json" || f.path === "/src/brain-output.json"
+            );
+            if (outputFile?.content) {
+              outputContent = outputFile.content;
             }
+          } else if (typeof files === "object") {
+            outputContent = files["src/brain-output.json"] || null;
+          }
 
-            if (outputContent) {
-              try {
-                const parsed = JSON.parse(outputContent);
-                if (parsed.status === "done" && parsed.response) {
-                  response = parsed.response;
-                  break;
-                }
-              } catch {
-                // Not valid JSON yet, keep polling
+          if (outputContent) {
+            try {
+              const parsed = JSON.parse(outputContent);
+              if (parsed.status === "done" && parsed.response) {
+                response = parsed.response;
               }
+            } catch {
+              // Not valid JSON yet
             }
           }
-        } catch (pollErr) {
-          console.warn("Poll error:", pollErr);
         }
-
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (pollErr) {
+        console.warn("Check error:", pollErr);
       }
 
-      // Update conversation with response
       if (response) {
         await serviceClient.from("loveai_conversations").update({
           ai_response: response,
@@ -570,20 +562,15 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-      } else {
-        await serviceClient.from("loveai_conversations").update({
-          status: "timeout",
-        }).eq("id", conversation_id);
-
-        return new Response(JSON.stringify({
-          success: false,
-          status: "timeout",
-          error: "Brain não respondeu em 60s",
-        }), {
-          status: 408,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
       }
+
+      // Not ready yet — client should poll again
+      return new Response(JSON.stringify({
+        success: true,
+        status: "processing",
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(JSON.stringify({ error: "Ação não reconhecida" }), {
