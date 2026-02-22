@@ -67,19 +67,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !user) {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Token inválido" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const user = { id: claimsData.claims.sub as string };
 
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -606,7 +610,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
               }
             }
 
-            // Strategy 3: If still nothing, check if there are new/modified .tsx/.ts/.md files
+      // Strategy 3: If still nothing, check if there are new/modified .tsx/.ts/.md files
             // that contain the actual AI-generated content
             if (!response && previousHash && currentHash !== previousHash) {
               // Source changed but we couldn't extract a clean response
@@ -624,6 +628,11 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
               if (relevantContent.length > 0) {
                 response = `O Brain processou sua solicitação. Aqui estão as alterações no código do projeto:\n\n${relevantContent.join("\n\n")}`;
               }
+            }
+
+            // Strategy 4: If hash changed but no extractable content, mark as completed with generic message
+            if (!response && previousHash && currentHash !== previousHash) {
+              response = "O Brain processou sua solicitação, mas a resposta não pôde ser extraída no formato esperado. Verifique o projeto Brain diretamente.";
             }
           }
         }
