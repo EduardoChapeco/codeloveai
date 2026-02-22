@@ -435,7 +435,7 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
         body: JSON.stringify({
           id: msgId,
           message: prompt,
-          intent: "fix",
+          intent: "security_fix_v2",
           chat_only: false,
           ai_message_id: aiMsgId,
           thread_id: "main",
