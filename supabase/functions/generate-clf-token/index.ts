@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     // Parse request body
     const body = await req.json();
     const plan = body.plan || "trial";
-    const expiresIn = body.expiresIn || 30 * 24 * 60 * 60 * 1000; // 30 days default
+    const expiresIn = body.expiresIn || 365 * 24 * 60 * 60 * 1000; // 365 days default
 
     // Use service role client for DB operations
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -126,11 +126,12 @@ Deno.serve(async (req) => {
 
     const expiresAt = new Date(exp).toISOString();
 
-    // Save to licenses table (new schema: key + active)
+    // Save to licenses table
     const { error: insertError } = await adminClient.from("licenses").insert({
       key: clfToken,
       user_id: userId,
-      plan_type: plan,
+      plan: plan,
+      plan_type: "messages",
       expires_at: expiresAt,
       active: true,
     });
