@@ -80,3 +80,12 @@ verify_jwt = false
 
 [functions.validate-license]
 verify_jwt = false
+
+[functions.validate-hwid]
+verify_jwt = false
+
+[functions.get-user-context]
+verify_jwt = false
+
+[functions.increment-usage]
+verify_jwt = false

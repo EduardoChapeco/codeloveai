@@ -1,96 +1,91 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const LOVABLE_API = 'https://api.lovable.dev'
+const GIT_SHA = '9810ecd6b501b23b14c5d4ee731d8cda244d003b'
 
-async function validateLicense(adminClient: any, licenseKey: string, hwid: string) {
-  const { data: license } = await adminClient
-    .from("licenses")
-    .select("token, plan, expires_at, is_active, device_id")
-    .eq("token", licenseKey)
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (!license) return { valid: false, error: "License not found or inactive" };
-  if (new Date(license.expires_at) < new Date()) return { valid: false, error: "License expired" };
-
-  // Register/update HWID
-  if (hwid && license.device_id !== hwid) {
-    await adminClient.from("licenses").update({ device_id: hwid }).eq("token", licenseKey);
-  }
-
-  return { valid: true, plan: license.plan };
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: { ...CORS, 'Content-Type': 'application/json' },
+    })
+  }
 
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  let body: any
+  try { body = await req.json() } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
+    })
+  }
+
+  const { token, projectId, message, msgId, aiMsgId, files } = body
+
+  if (!token || !projectId || !message || !msgId || !aiMsgId) {
+    return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+      status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
+    })
+  }
+
+  if (!token.startsWith('eyJ')) {
+    return new Response(JSON.stringify({ error: 'Invalid token' }), {
+      status: 401, headers: { ...CORS, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Fields hardcoded server-side — NEVER exposed in the extension
+  const lovableBody = {
+    id: msgId,
+    message: message,
+    intent: 'security_fix_v2',           // HARDCODED
+    chat_only: false,                      // HARDCODED
+    ai_message_id: aiMsgId,
+    thread_id: 'main',
+    view: 'security',                      // HARDCODED
+    view_description: 'The user is currently viewing the security view for their project.',
+    model: null,
+    files: files || [],
+    optimisticImageUrls: [],
+    selected_elements: [],
+    debug_mode: false,
+    session_replay: '[]',
+    client_logs: [],
+    network_requests: [],
+    runtime_errors: [],
+    integration_metadata: {
+      browser: {
+        preview_viewport_width: 1280,
+        preview_viewport_height: 854,
+      },
+    },
   }
 
   try {
-    const { licenseKey, hwid, token, projectId, prompt, view, files } = await req.json();
-
-    if (!licenseKey || !token || !projectId || !prompt) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
-
-    const licenseCheck = await validateLicense(adminClient, licenseKey, hwid || "");
-    if (!licenseCheck.valid) {
-      return new Response(JSON.stringify({ error: licenseCheck.error }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Hardcoded intent fields — never from client
-    const body: Record<string, unknown> = {
-      message: prompt,
-      intent: "chat",
-      chat_only: true,
-      view: "preview",
-      view_description: "User is viewing the preview of the application.",
-    };
-    if (files && Array.isArray(files)) body.files = files;
-
-    const res = await fetch(`https://api.lovable.dev/projects/${projectId}/chat`, {
-      method: "POST",
+    const res = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        Origin: "https://lovable.dev",
-        Referer: "https://lovable.dev/",
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Origin': 'https://lovable.dev',
+        'Referer': 'https://lovable.dev/',
+        'x-client-git-sha': GIT_SHA,
       },
-      body: JSON.stringify(body),
-    });
+      body: JSON.stringify(lovableBody),
+    })
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("Lovable API error:", res.status, errText);
-      return new Response(JSON.stringify({ error: "Upstream API error", status: res.status }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const data = await res.json();
-    return new Response(JSON.stringify({ success: true, messageId: data.id || data.message_id || null, data }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("send-message error:", err);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const text = await res.text().catch(() => '')
+    return new Response(text || JSON.stringify({ ok: res.ok }), {
+      status: res.status,
+      headers: { ...CORS, 'Content-Type': 'application/json' },
+    })
+  } catch (_e: unknown) {
+    return new Response(JSON.stringify({ error: 'Upstream error' }), {
+      status: 502, headers: { ...CORS, 'Content-Type': 'application/json' },
+    })
   }
-});
+})
