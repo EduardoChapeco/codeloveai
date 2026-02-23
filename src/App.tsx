@@ -46,6 +46,8 @@ const LovableUploadTest = lazyRetry(() => import("./pages/LovableUploadTest"));
 const Brain = lazyRetry(() => import("./pages/Brain"));
 const ProjectEditor = lazyRetry(() => import("./pages/ProjectEditor"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
+const WhiteLabelOnboarding = lazyRetry(() => import("./pages/WhiteLabelOnboarding"));
+const TenantDashboard = lazyRetry(() => import("./pages/TenantDashboard"));
 
 const queryClient = new QueryClient();
 
@@ -64,6 +66,7 @@ const App = () => (
                 <Route path="/" element={<Index />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/cadastro" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/dashboard" element={<Dashboard />} />
@@ -80,6 +83,8 @@ const App = () => (
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
                 <Route path="/brain" element={<Brain />} />
                 <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
+                <Route path="/whitelabel/onboarding" element={<WhiteLabelOnboarding />} />
+                <Route path="/tenant/dashboard" element={<TenantDashboard />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

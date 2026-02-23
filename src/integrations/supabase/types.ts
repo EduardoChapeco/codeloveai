@@ -357,29 +357,38 @@ export type Database = {
       affiliates: {
         Row: {
           affiliate_code: string
+          commission_rate: number
           created_at: string
           discount_percent: number
           display_name: string
           id: string
+          referral_code: string | null
           tenant_id: string | null
+          total_earned: number
           user_id: string
         }
         Insert: {
           affiliate_code: string
+          commission_rate?: number
           created_at?: string
           discount_percent?: number
           display_name?: string
           id?: string
+          referral_code?: string | null
           tenant_id?: string | null
+          total_earned?: number
           user_id: string
         }
         Update: {
           affiliate_code?: string
+          commission_rate?: number
           created_at?: string
           discount_percent?: number
           display_name?: string
           id?: string
+          referral_code?: string | null
           tenant_id?: string | null
+          total_earned?: number
           user_id?: string
         }
         Relationships: [
@@ -690,6 +699,48 @@ export type Database = {
           },
         ]
       }
+      daily_usage: {
+        Row: {
+          date: string
+          id: string
+          license_id: string
+          messages_used: number
+          tenant_id: string | null
+          user_id: string
+        }
+        Insert: {
+          date?: string
+          id?: string
+          license_id: string
+          messages_used?: number
+          tenant_id?: string | null
+          user_id: string
+        }
+        Update: {
+          date?: string
+          id?: string
+          license_id?: string
+          messages_used?: number
+          tenant_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_usage_license_id_fkey"
+            columns: ["license_id"]
+            isOneToOne: false
+            referencedRelation: "licenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_usage_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deployments_log: {
         Row: {
           created_at: string
@@ -879,42 +930,61 @@ export type Database = {
       }
       licenses: {
         Row: {
+          affiliate_id: string | null
           created_at: string
+          daily_messages: number
           device_id: string | null
           expires_at: string
+          hourly_limit: number | null
           id: string
           is_active: boolean
           last_validated_at: string | null
           plan: string
+          plan_type: string
           tenant_id: string | null
           token: string
           user_id: string
         }
         Insert: {
+          affiliate_id?: string | null
           created_at?: string
+          daily_messages?: number
           device_id?: string | null
           expires_at: string
+          hourly_limit?: number | null
           id?: string
           is_active?: boolean
           last_validated_at?: string | null
           plan?: string
+          plan_type?: string
           tenant_id?: string | null
           token: string
           user_id: string
         }
         Update: {
+          affiliate_id?: string | null
           created_at?: string
+          daily_messages?: number
           device_id?: string | null
           expires_at?: string
+          hourly_limit?: number | null
           id?: string
           is_active?: boolean
           last_validated_at?: string | null
           plan?: string
+          plan_type?: string
           tenant_id?: string | null
           token?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "licenses_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "licenses_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1957,8 +2027,10 @@ export type Database = {
           accent_color: string
           affiliate_global_split_percent: number | null
           border_radius: string
+          branding: Json
           commission_percent: number
           created_at: string
+          domain: string | null
           domain_custom: string | null
           favicon_url: string | null
           font_family: string
@@ -1969,11 +2041,14 @@ export type Database = {
           logo_url: string | null
           meta_description: string | null
           meta_title: string | null
+          mp_access_token: string | null
           name: string
+          plan_type: string
           primary_color: string
           secondary_color: string
           setup_paid: boolean | null
           slug: string
+          status: string
           terms_template: string | null
           theme_preset: string
           token_cost: number
@@ -1984,8 +2059,10 @@ export type Database = {
           accent_color?: string
           affiliate_global_split_percent?: number | null
           border_radius?: string
+          branding?: Json
           commission_percent?: number
           created_at?: string
+          domain?: string | null
           domain_custom?: string | null
           favicon_url?: string | null
           font_family?: string
@@ -1996,11 +2073,14 @@ export type Database = {
           logo_url?: string | null
           meta_description?: string | null
           meta_title?: string | null
+          mp_access_token?: string | null
           name: string
+          plan_type?: string
           primary_color?: string
           secondary_color?: string
           setup_paid?: boolean | null
           slug: string
+          status?: string
           terms_template?: string | null
           theme_preset?: string
           token_cost?: number
@@ -2011,8 +2091,10 @@ export type Database = {
           accent_color?: string
           affiliate_global_split_percent?: number | null
           border_radius?: string
+          branding?: Json
           commission_percent?: number
           created_at?: string
+          domain?: string | null
           domain_custom?: string | null
           favicon_url?: string | null
           font_family?: string
@@ -2023,11 +2105,14 @@ export type Database = {
           logo_url?: string | null
           meta_description?: string | null
           meta_title?: string | null
+          mp_access_token?: string | null
           name?: string
+          plan_type?: string
           primary_color?: string
           secondary_color?: string
           setup_paid?: boolean | null
           slug?: string
+          status?: string
           terms_template?: string | null
           theme_preset?: string
           token_cost?: number
@@ -2123,6 +2208,63 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transactions: {
+        Row: {
+          affiliate_id: string | null
+          amount: number
+          commission_percent: number | null
+          created_at: string
+          description: string
+          id: string
+          mp_payment_id: string | null
+          status: string
+          tenant_id: string | null
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          affiliate_id?: string | null
+          amount?: number
+          commission_percent?: number | null
+          created_at?: string
+          description?: string
+          id?: string
+          mp_payment_id?: string | null
+          status?: string
+          tenant_id?: string | null
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          affiliate_id?: string | null
+          amount?: number
+          commission_percent?: number | null
+          created_at?: string
+          description?: string
+          id?: string
+          mp_payment_id?: string | null
+          status?: string
+          tenant_id?: string | null
+          type?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
