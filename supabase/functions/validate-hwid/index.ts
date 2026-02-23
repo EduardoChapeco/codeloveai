@@ -12,7 +12,11 @@ serve(async (req) => {
   }
 
   try {
-    const { licenseKey, hwid } = await req.json();
+    const body = await req.json();
+    const { licenseKey, hwid } = body;
+
+    console.log("[validate-hwid] licenseKey recebido:", licenseKey?.slice(0, 40));
+    console.log("[validate-hwid] hwid recebido:", hwid);
 
     if (!licenseKey || !licenseKey.startsWith("CLF1.")) {
       return new Response(
@@ -26,48 +30,48 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Busca pela coluna "key" (nome atual após renomeação)
-    // Tenta as duas variações do nome da coluna para garantir compatibilidade
-    let license = null;
-    let fetchError = null;
+    // Tenta coluna "key" (schema renomeado)
+    let license: any = null;
 
-    // Tentativa 1: coluna "key" (schema mais recente)
-    const res1 = await supabase
+    const { data: d1, error: e1 } = await supabase
       .from("licenses")
       .select("*")
       .eq("key", licenseKey)
-      .single();
+      .maybeSingle();
 
-    if (!res1.error && res1.data) {
-      license = res1.data;
+    console.log("[validate-hwid] busca por 'key':", d1 ? "ENCONTRADO" : "não encontrado", e1?.message);
+
+    if (d1) {
+      license = d1;
     } else {
-      // Tentativa 2: coluna "token" (schema antigo)
-      const res2 = await supabase
+      // Tenta coluna "token" (schema original)
+      const { data: d2, error: e2 } = await supabase
         .from("licenses")
         .select("*")
         .eq("token", licenseKey)
-        .single();
+        .maybeSingle();
 
-      if (!res2.error && res2.data) {
-        license = res2.data;
-      } else {
-        fetchError = res2.error;
-      }
+      console.log("[validate-hwid] busca por 'token':", d2 ? "ENCONTRADO" : "não encontrado", e2?.message);
+      if (d2) license = d2;
     }
 
-    // Log para diagnóstico (remover após confirmar funcionamento)
-    console.log("licenseKey recebido:", licenseKey?.slice(0, 30) + "...");
-    console.log("license encontrada:", license ? "SIM" : "NÃO");
-    console.log("fetchError:", fetchError?.message);
-
     if (!license) {
+      // Log das primeiras linhas da tabela para diagnóstico
+      const { data: sample } = await supabase
+        .from("licenses")
+        .select("id, key, token, active, is_active, plan, expires_at")
+        .limit(3);
+      console.log("[validate-hwid] amostra da tabela licenses:", JSON.stringify(sample));
+
       return new Response(
         JSON.stringify({ valid: false, error: "License not found or inactive" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Verifica se está ativa (tenta as duas variações do nome da coluna)
+    console.log("[validate-hwid] licença encontrada, id:", license.id);
+
+    // Verifica ativo (tenta as duas variações)
     const isActive = license.active ?? license.is_active ?? true;
     if (!isActive) {
       return new Response(
@@ -87,31 +91,24 @@ serve(async (req) => {
     // HWID: registra no primeiro uso, verifica nos seguintes
     if (hwid) {
       if (!license.hwid) {
-        // Primeiro uso — registra o hwid
-        await supabase
-          .from("licenses")
-          .update({ hwid })
-          .eq("id", license.id);
-        license.hwid = hwid;
-        console.log("HWID registrado pela primeira vez:", hwid);
+        await supabase.from("licenses").update({ hwid }).eq("id", license.id);
+        console.log("[validate-hwid] hwid registrado pela primeira vez");
       } else if (license.hwid !== hwid) {
-        // HWID diferente — dispositivo não autorizado
-        console.log("HWID mismatch. Esperado:", license.hwid, "Recebido:", hwid);
+        console.log("[validate-hwid] hwid mismatch");
         return new Response(
-          JSON.stringify({ valid: false, error: "Device not authorized. Contact support." }),
+          JSON.stringify({ valid: false, error: "Device not authorized" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
 
-    // Busca dados do perfil do usuário
+    // Busca perfil
     const { data: profile } = await supabase
       .from("profiles")
       .select("name, email")
       .eq("user_id", license.user_id)
-      .single();
+      .maybeSingle();
 
-    // Retorna sucesso
     return new Response(
       JSON.stringify({
         valid: true,
@@ -122,14 +119,14 @@ serve(async (req) => {
           daily_messages: license.daily_messages,
           hourly_limit: license.hourly_limit,
         },
-        name: profile?.name || null,
-        email: profile?.email || null,
+        name: profile?.name ?? null,
+        email: profile?.email ?? null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (err) {
-    console.error("validate-hwid error:", err);
+    console.error("[validate-hwid] erro:", err);
     return new Response(
       JSON.stringify({ valid: false, error: "Internal server error" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
