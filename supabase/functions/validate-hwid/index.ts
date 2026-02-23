@@ -13,7 +13,9 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { licenseKey, hwid } = body;
+    // Aceita licenseKey, token ou key — a extensão pode enviar qualquer um
+    const licenseKey = body.licenseKey || body.token || body.key;
+    const hwid = body.hwid;
 
     console.log("[validate-hwid] licenseKey recebido:", licenseKey?.slice(0, 40));
     console.log("[validate-hwid] hwid recebido:", hwid);
@@ -30,12 +32,14 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Tenta coluna "key" (schema renomeado)
+    // ── BUSCA NA TABELA ───────────────────────────────────────────────────
+    // Schema atual: coluna "key" (migration 20260223163000 aplicada)
+    // Fallback: coluna "token" (schema original) — tentamos as duas
     let license: any = null;
 
     const { data: d1, error: e1 } = await supabase
       .from("licenses")
-      .select("*")
+      .select("id, key, user_id, plan, plan_type, created_at, expires_at, active, device_id, last_validated_at, daily_messages, hourly_limit")
       .eq("key", licenseKey)
       .maybeSingle();
 
@@ -44,10 +48,10 @@ serve(async (req) => {
     if (d1) {
       license = d1;
     } else {
-      // Tenta coluna "token" (schema original)
+      // Tenta coluna "token" (schema original sem migration)
       const { data: d2, error: e2 } = await supabase
         .from("licenses")
-        .select("*")
+        .select("id, key, user_id, plan, plan_type, created_at, expires_at, active, device_id, last_validated_at, daily_messages, hourly_limit")
         .eq("token", licenseKey)
         .maybeSingle();
 
@@ -56,22 +60,16 @@ serve(async (req) => {
     }
 
     if (!license) {
-      // Log das primeiras linhas da tabela para diagnóstico
-      const { data: sample } = await supabase
-        .from("licenses")
-        .select("id, key, token, active, is_active, plan, expires_at")
-        .limit(3);
-      console.log("[validate-hwid] amostra da tabela licenses:", JSON.stringify(sample));
-
+      console.log("[validate-hwid] licença não encontrada para key:", licenseKey?.slice(0, 40));
       return new Response(
-        JSON.stringify({ valid: false, error: "License not found or inactive" }),
+        JSON.stringify({ valid: false, error: "License not found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     console.log("[validate-hwid] licença encontrada, id:", license.id);
 
-    // Verifica ativo (tenta as duas variações)
+    // ── VERIFICA ACTIVE ───────────────────────────────────────────────────
     const isActive = license.active ?? license.is_active ?? true;
     if (!isActive) {
       return new Response(
@@ -80,7 +78,7 @@ serve(async (req) => {
       );
     }
 
-    // Verifica expiração
+    // ── VERIFICA EXPIRAÇÃO ────────────────────────────────────────────────
     if (license.expires_at && new Date(license.expires_at) < new Date()) {
       return new Response(
         JSON.stringify({ valid: false, error: "License expired" }),
@@ -88,21 +86,37 @@ serve(async (req) => {
       );
     }
 
-    // HWID: registra no primeiro uso, verifica nos seguintes
+    // ── HWID / DEVICE_ID ──────────────────────────────────────────────────
+    // CORREÇÃO: a coluna real é "device_id", não "hwid"
     if (hwid) {
-      if (!license.hwid) {
-        await supabase.from("licenses").update({ hwid }).eq("id", license.id);
-        console.log("[validate-hwid] hwid registrado pela primeira vez");
-      } else if (license.hwid !== hwid) {
-        console.log("[validate-hwid] hwid mismatch");
+      if (!license.device_id) {
+        // Primeiro uso — registrar o device
+        const { error: updateErr } = await supabase
+          .from("licenses")
+          .update({ device_id: hwid, last_validated_at: new Date().toISOString() })
+          .eq("id", license.id);
+
+        if (updateErr) {
+          console.log("[validate-hwid] erro ao registrar device_id:", updateErr.message);
+        } else {
+          console.log("[validate-hwid] device_id registrado pela primeira vez");
+        }
+      } else if (license.device_id !== hwid) {
+        console.log("[validate-hwid] device_id mismatch — esperado:", license.device_id, "recebido:", hwid);
         return new Response(
           JSON.stringify({ valid: false, error: "Device not authorized" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      } else {
+        // Device já conhecido — atualizar last_validated_at
+        await supabase
+          .from("licenses")
+          .update({ last_validated_at: new Date().toISOString() })
+          .eq("id", license.id);
       }
     }
 
-    // Busca perfil
+    // ── BUSCA PERFIL ──────────────────────────────────────────────────────
     const { data: profile } = await supabase
       .from("profiles")
       .select("name, email")
@@ -113,20 +127,20 @@ serve(async (req) => {
       JSON.stringify({
         valid: true,
         plan: {
-          expires_at: license.expires_at,
-          plan: license.plan,
-          plan_type: license.plan_type,
+          expires_at:     license.expires_at,
+          plan:           license.plan,
+          plan_type:      license.plan_type,
           daily_messages: license.daily_messages,
-          hourly_limit: license.hourly_limit,
+          hourly_limit:   license.hourly_limit,
         },
-        name: profile?.name ?? null,
+        name:  profile?.name  ?? null,
         email: profile?.email ?? null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (err) {
-    console.error("[validate-hwid] erro:", err);
+    console.error("[validate-hwid] erro inesperado:", err);
     return new Response(
       JSON.stringify({ valid: false, error: "Internal server error" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
