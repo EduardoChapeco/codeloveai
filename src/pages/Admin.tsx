@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+﻿import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
@@ -1260,7 +1260,7 @@ export default function Admin() {
               </div>
             )}
 
-            <p className="ep-sheet-footer">CODELOVE AI CORE SYSTEM v4.2</p>
+            <p className="ep-sheet-footer">Starble CORE SYSTEM v4.2</p>
           </div>
         </SheetContent>
       </Sheet>

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+﻿import { Link, useNavigate } from "react-router-dom";
 import MeshBackground from "@/components/MeshBackground";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
@@ -34,13 +34,13 @@ const faqs = [
   { q: "Como recebo minhas comissões?", a: "As comissões são consolidadas em faturas semanais e pagas via PIX. Cadastre seus dados bancários no painel de afiliado." },
   { q: "O que são CodeCoins?", a: "CodeCoins são moedas virtuais do programa de recompensas. Cada indicação confirmada vale 1 CodeCoin. Com 2 CodeCoins em uma semana, você ganha 7 dias grátis de acesso." },
   { q: "Posso usar meu próprio link para comprar?", a: "Sim! Como afiliado, ao comprar pelo seu próprio link você recebe 20% de desconto automaticamente." },
-  { q: "Como funciona o Magic Link?", a: "Seu Magic Link é uma URL exclusiva (ex: codeloveai.lovable.app/ref/SEUCODIGO) que identifica todas as vendas feitas por você." },
+  { q: "Como funciona o Magic Link?", a: "Seu Magic Link é uma URL exclusiva (ex: Starbleai.lovable.app/ref/SEUCODIGO) que identifica todas as vendas feitas por você." },
 ];
 
 export default function AffiliatesPage() {
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = tenant?.name || "Starble";
   useSEO({ title: "Programa de Afiliados", description: `Ganhe 30% de comissão indicando ${brandName}.` });
   const navigate = useNavigate();
   const [enrolling, setEnrolling] = useState(false);

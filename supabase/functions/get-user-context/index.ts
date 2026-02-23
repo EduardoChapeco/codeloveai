@@ -29,21 +29,19 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  // 1. Fetch license + tenant branding
   const { data: license } = await supabase
     .from('licenses')
-    .select('*, tenants(*)')
+    .select('*, tenants(branding, plan_type, status)')
     .eq('key', licenseKey)
     .eq('active', true)
     .single()
 
   if (!license) {
     return new Response(JSON.stringify({ valid: false }), {
-      headers: { ...CORS, 'Content-Type': 'application/json' },
+      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   }
 
-  // 2. Fetch today's usage
   const today = new Date().toISOString().split('T')[0]
   const { data: usage } = await supabase
     .from('daily_usage')
@@ -55,7 +53,6 @@ serve(async (req) => {
   const tenant = license.tenants
   const branding = tenant?.branding || {}
 
-  // 3. Return full context
   return new Response(JSON.stringify({
     valid: true,
     plan: {
@@ -67,12 +64,19 @@ serve(async (req) => {
       expires_at: license.expires_at,
     },
     branding: {
-      appName: branding.appName || 'CodeLove AI',
+      appName: branding.appName || 'Starble Booster',
       primaryColor: branding.primaryColor || '7c3aed',
       secondaryColor: branding.secondaryColor || '9d5af5',
       logoUrl: branding.logo || null,
       isTenant: !!tenant,
       tenantId: license.tenant_id || null,
     },
-  }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+    links: {
+      dashboard: 'https://starble.lovable.app/dashboard',
+      renew: 'https://starble.lovable.app/dashboard?action=renew',
+      affiliate: 'https://starble.lovable.app/cadastro?tipo=afiliado',
+    },
+  }), {
+    status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
+  })
 })

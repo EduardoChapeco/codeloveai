@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+﻿import { Link, useLocation } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useTenant } from "@/contexts/TenantContext";
@@ -15,7 +15,7 @@ export default function AppNav() {
   const { toggleChat, isChatOpen } = useChatContext();
   const { tenant } = useTenant();
   const { hasAccess } = useHasActiveAccess();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = tenant?.name || "Starble";
   const location = useLocation();
 
   if (authLoading || !user) return null;

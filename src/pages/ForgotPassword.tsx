@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import MeshBackground from "@/components/MeshBackground";
 
 export default function ForgotPassword() {
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = tenant?.name || "Starble";
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   useSEO({ title: "Esqueci a senha" });

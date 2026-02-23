@@ -2,61 +2,100 @@
 <html lang="pt-BR" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>CodeLove AI — Envios Ilimitados para Lovable</title>
-    <meta name="description" content="A melhor plataforma de envios ilimitados para Lovable. Crie projetos e envie mensagens sem limites, 24/7, sem descontar créditos.">
-    <meta name="author" content="CodeLove AI" />
-    <meta name="keywords" content="CodeLove AI, Lovable, extensão, envios ilimitados, créditos, projetos, desenvolvimento" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Starble — Envios Ilimitados para Lovable</title>
+    <meta
+      name="description"
+      content="A melhor plataforma de envios ilimitados para Lovable. Crie projetos e envie mensagens sem limites, 24/7, sem descontar créditos."
+    />
+    <meta name="author" content="Starble" />
+    <meta
+      name="keywords"
+      content="Starble, Starble Booster, Lovable, extensão, envios ilimitados, créditos, projetos, desenvolvimento"
+    />
 
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#0A84FF" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="CodeLove AI" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Starble" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="preconnect" href="https://qlhhmmboxlufvdtpbrsm.supabase.co" crossorigin />
+    <link
+      rel="preconnect"
+      href="https://qlhhmmboxlufvdtpbrsm.supabase.co"
+      crossorigin
+    />
 
     <!-- OG Tags -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://codeloveai.lovable.app" />
-    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/ByHYpD7dR5QxPwsADGeBdUDsJHW2/social-images/social-1771549611927-eventios_sistema_completo_para_eventos_e_para_encontrar_eventos.webp">
+    <meta property="og:url" content="https://starble.lovable.app" />
+    <meta
+      property="og:image"
+      content="https://storage.googleapis.com/gpt-engineer-file-uploads/ByHYpD7dR5QxPwsADGeBdUDsJHW2/social-images/social-1771549611927-eventios_sistema_completo_para_eventos_e_para_encontrar_eventos.webp"
+    />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@CodeLoveAI" />
-    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/ByHYpD7dR5QxPwsADGeBdUDsJHW2/social-images/social-1771549611927-eventios_sistema_completo_para_eventos_e_para_encontrar_eventos.webp">
-    <meta property="og:title" content="CodeLove AI — Envios Ilimitados para Lovable">
-    <meta name="twitter:title" content="CodeLove AI — Envios Ilimitados para Lovable">
-    <meta property="og:description" content="A melhor plataforma de envios ilimitados para Lovable. Crie projetos e envie mensagens sem limites, 24/7.">
-    <meta name="twitter:description" content="A melhor plataforma de envios ilimitados para Lovable. Crie projetos e envie mensagens sem limites, 24/7.">
-    <link rel="canonical" href="https://codeloveai.lovable.app" />
+    <meta name="twitter:site" content="@Starble" />
+    <meta
+      name="twitter:image"
+      content="https://storage.googleapis.com/gpt-engineer-file-uploads/ByHYpD7dR5QxPwsADGeBdUDsJHW2/social-images/social-1771549611927-eventios_sistema_completo_para_eventos_e_para_encontrar_eventos.webp"
+    />
+    <meta
+      property="og:title"
+      content="Starble — Envios Ilimitados para Lovable"
+    />
+    <meta
+      name="twitter:title"
+      content="Starble — Envios Ilimitados para Lovable"
+    />
+    <meta
+      property="og:description"
+      content="A melhor plataforma de envios ilimitados para Lovable. Crie projetos e envie mensagens sem limites, 24/7."
+    />
+    <meta
+      name="twitter:description"
+      content="A melhor plataforma de envios ilimitados para Lovable. Crie projetos e envie mensagens sem limites, 24/7."
+    />
+    <link rel="canonical" href="https://starble.lovable.app" />
   </head>
 
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      (function(){
-        function replaceBadge(){
-          var badge=document.getElementById('lovable-badge');
-          if(!badge)return false;
-          badge.style.cssText='position:fixed;bottom:16px;right:16px;z-index:9999;display:flex;align-items:center;background:#000;border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:8px 16px;font-family:Inter,system-ui,sans-serif;gap:8px;';
-          var cta=document.getElementById('lovable-badge-cta');
-          if(cta){
-            cta.href='/login';
-            cta.target='_self';
-            cta.removeAttribute('rel');
-            cta.style.cssText='display:flex;align-items:center;gap:6px;text-decoration:none;color:#fff;';
-            cta.innerHTML='<span style="font-size:10px;font-weight:900;letter-spacing:0.4em;text-transform:uppercase;color:#fff;">CODELOVE AI</span>';
+      (function () {
+        function replaceBadge() {
+          var badge = document.getElementById("lovable-badge");
+          if (!badge) return false;
+          badge.style.cssText =
+            "position:fixed;bottom:16px;right:16px;z-index:9999;display:flex;align-items:center;background:#000;border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:8px 16px;font-family:Inter,system-ui,sans-serif;gap:8px;";
+          var cta = document.getElementById("lovable-badge-cta");
+          if (cta) {
+            cta.href = "/login";
+            cta.target = "_self";
+            cta.removeAttribute("rel");
+            cta.style.cssText =
+              "display:flex;align-items:center;gap:6px;text-decoration:none;color:#fff;";
+            cta.innerHTML =
+              '<span style="font-size:10px;font-weight:900;letter-spacing:0.4em;text-transform:uppercase;color:#fff;">STARBLE</span>';
           }
-          var divider=document.getElementById('lovable-badge-divider');
-          if(divider)divider.style.display='none';
-          var close=document.getElementById('lovable-badge-close');
-          if(close)close.style.display='none';
+          var divider = document.getElementById("lovable-badge-divider");
+          if (divider) divider.style.display = "none";
+          var close = document.getElementById("lovable-badge-close");
+          if (close) close.style.display = "none";
           return true;
         }
-        if(!replaceBadge()){
-          var obs=new MutationObserver(function(m,o){if(replaceBadge())o.disconnect();});
-          obs.observe(document.body,{childList:true,subtree:true});
+        if (!replaceBadge()) {
+          var obs = new MutationObserver(function (m, o) {
+            if (replaceBadge()) o.disconnect();
+          });
+          obs.observe(document.body, { childList: true, subtree: true });
         }
       })();
     </script>

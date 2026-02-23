@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -11,7 +11,7 @@ import MeshBackground from "@/components/MeshBackground";
 export default function Register() {
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = tenant?.name || "Starble";
   useSEO({ title: "Criar conta" });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

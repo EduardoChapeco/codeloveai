@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+﻿import { Link } from "react-router-dom";
 import { Check, Users, Building2, Zap, Shield, MessageSquare, Clock, ChevronDown, ArrowRight, Star, DollarSign, Globe, Layers } from "lucide-react";
 import { useState } from "react";
 import { useSEO } from "@/hooks/useSEO";
@@ -44,7 +44,7 @@ const faqs = [
 export default function PartnersLanding() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = tenant?.name || "Starble";
   useSEO({ title: `Parceiros — ${brandName}`, description: "Programa de afiliados e White Label. Ganhe comissões ou revenda com sua própria marca." });
 
   return (

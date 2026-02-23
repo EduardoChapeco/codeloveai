@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAffiliate } from "@/hooks/useAuth";
@@ -243,8 +243,8 @@ export default function AffiliateDashboard() {
               <p className="lv-overline mb-4">Mensagens rápidas (WhatsApp)</p>
               <div className="space-y-3">
                 {[
-                  { label: "Convite Geral", text: `🚀 Quer enviar mensagens ilimitadas no Lovable sem gastar créditos? Conheça o CodeLove AI!\n\n✅ Sem descontar créditos\n✅ 24/7 sem parar\n✅ Ativação imediata\n\n🔗 Acesse: ${magicLink}` },
-                  { label: "Promoção", text: `⚡ PROMOÇÃO CODELOVE AI!\n\nA partir de R$9,99 você tem acesso ilimitado ao Lovable.\nSem gastar nenhum crédito da sua conta!\n\n👉 ${magicLink}` },
+                  { label: "Convite Geral", text: `🚀 Quer enviar mensagens ilimitadas no Lovable sem gastar créditos? Conheça o Starble!\n\n✅ Sem descontar créditos\n✅ 24/7 sem parar\n✅ Ativação imediata\n\n🔗 Acesse: ${magicLink}` },
+                  { label: "Promoção", text: `⚡ PROMOÇÃO Starble!\n\nA partir de R$9,99 você tem acesso ilimitado ao Lovable.\nSem gastar nenhum crédito da sua conta!\n\n👉 ${magicLink}` },
                   { label: "Dev para Dev", text: `Fala dev! 👋\n\nTô usando uma extensão sensacional pro Lovable que permite envios ilimitados. Testei e tá funcionando muito bem.\n\nDá uma olhada: ${magicLink}` },
                 ].map((tmpl, i) => (
                   <div key={i} className="lv-card-sm">

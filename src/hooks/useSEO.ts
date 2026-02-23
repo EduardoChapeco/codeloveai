@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { useTenant } from "@/contexts/TenantContext";
 
 interface SEOProps {
@@ -8,7 +8,7 @@ interface SEOProps {
 
 export function useSEO({ title, description }: SEOProps) {
   const { tenant } = useTenant();
-  const suffix = tenant?.name || "CodeLove AI";
+  const suffix = tenant?.name || "Starble";
 
   useEffect(() => {
     document.title = title === suffix ? title : `${title} — ${suffix}`;

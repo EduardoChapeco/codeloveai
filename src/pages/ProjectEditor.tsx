@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
@@ -130,7 +130,7 @@ export default function ProjectEditor() {
           ai_message_id: aiMsgId,
           thread_id: "main",
           view: "code",
-          view_description: "User is editing the project via CodeLove editor.",
+          view_description: "User is editing the project via Starble editor.",
           model: null,
           files: [],
           optimisticImageUrls: [],

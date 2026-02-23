@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Zap, Clock, MessageSquare, Shield, ChevronDown, Puzzle, Code2, Sparkles, Users, Building2, ArrowRight, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -60,7 +60,7 @@ export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = "CodeLove AI";
+  const brandName = "Starble";
   useSEO({ title: brandName, description: "A extensão que turbina o Lovable sem gastar seus créditos. Mensagens ilimitadas, White Label e programa de afiliados." });
   const demoRef = useRef<HTMLDivElement>(null);
 
@@ -186,7 +186,7 @@ export default function Index() {
           </div>
           <h2 className="lv-heading-lg mb-4">Tenha sua própria plataforma com sua marca</h2>
           <p className="lv-body-lg max-w-xl mx-auto mb-4">
-            Sua logo, suas cores, seu domínio, seus preços. Revenda a extensão CodeLove com branding personalizado.
+            Sua logo, suas cores, seu domínio, seus preços. Revenda a extensão Starble com branding personalizado.
           </p>
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             {["Sua logo e cores", "Domínio personalizado", "Painel de gestão", "Comissões automáticas"].map((f) => (

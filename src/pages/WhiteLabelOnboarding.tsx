@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -238,7 +238,7 @@ export default function WhiteLabelOnboarding() {
               <label className="lv-caption mb-1.5 block">Subdomínio</label>
               <div className="flex items-center gap-2">
                 <input className="lv-input flex-1" value={state.branding.subdomain} onChange={(e) => { updateBranding("subdomain", e.target.value); checkSubdomain(e.target.value); }} placeholder="minha-marca" />
-                <span className="lv-caption">.codelove.app</span>
+                <span className="lv-caption">.Starble.app</span>
               </div>
               {checkingSubdomain && <p className="lv-caption mt-1">Verificando...</p>}
               {subdomainAvailable === true && <p className="lv-caption mt-1 text-green-600">✓ Disponível</p>}
@@ -283,7 +283,7 @@ export default function WhiteLabelOnboarding() {
               <p className="lv-caption mt-1">Para receber pagamentos dos seus usuários</p>
             </div>
             <div className="lv-card-sm bg-accent/50">
-              <p className="lv-caption"><strong className="text-foreground">Nota:</strong> CodeLove retém 20% de comissão sobre cada cobrança.</p>
+              <p className="lv-caption"><strong className="text-foreground">Nota:</strong> Starble retém 20% de comissão sobre cada cobrança.</p>
             </div>
             <div className="flex justify-between">
               <button onClick={goBack} className="lv-btn-secondary h-10 px-6"><ChevronLeft className="h-4 w-4 mr-1" /> Voltar</button>
@@ -316,7 +316,7 @@ export default function WhiteLabelOnboarding() {
             <h2 className="lv-heading-md">Seu White Label está pronto! 🎉</h2>
             <div className="lv-card-sm bg-accent/50">
               <p className="lv-body-strong">URL da sua plataforma:</p>
-              <p className="lv-mono text-primary">{state.branding.subdomain}.codelove.app</p>
+              <p className="lv-mono text-primary">{state.branding.subdomain}.Starble.app</p>
             </div>
             <button onClick={() => { localStorage.removeItem("wl_onboarding_state"); navigate("/tenant/dashboard"); }} className="lv-btn-primary lv-btn-lg">
               Acessar meu painel

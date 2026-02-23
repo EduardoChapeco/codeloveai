@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Check, Zap, Clock, MessageSquare, Shield } from "lucide-react";
@@ -70,7 +70,7 @@ export default function AffiliateRefPage() {
     }
   };
 
-  const brandName = affiliate?.display_name || tenant?.name || "CodeLove AI";
+  const brandName = affiliate?.display_name || tenant?.name || "Starble";
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">

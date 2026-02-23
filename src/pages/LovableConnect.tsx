@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
@@ -128,13 +128,13 @@ export default function LovableConnect() {
       }
 
       if (event.data?.type === "clf_lovable_token" && event.data.token) {
-        console.log("[CodeLove] clf_lovable_token received");
+        console.log("[Starble] clf_lovable_token received");
         handleAutoToken(event.data.token);
         return;
       }
 
       if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
-        console.log("[CodeLove] clf_token_bridge received — idToken present");
+        console.log("[Starble] clf_token_bridge received — idToken present");
         handleAutoToken(event.data.idToken);
         // Also trigger CLF1 token generation automatically
         generateClfToken();
@@ -146,7 +146,7 @@ export default function LovableConnect() {
     const customHandler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.idToken) {
-        console.log("[CodeLove] clf_token_bridge CustomEvent received");
+        console.log("[Starble] clf_token_bridge CustomEvent received");
         handleAutoToken(detail.idToken);
         generateClfToken();
       }
@@ -169,7 +169,7 @@ export default function LovableConnect() {
     window.addEventListener("message", handleExtensionPresence);
 
     const detectExtension = () => {
-      if ((window as unknown as { __codeloveAI?: boolean }).__codeloveAI) {
+      if ((window as unknown as { __StarbleAI?: boolean }).__StarbleAI) {
         setExtensionDetected(true);
         return;
       }
@@ -362,7 +362,7 @@ export default function LovableConnect() {
               ) : (
                 <div className="space-y-3">
                   <p className="lv-caption">
-                    Instale a extensão CodeLove AI para conectar automaticamente.
+                    Instale a extensão Starble para conectar automaticamente.
                   </p>
                   <button
                     onClick={() => navigate("/install")}
@@ -378,7 +378,7 @@ export default function LovableConnect() {
             <div className="lv-card-sm bg-accent/50 space-y-3">
               <p className="lv-body-strong text-sm">Como funciona</p>
               <ol className="lv-caption space-y-1.5 list-decimal list-inside">
-                <li>Instale a extensão <strong className="text-foreground">CodeLove AI</strong></li>
+                <li>Instale a extensão <strong className="text-foreground">Starble</strong></li>
                 <li>Acesse <strong className="text-foreground">lovable.dev</strong> normalmente</li>
                 <li>A extensão captura e envia o token <strong className="text-foreground">automaticamente</strong></li>
                 <li>Pronto — gerencie projetos, deploys e previews</li>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Download, Smartphone, Monitor, Check, Lock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,7 +19,7 @@ export default function Install() {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { hasAccess, loading: accessLoading } = useHasActiveAccess();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = tenant?.name || "Starble";
 
   useEffect(() => {
     const handler = (e: Event) => {

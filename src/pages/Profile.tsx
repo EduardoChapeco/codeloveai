@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+﻿import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -64,7 +64,7 @@ export default function Profile() {
   const { userId } = useParams<{ userId: string }>();
   const { user, loading: authLoading, signOut } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = tenant?.name || "Starble";
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);

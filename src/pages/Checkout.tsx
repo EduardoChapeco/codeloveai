@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer, Percent, Copy, QrCode, CreditCard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -92,7 +92,7 @@ function formatBRL(value: number) {
 export default function Checkout() {
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "CodeLove AI";
+  const brandName = tenant?.name || "Starble";
   useSEO({ title: "Checkout", description: `Escolha seu plano ${brandName} e comece a usar envios ilimitados.` });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

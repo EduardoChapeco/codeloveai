@@ -29,7 +29,6 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  // 1. Validate license
   const { data: license } = await supabase
     .from('licenses')
     .select('id')
@@ -39,19 +38,18 @@ serve(async (req) => {
 
   if (!license) {
     return new Response(JSON.stringify({ ok: false, error: 'License not found' }), {
-      headers: { ...CORS, 'Content-Type': 'application/json' },
+      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   }
 
   const today = new Date().toISOString().split('T')[0]
 
-  // 2. Increment usage via RPC
   const { data } = await supabase.rpc('increment_daily_usage', {
     p_license_id: license.id,
     p_date: today,
   })
 
-  return new Response(JSON.stringify({ ok: true, usedToday: data }), {
-    headers: { ...CORS, 'Content-Type': 'application/json' },
+  return new Response(JSON.stringify({ ok: true, usedToday: data || 0 }), {
+    status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
   })
 })

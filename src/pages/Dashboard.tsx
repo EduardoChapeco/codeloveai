@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
@@ -136,7 +136,7 @@ export default function Dashboard() {
   // Detect extension
   useEffect(() => {
     const detect = () => {
-      if ((window as unknown as Record<string, unknown>).__codeloveAI) { setExtensionDetected(true); return; }
+      if ((window as unknown as Record<string, unknown>).__StarbleAI) { setExtensionDetected(true); return; }
       const handler = () => setExtensionDetected(true);
       window.addEventListener("clf_extension_present", handler);
       window.postMessage({ type: "clf_ping" }, window.location.origin);
