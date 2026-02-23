@@ -76,6 +76,31 @@ export default function LovableConnect() {
     loadClfToken();
   }, [user]);
 
+  // Proactively push CLF1 to extension whenever token is available
+  useEffect(() => {
+    if (!clfToken || !clfToken.startsWith("CLF1.")) return;
+
+    // 1. Send via postMessage (captured by content.js clf_sso_token listener)
+    window.postMessage({ type: "clf_sso_token", token: clfToken }, "*");
+
+    // 2. Store in localStorage (fallback for sso_bridge polling)
+    localStorage.setItem("clf_license", clfToken);
+    localStorage.setItem("clf_token", clfToken);
+
+    // 3. Dispatch storage event to ensure capture
+    try {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "clf_license",
+          newValue: clfToken,
+          storageArea: localStorage,
+        })
+      );
+    } catch { /* silent */ }
+
+    console.log("[Starble] CLF1 token pushed to extension proactively");
+  }, [clfToken]);
+
   // Generate CLF1 token — returns the token string or null
   const generateClfToken = useCallback(async (): Promise<string | null> => {
     if (!user || generatingClf) return clfTokenRef.current;
