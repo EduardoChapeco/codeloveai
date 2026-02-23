@@ -1,126 +1,138 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
-
-  let body: Record<string, unknown>
-  try { body = await req.json() } catch {
-    return new Response(JSON.stringify({ valid: false, error: 'Invalid JSON' }), {
-      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
-  const licenseKey = body.licenseKey as string | undefined
-  const hwid = body.hwid as string | undefined
+  try {
+    const { licenseKey, hwid } = await req.json();
 
-  if (!licenseKey?.startsWith('CLF1.')) {
-    return new Response(JSON.stringify({ valid: false, error: 'Invalid license format' }), {
-      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
-
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  )
-
-  // Try both column name conventions: "key" (new) or "token" (legacy)
-  // Also try "active" (new) or "is_active" (legacy)
-  let license: Record<string, unknown> | null = null
-  let keyCol = 'key'
-  let activeCol = 'active'
-
-  // Attempt 1: new column names (key + active)
-  const { data: d1, error: e1 } = await supabase
-    .from('licenses')
-    .select('*')
-    .eq('key', licenseKey)
-    .eq('active', true)
-    .single()
-
-  if (d1 && !e1) {
-    license = d1
-  } else {
-    // Attempt 2: legacy column names (token + is_active)
-    const { data: d2, error: e2 } = await supabase
-      .from('licenses')
-      .select('*')
-      .eq('token', licenseKey)
-      .eq('is_active', true)
-      .single()
-
-    if (d2 && !e2) {
-      license = d2
-      keyCol = 'token'
-      activeCol = 'is_active'
+    if (!licenseKey || !licenseKey.startsWith("CLF1.")) {
+      return new Response(
+        JSON.stringify({ valid: false, error: "Invalid license key format" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
     }
-  }
 
-  if (!license) {
-    console.error('[validate-hwid] License not found. Key prefix:', licenseKey.slice(0, 30))
-    return new Response(JSON.stringify({ valid: false, error: 'License not found or inactive' }), {
-      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-  // Check expiry
-  if (license.expires_at && new Date(license.expires_at as string) < new Date()) {
-    return new Response(JSON.stringify({ valid: false, error: 'License expired' }), {
-      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
+    // Busca pela coluna "key" (nome atual após renomeação)
+    // Tenta as duas variações do nome da coluna para garantir compatibilidade
+    let license = null;
+    let fetchError = null;
 
-  // Fetch profile separately (resilient even without FK)
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('name, email')
-    .eq('user_id', license.user_id as string)
-    .maybeSingle()
+    // Tentativa 1: coluna "key" (schema mais recente)
+    const res1 = await supabase
+      .from("licenses")
+      .select("*")
+      .eq("key", licenseKey)
+      .single();
 
-  // Register or verify HWID (Allow up to 2)
-  if (hwid) {
-    const rawHwid = (license.hwid as string) || ''
-    const currentHwids = rawHwid ? rawHwid.split(',') : []
-    if (!currentHwids.includes(hwid)) {
-      if (currentHwids.length >= 2) {
-        return new Response(JSON.stringify({ valid: false, error: 'Maximum devices reached (2)' }), {
-          status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
-        })
+    if (!res1.error && res1.data) {
+      license = res1.data;
+    } else {
+      // Tentativa 2: coluna "token" (schema antigo)
+      const res2 = await supabase
+        .from("licenses")
+        .select("*")
+        .eq("token", licenseKey)
+        .single();
+
+      if (!res2.error && res2.data) {
+        license = res2.data;
+      } else {
+        fetchError = res2.error;
       }
-      const updatedHwids = [...currentHwids, hwid].join(',')
-      await supabase.from('licenses').update({ hwid: updatedHwids }).eq(keyCol, licenseKey)
     }
+
+    // Log para diagnóstico (remover após confirmar funcionamento)
+    console.log("licenseKey recebido:", licenseKey?.slice(0, 30) + "...");
+    console.log("license encontrada:", license ? "SIM" : "NÃO");
+    console.log("fetchError:", fetchError?.message);
+
+    if (!license) {
+      return new Response(
+        JSON.stringify({ valid: false, error: "License not found or inactive" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verifica se está ativa (tenta as duas variações do nome da coluna)
+    const isActive = license.active ?? license.is_active ?? true;
+    if (!isActive) {
+      return new Response(
+        JSON.stringify({ valid: false, error: "License inactive" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verifica expiração
+    if (license.expires_at && new Date(license.expires_at) < new Date()) {
+      return new Response(
+        JSON.stringify({ valid: false, error: "License expired" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // HWID: registra no primeiro uso, verifica nos seguintes
+    if (hwid) {
+      if (!license.hwid) {
+        // Primeiro uso — registra o hwid
+        await supabase
+          .from("licenses")
+          .update({ hwid })
+          .eq("id", license.id);
+        license.hwid = hwid;
+        console.log("HWID registrado pela primeira vez:", hwid);
+      } else if (license.hwid !== hwid) {
+        // HWID diferente — dispositivo não autorizado
+        console.log("HWID mismatch. Esperado:", license.hwid, "Recebido:", hwid);
+        return new Response(
+          JSON.stringify({ valid: false, error: "Device not authorized. Contact support." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Busca dados do perfil do usuário
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("name, email")
+      .eq("user_id", license.user_id)
+      .single();
+
+    // Retorna sucesso
+    return new Response(
+      JSON.stringify({
+        valid: true,
+        plan: {
+          expires_at: license.expires_at,
+          plan: license.plan,
+          plan_type: license.plan_type,
+          daily_messages: license.daily_messages,
+          hourly_limit: license.hourly_limit,
+        },
+        name: profile?.name || null,
+        email: profile?.email || null,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (err) {
+    console.error("validate-hwid error:", err);
+    return new Response(
+      JSON.stringify({ valid: false, error: "Internal server error" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+    );
   }
-
-  // Fetch usage today
-  const today = new Date().toISOString().split('T')[0]
-  const { data: usage } = await supabase
-    .from('daily_usage')
-    .select('messages_used')
-    .eq('license_id', license.id as string)
-    .eq('date', today)
-    .maybeSingle()
-
-  return new Response(JSON.stringify({
-    valid: true,
-    plan: {
-      expires_at: license.expires_at || null,
-      planName: license.plan || 'Chat Booster',
-      type: license.plan_type || 'messages',
-      dailyLimit: license.daily_messages || 100,
-      usedToday: (usage as Record<string, unknown>)?.messages_used || 0
-    },
-    name: profile?.name || 'Usuário',
-    email: profile?.email || '',
-    tenantId: license.tenant_id || null,
-  }), {
-    status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
-})
+});
