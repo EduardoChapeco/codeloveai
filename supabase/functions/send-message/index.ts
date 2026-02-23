@@ -83,6 +83,9 @@ serve(async (req) => {
     },
   }
 
+  // DEBUG: log exact payload sent to Lovable — check in Supabase Edge Functions logs
+  console.log('[send-message] payload to Lovable:', JSON.stringify(lovableBody))
+
   try {
     const res = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
       method: 'POST',
