@@ -4,7 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
 import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
-import { Loader2, Check, X, Unlink, ShieldCheck, Zap, RefreshCw, Plug, FolderOpen, Eye } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Loader2, Check, X, Unlink, ShieldCheck, Zap, RefreshCw, Plug, FolderOpen, Eye, Key, Copy } from "lucide-react";
 
 export default function LovableConnect() {
   const { user, loading: authLoading } = useAuth();
@@ -19,6 +20,11 @@ export default function LovableConnect() {
   const [extensionDetected, setExtensionDetected] = useState(false);
   const [autoCapturing, setAutoCapturing] = useState(false);
 
+  // CLF1 token state
+  const [clfToken, setClfToken] = useState<string | null>(null);
+  const [clfExpiresAt, setClfExpiresAt] = useState<string | null>(null);
+  const [generatingClf, setGeneratingClf] = useState(false);
+
   useEffect(() => {
     if (!authLoading && !user) navigate("/login?returnTo=/lovable/connect");
   }, [user, authLoading, navigate]);
@@ -30,7 +36,6 @@ export default function LovableConnect() {
       const status = await checkConnection(user.id);
       setConnectionStatus(status);
       if (status === "active") {
-        const { supabase } = await import("@/integrations/supabase/client");
         const { data } = await supabase
           .from("lovable_accounts")
           .select("last_verified_at")
@@ -43,7 +48,54 @@ export default function LovableConnect() {
     load();
   }, [user, checkConnection]);
 
-  // ─── handleAutoToken must be declared before the useEffects that use it ───
+  // Load existing CLF1 token
+  useEffect(() => {
+    if (!user) return;
+    const loadClfToken = async () => {
+      const { data } = await supabase
+        .from("licenses")
+        .select("token, expires_at")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        setClfToken(data.token);
+        setClfExpiresAt(data.expires_at);
+      }
+    };
+    loadClfToken();
+  }, [user]);
+
+  // Generate CLF1 token
+  const generateClfToken = useCallback(async () => {
+    if (!user || generatingClf) return;
+    setGeneratingClf(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-clf-token", {
+        body: { plan: "pro", expiresIn: 30 * 24 * 60 * 60 * 1000 },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setClfToken(data.token);
+      setClfExpiresAt(data.expires_at);
+      toast.success("Token CLF1 gerado com sucesso!");
+    } catch (err: unknown) {
+      toast.error((err as { message?: string })?.message || "Erro ao gerar token CLF1.");
+    } finally {
+      setGeneratingClf(false);
+    }
+  }, [user, generatingClf]);
+
+  const copyToken = useCallback(() => {
+    if (clfToken) {
+      navigator.clipboard.writeText(clfToken);
+      toast.success("Token copiado!");
+    }
+  }, [clfToken]);
+
+  // handleAutoToken for Lovable connection
   const handleAutoToken = useCallback(async (token: string) => {
     if (saving || connectionStatus === "active") return;
     setSaving(true);
@@ -59,11 +111,7 @@ export default function LovableConnect() {
     }
   }, [saving, connectionStatus, saveToken]);
 
-  // Listen for token from extension via postMessage.
-  // Two event types supported:
-  //   1. clf_lovable_token  — legacy path (clf_request_lovable_token response)
-  //   2. clf_token_bridge   — native path (extension popup "Integrar" button sends this)
-  // NOTE: extension runs on lovable.dev (cross-origin) — we CANNOT filter by origin strictly.
+  // Listen for token from extension via postMessage
   useEffect(() => {
     const ALLOWED_ORIGINS = [
       window.location.origin,
@@ -71,7 +119,6 @@ export default function LovableConnect() {
       "https://www.lovable.dev",
     ];
     const handler = (event: MessageEvent) => {
-      // Accept from same origin OR known Lovable origins OR extension (null/empty origin)
       if (
         event.origin &&
         !ALLOWED_ORIGINS.includes(event.origin) &&
@@ -80,25 +127,39 @@ export default function LovableConnect() {
         return;
       }
 
-      // Legacy path: clf_lovable_token { token: string }
       if (event.data?.type === "clf_lovable_token" && event.data.token) {
         console.log("[CodeLove] clf_lovable_token received");
         handleAutoToken(event.data.token);
         return;
       }
 
-      // Native bridge path: clf_token_bridge { idToken, refreshToken, uid, email }
-      // This is emitted when the extension popup "Integrar" button is clicked
       if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
         console.log("[CodeLove] clf_token_bridge received — idToken present");
         handleAutoToken(event.data.idToken);
+        // Also trigger CLF1 token generation automatically
+        generateClfToken();
       }
     };
     window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, [connectionStatus, saving, handleAutoToken]);
 
-  // Detect extension presence via clf_pong or clf_extension_ready message
+    // Also listen for CustomEvent on document
+    const customHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.idToken) {
+        console.log("[CodeLove] clf_token_bridge CustomEvent received");
+        handleAutoToken(detail.idToken);
+        generateClfToken();
+      }
+    };
+    document.addEventListener("clf_token_bridge", customHandler);
+
+    return () => {
+      window.removeEventListener("message", handler);
+      document.removeEventListener("clf_token_bridge", customHandler);
+    };
+  }, [connectionStatus, saving, handleAutoToken, generateClfToken]);
+
+  // Detect extension presence
   useEffect(() => {
     const handleExtensionPresence = (event: MessageEvent) => {
       if (event.data?.type === "clf_pong" || event.data?.type === "clf_extension_ready" || event.data?.type === "clf_lovable_token") {
@@ -108,16 +169,13 @@ export default function LovableConnect() {
     window.addEventListener("message", handleExtensionPresence);
 
     const detectExtension = () => {
-      // Check flag set by content.js if running on same page
       if ((window as unknown as { __codeloveAI?: boolean }).__codeloveAI) {
         setExtensionDetected(true);
         return;
       }
-      // Send ping — content.js responds with clf_pong
       window.postMessage({ type: "clf_ping" }, "*");
     };
     
-    // Try immediately and after a short delay  
     detectExtension();
     const t = setTimeout(detectExtension, 800);
     return () => {
@@ -126,10 +184,8 @@ export default function LovableConnect() {
     };
   }, []);
 
-
   const requestTokenFromExtension = useCallback(() => {
     setAutoCapturing(true);
-    // Use "*" so the content.js on lovable.dev can receive the request
     window.postMessage({ type: "clf_request_lovable_token" }, "*");
     setTimeout(() => setAutoCapturing(false), 5000);
   }, []);
@@ -181,6 +237,47 @@ export default function LovableConnect() {
                     : "Token ativo"}
                 </p>
               </div>
+            </div>
+
+            {/* CLF1 Token Section */}
+            <div className="lv-card space-y-3">
+              <div className="flex items-center gap-3">
+                <Key className="h-5 w-5 text-primary" />
+                <p className="lv-body-strong">Token CLF1 da Extensão</p>
+              </div>
+              {clfToken ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-muted/50 rounded-lg px-3 py-2 truncate font-mono">
+                      {clfToken.substring(0, 30)}...
+                    </code>
+                    <button onClick={copyToken} className="lv-btn-secondary h-9 px-3 flex items-center gap-1.5">
+                      <Copy className="h-3.5 w-3.5" />
+                      Copiar
+                    </button>
+                  </div>
+                  <p className="lv-caption text-xs">
+                    Expira em {clfExpiresAt ? new Date(clfExpiresAt).toLocaleDateString("pt-BR") : "—"}
+                  </p>
+                  <button
+                    onClick={generateClfToken}
+                    disabled={generatingClf}
+                    className="lv-btn-secondary w-full h-9 flex items-center justify-center gap-2 text-sm"
+                  >
+                    {generatingClf ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    Gerar novo token
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={generateClfToken}
+                  disabled={generatingClf}
+                  className="lv-btn-primary w-full h-10 flex items-center justify-center gap-2"
+                >
+                  {generatingClf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+                  Gerar Token CLF1
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

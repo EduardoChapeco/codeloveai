@@ -56,3 +56,9 @@ verify_jwt = false
 
 [functions.lovable-projects-sync]
 verify_jwt = false
+
+[functions.generate-clf-token]
+verify_jwt = false
+
+[functions.validate]
+verify_jwt = false
