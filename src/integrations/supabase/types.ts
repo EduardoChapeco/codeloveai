@@ -877,6 +877,53 @@ export type Database = {
           },
         ]
       }
+      licenses: {
+        Row: {
+          created_at: string
+          device_id: string | null
+          expires_at: string
+          id: string
+          is_active: boolean
+          last_validated_at: string | null
+          plan: string
+          tenant_id: string | null
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_id?: string | null
+          expires_at: string
+          id?: string
+          is_active?: boolean
+          last_validated_at?: string | null
+          plan?: string
+          tenant_id?: string | null
+          token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_id?: string | null
+          expires_at?: string
+          id?: string
+          is_active?: boolean
+          last_validated_at?: string | null
+          plan?: string
+          tenant_id?: string | null
+          token?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "licenses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lovable_accounts: {
         Row: {
           auto_refresh_enabled: boolean
@@ -1484,6 +1531,24 @@ export type Database = {
           last_checked?: string
           project_id?: string
           snapshot_hash?: string | null
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          count: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          count?: number
+          key: string
+          window_start?: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          window_start?: string
         }
         Relationships: []
       }
