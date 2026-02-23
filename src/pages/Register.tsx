@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +18,10 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isAffiliate = searchParams.get("tipo") === "afiliado";
+  const refCode = searchParams.get("ref");
+  const [wantAffiliate, setWantAffiliate] = useState(isAffiliate);
 
   useEffect(() => {
     if (!authLoading && user) navigate("/dashboard", { replace: true });
@@ -34,7 +38,7 @@ export default function Register() {
       email,
       password,
       options: {
-        data: { name },
+        data: { name, want_affiliate: wantAffiliate, ref_code: refCode || undefined },
         emailRedirectTo: window.location.origin,
       },
     });
@@ -97,6 +101,16 @@ export default function Register() {
                 required
               />
             </div>
+            {/* Affiliate checkbox */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={wantAffiliate} onChange={(e) => setWantAffiliate(e.target.checked)} className="rounded border-border" />
+              <span className="lv-body">Quero ser afiliado (ganhe 30% de comissão)</span>
+            </label>
+            {refCode && (
+              <div className="lv-card-sm bg-accent/50">
+                <p className="lv-caption">Indicado por: <strong className="text-foreground">{refCode}</strong></p>
+              </div>
+            )}
             <button type="submit" disabled={loading} className="lv-btn-primary w-full">
               {loading ? "Criando..." : "Criar conta"}
             </button>
