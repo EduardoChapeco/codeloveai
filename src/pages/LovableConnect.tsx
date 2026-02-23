@@ -54,15 +54,16 @@ export default function LovableConnect() {
     const loadClfToken = async () => {
       const { data } = await supabase
         .from("licenses")
-        .select("token, expires_at")
+        .select("key, expires_at")
         .eq("user_id", user.id)
-        .eq("is_active", true)
+        .eq("active", true)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (data) {
-        setClfToken(data.token);
-        setClfExpiresAt(data.expires_at);
+        const row = data as unknown as { key: string; expires_at: string | null };
+        setClfToken(row.key);
+        setClfExpiresAt(row.expires_at);
       }
     };
     loadClfToken();

@@ -104,9 +104,9 @@ Deno.serve(async (req) => {
     // Deactivate any existing active licenses for this user
     await adminClient
       .from("licenses")
-      .update({ is_active: false })
+      .update({ active: false })
       .eq("user_id", userId)
-      .eq("is_active", true);
+      .eq("active", true);
 
     // Build CLF1 token
     const now = Date.now();
@@ -126,13 +126,13 @@ Deno.serve(async (req) => {
 
     const expiresAt = new Date(exp).toISOString();
 
-    // Save to licenses table
+    // Save to licenses table (new schema: key + active)
     const { error: insertError } = await adminClient.from("licenses").insert({
-      token: clfToken,
+      key: clfToken,
       user_id: userId,
-      plan,
+      plan_type: plan,
       expires_at: expiresAt,
-      is_active: true,
+      active: true,
     });
 
     if (insertError) {
