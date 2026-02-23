@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
@@ -24,6 +24,13 @@ export default function LovableConnect() {
   const [clfToken, setClfToken] = useState<string | null>(null);
   const [clfExpiresAt, setClfExpiresAt] = useState<string | null>(null);
   const [generatingClf, setGeneratingClf] = useState(false);
+
+  // SSO bridge state
+  const [ssoStatus, setSsoStatus] = useState<"idle" | "waiting" | "connecting" | "success" | "error">("idle");
+  const clfTokenRef = useRef<string | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => { clfTokenRef.current = clfToken; }, [clfToken]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login?returnTo=/lovable/connect");
@@ -69,9 +76,9 @@ export default function LovableConnect() {
     loadClfToken();
   }, [user]);
 
-  // Generate CLF1 token
-  const generateClfToken = useCallback(async () => {
-    if (!user || generatingClf) return;
+  // Generate CLF1 token — returns the token string or null
+  const generateClfToken = useCallback(async (): Promise<string | null> => {
+    if (!user || generatingClf) return clfTokenRef.current;
     setGeneratingClf(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-clf-token", {
@@ -81,13 +88,64 @@ export default function LovableConnect() {
       if (data?.error) throw new Error(data.error);
       setClfToken(data.token);
       setClfExpiresAt(data.expires_at);
+      clfTokenRef.current = data.token;
       toast.success("Token CLF1 gerado com sucesso!");
+      return data.token as string;
     } catch (err: unknown) {
       toast.error((err as { message?: string })?.message || "Erro ao gerar token CLF1.");
+      return null;
     } finally {
       setGeneratingClf(false);
     }
   }, [user, generatingClf]);
+
+  // Load existing or generate new CLF1 — always returns a token if possible
+  const loadOrGenerateClf1 = useCallback(async (): Promise<string | null> => {
+    // If we already have a token in state, return it
+    if (clfTokenRef.current) return clfTokenRef.current;
+    // Try to load from DB
+    if (user) {
+      const { data } = await supabase
+        .from("licenses")
+        .select("key, expires_at")
+        .eq("user_id", user.id)
+        .eq("active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        const row = data as unknown as { key: string; expires_at: string | null };
+        setClfToken(row.key);
+        setClfExpiresAt(row.expires_at);
+        clfTokenRef.current = row.key;
+        return row.key;
+      }
+    }
+    // No existing token — generate a new one
+    return generateClfToken();
+  }, [user, generateClfToken]);
+
+  // Respond to extension with CLF1 token via postMessage
+  const respondWithClf1 = useCallback(async () => {
+    setSsoStatus("connecting");
+    try {
+      const token = await loadOrGenerateClf1();
+      if (token) {
+        // Send CLF1 to extension via postMessage
+        window.postMessage({ type: "clf_sso_token", token }, "*");
+        // Also store in localStorage as fallback
+        localStorage.setItem("clf_license", token);
+        setSsoStatus("success");
+        toast.success("Extensão conectada com sucesso!");
+      } else {
+        setSsoStatus("error");
+        toast.error("Não foi possível gerar a licença.");
+      }
+    } catch {
+      setSsoStatus("error");
+      toast.error("Erro ao conectar extensão.");
+    }
+  }, [loadOrGenerateClf1]);
 
   const copyToken = useCallback(() => {
     if (clfToken) {
@@ -114,20 +172,8 @@ export default function LovableConnect() {
 
   // Listen for token from extension via postMessage
   useEffect(() => {
-    const ALLOWED_ORIGINS = [
-      window.location.origin,
-      "https://lovable.dev",
-      "https://www.lovable.dev",
-    ];
     const handler = (event: MessageEvent) => {
-      if (
-        event.origin &&
-        !ALLOWED_ORIGINS.includes(event.origin) &&
-        !event.origin.endsWith(".lovable.dev")
-      ) {
-        return;
-      }
-
+      // Accept messages from same origin and extension (any origin)
       if (event.data?.type === "clf_lovable_token" && event.data.token) {
         console.log("[Starble] clf_lovable_token received");
         handleAutoToken(event.data.token);
@@ -135,10 +181,12 @@ export default function LovableConnect() {
       }
 
       if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
-        console.log("[Starble] clf_token_bridge received — idToken present");
+        console.log("[Starble] clf_token_bridge received — responding with CLF1");
+        setSsoStatus("waiting");
+        // Save the Lovable token
         handleAutoToken(event.data.idToken);
-        // Only generate CLF1 if user has no active token yet
-        if (!clfToken) generateClfToken();
+        // Respond back with CLF1 license
+        respondWithClf1();
       }
     };
     window.addEventListener("message", handler);
@@ -149,8 +197,7 @@ export default function LovableConnect() {
       if (detail?.idToken) {
         console.log("[Starble] clf_token_bridge CustomEvent received");
         handleAutoToken(detail.idToken);
-        // Only generate CLF1 if user has no active token yet
-        if (!clfToken) generateClfToken();
+        respondWithClf1();
       }
     };
     document.addEventListener("clf_token_bridge", customHandler);
@@ -159,7 +206,7 @@ export default function LovableConnect() {
       window.removeEventListener("message", handler);
       document.removeEventListener("clf_token_bridge", customHandler);
     };
-  }, [connectionStatus, saving, handleAutoToken, generateClfToken, clfToken]);
+  }, [handleAutoToken, respondWithClf1]);
 
   // Detect extension presence
   useEffect(() => {
@@ -242,6 +289,36 @@ export default function LovableConnect() {
               </div>
               {isConnected && <span className="lv-badge lv-badge-success">Ativo</span>}
             </div>
+
+            {/* SSO Bridge Status */}
+            {ssoStatus !== "idle" && (
+              <div className={`lv-card flex items-center gap-4 ${
+                ssoStatus === "success" ? "border-green-500/30 bg-green-500/5" :
+                ssoStatus === "error" ? "border-destructive/30 bg-destructive/5" :
+                "border-primary/30 bg-primary/5"
+              }`}>
+                <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0">
+                  {ssoStatus === "waiting" && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+                  {ssoStatus === "connecting" && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+                  {ssoStatus === "success" && <Check className="h-5 w-5 text-green-500" />}
+                  {ssoStatus === "error" && <X className="h-5 w-5 text-destructive" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="lv-body-strong text-sm">
+                    {ssoStatus === "waiting" && "Aguardando extensão..."}
+                    {ssoStatus === "connecting" && "Conectando..."}
+                    {ssoStatus === "success" && "✅ Extensão conectada com sucesso!"}
+                    {ssoStatus === "error" && "❌ Erro ao conectar extensão"}
+                  </p>
+                  <p className="lv-caption text-xs">
+                    {ssoStatus === "waiting" && "Recebendo token da extensão Chrome"}
+                    {ssoStatus === "connecting" && "Buscando licença CLF1..."}
+                    {ssoStatus === "success" && "Token CLF1 enviado para a extensão"}
+                    {ssoStatus === "error" && "Tente gerar um novo token manualmente"}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* 2. Token CLF1 da Extensão */}
             <div className="lv-card space-y-4">

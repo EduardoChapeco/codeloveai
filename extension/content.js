@@ -273,7 +273,49 @@
         window.postMessage({ type: "clf_pong" }, window.location.origin);
       }
     }
+
+    // ── SSO Bridge: capture CLF1 license response from the Starble page ──
+    if (event.data?.type === "clf_sso_token" && event.data.token) {
+      const token = event.data.token;
+      if (typeof token === "string" && token.startsWith("CLF1.")) {
+        console.log("[Starble] clf_sso_token received — storing CLF1 license");
+        chrome.storage.local.set({
+          clf_token: token,
+          clf_license_at: new Date().toISOString(),
+        });
+        // Notify background to validate the license
+        chrome.runtime.sendMessage({
+          type: "CLF_LICENSE_RECEIVED",
+          token,
+        });
+      }
+    }
   });
+
+  // ── SSO Bridge Fallback: poll localStorage for clf_license ──
+  // If postMessage is blocked, the page also writes to localStorage
+  if (window.location.hostname.includes("starble")) {
+    let pollCount = 0;
+    const pollInterval = setInterval(() => {
+      pollCount++;
+      if (pollCount > 60) { // 30 seconds max (500ms * 60)
+        clearInterval(pollInterval);
+        return;
+      }
+      try {
+        const token = localStorage.getItem("clf_license");
+        if (token && token.startsWith("CLF1.")) {
+          console.log("[Starble] clf_license found in localStorage — storing");
+          chrome.storage.local.set({
+            clf_token: token,
+            clf_license_at: new Date().toISOString(),
+          });
+          localStorage.removeItem("clf_license"); // Clean up
+          clearInterval(pollInterval);
+        }
+      } catch { /* silent */ }
+    }, 500);
+  }
 
   // ─── Also listen for clf_token_bridge as a CustomEvent (dispatched on document) ───
   document.addEventListener("clf_token_bridge", (event) => {

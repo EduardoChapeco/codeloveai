@@ -13,6 +13,11 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Open Starble Connect page when user clicks the extension icon
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({ url: "https://starble.lovable.app/lovable/connect" });
+});
+
 async function getPlatformUrl() {
   const { platformUrl } = await chrome.storage.local.get("platformUrl");
   return platformUrl || DEFAULT_PLATFORM_URL;
@@ -85,6 +90,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .catch((err) => sendResponse({ error: err.message }));
     });
     return true;
+  }
+
+  // ── CLF1 License received from SSO bridge ──
+  if (message.type === "CLF_LICENSE_RECEIVED" && message.token) {
+    console.log("[Starble] CLF1 license received via SSO bridge — validating");
+    validateLicense(message.token).then((res) => {
+      if (res?.valid) {
+        console.log("[Starble] License validated successfully ✅");
+      } else {
+        console.warn("[Starble] License validation failed:", res?.error || res?.message);
+      }
+    });
+    sendResponse({ ok: true });
+    return false;
   }
 });
 
@@ -178,4 +197,48 @@ async function fetchNotes(supabaseJwt) {
   } catch (e) {
     return { error: e.message };
   }
+}
+
+async function validateLicense(licenseKey) {
+  const baseUrl = await getPlatformUrl();
+
+  try {
+    const hwid = await getDeviceId();
+
+    const res = await fetch(`${baseUrl}/validate-hwid`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey, hwid }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { valid: false, error: data.error || `Status ${res.status}` };
+    }
+
+    const data = await res.json();
+    if (data.valid) {
+      chrome.storage.local.set({
+        license_validated: true,
+        license_validated_at: new Date().toISOString(),
+      });
+    }
+    return data;
+  } catch (e) {
+    return { valid: false, error: e.message };
+  }
+}
+
+async function getDeviceId() {
+  // In Service Workers, screen/navigator info is limited — no screen.width/height
+  const { deviceId } = await chrome.storage.local.get("deviceId");
+  if (deviceId) return deviceId;
+
+  const raw = `${navigator.userAgent}-${navigator.language}-${Date.now()}`;
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(raw));
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const newId = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").substring(0, 32);
+  await chrome.storage.local.set({ deviceId: newId });
+  return newId;
 }
