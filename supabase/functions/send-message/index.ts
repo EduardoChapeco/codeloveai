@@ -63,12 +63,12 @@ serve(async (req) => {
   const lovableBody = {
     id: msgId,
     message: message,
-    intent: 'security_fix_v2',       // HARDCODED
+    intent: 'chat',                   // HARDCODED
     chat_only: true,                   // HARDCODED
     ai_message_id: aiMsgId,
     thread_id: 'main',
-    view: 'security',                  // HARDCODED
-    view_description: 'The user is currently viewing the security view for their project.',
+    view: 'preview',                   // HARDCODED
+    view_description: 'The user is currently viewing the preview of their project.', // HARDCODED
     model: null,
     files: files || [],
     optimisticImageUrls: [],

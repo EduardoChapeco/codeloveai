@@ -22,7 +22,7 @@ interface Token {
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const brandName = "Code Lovable Oficial";
+  const brandName = "Starble";
   useSEO({ title: "Dashboard" });
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [tokensLoaded, setTokensLoaded] = useState(false);
@@ -193,35 +193,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Token de Acesso */}
-            <div className="lv-card">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Key className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="lv-body-strong">Token de Acesso</p>
-                  <p className="lv-caption">
-                    {activeTokens.length > 1 ? `${activeTokens.length} ativos` : "Seu token ativo"}
-                  </p>
-                </div>
-              </div>
-              {activeTokens.length > 0 ? (
-                <div className="flex items-center gap-2">
-                  <code className="font-mono text-xs text-foreground bg-muted/60 rounded-lg px-3 py-2 flex-1 truncate">
-                    {activeTokens[0].token.substring(0, 10)}••••{activeTokens[0].token.substring(activeTokens[0].token.length - 4)}
-                  </code>
-                  <button
-                    onClick={() => copyToken(activeTokens[0].token)}
-                    className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5 shrink-0"
-                  >
-                    <Copy className="h-3.5 w-3.5" /> Copiar
-                  </button>
-                </div>
-              ) : (
-                <p className="lv-caption">{tokenGenerating ? "Gerando..." : "Nenhum token ativo"}</p>
-              )}
-            </div>
 
             {/* Extensão */}
             <div className="lv-card">
@@ -345,7 +316,7 @@ export default function Dashboard() {
               {[
                 { step: "01", title: "Baixar", desc: "Faça download da extensão acima", icon: Download },
                 { step: "02", title: "Instalar", desc: "Ative no Chrome em Gerenciar Extensões", icon: Monitor },
-                { step: "03", title: "Token", desc: "Copie seu token e cole na extensão", icon: Key },
+                { step: "03", title: "Conectar", desc: "Gere seu token em Lovable Connect", icon: Key },
                 { step: "04", title: "Pronto", desc: "Abra lovable.dev e a extensão ativa automaticamente", icon: Zap },
               ].map((item) => (
                 <div key={item.step} className="rounded-xl bg-muted/50 p-4 relative">

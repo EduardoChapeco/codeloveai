@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+﻿import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
@@ -103,7 +103,7 @@ serve(async (req) => {
     // Get tenant name for system prompt personalization
     const { data: tenantData } = await serviceClient
       .from("tenants").select("name").eq("id", tenantId).maybeSingle();
-    const tenantName = tenantData?.name || "CodeLove AI";
+    const tenantName = tenantData?.name || "Starble";
 
     // Check for custom AI config per tenant
     const { data: aiConfig } = await serviceClient

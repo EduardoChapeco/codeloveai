@@ -1,13 +1,13 @@
-// CodeLove AI Extension — Content Script
+﻿// Starble Extension — Content Script
 // Injects panel, intercepts chat, captures Lovable API tokens automatically
 
 (function () {
   "use strict";
 
-  if (window.__codeloveAI) return;
-  window.__codeloveAI = true;
+  if (window.__StarbleAI) return;
+  window.__StarbleAI = true;
 
-  // Signal presence so codeloveai.com can detect extension
+  // Signal presence so Starbleai.com can detect extension
   window.postMessage({ type: "clf_extension_ready" }, "*");
 
   // ─── Automatic Lovable Token Capture via XHR/Fetch interception ───
@@ -137,14 +137,14 @@
   const origXHRSetHeader = XMLHttpRequest.prototype.setRequestHeader;
 
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-    this.__codeloveUrl = url;
+    this.__StarbleUrl = url;
     return origXHROpen.call(this, method, url, ...rest);
   };
 
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
-    if (this.__codeloveUrl && (
-      this.__codeloveUrl.includes("api.lovable.dev") ||
-      this.__codeloveUrl.includes("lovable.dev")
+    if (this.__StarbleUrl && (
+      this.__StarbleUrl.includes("api.lovable.dev") ||
+      this.__StarbleUrl.includes("lovable.dev")
     )) {
         if (name.toLowerCase() === "authorization" && value.startsWith("Bearer ")) {
         const token = value.replace("Bearer ", "");
@@ -185,8 +185,8 @@
     });
   }
 
-  // ─── SSO Bridge: capture CodeLove platform token from localStorage ───
-  function captureCodeLoveToken() {
+  // ─── SSO Bridge: capture Starble platform token from localStorage ───
+  function captureStarbleToken() {
     try {
       const token = localStorage.getItem("clf_token") ||
                     localStorage.getItem("supabase.auth.token") ||
@@ -217,7 +217,7 @@
 
     // ── Handle clf_token_bridge (fired by extension popup "Integrar" button) ──
     if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
-      console.log("[CodeLove AI] clf_token_bridge received — saving idToken + refreshToken");
+      console.log("[Starble] clf_token_bridge received — saving idToken + refreshToken");
       const { idToken, refreshToken } = event.data;
       setCurrentLovableToken(idToken);
       if (refreshToken) {
@@ -279,7 +279,7 @@
   document.addEventListener("clf_token_bridge", (event) => {
     const detail = /** @type {CustomEvent} */ (event).detail;
     if (detail?.idToken) {
-      console.log("[CodeLove AI] clf_token_bridge CustomEvent received");
+      console.log("[Starble] clf_token_bridge CustomEvent received");
       setCurrentLovableToken(detail.idToken);
       if (detail.refreshToken) {
         chrome.storage.local.set({ lovable_refresh_token: detail.refreshToken });
@@ -291,45 +291,45 @@
   // ─── Panel injection ───
   function createPanel() {
     const panel = document.createElement("div");
-    panel.id = "codelove-panel";
+    panel.id = "Starble-panel";
     panel.innerHTML = `
-      <div id="codelove-panel-header">
-        <span class="codelove-logo">CODELOVE AI</span>
-        <button id="codelove-close">✕</button>
+      <div id="Starble-panel-header">
+        <span class="Starble-logo">Starble</span>
+        <button id="Starble-close">✕</button>
       </div>
-      <div id="codelove-panel-tabs">
-        <button class="codelove-tab active" data-tab="dashboard">Dashboard</button>
-        <button class="codelove-tab" data-tab="chat">Chat</button>
-        <button class="codelove-tab" data-tab="projects">Projetos</button>
-        <button class="codelove-tab" data-tab="settings">Config</button>
+      <div id="Starble-panel-tabs">
+        <button class="Starble-tab active" data-tab="dashboard">Dashboard</button>
+        <button class="Starble-tab" data-tab="chat">Chat</button>
+        <button class="Starble-tab" data-tab="projects">Projetos</button>
+        <button class="Starble-tab" data-tab="settings">Config</button>
       </div>
-      <div id="codelove-panel-content">
-        <div class="codelove-section" data-section="dashboard">
+      <div id="Starble-panel-content">
+        <div class="Starble-section" data-section="dashboard">
           <h3>Dashboard</h3>
-          <div id="codelove-status">Capturando token automaticamente...</div>
-          <div id="codelove-token-status" style="margin-top:12px;padding:10px;border-radius:8px;font-size:11px;"></div>
-          <div id="codelove-platform-status" style="margin-top:8px;padding:10px;border-radius:8px;font-size:11px;"></div>
+          <div id="Starble-status">Capturando token automaticamente...</div>
+          <div id="Starble-token-status" style="margin-top:12px;padding:10px;border-radius:8px;font-size:11px;"></div>
+          <div id="Starble-platform-status" style="margin-top:8px;padding:10px;border-radius:8px;font-size:11px;"></div>
         </div>
-        <div class="codelove-section" data-section="chat" style="display:none">
+        <div class="Starble-section" data-section="chat" style="display:none">
           <h3>Chat AI</h3>
-          <div id="codelove-chat-messages"></div>
-          <div id="codelove-chat-input-wrap">
-            <textarea id="codelove-chat-input" placeholder="Pergunte algo..."></textarea>
-            <button id="codelove-chat-send">Enviar</button>
+          <div id="Starble-chat-messages"></div>
+          <div id="Starble-chat-input-wrap">
+            <textarea id="Starble-chat-input" placeholder="Pergunte algo..."></textarea>
+            <button id="Starble-chat-send">Enviar</button>
           </div>
         </div>
-        <div class="codelove-section" data-section="projects" style="display:none">
+        <div class="Starble-section" data-section="projects" style="display:none">
           <h3>Projetos</h3>
-          <div id="codelove-projects-list">Conecte sua conta para ver projetos.</div>
+          <div id="Starble-projects-list">Conecte sua conta para ver projetos.</div>
         </div>
-        <div class="codelove-section" data-section="settings" style="display:none">
+        <div class="Starble-section" data-section="settings" style="display:none">
           <h3>Configurações</h3>
           <label>URL da Plataforma:</label>
-          <input id="codelove-platform-url" placeholder="https://..." />
-          <button id="codelove-save-settings">Salvar</button>
+          <input id="Starble-platform-url" placeholder="https://..." />
+          <button id="Starble-save-settings">Salvar</button>
           <hr />
           <label>Modo de interceptação:</label>
-          <select id="codelove-intercept-mode">
+          <select id="Starble-intercept-mode">
             <option value="off">Desativado</option>
             <option value="overlay">Overlay (bloquear chat nativo)</option>
           </select>
@@ -339,21 +339,21 @@
     document.body.appendChild(panel);
 
     // Tab switching
-        panel.querySelectorAll(".codelove-tab").forEach((tab) => {
+        panel.querySelectorAll(".Starble-tab").forEach((tab) => {
           tab.addEventListener("click", () => {
-            panel.querySelectorAll(".codelove-tab").forEach((t) => t.classList.remove("active"));
+            panel.querySelectorAll(".Starble-tab").forEach((t) => t.classList.remove("active"));
             tab.classList.add("active");
-            panel.querySelectorAll(".codelove-section").forEach((s) => { s.style.display = "none"; });
+            panel.querySelectorAll(".Starble-section").forEach((s) => { s.style.display = "none"; });
             const section = panel.querySelector(`[data-section="${tab.dataset.tab}"]`);
             if (section) section.style.display = "block";
           });
         });
 
-    document.getElementById("codelove-close")?.addEventListener("click", togglePanel);
+    document.getElementById("Starble-close")?.addEventListener("click", togglePanel);
 
-    document.getElementById("codelove-save-settings")?.addEventListener("click", () => {
-      const urlEl = /** @type {HTMLInputElement} */ (document.getElementById("codelove-platform-url"));
-      const modeEl = /** @type {HTMLSelectElement} */ (document.getElementById("codelove-intercept-mode"));
+    document.getElementById("Starble-save-settings")?.addEventListener("click", () => {
+      const urlEl = /** @type {HTMLInputElement} */ (document.getElementById("Starble-platform-url"));
+      const modeEl = /** @type {HTMLSelectElement} */ (document.getElementById("Starble-intercept-mode"));
       const url = urlEl?.value;
       const mode = modeEl?.value;
       chrome.storage.local.set({ platformUrl: url, interceptMode: mode });
@@ -361,8 +361,8 @@
     });
 
     chrome.storage.local.get(["platformUrl", "interceptMode"], (data) => {
-      const urlEl = /** @type {HTMLInputElement} */ (document.getElementById("codelove-platform-url"));
-      const modeEl = /** @type {HTMLSelectElement} */ (document.getElementById("codelove-intercept-mode"));
+      const urlEl = /** @type {HTMLInputElement} */ (document.getElementById("Starble-platform-url"));
+      const modeEl = /** @type {HTMLSelectElement} */ (document.getElementById("Starble-intercept-mode"));
       if (data.platformUrl && urlEl) urlEl.value = data.platformUrl;
       if (data.interceptMode && modeEl) modeEl.value = data.interceptMode;
     });
@@ -372,8 +372,8 @@
   }
 
   function updateTokenStatusUI() {
-    const el = document.getElementById("codelove-token-status");
-    const elPlatform = document.getElementById("codelove-platform-status");
+    const el = document.getElementById("Starble-token-status");
+    const elPlatform = document.getElementById("Starble-platform-status");
     if (!el) return;
     chrome.storage.local.get(["lovable_api_token", "lovable_refresh_token", "clf_token", "lovable_token_history", "lovable_token_updated_at"], (data) => {
       const historyCount = (data.lovable_token_history || []).length;
@@ -396,12 +396,12 @@
           elPlatform.style.background = "#0a1a2a";
           elPlatform.style.border = "1px solid #1a3a4a";
           elPlatform.style.color = "#60a5fa";
-          elPlatform.textContent = "🔗 Conectado à plataforma CodeLove AI";
+          elPlatform.textContent = "🔗 Conectado à plataforma Starble";
         } else {
           elPlatform.style.background = "#1a1a1a";
           elPlatform.style.border = "1px solid #333";
           elPlatform.style.color = "#888";
-          elPlatform.textContent = "⚪ Plataforma CodeLove AI não conectada";
+          elPlatform.textContent = "⚪ Plataforma Starble não conectada";
         }
       }
     });
@@ -437,23 +437,23 @@
     const chatArea = document.querySelector('[class*="chat"]');
     if (!chatArea) return;
     const overlay = document.createElement("div");
-    overlay.id = "codelove-overlay";
+    overlay.id = "Starble-overlay";
     overlay.innerHTML = `
-      <div class="codelove-overlay-badge">
-        <strong>BLOQUEADO</strong> — use o painel CodeLove AI
+      <div class="Starble-overlay-badge">
+        <strong>BLOQUEADO</strong> — use o painel Starble
       </div>
     `;
     (overlay.style as any).cssText = "position:absolute;inset:0;z-index:9999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;";
-    (overlay.querySelector(".codelove-overlay-badge") as HTMLElement).style.cssText = "background:#fff;color:#000;padding:16px 32px;border-radius:12px;font-size:14px;font-weight:bold;";
+    (overlay.querySelector(".Starble-overlay-badge") as HTMLElement).style.cssText = "background:#fff;color:#000;padding:16px 32px;border-radius:12px;font-size:14px;font-weight:bold;";
     (chatArea as HTMLElement).style.position = "relative";
     chatArea.appendChild(overlay);
   }
 
   // ─── Extension button (floating) ───
   const btn = document.createElement("button");
-  btn.id = "codelove-toggle";
+  btn.id = "Starble-toggle";
   btn.textContent = "⚡";
-  btn.title = "CodeLove AI";
+  btn.title = "Starble";
   (btn.style as any).cssText = "position:fixed;bottom:20px;right:20px;z-index:99999;width:48px;height:48px;border-radius:50%;background:#000;color:#fff;border:none;cursor:pointer;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:transform 0.2s;";
   btn.addEventListener("mouseenter", () => (btn.style.transform = "scale(1.1)"));
   btn.addEventListener("mouseleave", () => (btn.style.transform = "scale(1)"));
@@ -461,5 +461,5 @@
   document.body.appendChild(btn);
 
   // Initial token capture attempt
-  setTimeout(captureCodeLoveToken, 1000);
+  setTimeout(captureStarbleToken, 1000);
 })();

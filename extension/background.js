@@ -1,11 +1,11 @@
-// CodeLove AI Extension — Background Service Worker
+﻿// Starble Extension — Background Service Worker
 // Handles message routing, token relay, and auto-save
 
-// ✅ CORRECT Supabase project: qlhhmmboxlufvdtpbrsm (CodeLove AI)
+// ✅ CORRECT Supabase project: qlhhmmboxlufvdtpbrsm (Starble)
 const DEFAULT_PLATFORM_URL = "https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1";
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("[CodeLove AI] Extension installed");
+  console.log("[Starble] Extension installed");
   chrome.storage.local.set({
     panelOpen: false,
     interceptMode: "off",
@@ -34,7 +34,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "LOVABLE_TOKEN_CAPTURED") {
-    console.log("[CodeLove AI] Lovable API token captured automatically");
+    console.log("[Starble] Lovable API token captured automatically");
     // Save refresh token if provided
     if (message.refreshToken) {
       chrome.storage.local.set({ lovable_refresh_token: message.refreshToken });
@@ -44,7 +44,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (data.clf_token && message.token) {
         autoSaveLovableToken(message.token, message.refreshToken || null, data.clf_token).then((res) => {
           if (res?.success || res?.ok) {
-            console.log("[CodeLove AI] Token auto-saved to platform");
+            console.log("[Starble] Token auto-saved to platform");
           }
         });
       }
@@ -123,13 +123,13 @@ async function autoSaveLovableToken(lovableToken, refreshToken, supabaseJwt) {
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      console.error("[CodeLove AI] Token save failed:", data.error || res.status);
+      console.error("[Starble] Token save failed:", data.error || res.status);
       return { error: data.error || `Status ${res.status}` };
     }
 
     return await res.json();
   } catch (e) {
-    console.error("[CodeLove AI] Token save error:", e.message);
+    console.error("[Starble] Token save error:", e.message);
     return { error: e.message };
   }
 }

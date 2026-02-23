@@ -1,4 +1,4 @@
-
+﻿
 -- =============================================
 -- PHASE 1: MULTI-TENANT WHITE LABEL FOUNDATION
 -- =============================================
@@ -246,27 +246,27 @@ $$;
 -- 13. MIGRATE EXISTING DATA — CREATE DEFAULT TENANT
 -- =============================================
 
--- Create the default "codelove" tenant
+-- Create the default "Starble" tenant
 INSERT INTO public.tenants (id, name, slug, domain_custom, primary_color, secondary_color, commission_percent, token_cost, is_active, meta_title, meta_description)
 VALUES (
   'a0000000-0000-0000-0000-000000000001',
-  'CodeLove AI',
-  'codelove',
-  'codeloveai.lovable.app',
+  'Starble',
+  'Starble',
+  'Starbleai.lovable.app',
   '#0A84FF',
   '#5E5CE6',
   0,
   0,
   true,
-  'CodeLove AI — Mensagens Ilimitadas no Lovable',
-  'Acesse o Lovable sem limites com a extensão CodeLove AI'
+  'Starble — Mensagens Ilimitadas no Lovable',
+  'Acesse o Lovable sem limites com a extensão Starble'
 );
 
 -- Create wallet for default tenant
 INSERT INTO public.tenant_wallets (tenant_id, balance, total_credited, total_debited)
 VALUES ('a0000000-0000-0000-0000-000000000001', 999999, 999999, 0);
 
--- Assign ALL existing users to the codelove tenant
+-- Assign ALL existing users to the Starble tenant
 INSERT INTO public.tenant_users (tenant_id, user_id, role, is_primary)
 SELECT 
   'a0000000-0000-0000-0000-000000000001',
@@ -412,7 +412,7 @@ BEGIN
   INSERT INTO public.user_roles (user_id, role)
   VALUES (NEW.id, _role);
 
-  -- Assign user to default tenant (codelove)
+  -- Assign user to default tenant (Starble)
   _default_tenant_id := 'a0000000-0000-0000-0000-000000000001';
   INSERT INTO public.tenant_users (tenant_id, user_id, role, is_primary)
   VALUES (_default_tenant_id, NEW.id, 'tenant_member', true)

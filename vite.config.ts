@@ -41,8 +41,8 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       manifest: {
-        name: "CodeLove AI",
-        short_name: "CodeLove",
+        name: "Starble",
+        short_name: "Starble",
         description: "A plataforma de envios infinitos para Lovable. Sem descontar créditos.",
         theme_color: "#000000",
         background_color: "#ffffff",

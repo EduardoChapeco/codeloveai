@@ -1,8 +1,8 @@
-
-# CodeLove AI - Complete Implementation Plan
+﻿
+# Starble - Complete Implementation Plan
 
 ## Overview
-This plan implements the full CodeLove AI platform evolution across 8 modules: migrating from Cloudflare to backend functions, evolving the database schema, redesigning the landing page, building White Label onboarding, tenant dashboard, user dashboard with affiliates, Chrome extension branding, and Mercado Pago webhook/checkout integration.
+This plan implements the full Starble platform evolution across 8 modules: migrating from Cloudflare to backend functions, evolving the database schema, redesigning the landing page, building White Label onboarding, tenant dashboard, user dashboard with affiliates, Chrome extension branding, and Mercado Pago webhook/checkout integration.
 
 ## Current State Assessment
 
@@ -193,7 +193,7 @@ Note: The Chrome extension panel.js updates are documented but live outside this
 
 The existing `mercadopago-webhook` handles standard member purchases and WL purchases. Create a new `mp-webhook` edge function (or update the existing one) that also:
 - Handles affiliate commission distribution (30% to affiliate)
-- Handles platform commission for tenant users (20% to CodeLove)
+- Handles platform commission for tenant users (20% to Starble)
 - Updates `affiliates.total_earned`
 - Inserts into `transactions` table with proper types
 

@@ -75,7 +75,7 @@ export default function LovableConnect() {
     setGeneratingClf(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-clf-token", {
-        body: { plan: "pro", expiresIn: 30 * 24 * 60 * 60 * 1000 },
+        body: { plan: "pro", expiresIn: 365 * 24 * 60 * 60 * 1000 },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -137,8 +137,8 @@ export default function LovableConnect() {
       if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
         console.log("[Starble] clf_token_bridge received — idToken present");
         handleAutoToken(event.data.idToken);
-        // Also trigger CLF1 token generation automatically
-        generateClfToken();
+        // Only generate CLF1 if user has no active token yet
+        if (!clfToken) generateClfToken();
       }
     };
     window.addEventListener("message", handler);
@@ -149,7 +149,8 @@ export default function LovableConnect() {
       if (detail?.idToken) {
         console.log("[Starble] clf_token_bridge CustomEvent received");
         handleAutoToken(detail.idToken);
-        generateClfToken();
+        // Only generate CLF1 if user has no active token yet
+        if (!clfToken) generateClfToken();
       }
     };
     document.addEventListener("clf_token_bridge", customHandler);
@@ -158,7 +159,7 @@ export default function LovableConnect() {
       window.removeEventListener("message", handler);
       document.removeEventListener("clf_token_bridge", customHandler);
     };
-  }, [connectionStatus, saving, handleAutoToken, generateClfToken]);
+  }, [connectionStatus, saving, handleAutoToken, generateClfToken, clfToken]);
 
   // Detect extension presence
   useEffect(() => {
@@ -224,46 +225,51 @@ export default function LovableConnect() {
           <div className="text-center py-20">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
           </div>
-        ) : isConnected ? (
-          <div className="space-y-5">
+        ) : (
+          <div className="space-y-6">
+            {/* 1. Status de conexão */}
             <div className="lv-card flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
-                <Check className="h-5 w-5 text-green-500" />
+              <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${isConnected ? 'bg-green-500/10' : 'bg-destructive/10'}`}>
+                {isConnected ? <Check className="h-5 w-5 text-green-500" /> : <X className="h-5 w-5 text-destructive" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="lv-body-strong">Conectado com sucesso</p>
+                <p className="lv-body-strong">{isConnected ? "Conectado com sucesso" : "Não conectado"}</p>
                 <p className="lv-caption">
-                  {lastVerified
+                  {isConnected && lastVerified
                     ? `Verificado em ${new Date(lastVerified).toLocaleString("pt-BR")}`
-                    : "Token ativo"}
+                    : isConnected ? "Token ativo" : "Acesse lovable.dev para conectar"}
                 </p>
               </div>
+              {isConnected && <span className="lv-badge lv-badge-success">Ativo</span>}
             </div>
 
-            {/* CLF1 Token Section */}
-            <div className="lv-card space-y-3">
+            {/* 2. Token CLF1 da Extensão */}
+            <div className="lv-card space-y-4">
               <div className="flex items-center gap-3">
                 <Key className="h-5 w-5 text-primary" />
                 <p className="lv-body-strong">Token CLF1 da Extensão</p>
               </div>
+              
               {clfToken ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <code className="flex-1 text-xs bg-muted/50 rounded-lg px-3 py-2 truncate font-mono">
-                      {clfToken.substring(0, 30)}...
+                      {clfToken.substring(0, 20)}...
                     </code>
-                    <button onClick={copyToken} className="lv-btn-secondary h-9 px-3 flex items-center gap-1.5">
+                    <button onClick={copyToken} className="lv-btn-secondary h-9 px-3 flex items-center gap-1.5 shrink-0">
                       <Copy className="h-3.5 w-3.5" />
                       Copiar
                     </button>
                   </div>
-                  <p className="lv-caption text-xs">
-                    Expira em {clfExpiresAt ? new Date(clfExpiresAt).toLocaleDateString("pt-BR") : "—"}
-                  </p>
+                  <div className="flex items-center justify-between items-end">
+                    <p className="lv-caption text-xs">
+                      Expira em: <span className="text-foreground">{clfExpiresAt ? new Date(clfExpiresAt).toLocaleDateString("pt-BR") : "—"}</span>
+                    </p>
+                  </div>
                   <button
                     onClick={generateClfToken}
                     disabled={generatingClf}
-                    className="lv-btn-secondary w-full h-9 flex items-center justify-center gap-2 text-sm"
+                    className="lv-btn-secondary w-full h-10 flex items-center justify-center gap-2 text-sm border-dashed"
                   >
                     {generatingClf ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                     Gerar novo token
@@ -273,7 +279,7 @@ export default function LovableConnect() {
                 <button
                   onClick={generateClfToken}
                   disabled={generatingClf}
-                  className="lv-btn-primary w-full h-10 flex items-center justify-center gap-2"
+                  className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
                 >
                   {generatingClf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
                   Gerar Token CLF1
@@ -281,116 +287,48 @@ export default function LovableConnect() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* 3. Atalhos */}
+            <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => navigate("/lovable/projects")}
-                className="lv-card-sm text-center hover:bg-accent/50 transition-colors cursor-pointer"
+                className="lv-card flex flex-col items-center text-center hover:bg-accent/50 transition-colors cursor-pointer p-4"
               >
-                <FolderOpen className="h-5 w-5 mx-auto mb-1 text-primary" />
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+                  <FolderOpen className="h-5 w-5 text-primary" />
+                </div>
                 <p className="lv-body-strong text-sm">Meus Projetos</p>
                 <p className="lv-caption text-xs">Gerenciar e fazer deploys</p>
               </button>
               <button
                 onClick={() => navigate("/lovable/preview")}
-                className="lv-card-sm text-center hover:bg-accent/50 transition-colors cursor-pointer"
+                className="lv-card flex flex-col items-center text-center hover:bg-accent/50 transition-colors cursor-pointer p-4"
               >
-                <Eye className="h-5 w-5 mx-auto mb-1 text-primary" />
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+                  <Eye className="h-5 w-5 text-primary" />
+                </div>
                 <p className="lv-body-strong text-sm">Preview</p>
                 <p className="lv-caption text-xs">Visualizar projetos ao vivo</p>
               </button>
             </div>
 
-            <div className="lv-card-sm bg-accent/50 flex items-start gap-3">
+            {/* 4. Aviso de segurança */}
+            <div className="lv-card-sm bg-accent/30 flex items-start gap-3 border-none">
               <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <p className="lv-caption">
+              <p className="lv-caption text-xs leading-relaxed">
                 Seu token é armazenado de forma segura no servidor e <strong className="text-foreground">nunca</strong> é exposto no navegador após salvo.
               </p>
             </div>
 
-            <button
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-              className="lv-btn-secondary w-full h-11 flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10"
-            >
-              {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
-              Desconectar conta
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {isExpired && (
-              <div className="lv-card-sm bg-destructive/10 border-destructive/20 flex items-start gap-3">
-                <X className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                <p className="lv-caption text-destructive">
-                  Token expirado. Acesse <strong>lovable.dev</strong> com a extensão ativa para reconectar automaticamente.
-                </p>
-              </div>
-            )}
-
-            <div className="lv-card space-y-4">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Zap className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="lv-body-strong">Conexão Automática</p>
-                  <p className="lv-caption">A extensão captura e sincroniza tudo automaticamente</p>
-                </div>
-              </div>
-
-              {extensionDetected ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-green-500">
-                    <Plug className="h-4 w-4" />
-                    <span className="text-sm font-medium">Extensão detectada</span>
-                  </div>
-                  <p className="lv-caption">
-                    Acesse <strong className="text-foreground">lovable.dev</strong> em outra aba e faça qualquer ação. A extensão capturará o token automaticamente.
-                  </p>
-                  <button
-                    onClick={requestTokenFromExtension}
-                    disabled={autoCapturing || saving}
-                    className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
-                  >
-                    {autoCapturing || saving ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    {saving ? "Conectando..." : autoCapturing ? "Buscando token..." : "Capturar token agora"}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="lv-caption">
-                    Instale a extensão Starble para conectar automaticamente.
-                  </p>
-                  <button
-                    onClick={() => navigate("/install")}
-                    className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
-                  >
-                    <Plug className="h-4 w-4" />
-                    Instalar extensão
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="lv-card-sm bg-accent/50 space-y-3">
-              <p className="lv-body-strong text-sm">Como funciona</p>
-              <ol className="lv-caption space-y-1.5 list-decimal list-inside">
-                <li>Instale a extensão <strong className="text-foreground">Starble</strong></li>
-                <li>Acesse <strong className="text-foreground">lovable.dev</strong> normalmente</li>
-                <li>A extensão captura e envia o token <strong className="text-foreground">automaticamente</strong></li>
-                <li>Pronto — gerencie projetos, deploys e previews</li>
-              </ol>
-            </div>
-
-            <div className="lv-card-sm bg-accent/50 flex items-start gap-3">
-              <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <p className="lv-caption">
-                O token é verificado antes de ser salvo e <strong className="text-foreground">nunca retorna ao navegador</strong> — todas as chamadas são feitas pelo proxy seguro.
-              </p>
+            {/* 5. Botão Desconectar conta */}
+            <div className="pt-4">
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="lv-btn-secondary w-full h-11 flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10 border-destructive/20"
+              >
+                {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
+                Desconectar conta
+              </button>
             </div>
           </div>
         )}

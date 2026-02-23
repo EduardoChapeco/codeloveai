@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isDisposableEmail } from "../_shared/disposable-emails.ts";
 import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
@@ -141,8 +141,8 @@ Deno.serve(async (req) => {
     });
 
     // Call external webhook for token generation
-    const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
-    console.log(`CODELOVE_WEBHOOK_SECRET present: ${!!webhookSecret}`);
+    const webhookSecret = Deno.env.get("Starble_WEBHOOK_SECRET");
+    console.log(`Starble_WEBHOOK_SECRET present: ${!!webhookSecret}`);
     if (webhookSecret) {
       try {
         const requestBody = {
@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
         };
         console.log(`Calling external webhook for user ${userId}, email: ${userEmail}, plan: test_1d`);
         
-        const webhookResponse = await fetch("https://codelove-fix-api.eusoueduoficial.workers.dev/webhook/purchase", {
+        const webhookResponse = await fetch("https://Starble-fix-api.eusoueduoficial.workers.dev/webhook/purchase", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),
@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
         // Don't fail the main flow
       }
     } else {
-      console.warn("CODELOVE_WEBHOOK_SECRET not configured, skipping external token generation");
+      console.warn("Starble_WEBHOOK_SECRET not configured, skipping external token generation");
     }
 
     return new Response(JSON.stringify({ status: "activated" }), {

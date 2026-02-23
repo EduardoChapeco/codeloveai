@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
@@ -7,7 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const WORKER_URL = "https://codelove-fix-api.eusoueduoficial.workers.dev";
+const WORKER_URL = "https://Starble-fix-api.eusoueduoficial.workers.dev";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
+      const webhookSecret = Deno.env.get("Starble_WEBHOOK_SECRET");
       if (webhookSecret) {
         const workerPlan = plan === "1_day" ? "test_1d" :
                           plan === "7_days" ? "days_15" :

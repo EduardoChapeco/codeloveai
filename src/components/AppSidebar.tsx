@@ -40,8 +40,8 @@ const adminTabs = [
 export default function AppSidebar() {
   const { user, signOut } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const brandName = "Code Lovable Oficial";
-  const brandInitials = "CL";
+  const brandName = "Starble";
+  const brandInitials = "SB";
   const { isAdmin } = useIsAdmin();
   const { toggleChat, isChatOpen } = useChatContext();
   const { toggleSupport, isOpen: isSupportOpen, unreadCount } = useSupportChat();

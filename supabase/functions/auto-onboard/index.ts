@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isDisposableEmail } from "../_shared/disposable-emails.ts";
 import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
 
     // Generate token via webhook
     let generatedToken: string | null = null;
-    const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
+    const webhookSecret = Deno.env.get("Starble_WEBHOOK_SECRET");
     if (webhookSecret) {
       try {
         const requestBody = {
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
         };
 
         const webhookResponse = await fetch(
-          "https://codelove-fix-api.eusoueduoficial.workers.dev/webhook/purchase",
+          "https://Starble-fix-api.eusoueduoficial.workers.dev/webhook/purchase",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

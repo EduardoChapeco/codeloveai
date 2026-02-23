@@ -1,4 +1,4 @@
-#codelove-panel {
+﻿#Starble-panel {
   position: fixed;
   top: 0;
   right: -420px;
@@ -15,11 +15,11 @@
   box-shadow: -4px 0 24px rgba(0,0,0,0.4);
 }
 
-#codelove-panel.open {
+#Starble-panel.open {
   right: 0;
 }
 
-#codelove-panel-header {
+#Starble-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -27,14 +27,14 @@
   border-bottom: 1px solid #222;
 }
 
-.codelove-logo {
+.Starble-logo {
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.3em;
   color: #fff;
 }
 
-#codelove-close {
+#Starble-close {
   background: none;
   border: none;
   color: #666;
@@ -43,15 +43,15 @@
   padding: 4px 8px;
   border-radius: 6px;
 }
-#codelove-close:hover { color: #fff; background: #222; }
+#Starble-close:hover { color: #fff; background: #222; }
 
-#codelove-panel-tabs {
+#Starble-panel-tabs {
   display: flex;
   border-bottom: 1px solid #222;
   padding: 0 12px;
 }
 
-.codelove-tab {
+.Starble-tab {
   background: none;
   border: none;
   color: #666;
@@ -63,29 +63,29 @@
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
 }
-.codelove-tab:hover { color: #ccc; }
-.codelove-tab.active { color: #fff; border-bottom-color: #fff; }
+.Starble-tab:hover { color: #ccc; }
+.Starble-tab.active { color: #fff; border-bottom-color: #fff; }
 
-#codelove-panel-content {
+#Starble-panel-content {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
 }
 
-.codelove-section h3 {
+.Starble-section h3 {
   font-size: 13px;
   font-weight: 700;
   margin-bottom: 12px;
   color: #fff;
 }
 
-.codelove-section p {
+.Starble-section p {
   font-size: 12px;
   color: #888;
   margin-bottom: 12px;
 }
 
-.codelove-section label {
+.Starble-section label {
   display: block;
   font-size: 9px;
   font-weight: 700;
@@ -95,9 +95,9 @@
   margin-top: 12px;
 }
 
-.codelove-section input,
-.codelove-section select,
-.codelove-section textarea {
+.Starble-section input,
+.Starble-section select,
+.Starble-section textarea {
   width: 100%;
   background: #111;
   border: 1px solid #333;
@@ -108,13 +108,13 @@
   margin-bottom: 8px;
   box-sizing: border-box;
 }
-.codelove-section input:focus,
-.codelove-section textarea:focus {
+.Starble-section input:focus,
+.Starble-section textarea:focus {
   outline: none;
   border-color: #555;
 }
 
-.codelove-section button {
+.Starble-section button {
   background: #fff;
   color: #000;
   border: none;
@@ -126,15 +126,15 @@
   cursor: pointer;
   transition: opacity 0.2s;
 }
-.codelove-section button:hover { opacity: 0.8; }
+.Starble-section button:hover { opacity: 0.8; }
 
-.codelove-section hr {
+.Starble-section hr {
   border: none;
   border-top: 1px solid #222;
   margin: 16px 0;
 }
 
-#codelove-chat-messages {
+#Starble-chat-messages {
   min-height: 200px;
   max-height: 400px;
   overflow-y: auto;
@@ -145,18 +145,18 @@
   border: 1px solid #222;
 }
 
-#codelove-chat-input-wrap {
+#Starble-chat-input-wrap {
   display: flex;
   gap: 8px;
 }
 
-#codelove-chat-input {
+#Starble-chat-input {
   flex: 1;
   resize: none;
   height: 40px;
 }
 
-#codelove-chat-send {
+#Starble-chat-send {
   width: auto;
   padding: 8px 20px;
 }

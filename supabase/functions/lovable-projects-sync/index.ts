@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,8 +14,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Require admin authentication OR a valid CODELOVE_ADMIN_SECRET header (for cron jobs)
-    const adminSecret = Deno.env.get("CODELOVE_ADMIN_SECRET");
+    // Require admin authentication OR a valid Starble_ADMIN_SECRET header (for cron jobs)
+    const adminSecret = Deno.env.get("Starble_ADMIN_SECRET");
     const providedSecret = req.headers.get("x-admin-secret");
 
     let isAuthorized = false;

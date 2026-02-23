@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,8 +42,8 @@ Deno.serve(async (req) => {
         items: [{ title: planName, quantity: 1, unit_price: Number(planPrice), currency_id: "BRL" }],
         external_reference: licenseKey,
         back_urls: {
-          success: "https://codeloveai.lovable.app/dashboard?payment=success",
-          failure: "https://codeloveai.lovable.app/dashboard?payment=failure",
+          success: "https://Starbleai.lovable.app/dashboard?payment=success",
+          failure: "https://Starbleai.lovable.app/dashboard?payment=failure",
         },
         auto_return: "approved",
         notification_url: `${supabaseUrl}/functions/v1/mp-webhook`,

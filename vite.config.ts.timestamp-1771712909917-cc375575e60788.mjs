@@ -1,10 +1,10 @@
-// vite.config.ts
-import { defineConfig } from "file:///C:/codeloveai/node_modules/vite/dist/node/index.js";
-import react from "file:///C:/codeloveai/node_modules/@vitejs/plugin-react-swc/index.js";
+﻿// vite.config.ts
+import { defineConfig } from "file:///C:/Starbleai/node_modules/vite/dist/node/index.js";
+import react from "file:///C:/Starbleai/node_modules/@vitejs/plugin-react-swc/index.js";
 import path from "path";
-import { componentTagger } from "file:///C:/codeloveai/node_modules/lovable-tagger/dist/index.js";
-import { VitePWA } from "file:///C:/codeloveai/node_modules/vite-plugin-pwa/dist/index.js";
-var __vite_injected_original_dirname = "C:\\codeloveai";
+import { componentTagger } from "file:///C:/Starbleai/node_modules/lovable-tagger/dist/index.js";
+import { VitePWA } from "file:///C:/Starbleai/node_modules/vite-plugin-pwa/dist/index.js";
+var __vite_injected_original_dirname = "C:\\Starbleai";
 var vite_config_default = defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -35,8 +35,8 @@ var vite_config_default = defineConfig(({ mode }) => ({
         ]
       },
       manifest: {
-        name: "CodeLove AI",
-        short_name: "CodeLove",
+        name: "Starble",
+        short_name: "Starble",
         description: "A plataforma de envios infinitos para Lovable. Sem descontar cr\xE9ditos.",
         theme_color: "#000000",
         background_color: "#ffffff",

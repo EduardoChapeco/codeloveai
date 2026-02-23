@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     }
 
     const response = await fetch(url, {
-      headers: { "User-Agent": "CodeLoveBot/1.0" },
+      headers: { "User-Agent": "StarbleBot/1.0" },
       redirect: "follow",
     });
 

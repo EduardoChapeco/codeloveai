@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -238,8 +238,8 @@ function buildBrainPrompt(brainType: string, message: string): string {
   const prompts: Record<string, string> = {
     general: `Analise e corrija os seguintes problemas de segurança encontrados:
 
-SISTEMA CODELOVE BRAIN — INSTRUÇÃO:
-Você é LoveAI, assistente de código e design da plataforma CodeLove.
+SISTEMA STARBLE BRAIN — INSTRUÇÃO:
+Você é LoveAI, assistente de código e design da plataforma Starble.
 O usuário solicitou: "${message}"
 
 REGRAS DE RESPOSTA:
@@ -255,14 +255,14 @@ IMPORTANTE: Escreva sua resposta COMPLETA no arquivo src/brain-output.json no fo
 
     design: `Analise e corrija os seguintes problemas de design encontrados no scan:
 
-SISTEMA CODELOVE BRAIN — MODO DESIGN:
+SISTEMA STARBLE BRAIN — MODO DESIGN:
 O usuário quer: "${message}"
 Retorne um prompt de design COMPLETO e DETALHADO. Inclua: paleta de cores (hex), tipografia, espaçamentos, componentes, layout grid, sombras, bordas, animações, responsividade, tema light/dark.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
 
     code: `Analise e corrija os seguintes problemas de código encontrados:
 
-SISTEMA CODELOVE BRAIN — MODO CODE:
+SISTEMA STARBLE BRAIN — MODO CODE:
 O usuário quer: "${message}"
 Retorne APENAS o código necessário. Formato: arquivos separados com caminho completo.
 Priorize: TypeScript, React, TailwindCSS, shadcn/ui, Supabase.
@@ -270,14 +270,14 @@ Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "time
 
     scraper: `Analise e corrija os seguintes problemas no script de scraping:
 
-SISTEMA CODELOVE BRAIN — MODO SCRAPER:
+SISTEMA STARBLE BRAIN — MODO SCRAPER:
 O usuário quer extrair dados de: "${message}"
 Retorne um script completo para captura dos dados. Inclua tratamento de erros e formato JSON.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
 
     migration: `Analise e corrija os seguintes problemas de migração SQL:
 
-SISTEMA CODELOVE BRAIN — MODO MIGRATION:
+SISTEMA STARBLE BRAIN — MODO MIGRATION:
 O usuário quer migrar: "${message}"
 Gere o script SQL completo de migração incluindo: schemas, tabelas, RLS policies, triggers, functions e seed data.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
@@ -395,7 +395,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            description: "CodeLove Brain - AI Assistant",
+            description: "Starble Brain - AI Assistant",
             visibility: "private",
             env_vars: {},
             metadata: { chat_mode_enabled: false },
@@ -436,7 +436,7 @@ Deno.serve(async (req) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             changes: [
-              { path: "src/brain-config.md", content: "# CodeLove Brain System\n\nEste projeto é o Brain da plataforma CodeLove.\nQuando receber mensagens via chat, responda SOMENTE com o resultado solicitado.\nNÃO crie páginas, componentes ou código a menos que explicitamente solicitado.\nFormato de resposta padrão: texto puro ou JSON conforme instruído no prompt.\n\nRESPONDA SEMPRE EM PORTUGUÊS (Brasil)." },
+              { path: "src/brain-config.md", content: "# Starble Brain System\n\nEste projeto é o Brain da plataforma Starble.\nQuando receber mensagens via chat, responda SOMENTE com o resultado solicitado.\nNÃO crie páginas, componentes ou código a menos que explicitamente solicitado.\nFormato de resposta padrão: texto puro ou JSON conforme instruído no prompt.\n\nRESPONDA SEMPRE EM PORTUGUÊS (Brasil)." },
               { path: "src/brain-output.json", content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }) },
             ],
           }),

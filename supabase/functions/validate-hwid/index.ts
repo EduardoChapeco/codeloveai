@@ -10,14 +10,15 @@ const CORS = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
 
-  let body: any
+  let body: Record<string, unknown>
   try { body = await req.json() } catch {
     return new Response(JSON.stringify({ valid: false, error: 'Invalid JSON' }), {
       status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   }
 
-  const { licenseKey, hwid } = body
+  const licenseKey = body.licenseKey as string | undefined
+  const hwid = body.hwid as string | undefined
 
   if (!licenseKey?.startsWith('CLF1.')) {
     return new Response(JSON.stringify({ valid: false, error: 'Invalid license format' }), {
@@ -30,15 +31,16 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
+  // Query license by key + active
   const { data: license, error } = await supabase
     .from('licenses')
-    .select('*, tenants(id, branding, plan_type, commission_rate, status)')
+    .select('*')
     .eq('key', licenseKey)
     .eq('active', true)
     .single()
 
   if (error || !license) {
-    return new Response(JSON.stringify({ valid: false, error: 'License not found' }), {
+    return new Response(JSON.stringify({ valid: false, error: 'License not found or inactive' }), {
       status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   }
@@ -50,24 +52,47 @@ serve(async (req) => {
     })
   }
 
-  // Register or verify HWID
-  if (!license.hwid) {
-    await supabase.from('licenses').update({ hwid }).eq('key', licenseKey)
-  } else if (license.hwid !== hwid) {
-    return new Response(JSON.stringify({ valid: false, error: 'Device not authorized' }), {
-      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
+  // Fetch profile separately (resilient even without FK)
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('name, email')
+    .eq('user_id', license.user_id)
+    .maybeSingle()
+
+  // Register or verify HWID (Allow up to 2)
+  if (hwid) {
+    const currentHwids = license.hwid ? (license.hwid as string).split(',') : []
+    if (!currentHwids.includes(hwid)) {
+      if (currentHwids.length >= 2) {
+        return new Response(JSON.stringify({ valid: false, error: 'Maximum devices reached (2)' }), {
+          status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
+        })
+      }
+      const updatedHwids = [...currentHwids, hwid].join(',')
+      await supabase.from('licenses').update({ hwid: updatedHwids }).eq('key', licenseKey)
+    }
   }
+
+  // Fetch usage today
+  const today = new Date().toISOString().split('T')[0]
+  const { data: usage } = await supabase
+    .from('daily_usage')
+    .select('messages_used')
+    .eq('license_id', license.id)
+    .eq('date', today)
+    .maybeSingle()
 
   return new Response(JSON.stringify({
     valid: true,
     plan: {
-      type: license.plan_type || 'messages',
-      dailyLimit: license.daily_messages || 10,
-      hourlyLimit: license.hourly_limit || null,
       expires_at: license.expires_at || null,
-      planName: license.plan || 'Grátis',
+      planName: license.plan || 'Chat Booster',
+      type: license.plan_type || 'messages',
+      dailyLimit: license.daily_messages || 100,
+      usedToday: usage?.messages_used || 0
     },
+    name: profile?.name || 'Usuário',
+    email: profile?.email || '',
     tenantId: license.tenant_id || null,
   }), {
     status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },

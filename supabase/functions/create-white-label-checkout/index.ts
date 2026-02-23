@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -129,8 +129,8 @@ Deno.serve(async (req) => {
     }
 
     const rawOrigin = req.headers.get("origin");
-    const allowedOrigins = ["https://codeloveai.lovable.app", "https://id-preview--804f123e-068a-44af-90b4-2843ed8e7d2a.lovable.app"];
-    const origin = rawOrigin && allowedOrigins.some(o => rawOrigin.startsWith(o)) ? rawOrigin : "https://codeloveai.lovable.app";
+    const allowedOrigins = ["https://Starbleai.lovable.app", "https://id-preview--804f123e-068a-44af-90b4-2843ed8e7d2a.lovable.app"];
+    const origin = rawOrigin && allowedOrigins.some(o => rawOrigin.startsWith(o)) ? rawOrigin : "https://Starbleai.lovable.app";
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const webhookUrl = `${supabaseUrl}/functions/v1/mercadopago-webhook`;
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
         description: `White Label ${plan.name} (${selectedPeriod})`,
         payment_method_id: "pix",
         payer: {
-          email: userEmail || `user-${userId.substring(0, 8)}@codelove.ai`,
+          email: userEmail || `user-${userId.substring(0, 8)}@Starble.ai`,
         },
         external_reference: externalReference,
         notification_url: webhookUrl,
@@ -247,7 +247,7 @@ Deno.serve(async (req) => {
       },
       auto_return: "approved",
       notification_url: webhookUrl,
-      statement_descriptor: "WHITE LABEL CODELOVE",
+      statement_descriptor: "WHITE LABEL Starble",
     };
 
     const mpResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
