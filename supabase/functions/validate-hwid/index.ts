@@ -31,22 +31,47 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  // Query license by key + active
-  const { data: license, error } = await supabase
+  // Try both column name conventions: "key" (new) or "token" (legacy)
+  // Also try "active" (new) or "is_active" (legacy)
+  let license: Record<string, unknown> | null = null
+  let keyCol = 'key'
+  let activeCol = 'active'
+
+  // Attempt 1: new column names (key + active)
+  const { data: d1, error: e1 } = await supabase
     .from('licenses')
     .select('*')
     .eq('key', licenseKey)
     .eq('active', true)
     .single()
 
-  if (error || !license) {
+  if (d1 && !e1) {
+    license = d1
+  } else {
+    // Attempt 2: legacy column names (token + is_active)
+    const { data: d2, error: e2 } = await supabase
+      .from('licenses')
+      .select('*')
+      .eq('token', licenseKey)
+      .eq('is_active', true)
+      .single()
+
+    if (d2 && !e2) {
+      license = d2
+      keyCol = 'token'
+      activeCol = 'is_active'
+    }
+  }
+
+  if (!license) {
+    console.error('[validate-hwid] License not found. Key prefix:', licenseKey.slice(0, 30))
     return new Response(JSON.stringify({ valid: false, error: 'License not found or inactive' }), {
       status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   }
 
   // Check expiry
-  if (license.expires_at && new Date(license.expires_at) < new Date()) {
+  if (license.expires_at && new Date(license.expires_at as string) < new Date()) {
     return new Response(JSON.stringify({ valid: false, error: 'License expired' }), {
       status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
@@ -56,12 +81,13 @@ serve(async (req) => {
   const { data: profile } = await supabase
     .from('profiles')
     .select('name, email')
-    .eq('user_id', license.user_id)
+    .eq('user_id', license.user_id as string)
     .maybeSingle()
 
   // Register or verify HWID (Allow up to 2)
   if (hwid) {
-    const currentHwids = license.hwid ? (license.hwid as string).split(',') : []
+    const rawHwid = (license.hwid as string) || ''
+    const currentHwids = rawHwid ? rawHwid.split(',') : []
     if (!currentHwids.includes(hwid)) {
       if (currentHwids.length >= 2) {
         return new Response(JSON.stringify({ valid: false, error: 'Maximum devices reached (2)' }), {
@@ -69,7 +95,7 @@ serve(async (req) => {
         })
       }
       const updatedHwids = [...currentHwids, hwid].join(',')
-      await supabase.from('licenses').update({ hwid: updatedHwids }).eq('key', licenseKey)
+      await supabase.from('licenses').update({ hwid: updatedHwids }).eq(keyCol, licenseKey)
     }
   }
 
@@ -78,7 +104,7 @@ serve(async (req) => {
   const { data: usage } = await supabase
     .from('daily_usage')
     .select('messages_used')
-    .eq('license_id', license.id)
+    .eq('license_id', license.id as string)
     .eq('date', today)
     .maybeSingle()
 
@@ -89,7 +115,7 @@ serve(async (req) => {
       planName: license.plan || 'Chat Booster',
       type: license.plan_type || 'messages',
       dailyLimit: license.daily_messages || 100,
-      usedToday: usage?.messages_used || 0
+      usedToday: (usage as Record<string, unknown>)?.messages_used || 0
     },
     name: profile?.name || 'Usuário',
     email: profile?.email || '',

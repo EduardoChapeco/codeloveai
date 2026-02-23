@@ -101,12 +101,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Deactivate any existing active licenses for this user
+    // Deactivate existing active licenses — try both column name conventions
+    // New schema: "active" column | Legacy schema: "is_active" column
     await adminClient
       .from("licenses")
       .update({ active: false })
       .eq("user_id", userId)
       .eq("active", true);
+    // Also try legacy column name
+    await adminClient
+      .from("licenses")
+      .update({ is_active: false })
+      .eq("user_id", userId)
+      .eq("is_active", true);
 
     // Build CLF1 token
     const now = Date.now();
@@ -126,8 +133,11 @@ Deno.serve(async (req) => {
 
     const expiresAt = new Date(exp).toISOString();
 
-    // Save to licenses table
-    const { error: insertError } = await adminClient.from("licenses").insert({
+    // Save to licenses table — try new column names first, fallback to legacy
+    let insertError: unknown = null;
+
+    // Attempt 1: new columns (key, active)
+    const { error: err1 } = await adminClient.from("licenses").insert({
       key: clfToken,
       user_id: userId,
       plan: plan,
@@ -135,6 +145,20 @@ Deno.serve(async (req) => {
       expires_at: expiresAt,
       active: true,
     });
+
+    if (err1) {
+      console.warn("Insert with 'key'/'active' failed, trying 'token'/'is_active':", err1.message);
+      // Attempt 2: legacy columns (token, is_active)
+      const { error: err2 } = await adminClient.from("licenses").insert({
+        token: clfToken,
+        user_id: userId,
+        plan: plan,
+        plan_type: "messages",
+        expires_at: expiresAt,
+        is_active: true,
+      });
+      insertError = err2;
+    }
 
     if (insertError) {
       console.error("Insert license error:", insertError);
