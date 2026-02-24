@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     );
 
     let userId: string;
-    let userEmail: string;
+    let userEmail: string = "";
 
     try {
       const token = authHeader.replace("Bearer ", "");
