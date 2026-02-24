@@ -28,6 +28,27 @@ async function validateLicense(adminClient: ReturnType<typeof createClient>, lic
 }
 
 Deno.serve(async (req) => {
+  // ── BLOQUEIO EXTENSÃO ──────────────────────────────────────────────
+  // Esta função foi substituída. Requisições da extensão Starble Booster
+  // devem ser rejeitadas para forçar migração para a nova função (send-message).
+  const _BLOCKED_ORIGINS = ['chrome-extension://', 'moz-extension://'];
+  const _referer = req.headers.get('referer') || '';
+  const _origin  = req.headers.get('origin')  || '';
+  const _isExtension = _BLOCKED_ORIGINS.some(o => _referer.startsWith(o) || _origin.startsWith(o));
+
+  // Bloqueia também pelo licenseKey (identifica requisições da extensão)
+  let _bodyCheck: any = {};
+  try { _bodyCheck = await req.clone().json(); } catch { /* ignore */ }
+  const _hasLicenseKey = typeof _bodyCheck.licenseKey === 'string' && _bodyCheck.licenseKey.startsWith('CLF1.');
+
+  if (_isExtension || _hasLicenseKey) {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Esta função foi descontinuada. Use send-message v2.' }),
+      { status: 410, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } }
+    );
+  }
+  // ── FIM DO BLOQUEIO ────────────────────────────────────────────────
+
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   if (req.method !== "POST") {

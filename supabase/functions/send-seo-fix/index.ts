@@ -28,6 +28,17 @@ async function validateLicense(adminClient: ReturnType<typeof createClient>, lic
 }
 
 Deno.serve(async (req) => {
+  // ── BLOQUEIO EXTENSÃO ──────────────────────────────────────────────
+  let _bc: any = {};
+  try { _bc = await req.clone().json(); } catch { /* ignore */ }
+  if (typeof _bc.licenseKey === 'string' && _bc.licenseKey.startsWith('CLF1.')) {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Funcao descontinuada. Atualize a extensao.' }),
+      { status: 410, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } }
+    );
+  }
+  // ── FIM DO BLOQUEIO ────────────────────────────────────────────────
+
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   if (req.method !== "POST") {
