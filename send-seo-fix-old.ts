@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,13 +53,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Hardcoded: seo_fix intent — never exposed to client
+    // Hardcoded: seo_fix intent
     const body: Record<string, unknown> = {
       message: prompt,
       intent: "seo_fix",
       chat_only: false,
       view: "seo",
-      view_description: "O usuário está visualizando o painel de análise de SEO da aplicação.",
+      view_description: "User is viewing the SEO analysis panel for the application.",
     };
     if (files && Array.isArray(files)) body.files = files;
 

@@ -129,7 +129,7 @@ function buildChatPayload(
     runtime_errors: [],
   };
 
-  // ─── MODE 1: security_fix_v2 (HAR-exact - Safe) ───
+  // ─── MODE 1: security_fix_v2 (HAR-exact) ───
   if (mode === "security_fix") {
     return {
       ...base,
@@ -138,7 +138,8 @@ function buildChatPayload(
       chat_only: false,
       debug_mode: false,
       view: "security",
-      view_description: extra?.view_description || "O usuário está visualizando a aba de segurança do projeto.",
+      view_description: extra?.view_description ||
+        "The user is currently viewing the security view for their project.",
       files: [],
       selected_elements: [],
       optimisticImageUrls: [],
@@ -148,31 +149,33 @@ function buildChatPayload(
     };
   }
 
-  // ─── MODE 2: error_fix / instant (HAR-exact - Safe) ───
+  // ─── MODE 2: error_fix / instant (HAR-exact) ───
   if (mode === "error_fix") {
     return {
       ...base,
-      message: `Para o código presente, recebi o seguinte erro.\n\nPor favor, pense passo a passo para resolvê-lo.\n\`\`\`\n${prompt}\n\`\`\``,
+      message: `For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n\`\`\`\n${prompt}\n\`\`\``,
       mode: "instant",
       debug_mode: false,
       view: "error",
-      view_description: "O usuário está visualizando o erro em seu projeto. Isso mostra uma versão estática do código com uma visualização de diff. A edição só é possível para usuários pagos e para a edição mais recente. Mostra o erro real no topo.",
+      view_description:
+        "The user is currently viewing the error for their project. This shows a static version of the code, with a diff view available. Editing is only possible for paid users and for the latest edit. It shows the actual error in their code at the top.",
     };
   }
 
-  // ─── MODE 3: seo_fix (HAR-exact - Safe) ───
+  // ─── MODE 3: seo_fix (HAR-exact) ───
   if (mode === "seo_fix") {
     return {
       ...base,
-      message: prompt,
+      message: prompt, // Already fully formatted by caller
       intent: "seo_fix",
       chat_only: false,
       view: "seo",
-      view_description: extra?.view_description || "O usuário está visualizando a visualização de análise de Page Speed do projeto. Isso utiliza o Google Lighthouse para analisar o desempenho real do app do usuário.",
+      view_description: extra?.view_description ||
+        "The user is currently viewing the Page Speed analysis view for their project. This uses Google Lighthouse to analyze the actual performance of the user's app and gives separate scores for both mobile and desktop performance.",
     };
   }
 
-  // ─── MODE 4: tool_approve / instant (HAR-exact - Safe) ───
+  // ─── MODE 4: tool_approve / instant (HAR-exact) ───
   if (mode === "tool_approve") {
     return {
       ...base,
@@ -185,7 +188,7 @@ function buildChatPayload(
       user_input: {},
       current_page: "/",
       view: "preview",
-      view_description: "O usuário está visualizando a prévia.",
+      view_description: "The user is currently viewing the preview.",
     };
   }
 
@@ -196,7 +199,7 @@ function buildChatPayload(
     intent: "security_fix_v2",
     chat_only: false,
     view: "security",
-    view_description: "O usuário está visualizando a aba de segurança do projeto.",
+    view_description: "The user is currently viewing the security view for their project.",
   };
 }
 
