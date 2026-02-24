@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSEO } from "@/hooks/useSEO";
+import { Link } from "react-router-dom";
 import AppLayout from "@/components/AppLayout";
 import { ChevronDown, Building2, CreditCard, Palette, Users, Eye, HelpCircle, Shield } from "lucide-react";
 
@@ -116,14 +117,23 @@ export default function WhiteLabelFAQ() {
         </div>
 
         {/* CTA */}
-        <div className="mt-12 text-center">
-          <a
-            href="/wl/setup"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity"
-          >
-            <Building2 className="w-4 h-4" />
-            Criar meu White Label
-          </a>
+        <div className="mt-12 lv-liquid-glass p-8 text-center">
+          <h2 className="lv-heading-md mb-3">Pronto para começar?</h2>
+          <p className="lv-body mb-6 max-w-md mx-auto">
+            Crie sua plataforma com preview ao vivo durante o setup.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              to="/whitelabel/onboarding"
+              className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2"
+            >
+              <Building2 className="w-4 h-4" />
+              Criar meu White Label
+            </Link>
+            <Link to="/whitelabel" className="lv-btn-secondary lv-btn-lg">
+              Saiba mais
+            </Link>
+          </div>
         </div>
       </div>
     </AppLayout>

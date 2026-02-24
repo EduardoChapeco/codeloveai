@@ -1,16 +1,25 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { useSEO } from "@/hooks/useSEO";
 import AppLayout from "@/components/AppLayout";
-import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import OrchestratorDashboard from "@/components/orchestrator/OrchestratorDashboard";
 import {
   Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
   Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon,
-  MessageSquare, ChevronLeft, ChevronRight, Bug, Globe,
+  MessageSquare, ChevronLeft, ChevronRight, Bug, Globe, Zap, Volume2, VolumeX, Stars,
 } from "lucide-react";
+import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+interface AssistantMessage {
+  role: "user" | "ai";
+  content: string;
+  audioUrl?: string;
+  loading?: boolean;
+}
 
 type BrainType = "general" | "design" | "code" | "scraper" | "migration" | "error" | "seo";
 type ConvoStatus = "pending" | "processing" | "completed" | "timeout" | "failed";
@@ -73,7 +82,15 @@ export default function BrainPage() {
   const [sending, setSending] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [brainMode, setBrainMode] = useState<"chat" | "orchestrator" | "assistant">("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const assistantEndRef = useRef<HTMLDivElement>(null);
+
+  // ── Gemini Assistant state ────────────────────────────────────
+  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
+  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [playingAudio, setPlayingAudio] = useState<HTMLAudioElement | null>(null);
 
   const historyConvos = useMemo(() => {
     return allConversations.filter(c => c.status === "completed" || c.status === "timeout" || c.status === "failed");
@@ -267,6 +284,61 @@ export default function BrainPage() {
     }
   };
 
+  // ── Gemini assistant send ────────────────────────────────────
+  const sendAssistantMessage = useCallback(async () => {
+    const text = assistantInput.trim();
+    if (!text || assistantLoading) return;
+    setAssistantInput("");
+    setAssistantMessages(prev => [
+      ...prev,
+      { role: "user", content: text },
+      { role: "ai", content: "", loading: true },
+    ]);
+    setAssistantLoading(true);
+    try {
+      const history = assistantMessages
+        .filter(m => !m.loading)
+        .slice(-10)
+        .map(m => ({ role: m.role, content: m.content }));
+      const { data, error } = await supabase.functions.invoke("gemini-chat", {
+        body: { message: text, history },
+      });
+      if (error) throw error;
+      const reply = (data as { reply: string }).reply || "Não consegui processar sua pergunta. Tente novamente.";
+      setAssistantMessages(prev =>
+        prev.map((m, i) => i === prev.length - 1 ? { ...m, content: reply, loading: false } : m)
+      );
+    } catch (e: unknown) {
+      setAssistantMessages(prev =>
+        prev.map((m, i) => i === prev.length - 1
+          ? { ...m, content: "Erro ao conectar com o assistente. Tente novamente.", loading: false }
+          : m
+        )
+      );
+      toast.error((e as Error).message);
+    } finally {
+      setAssistantLoading(false);
+    }
+  }, [assistantInput, assistantLoading, assistantMessages]);
+
+  const playVoice = useCallback(async (text: string) => {
+    if (playingAudio) { playingAudio.pause(); setPlayingAudio(null); return; }
+    try {
+      const { data, error } = await supabase.functions.invoke("voice-response", {
+        body: { text },
+      });
+      if (error || !(data as { url?: string }).url) throw new Error("Sem URL de áudio");
+      const audio = new Audio((data as { url: string }).url);
+      setPlayingAudio(audio);
+      audio.onended = () => setPlayingAudio(null);
+      audio.play();
+    } catch { toast.error("Não foi possível gerar o áudio."); }
+  }, [playingAudio]);
+
+  useEffect(() => {
+    assistantEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [assistantMessages]);
+
   const copyResponse = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Resposta copiada!");
@@ -381,24 +453,182 @@ export default function BrainPage() {
               <p className="text-sm font-semibold">Star AI</p>
               <p className="text-[11px] text-muted-foreground">🟢 Ativo</p>
             </div>
-            <div className="ml-auto flex items-center gap-1 flex-wrap justify-end">
-              {brainTypes.map(bt => (
-                <button
-                  key={bt.id}
-                  onClick={() => setBrainType(bt.id)}
-                  title={bt.desc}
-                  className={`h-7 px-2.5 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors ${
-                    brainType === bt.id ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  <bt.icon className="h-3 w-3" />
-                  <span className="hidden lg:inline">{bt.label}</span>
-                </button>
-              ))}
+
+            {/* Mode toggle */}
+            <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-0.5 ml-2">
+              <button
+                onClick={() => setBrainMode("chat")}
+                className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1 transition-colors ${
+                  brainMode === "chat" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <MessageSquare className="h-3 w-3" /> Chat
+              </button>
+              <button
+                onClick={() => setBrainMode("assistant")}
+                className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1 transition-colors ${
+                  brainMode === "assistant" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Stars className="h-3 w-3" /> Assistente
+              </button>
+              <button
+                onClick={() => setBrainMode("orchestrator")}
+                className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1 transition-colors ${
+                  brainMode === "orchestrator" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Zap className="h-3 w-3" /> Orquestrador
+              </button>
             </div>
+
+            {brainMode === "chat" && (
+              <div className="ml-auto flex items-center gap-1 flex-wrap justify-end">
+                {brainTypes.map(bt => (
+                  <button
+                    key={bt.id}
+                    onClick={() => setBrainType(bt.id)}
+                    title={bt.desc}
+                    className={`h-7 px-2.5 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                      brainType === bt.id ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <bt.icon className="h-3 w-3" />
+                    <span className="hidden lg:inline">{bt.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Messages */}
+          {/* Orchestrator mode */}
+          {brainMode === "orchestrator" && (
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <OrchestratorDashboard />
+            </div>
+          )}
+
+          {/* ── Gemini Assistant Mode ──────────────────────────── */}
+          {brainMode === "assistant" && (
+            <div className="flex-1 flex flex-col min-w-0">
+              {/* Info banner */}
+              <div className="px-4 py-2.5 bg-blue-500/5 border-b border-blue-400/20 flex items-center gap-2">
+                <Stars className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                <p className="text-[11px] text-blue-600/80">
+                  <strong>Assistente Starble</strong> — responde dúvidas sobre como usar a plataforma. Powered by Gemini.
+                </p>
+                {assistantMessages.length > 0 && (
+                  <button
+                    onClick={() => setAssistantMessages([])}
+                    className="ml-auto text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Limpar conversa
+                  </button>
+                )}
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {assistantMessages.length === 0 && (
+                  <div className="text-center py-16">
+                    <div className="h-16 w-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
+                      <Stars className="h-8 w-8 text-blue-500" />
+                    </div>
+                    <p className="font-medium mb-1">Como posso ajudar?</p>
+                    <p className="text-sm text-muted-foreground mb-6">Tire dúvidas sobre a plataforma Starble</p>
+                    <div className="flex flex-col gap-2 max-w-sm mx-auto">
+                      {[
+                        "Como funciona o Orquestrador?",
+                        "O que é o StarCrawl?",
+                        "Como conectar minha conta Lovable?",
+                        "Diferença entre os planos?",
+                      ].map(q => (
+                        <button
+                          key={q}
+                          onClick={() => { setAssistantInput(q); }}
+                          className="text-left px-4 py-2.5 rounded-xl bg-muted/40 hover:bg-muted/70 text-sm text-muted-foreground transition-colors border border-border/40"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {assistantMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.role === "ai" && (
+                      <div className="h-7 w-7 rounded-full bg-blue-500/15 flex items-center justify-center shrink-0 mr-2 mt-1">
+                        <Stars className="h-3.5 w-3.5 text-blue-500" />
+                      </div>
+                    )}
+                    <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-br-sm"
+                        : "bg-muted/60 border border-border/40 rounded-bl-sm"
+                    }`}>
+                      {msg.loading ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span className="text-xs text-muted-foreground">Pensando...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm dark:prose-invert max-w-none">
+                            {msg.content}
+                          </ReactMarkdown>
+                          {msg.role === "ai" && msg.content && (
+                            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/30">
+                              <button
+                                onClick={() => playVoice(msg.content)}
+                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                title="Ouvir resposta"
+                              >
+                                {playingAudio ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                                {playingAudio ? "Parar" : "Ouvir"}
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={assistantEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="border-t border-border/60 px-4 py-3">
+                <div className="flex items-end gap-2">
+                  <textarea
+                    value={assistantInput}
+                    onChange={e => setAssistantInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAssistantMessage(); }
+                    }}
+                    placeholder="Pergunte sobre a plataforma..."
+                    rows={1}
+                    className="flex-1 resize-none bg-muted/40 border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[44px] max-h-[120px] focus:border-primary/50"
+                    style={{ scrollbarWidth: "none" }}
+                  />
+                  <button
+                    onClick={sendAssistantMessage}
+                    disabled={assistantLoading || !assistantInput.trim()}
+                    className="h-11 w-11 flex items-center justify-center rounded-xl bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 transition-colors shrink-0"
+                  >
+                    {assistantLoading
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Send className="h-4 w-4" />
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Messages + Input (chat mode only) */}
+          {brainMode === "chat" && (
+            <>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {displayConvos.length === 0 && !currentConvoId && (
               <div className="text-center py-20">
@@ -495,6 +725,8 @@ export default function BrainPage() {
               </p>
             )}
           </div>
+            </>
+          )}
         </div>
       </div>
     </AppLayout>

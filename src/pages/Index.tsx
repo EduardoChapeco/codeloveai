@@ -18,7 +18,7 @@ const plans = [
   {
     name: "Grátis",
     price: "R$0",
-    period: "/mês",
+    period: "",
     badge: "Comece agora",
     features: ["10 mensagens/dia", "1 projeto", "Sem cartão de crédito", "Suporte comunidade"],
     cta: "Começar Grátis",
@@ -26,23 +26,23 @@ const plans = [
     highlight: false,
   },
   {
-    name: "Pro",
-    price: "R$49",
-    period: "/mês",
+    name: "Diário",
+    price: "R$4,90",
+    period: "/dia",
     badge: "Mais popular",
-    features: ["Mensagens ilimitadas", "Projetos ilimitados", "Prioridade no envio", "Suporte prioritário"],
-    cta: "Assinar Pro",
-    href: "/register?plan=pro",
+    features: ["Mensagens ilimitadas", "Projetos ilimitados", "Ativa por 24h", "Sem mensalidade fixa"],
+    cta: "Comprar acesso",
+    href: "/checkout?plan=daily",
     highlight: true,
   },
   {
-    name: "Agência",
-    price: "R$149",
+    name: "Mensal",
+    price: "R$97",
     period: "/mês",
-    badge: "Para times",
-    features: ["Tudo do Pro", "Múltiplos usuários", "API de integração", "Gerenciamento avançado"],
-    cta: "Falar com vendas",
-    href: "/register?plan=agency",
+    badge: "Melhor custo",
+    features: ["Mensagens ilimitadas", "Projetos ilimitados", "Renovação automática", "Suporte prioritário"],
+    cta: "Assinar Mensal",
+    href: "/checkout?plan=monthly",
     highlight: false,
   },
 ];
@@ -196,8 +196,8 @@ export default function Index() {
             ))}
           </div>
           <p className="lv-caption mb-6">Setup a partir de <strong className="text-foreground">R$299</strong> + 20% por usuário ativo</p>
-          <Link to="/whitelabel/onboarding" className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
-            Criar meu White Label <ArrowRight className="h-4 w-4" />
+          <Link to="/whitelabel" className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
+            Saiba mais sobre White Label <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </section>
@@ -242,7 +242,7 @@ export default function Index() {
           <div className="flex items-center gap-4">
             <Link to="/community" className="lv-caption hover:text-foreground transition-colors">Comunidade</Link>
             <Link to="/register?tipo=afiliado" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>
-            <Link to="/whitelabel/onboarding" className="lv-caption hover:text-foreground transition-colors">White Label</Link>
+            <Link to="/whitelabel" className="lv-caption hover:text-foreground transition-colors">White Label</Link>
           </div>
         </div>
       </footer>

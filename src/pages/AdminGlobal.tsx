@@ -107,7 +107,23 @@ interface WlSubscription {
   created_at: string;
 }
 
-type Tab = "tenants" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud";
+interface Plan {
+  id: string;
+  name: string;
+  type: string;
+  price: number;
+  billing_cycle: string;
+  description: string | null;
+  features: string[] | null;
+  highlight_label: string | null;
+  daily_limit: number;
+  display_order: number;
+  is_public: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+type Tab = "tenants" | "plans" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -124,7 +140,22 @@ export default function AdminGlobal() {
   const [wlPlans, setWlPlans] = useState<WlPlan[]>([]);
   const [wlAffiliates, setWlAffiliates] = useState<WlAffiliate[]>([]);
   const [wlSubs, setWlSubs] = useState<WlSubscription[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Plans edit sheet
+  const [planSheetOpen, setPlanSheetOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [planForm, setPlanForm] = useState<{
+    name: string; price: string; billing_cycle: string; description: string;
+    highlight_label: string; daily_limit: string; display_order: string;
+    is_public: boolean; is_active: boolean;
+  }>({
+    name: "", price: "0", billing_cycle: "monthly", description: "",
+    highlight_label: "", daily_limit: "-1", display_order: "0",
+    is_public: true, is_active: true,
+  });
+  const [planSaving, setPlanSaving] = useState(false);
 
   // Create/Edit tenant sheet
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -153,7 +184,7 @@ export default function AdminGlobal() {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [tenantsRes, walletsRes, commissionsRes, ledgerRes, wlPlansRes, wlAffRes, wlSubsRes] = await Promise.all([
+    const [tenantsRes, walletsRes, commissionsRes, ledgerRes, wlPlansRes, wlAffRes, wlSubsRes, plansRes] = await Promise.all([
       supabase.from("tenants").select("*").order("created_at", { ascending: true }),
       supabase.from("tenant_wallets").select("*"),
       supabase.from("admin_commissions").select("*").order("created_at", { ascending: false }).limit(100),
@@ -161,6 +192,7 @@ export default function AdminGlobal() {
       supabase.from("white_label_plans").select("*").order("created_at", { ascending: false }),
       supabase.from("white_label_affiliates").select("*").order("created_at", { ascending: false }),
       supabase.from("white_label_subscriptions").select("*").order("created_at", { ascending: false }).limit(100),
+      supabase.from("plans").select("*").order("display_order", { ascending: true }),
     ]);
     setTenants(tenantsRes.data || []);
     setWallets(walletsRes.data || []);
@@ -169,7 +201,56 @@ export default function AdminGlobal() {
     setWlPlans((wlPlansRes.data as WlPlan[]) || []);
     setWlAffiliates((wlAffRes.data as WlAffiliate[]) || []);
     setWlSubs((wlSubsRes.data as WlSubscription[]) || []);
+    setPlans((plansRes.data as Plan[]) || []);
     setLoading(false);
+  };
+
+  const openEditPlan = (p: Plan) => {
+    setEditingPlan(p);
+    setPlanForm({
+      name: p.name,
+      price: String(p.price),
+      billing_cycle: p.billing_cycle,
+      description: p.description || "",
+      highlight_label: p.highlight_label || "",
+      daily_limit: String(p.daily_limit),
+      display_order: String(p.display_order),
+      is_public: p.is_public,
+      is_active: p.is_active,
+    });
+    setPlanSheetOpen(true);
+  };
+
+  const savePlan = async () => {
+    if (!editingPlan) return;
+    setPlanSaving(true);
+    try {
+      const { error } = await supabase.from("plans").update({
+        name: planForm.name,
+        price: parseInt(planForm.price, 10),
+        billing_cycle: planForm.billing_cycle,
+        description: planForm.description || null,
+        highlight_label: planForm.highlight_label || null,
+        daily_limit: parseInt(planForm.daily_limit, 10),
+        display_order: parseInt(planForm.display_order, 10),
+        is_public: planForm.is_public,
+        is_active: planForm.is_active,
+      }).eq("id", editingPlan.id);
+      if (error) throw error;
+      toast.success("Plano atualizado!");
+      setPlanSheetOpen(false);
+      fetchAll();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao salvar plano");
+    } finally {
+      setPlanSaving(false);
+    }
+  };
+
+  const togglePlanActive = async (id: string, current: boolean) => {
+    await supabase.from("plans").update({ is_active: !current }).eq("id", id);
+    toast.success(current ? "Plano desativado" : "Plano ativado");
+    fetchAll();
   };
 
   useEffect(() => {
@@ -244,8 +325,8 @@ export default function AdminGlobal() {
       }
       setSheetOpen(false);
       fetchAll();
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao salvar tenant");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao salvar tenant");
     } finally {
       setSaving(false);
     }
@@ -321,12 +402,13 @@ export default function AdminGlobal() {
           <div className="flex gap-2 flex-wrap">
             {([
               { id: "tenants", label: "Tenants", icon: Building2 },
+              { id: "plans", label: "Planos", icon: DollarSign },
               { id: "lovable_cloud", label: "Lovable Cloud", icon: CloudLightning },
               { id: "wl_plans", label: "Planos WL", icon: Package },
               { id: "wl_affiliates", label: "Afiliados WL", icon: UserPlus },
               { id: "wl_subs", label: "Assinaturas WL", icon: FileText },
               { id: "finances", label: "Faturamento", icon: BarChart3 },
-              { id: "commissions", label: "Comissões", icon: DollarSign },
+              { id: "commissions", label: "Comissões", icon: BarChart3 },
               { id: "wallets", label: "Wallets", icon: Wallet },
               { id: "ledger", label: "Ledger", icon: BookOpen },
               { id: "operations", label: "Operações", icon: Shield },
@@ -340,6 +422,93 @@ export default function AdminGlobal() {
               </button>
             ))}
           </div>
+
+          {/* ─── PLANS TAB ─── */}
+          {tab === "plans" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="lv-body-strong">{plans.length} plano(s) na plataforma</p>
+                <button onClick={fetchAll} className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-2">
+                  <RefreshCw className="h-3.5 w-3.5" /> Atualizar
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-2 lv-caption font-medium">ID</th>
+                      <th className="text-left py-3 px-2 lv-caption font-medium">Nome</th>
+                      <th className="text-right py-3 px-2 lv-caption font-medium">Preço (centavos)</th>
+                      <th className="text-left py-3 px-2 lv-caption font-medium">Ciclo</th>
+                      <th className="text-right py-3 px-2 lv-caption font-medium">Limite/dia</th>
+                      <th className="text-left py-3 px-2 lv-caption font-medium">Badge</th>
+                      <th className="text-center py-3 px-2 lv-caption font-medium">Público</th>
+                      <th className="text-center py-3 px-2 lv-caption font-medium">Ativo</th>
+                      <th className="py-3 px-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plans.map(p => (
+                      <tr key={p.id} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
+                        <td className="py-3 px-2">
+                          <code className="text-xs bg-muted px-2 py-0.5 rounded">{p.id}</code>
+                        </td>
+                        <td className="py-3 px-2 font-medium">{p.name}</td>
+                        <td className="py-3 px-2 text-right">
+                          {p.price === 0 ? (
+                            <span className="text-muted-foreground">Grátis</span>
+                          ) : (
+                            <span>R${(p.price / 100).toFixed(2)}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-2">
+                          <span className="lv-badge lv-badge-muted">{p.billing_cycle}</span>
+                        </td>
+                        <td className="py-3 px-2 text-right">
+                          {p.daily_limit === -1 ? (
+                            <span className="text-emerald-600 font-medium">∞</span>
+                          ) : (
+                            <span>{p.daily_limit}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-2">
+                          {p.highlight_label ? (
+                            <span className="lv-badge" style={{ background: 'var(--clf-accent-purple)', color: '#fff' }}>
+                              {p.highlight_label}
+                            </span>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="py-3 px-2 text-center">
+                          {p.is_public ? <CheckCircle className="h-4 w-4 text-emerald-500 mx-auto" /> : <XCircle className="h-4 w-4 text-muted-foreground mx-auto" />}
+                        </td>
+                        <td className="py-3 px-2 text-center">
+                          <button
+                            onClick={() => togglePlanActive(p.id, p.is_active)}
+                            className={`lv-badge cursor-pointer ${p.is_active ? 'lv-badge-success' : 'lv-badge-muted'}`}
+                            title={p.is_active ? 'Clique para desativar' : 'Clique para ativar'}
+                          >
+                            {p.is_active ? 'Ativo' : 'Inativo'}
+                          </button>
+                        </td>
+                        <td className="py-3 px-2">
+                          <button onClick={() => openEditPlan(p)} className="lv-btn-icon h-8 w-8" title="Editar">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {plans.length === 0 && (
+                <div className="lv-card text-center py-10">
+                  <p className="lv-body text-muted-foreground">Nenhum plano encontrado. Execute a migration primeiro.</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ─── TENANTS TAB ─── */}
           {tab === "tenants" && (
@@ -957,6 +1126,70 @@ export default function AdminGlobal() {
             <button onClick={saveTenant} disabled={saving} className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {editingTenant ? "Salvar Alterações" : "Criar Tenant"}
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Plan Edit Sheet */}
+      <Sheet open={planSheetOpen} onOpenChange={setPlanSheetOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Editar Plano</SheetTitle>
+            <SheetDescription>Atualize as configurações do plano <strong>{editingPlan?.id}</strong>.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 mt-6">
+            <div>
+              <label className="lv-caption block mb-1">Nome</label>
+              <input className="lv-input w-full" value={planForm.name} onChange={e => setPlanForm({ ...planForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="lv-caption block mb-1">Preço (centavos)</label>
+                <input type="number" className="lv-input w-full" value={planForm.price} onChange={e => setPlanForm({ ...planForm, price: e.target.value })} min={0} />
+                <p className="lv-caption text-muted-foreground mt-1">490 = R$4,90</p>
+              </div>
+              <div>
+                <label className="lv-caption block mb-1">Ciclo</label>
+                <select className="lv-input w-full" value={planForm.billing_cycle} onChange={e => setPlanForm({ ...planForm, billing_cycle: e.target.value })}>
+                  <option value="once">once</option>
+                  <option value="daily">daily</option>
+                  <option value="weekly">weekly</option>
+                  <option value="monthly">monthly</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="lv-caption block mb-1">Limite/dia (-1 = ∞)</label>
+                <input type="number" className="lv-input w-full" value={planForm.daily_limit} onChange={e => setPlanForm({ ...planForm, daily_limit: e.target.value })} />
+              </div>
+              <div>
+                <label className="lv-caption block mb-1">Ordem</label>
+                <input type="number" className="lv-input w-full" value={planForm.display_order} onChange={e => setPlanForm({ ...planForm, display_order: e.target.value })} min={0} />
+              </div>
+            </div>
+            <div>
+              <label className="lv-caption block mb-1">Badge (ex: Popular)</label>
+              <input className="lv-input w-full" value={planForm.highlight_label} onChange={e => setPlanForm({ ...planForm, highlight_label: e.target.value })} placeholder="Deixe vazio para nenhum" />
+            </div>
+            <div>
+              <label className="lv-caption block mb-1">Descrição</label>
+              <textarea className="lv-input w-full" rows={2} value={planForm.description} onChange={e => setPlanForm({ ...planForm, description: e.target.value })} />
+            </div>
+            <div className="flex flex-col gap-3 pt-2">
+              <div className="flex items-center gap-3">
+                <input type="checkbox" checked={planForm.is_public} onChange={e => setPlanForm({ ...planForm, is_public: e.target.checked })} className="h-4 w-4 rounded" />
+                <span className="lv-body">Público (visível na página de preços)</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <input type="checkbox" checked={planForm.is_active} onChange={e => setPlanForm({ ...planForm, is_active: e.target.checked })} className="h-4 w-4 rounded" />
+                <span className="lv-body">Ativo (disponível para compra)</span>
+              </div>
+            </div>
+            <button onClick={savePlan} disabled={planSaving} className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2">
+              {planSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar Plano
             </button>
           </div>
         </SheetContent>

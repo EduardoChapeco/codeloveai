@@ -13,6 +13,7 @@ import SupportChatPanel from "@/components/chat/SupportChatPanel";
 import Index from "./pages/Index";
 
 // Retry dynamic imports once on failure (stale chunk after deploy)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function lazyRetry(importFn: () => Promise<any>) {
   return lazy(() =>
     importFn().catch(() => {
@@ -45,6 +46,7 @@ const LovablePreview = lazyRetry(() => import("./pages/LovablePreview"));
 const LovableUploadTest = lazyRetry(() => import("./pages/LovableUploadTest"));
 const Brain = lazyRetry(() => import("./pages/Brain"));
 const ProjectEditor = lazyRetry(() => import("./pages/ProjectEditor"));
+const OrchestratorProjectPanel = lazyRetry(() => import("./pages/OrchestratorProjectPanel"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
 const WhiteLabelOnboarding = lazyRetry(() => import("./pages/WhiteLabelOnboarding"));
 const TenantDashboard = lazyRetry(() => import("./pages/TenantDashboard"));
@@ -52,6 +54,20 @@ const WhiteLabelFAQ = lazyRetry(() => import("./pages/WhiteLabelFAQ"));
 const Checkout = lazyRetry(() => import("./pages/Checkout"));
 const FreePlan = lazyRetry(() => import("./pages/FreePlan"));
 const PlansPage = lazyRetry(() => import("./pages/PlansPage"));
+const AdminIntegrations = lazyRetry(() => import("./pages/AdminIntegrations"));
+// Lab pages (feature-flag gated)
+const BrainLab = lazyRetry(() => import("./pages/lab/BrainLab"));
+const StarCrawlLab = lazyRetry(() => import("./pages/lab/StarCrawlLab"));
+const VoiceLab = lazyRetry(() => import("./pages/lab/VoiceLab"));
+const OrchestratorLab = lazyRetry(() => import("./pages/lab/OrchestratorLab"));
+// Public landings
+const AffiliateLanding = lazyRetry(() => import("./pages/public/AffiliateLanding"));
+const WhiteLabelLanding = lazyRetry(() => import("./pages/public/WhiteLabelLanding"));
+// Help, Terms, Support
+const HelpCenter = lazyRetry(() => import("./pages/HelpCenter"));
+const HelpArticle = lazyRetry(() => import("./pages/HelpArticle"));
+const TermsOfUse = lazyRetry(() => import("./pages/TermsOfUse"));
+const SupportPage = lazyRetry(() => import("./pages/SupportPage"));
 
 const queryClient = new QueryClient();
 
@@ -76,6 +92,7 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/global" element={<AdminGlobal />} />
+                <Route path="/admin/integrations" element={<AdminIntegrations />} />
                 <Route path="/admin/tenant" element={<TenantAdmin />} />
                 <Route path="/community" element={<Community />} />
                 <Route path="/profile/:userId" element={<Profile />} />
@@ -87,6 +104,7 @@ const App = () => (
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
                 <Route path="/brain" element={<Brain />} />
                 <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
+                <Route path="/orquestrador/:id" element={<OrchestratorProjectPanel />} />
                 <Route path="/whitelabel/onboarding" element={<WhiteLabelOnboarding />} />
                 <Route path="/wl/setup" element={<WhiteLabelOnboarding />} />
                 <Route path="/faq/whitelabel" element={<WhiteLabelFAQ />} />
@@ -95,6 +113,19 @@ const App = () => (
                 <Route path="/free" element={<FreePlan />} />
                 <Route path="/plans" element={<PlansPage />} />
                 <Route path="/precos" element={<PlansPage />} />
+                {/* Lab pages (feature-flag gated, with waitlist) */}
+                <Route path="/lab/brain" element={<BrainLab />} />
+                <Route path="/lab/starcrawl" element={<StarCrawlLab />} />
+                <Route path="/lab/voice" element={<VoiceLab />} />
+                <Route path="/lab/orchestrator" element={<OrchestratorLab />} />
+                {/* Public landings */}
+                <Route path="/afiliados" element={<AffiliateLanding />} />
+                <Route path="/whitelabel" element={<WhiteLabelLanding />} />
+                {/* Help, Terms, Support */}
+                <Route path="/ajuda" element={<HelpCenter />} />
+                <Route path="/ajuda/:slug" element={<HelpArticle />} />
+                <Route path="/termos" element={<TermsOfUse />} />
+                <Route path="/suporte" element={<SupportPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
