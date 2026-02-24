@@ -357,38 +357,47 @@ export type Database = {
       affiliates: {
         Row: {
           affiliate_code: string
+          bank_info: Json | null
           commission_rate: number
           created_at: string
           discount_percent: number
           display_name: string
           id: string
+          pix_key: string | null
           referral_code: string | null
           tenant_id: string | null
           total_earned: number
+          type: string
           user_id: string
         }
         Insert: {
           affiliate_code: string
+          bank_info?: Json | null
           commission_rate?: number
           created_at?: string
           discount_percent?: number
           display_name?: string
           id?: string
+          pix_key?: string | null
           referral_code?: string | null
           tenant_id?: string | null
           total_earned?: number
+          type?: string
           user_id: string
         }
         Update: {
           affiliate_code?: string
+          bank_info?: Json | null
           commission_rate?: number
           created_at?: string
           discount_percent?: number
           display_name?: string
           id?: string
+          pix_key?: string | null
           referral_code?: string | null
           tenant_id?: string | null
           total_earned?: number
+          type?: string
           user_id?: string
         }
         Relationships: [
@@ -604,6 +613,156 @@ export type Database = {
           },
         ]
       }
+      commissions: {
+        Row: {
+          affiliate_id: string | null
+          amount: number
+          created_at: string
+          id: string
+          license_id: string | null
+          paid_at: string | null
+          payout_batch_id: string | null
+          status: string
+          tenant_id: string | null
+          type: string
+        }
+        Insert: {
+          affiliate_id?: string | null
+          amount?: number
+          created_at?: string
+          id?: string
+          license_id?: string | null
+          paid_at?: string | null
+          payout_batch_id?: string | null
+          status?: string
+          tenant_id?: string | null
+          type: string
+        }
+        Update: {
+          affiliate_id?: string | null
+          amount?: number
+          created_at?: string
+          id?: string
+          license_id?: string | null
+          paid_at?: string | null
+          payout_batch_id?: string | null
+          status?: string
+          tenant_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commissions_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_license_id_fkey"
+            columns: ["license_id"]
+            isOneToOne: false
+            referencedRelation: "licenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_payout_batch_id_fkey"
+            columns: ["payout_batch_id"]
+            isOneToOne: false
+            referencedRelation: "payout_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_channels: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_private: boolean
+          is_readonly: boolean
+          name: string
+          slug: string
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_private?: boolean
+          is_readonly?: boolean
+          name: string
+          slug: string
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_private?: boolean
+          is_readonly?: boolean
+          name?: string
+          slug?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_channels_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_messages: {
+        Row: {
+          channel_id: string
+          content: string
+          created_at: string
+          edited_at: string | null
+          id: string
+          is_deleted: boolean
+          user_id: string
+        }
+        Insert: {
+          channel_id: string
+          content: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          user_id: string
+        }
+        Update: {
+          channel_id?: string
+          content?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_messages_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "community_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_posts: {
         Row: {
           comments_count: number
@@ -698,6 +857,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      community_profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          reputation: number
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          reputation?: number
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          reputation?: number
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
       }
       daily_usage: {
         Row: {
@@ -937,12 +1123,24 @@ export type Database = {
           device_id: string | null
           expires_at: string
           hourly_limit: number | null
+          hours_used_month: number
           id: string
           key: string
+          last_renewed_at: string | null
+          last_reset_at: string | null
           last_validated_at: string | null
+          messages_used_month: number
+          messages_used_today: number
           plan: string
+          plan_id: string | null
           plan_type: string
+          status: string
           tenant_id: string | null
+          token_valid_until: string | null
+          trial_expires_at: string | null
+          trial_started_at: string | null
+          trial_used: boolean
+          type: string
           user_id: string
         }
         Insert: {
@@ -953,12 +1151,24 @@ export type Database = {
           device_id?: string | null
           expires_at: string
           hourly_limit?: number | null
+          hours_used_month?: number
           id?: string
           key: string
+          last_renewed_at?: string | null
+          last_reset_at?: string | null
           last_validated_at?: string | null
+          messages_used_month?: number
+          messages_used_today?: number
           plan?: string
+          plan_id?: string | null
           plan_type?: string
+          status?: string
           tenant_id?: string | null
+          token_valid_until?: string | null
+          trial_expires_at?: string | null
+          trial_started_at?: string | null
+          trial_used?: boolean
+          type?: string
           user_id: string
         }
         Update: {
@@ -969,12 +1179,24 @@ export type Database = {
           device_id?: string | null
           expires_at?: string
           hourly_limit?: number | null
+          hours_used_month?: number
           id?: string
           key?: string
+          last_renewed_at?: string | null
+          last_reset_at?: string | null
           last_validated_at?: string | null
+          messages_used_month?: number
+          messages_used_today?: number
           plan?: string
+          plan_id?: string | null
           plan_type?: string
+          status?: string
           tenant_id?: string | null
+          token_valid_until?: string | null
+          trial_expires_at?: string | null
+          trial_started_at?: string | null
+          trial_used?: boolean
+          type?: string
           user_id?: string
         }
         Relationships: [
@@ -983,6 +1205,13 @@ export type Database = {
             columns: ["affiliate_id"]
             isOneToOne: false
             referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "licenses_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
             referencedColumns: ["id"]
           },
           {
@@ -1327,6 +1556,107 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payout_batches: {
+        Row: {
+          created_at: string
+          id: string
+          processed_at: string | null
+          status: string
+          total_amount: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          processed_at?: string | null
+          status?: string
+          total_amount?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          processed_at?: string | null
+          status?: string
+          total_amount?: number
+        }
+        Relationships: []
+      }
+      plans: {
+        Row: {
+          billing_cycle: string
+          created_at: string
+          daily_message_limit: number | null
+          description: string | null
+          display_order: number
+          extension_mode: string
+          features: Json
+          highlight_label: string | null
+          hourly_limit: number | null
+          id: string
+          is_active: boolean
+          is_public: boolean
+          modules: Json | null
+          monthly_limit: number | null
+          name: string
+          price: number
+          tenant_id: string | null
+          trial_enabled: boolean
+          trial_minutes: number
+          type: string
+        }
+        Insert: {
+          billing_cycle?: string
+          created_at?: string
+          daily_message_limit?: number | null
+          description?: string | null
+          display_order?: number
+          extension_mode?: string
+          features?: Json
+          highlight_label?: string | null
+          hourly_limit?: number | null
+          id?: string
+          is_active?: boolean
+          is_public?: boolean
+          modules?: Json | null
+          monthly_limit?: number | null
+          name: string
+          price?: number
+          tenant_id?: string | null
+          trial_enabled?: boolean
+          trial_minutes?: number
+          type?: string
+        }
+        Update: {
+          billing_cycle?: string
+          created_at?: string
+          daily_message_limit?: number | null
+          description?: string | null
+          display_order?: number
+          extension_mode?: string
+          features?: Json
+          highlight_label?: string | null
+          hourly_limit?: number | null
+          id?: string
+          is_active?: boolean
+          is_public?: boolean
+          modules?: Json | null
+          monthly_limit?: number | null
+          name?: string
+          price?: number
+          tenant_id?: string | null
+          trial_enabled?: boolean
+          trial_minutes?: number
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plans_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1735,6 +2065,68 @@ export type Database = {
           },
         ]
       }
+      tenant_branding: {
+        Row: {
+          accent_color: string | null
+          app_name: string
+          community_group_enabled: boolean
+          community_group_name: string | null
+          community_max_channels: number
+          custom_mode_prompt: string | null
+          extension_mode: string
+          logo_url: string | null
+          modules: Json
+          primary_color: string
+          prompt_suggestions: Json
+          secondary_color: string
+          tenant_id: string
+          trial_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          accent_color?: string | null
+          app_name?: string
+          community_group_enabled?: boolean
+          community_group_name?: string | null
+          community_max_channels?: number
+          custom_mode_prompt?: string | null
+          extension_mode?: string
+          logo_url?: string | null
+          modules?: Json
+          primary_color?: string
+          prompt_suggestions?: Json
+          secondary_color?: string
+          tenant_id: string
+          trial_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          accent_color?: string | null
+          app_name?: string
+          community_group_enabled?: boolean
+          community_group_name?: string | null
+          community_max_channels?: number
+          custom_mode_prompt?: string | null
+          extension_mode?: string
+          logo_url?: string | null
+          modules?: Json
+          primary_color?: string
+          prompt_suggestions?: Json
+          secondary_color?: string
+          tenant_id?: string
+          trial_minutes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_branding_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_extensions: {
         Row: {
           activation_cost: number
@@ -2033,6 +2425,7 @@ export type Database = {
         Row: {
           accent_color: string
           affiliate_global_split_percent: number | null
+          affiliate_id: string | null
           border_radius: string
           branding: Json
           commission_percent: number
@@ -2050,10 +2443,13 @@ export type Database = {
           meta_title: string | null
           mp_access_token: string | null
           name: string
+          owner_user_id: string | null
           plan_type: string
+          platform_fee_per_user: number | null
           primary_color: string
           secondary_color: string
           setup_paid: boolean | null
+          setup_paid_at: string | null
           slug: string
           status: string
           terms_template: string | null
@@ -2065,6 +2461,7 @@ export type Database = {
         Insert: {
           accent_color?: string
           affiliate_global_split_percent?: number | null
+          affiliate_id?: string | null
           border_radius?: string
           branding?: Json
           commission_percent?: number
@@ -2082,10 +2479,13 @@ export type Database = {
           meta_title?: string | null
           mp_access_token?: string | null
           name: string
+          owner_user_id?: string | null
           plan_type?: string
+          platform_fee_per_user?: number | null
           primary_color?: string
           secondary_color?: string
           setup_paid?: boolean | null
+          setup_paid_at?: string | null
           slug: string
           status?: string
           terms_template?: string | null
@@ -2097,6 +2497,7 @@ export type Database = {
         Update: {
           accent_color?: string
           affiliate_global_split_percent?: number | null
+          affiliate_id?: string | null
           border_radius?: string
           branding?: Json
           commission_percent?: number
@@ -2114,10 +2515,13 @@ export type Database = {
           meta_title?: string | null
           mp_access_token?: string | null
           name?: string
+          owner_user_id?: string | null
           plan_type?: string
+          platform_fee_per_user?: number | null
           primary_color?: string
           secondary_color?: string
           setup_paid?: boolean | null
+          setup_paid_at?: string | null
           slug?: string
           status?: string
           terms_template?: string | null
@@ -2127,6 +2531,13 @@ export type Database = {
           white_label_plan_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "tenants_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tenants_white_label_plan_id_fkey"
             columns: ["white_label_plan_id"]
@@ -2747,6 +3158,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_daily_usage: {
+        Args: { p_date: string; p_license_id: string }
+        Returns: number
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_tenant_admin: {

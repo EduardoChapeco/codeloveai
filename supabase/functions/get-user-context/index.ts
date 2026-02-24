@@ -27,28 +27,13 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // ── Find license ──────────────────────────────────────────────────────
-    let license: any = null;
-
-    const { data: d1 } = await supabase
+    // ── 1. Find license ──────────────────────────────────────────
+    const { data: license } = await supabase
       .from("licenses")
-      .select("id, key, user_id, tenant_id, plan, plan_type, expires_at, active, daily_messages, hourly_limit")
+      .select("id, key, user_id, tenant_id, plan, plan_type, type, status, expires_at, active, daily_messages, hourly_limit, plan_id, token_valid_until, trial_expires_at, trial_used, messages_used_today, messages_used_month")
       .eq("key", licenseKey)
       .eq("active", true)
       .maybeSingle();
-
-    if (d1) {
-      license = d1;
-    } else {
-      // Fallback: try "token" column (pre-migration schema)
-      const { data: d2 } = await supabase
-        .from("licenses")
-        .select("id, key, user_id, tenant_id, plan, plan_type, expires_at, active, daily_messages, hourly_limit")
-        .eq("token", licenseKey)
-        .eq("active", true)
-        .maybeSingle();
-      if (d2) license = d2;
-    }
 
     if (!license) {
       return new Response(
@@ -57,7 +42,20 @@ serve(async (req) => {
       );
     }
 
-    // ── Fetch daily usage ─────────────────────────────────────────────────
+    const tenantId = license.tenant_id || "a0000000-0000-0000-0000-000000000001";
+
+    // ── 2. Fetch plan (if plan_id exists) ─────────────────────────
+    let planData: any = null;
+    if (license.plan_id) {
+      const { data } = await supabase
+        .from("plans")
+        .select("*")
+        .eq("id", license.plan_id)
+        .maybeSingle();
+      planData = data;
+    }
+
+    // ── 3. Fetch daily usage ──────────────────────────────────────
     const today = new Date().toISOString().split("T")[0];
     const { data: usage } = await supabase
       .from("daily_usage")
@@ -66,29 +64,44 @@ serve(async (req) => {
       .eq("date", today)
       .maybeSingle();
 
-    // ── Fetch tenant branding ─────────────────────────────────────────────
-    let branding: any = null;
-    const tenantId = license.tenant_id || "a0000000-0000-0000-0000-000000000001";
-
-    const { data: brandingRow } = await supabase
+    // ── 4. Fetch tenant branding ──────────────────────────────────
+    const { data: branding } = await supabase
       .from("tenant_branding")
-      .select("app_name, logo_url, primary_color, secondary_color, accent_color, modules, prompt_suggestions")
+      .select("*")
       .eq("tenant_id", tenantId)
       .maybeSingle();
 
-    if (brandingRow) {
-      branding = brandingRow;
-    }
-
-    // ── Fetch tenant meta (name, slug) ────────────────────────────────────
+    // ── 5. Fetch tenant meta ──────────────────────────────────────
     const { data: tenant } = await supabase
       .from("tenants")
       .select("name, slug")
       .eq("id", tenantId)
       .maybeSingle();
 
-    // ── Build response ────────────────────────────────────────────────────
-    const defaultModules = { chat: true, deploy: true, preview: true, notes: true, split: true, auto: true, wl: true };
+    // ── 6. Calculate effective modules ────────────────────────────
+    const defaultModules = {
+      chat: false, deploy: true, preview: true, notes: true,
+      split: true, auto: true, wl: true, affiliate: true, community: true,
+    };
+    const tenantModules = branding?.modules || defaultModules;
+    const planModules = planData?.modules || null;
+
+    // Effective = intersection of tenant AND plan modules
+    let effectiveModules: Record<string, boolean> = {};
+    for (const key of Object.keys(defaultModules)) {
+      const tenantEnabled = (tenantModules as any)[key] ?? (defaultModules as any)[key];
+      const planEnabled = planModules ? ((planModules as any)[key] ?? true) : true;
+      effectiveModules[key] = tenantEnabled && planEnabled;
+    }
+
+    // ── 7. Determine extension mode ───────────────────────────────
+    const extensionMode = planData?.extension_mode || branding?.extension_mode || "security_fix_v2";
+    const customModePrompt = extensionMode === "custom" ? branding?.custom_mode_prompt || null : null;
+
+    // ── 8. Build response ─────────────────────────────────────────
+    const baseUrl = tenant?.slug
+      ? `https://${tenant.slug}.lovable.app`
+      : "https://starble.lovable.app";
 
     const response = {
       valid: true,
@@ -98,27 +111,33 @@ serve(async (req) => {
         primaryColor: branding?.primary_color || "7c3aed",
         secondaryColor: branding?.secondary_color || "a855f7",
         accentColor: branding?.accent_color || null,
-        planType: license.plan_type || "messages",
-        modules: branding?.modules || defaultModules,
-        promptSuggestions: branding?.prompt_suggestions || null,
+        extensionMode,
+        customModePrompt,
+        modules: effectiveModules,
+        promptSuggestions: branding?.prompt_suggestions || [],
         isTenant: tenantId !== "a0000000-0000-0000-0000-000000000001",
-        tenantId: tenantId,
+        tenantId,
         tenantName: tenant?.name || "Starble",
         tenantSlug: tenant?.slug || "starble",
       },
       plan: {
-        planName: license.plan || "Grátis",
-        type: license.plan_type || "messages",
-        dailyLimit: license.daily_messages || 10,
-        hourlyLimit: license.hourly_limit || null,
-        usedToday: usage?.messages_used || 0,
+        planName: planData?.name || license.plan || "Grátis",
+        type: planData?.type || license.plan_type || "messages",
+        dailyLimit: planData?.daily_message_limit || license.daily_messages || null,
+        hourlyLimit: planData?.hourly_limit || license.hourly_limit || null,
+        usedToday: usage?.messages_used || license.messages_used_today || 0,
+        usedThisMonth: license.messages_used_month || 0,
+        tokenValidUntil: license.token_valid_until || null,
+        trialExpiresAt: license.trial_expires_at || null,
+        isTrial: license.type === "trial" || license.status === "trial",
         expires_at: license.expires_at,
       },
       links: {
-        dashboard: "https://starble.lovable.app/dashboard",
-        renew: "https://starble.lovable.app/dashboard?action=renew",
-        affiliate: "https://starble.lovable.app/cadastro?tipo=afiliado",
-        buyCredits: "https://starble.lovable.app/planos",
+        dashboard: `${baseUrl}/dashboard`,
+        renew: `${baseUrl}/dashboard?action=renew`,
+        affiliate: `${baseUrl}/cadastro?tipo=afiliado`,
+        buyCredits: `${baseUrl}/planos`,
+        community: `${baseUrl}/comunidade`,
       },
     };
 

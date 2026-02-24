@@ -56,11 +56,12 @@ Deno.serve(async (req) => {
       }
     }
 
+    // FIX: Use correct column names — "key" and "active" (not "token"/"is_active")
     const { data: license } = await adminClient
       .from("licenses")
-      .select("token, plan, expires_at, is_active, device_id, user_id")
-      .eq("token", licenseKey)
-      .eq("is_active", true)
+      .select("id, key, plan, plan_type, type, status, expires_at, active, device_id, user_id, tenant_id, daily_messages, hourly_limit, token_valid_until, trial_expires_at, trial_used, messages_used_today")
+      .eq("key", licenseKey)
+      .eq("active", true)
       .maybeSingle();
 
     if (!license) {
@@ -69,27 +70,70 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Check expiration
     const now = new Date();
-    if (new Date(license.expires_at) < now) {
+    if (license.expires_at && new Date(license.expires_at) < now) {
       return new Response(JSON.stringify({ valid: false, error: "License expired" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Update HWID and last_validated_at
-    await adminClient
-      .from("licenses")
-      .update({
-        last_validated_at: now.toISOString(),
-        ...(hwid ? { device_id: hwid } : {}),
-      })
-      .eq("token", licenseKey);
+    // Check trial expiration
+    if (license.type === 'trial' && license.trial_expires_at && new Date(license.trial_expires_at) < now) {
+      return new Response(JSON.stringify({ valid: false, error: "Trial expired" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Check daily token expiration
+    if (license.type === 'daily_token' && license.token_valid_until && new Date(license.token_valid_until) < now) {
+      return new Response(JSON.stringify({ valid: false, error: "Daily token expired, please renew" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Check daily message limit
+    if (license.daily_messages && license.messages_used_today >= license.daily_messages) {
+      return new Response(JSON.stringify({ valid: false, error: "Daily message limit reached" }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // HWID / device_id binding
+    if (hwid) {
+      if (!license.device_id) {
+        await adminClient.from("licenses")
+          .update({ device_id: hwid, last_validated_at: now.toISOString() })
+          .eq("id", license.id);
+      } else if (license.device_id !== hwid) {
+        return new Response(JSON.stringify({ valid: false, error: "Device not authorized" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } else {
+        await adminClient.from("licenses")
+          .update({ last_validated_at: now.toISOString() })
+          .eq("id", license.id);
+      }
+    } else {
+      await adminClient.from("licenses")
+        .update({ last_validated_at: now.toISOString() })
+        .eq("id", license.id);
+    }
 
     return new Response(
       JSON.stringify({
         valid: true,
         plan: license.plan,
-        exp: new Date(license.expires_at).getTime(),
+        planType: license.plan_type,
+        type: license.type,
+        status: license.status,
+        dailyMessages: license.daily_messages,
+        hourlyLimit: license.hourly_limit,
+        usedToday: license.messages_used_today || 0,
+        tokenValidUntil: license.token_valid_until,
+        trialExpiresAt: license.trial_expires_at,
+        tenantId: license.tenant_id,
+        exp: license.expires_at ? new Date(license.expires_at).getTime() : null,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
