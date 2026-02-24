@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
-import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2, UserPlus, Eye, EyeOff, Puzzle, Download, ChevronRight } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2, UserPlus, Eye, EyeOff, Puzzle, Download, ChevronRight, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -86,6 +86,29 @@ interface TenantExtension {
   created_at: string;
 }
 
+interface SupportTicket {
+  id: string;
+  user_id: string;
+  subject: string;
+  description: string;
+  status: "open" | "in_progress" | "resolved" | "closed";
+  priority: "low" | "medium" | "high" | "urgent";
+  category: string;
+  created_at: string;
+  updated_at: string;
+  user_email?: string;
+  user_name?: string;
+}
+
+interface TicketReply {
+  id: string;
+  ticket_id: string;
+  user_id: string;
+  message: string;
+  is_admin: boolean;
+  created_at: string;
+}
+
 const planOptions = [
   { value: "daily_token", label: "Token Diário (24h)", days: 1 },
   { value: "messages", label: "Mensal (Mensagens)", days: 30 },
@@ -114,7 +137,7 @@ interface WorkerResult {
   error?: string;
 }
 
-type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "worker-tokens";
+type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "worker-tokens" | "support";
 
 export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -160,6 +183,14 @@ export default function Admin() {
   const [adminMessage, setAdminMessage] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Support state
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [ticketReplies, setTicketReplies] = useState<TicketReply[]>([]);
+  const [replyMessage, setReplyMessage] = useState("");
+  const [replyLoading, setReplyLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+
   // Create user sheet state
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -182,8 +213,82 @@ export default function Admin() {
     if (!authLoading && !adminLoading) {
       if (!user) navigate("/login");
       else if (!isAdmin) navigate("/dashboard");
+      else {
+        fetchTickets();
+      }
     }
   }, [user, isAdmin, authLoading, adminLoading, navigate]);
+
+  const fetchTickets = useCallback(async () => {
+    const { data: tks, error } = await supabase
+      .from("support_tickets")
+      .select(`
+        *,
+        profiles:user_id (email, name)
+      `)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast.error("Erro ao carregar tickets");
+      return;
+    }
+
+    const formatted = (tks || []).map((t: any) => ({
+      ...t,
+      user_email: t.profiles?.email,
+      user_name: t.profiles?.name,
+    }));
+    setTickets(formatted);
+  }, []);
+
+  const fetchTicketReplies = async (ticketId: string) => {
+    const { data, error } = await supabase
+      .from("ticket_replies")
+      .select("*")
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: true });
+    
+    if (!error) setTicketReplies(data || []);
+  };
+
+  const sendTicketReply = async () => {
+    if (!selectedTicket || !replyMessage.trim()) return;
+    setReplyLoading(true);
+    const { error } = await supabase.from("ticket_replies").insert({
+      ticket_id: selectedTicket.id,
+      user_id: user!.id,
+      message: replyMessage,
+      is_admin: true
+    });
+
+    if (error) {
+      toast.error("Erro ao enviar resposta");
+    } else {
+      toast.success("Resposta enviada!");
+      setReplyMessage("");
+      fetchTicketReplies(selectedTicket.id);
+    }
+    setReplyLoading(false);
+  };
+
+  const updateTicketStatus = async (ticketId: string, status: SupportTicket["status"]) => {
+    setStatusLoading(true);
+    const { error } = await supabase
+      .from("support_tickets")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("id", ticketId);
+
+    if (error) {
+      toast.error("Erro ao atualizar status");
+    } else {
+      toast.success(`Status atualizado para ${status}`);
+      fetchTickets();
+      if (selectedTicket?.id === ticketId) {
+        setSelectedTicket(prev => prev ? { ...prev, status } : null);
+      }
+    }
+    setStatusLoading(false);
+  };
 
   // Fetch members
   const fetchMembers = useCallback(async () => {
@@ -692,7 +797,7 @@ export default function Admin() {
           </div>
           
           <div className="flex gap-2 flex-wrap bg-primary/5 p-1 rounded-2xl border border-primary/10">
-            {(["members", "affiliates", "invoices", "worker-tokens", "extension", "notifications", "messages"] as const).map((t) => (
+            {(["members", "affiliates", "invoices", "worker-tokens", "extension", "notifications", "messages", "support"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setSearchParams({ tab: t })}
@@ -717,7 +822,8 @@ export default function Admin() {
                     "worker-tokens": "Tokens API", 
                     extension: "Extensão", 
                     notifications: "Alertas", 
-                    messages: "Chat" 
+                    messages: "Chat",
+                    support: "Suporte" 
                   }[t]
                 }
               </button>
@@ -736,7 +842,8 @@ export default function Admin() {
                 "worker-tokens": "Gerador de Tokens Externo", 
                 extension: "Distribuição da Extensão", 
                 notifications: "Notificações do Sistema", 
-                messages: "Atendimento ao Cliente" 
+                messages: "Atendimento ao Cliente",
+                support: "Gestão de Tickets" 
               }[tab]
             }</span>
           </p>
@@ -1422,6 +1529,155 @@ export default function Admin() {
                   <p className="lv-overline text-destructive opacity-60">RETENÇÃO/EXPIRADO</p>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Support Tab */}
+        {tab === "support" && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Tickets List */}
+            <div className="lg:col-span-1 space-y-4 max-h-[1000px] overflow-y-auto pr-2">
+              {tickets.map(t => (
+                <div 
+                  key={t.id} 
+                  onClick={() => {
+                    setSelectedTicket(t);
+                    fetchTicketReplies(t.id);
+                  }}
+                  className={`clf-liquid-glass p-5 cursor-pointer transition-all hover:scale-[1.02] border-2 ${
+                    selectedTicket?.id === t.id ? "border-primary" : "border-transparent"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${
+                      { 
+                        open: "bg-amber-500/10 text-amber-600",
+                        in_progress: "bg-blue-500/10 text-blue-600",
+                        resolved: "bg-emerald-500/10 text-emerald-600",
+                        closed: "bg-slate-500/10 text-slate-600"
+                      }[t.status as SupportTicket["status"]]
+                    }`}>
+                      {t.status.replace("_", " ")}
+                    </span>
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${
+                      { 
+                        low: "bg-blue-500/5 text-blue-400",
+                        medium: "bg-yellow-500/5 text-yellow-400",
+                        high: "bg-orange-500/5 text-orange-400",
+                        urgent: "bg-rose-500/10 text-rose-600 animate-pulse"
+                      }[t.priority as SupportTicket["priority"]]
+                    }`}>
+                      {t.priority}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-sm mb-1 line-clamp-1">{t.subject}</h3>
+                  <p className="text-[11px] text-muted-foreground line-clamp-2 mb-3">{t.description}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-medium opacity-70">{t.user_email}</p>
+                    <p className="text-[9px] opacity-40">{format(new Date(t.created_at), "dd/MM HH:mm")}</p>
+                  </div>
+                </div>
+              ))}
+              {tickets.length === 0 && (
+                <div className="lv-empty py-20">
+                  <MessageSquare className="h-10 w-10 opacity-10 mb-2" />
+                  <p className="lv-overline opacity-40">Nenhum ticket</p>
+                </div>
+              )}
+            </div>
+
+            {/* Ticket Detail & Chat */}
+            <div className="lg:col-span-2 space-y-6">
+              {selectedTicket ? (
+                <div className="clf-liquid-glass flex flex-col h-[1000px]">
+                  {/* Header */}
+                  <div className="p-8 border-b border-white/10 shrink-0">
+                    <div className="flex items-start justify-between mb-6">
+                      <div>
+                        <p className="lv-overline text-primary mb-2">TICKET #{selectedTicket.id.substring(0,8)}</p>
+                        <h2 className="lv-heading-sm mb-1">{selectedTicket.subject}</h2>
+                        <div className="flex items-center gap-3">
+                          <p className="lv-body-strong text-xs">{selectedTicket.user_name || "Usuário"}</p>
+                          <span className="h-1 w-1 rounded-full bg-white/20" />
+                          <p className="lv-body text-xs opacity-60">{selectedTicket.user_email}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {(["open", "in_progress", "resolved", "closed"] as const).map(s => (
+                          <button
+                            key={s}
+                            disabled={statusLoading}
+                            onClick={() => updateTicketStatus(selectedTicket.id, s)}
+                            className={`h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                              selectedTicket.status === s
+                              ? "bg-primary text-white"
+                              : "bg-white/5 hover:bg-white/10 opacity-40 hover:opacity-100"
+                            }`}
+                          >
+                            {s.replace("_", " ")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                      <p className="text-sm italic opacity-80 leading-relaxed">
+                        "{selectedTicket.description}"
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Replies area */}
+                  <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                    {ticketReplies.map(r => (
+                      <div key={r.id} className={`flex ${r.is_admin ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[80%] p-4 rounded-3xl ${
+                          r.is_admin 
+                          ? "bg-primary text-white rounded-tr-none" 
+                          : "bg-white/10 rounded-tl-none border border-white/10"
+                        }`}>
+                          <p className="text-sm leading-relaxed">{r.message}</p>
+                          <p className={`text-[9px] mt-2 font-bold uppercase tracking-widest opacity-40 ${r.is_admin ? "text-right" : ""}`}>
+                            {format(new Date(r.created_at), "dd/MM HH:mm")} {r.is_admin && "• Admin"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {ticketReplies.length === 0 && (
+                      <div className="text-center py-10">
+                        <p className="lv-overline opacity-20">Sem respostas ainda</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Reply Input */}
+                  <div className="p-8 border-t border-white/10 shrink-0">
+                    <div className="relative">
+                      <textarea
+                        value={replyMessage}
+                        onChange={(e) => setReplyMessage(e.target.value)}
+                        placeholder="Digite sua resposta oficial..."
+                        className="lv-input min-h-[120px] rounded-3xl p-6 pr-16 resize-none"
+                      />
+                      <button 
+                        onClick={sendTicketReply}
+                        disabled={replyLoading || !replyMessage.trim()}
+                        className="absolute bottom-4 right-4 h-10 w-10 rounded-full bg-primary text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-transform disabled:opacity-50"
+                      >
+                        {replyLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="clf-liquid-glass h-full flex flex-col items-center justify-center p-20 text-center opacity-40">
+                  <div className="h-24 w-24 rounded-[40px] bg-white/5 flex items-center justify-center mb-6">
+                    <Eye className="h-10 w-10" />
+                  </div>
+                  <h3 className="lv-heading-sm mb-2">Selecione um Ticket</h3>
+                  <p className="lv-body max-w-xs">Escolha um chamado na lista à esquerda para ver os detalhes e responder.</p>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
 import { toast } from "sonner";
@@ -239,9 +240,10 @@ export default function OrchestratorProjectPanel() {
   const { id: orchestratorProjectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const { enabled: orchEnabled, loading: flagLoading } = useFeatureFlag("orchestrator");
   const { invoke } = useLovableProxy();
 
-  // Orchestrator state
+  // ── Orchestrator state ──
   const [project, setProject] = useState<OrchestratorProject | null>(null);
   const [tasks, setTasks] = useState<OrchestratorTask[]>([]);
   const [logs, setLogs] = useState<OrchestratorLog[]>([]);
@@ -271,6 +273,25 @@ export default function OrchestratorProjectPanel() {
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
   }, [user, authLoading, navigate]);
+
+  useEffect(() => {
+    if (!authLoading && !flagLoading && !orchEnabled) {
+      if (!user) navigate("/login");
+      else navigate("/lab/orchestrator");
+    }
+  }, [user, authLoading, orchEnabled, flagLoading, navigate]);
+
+  if (authLoading || flagLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!orchEnabled) return null;
 
   // ── Load preview URL ──────────────────────────────────────────
   const loadPreview = useCallback(async (lvId: string) => {

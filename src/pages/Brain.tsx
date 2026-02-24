@@ -70,6 +70,7 @@ function groupByDate(convos: Conversation[]): Record<string, Conversation[]> {
 
 export default function BrainPage() {
   const { user, loading: authLoading } = useAuth();
+  const { enabled: brainEnabled, loading: flagLoading } = useFeatureFlag("brain");
   const navigate = useNavigate();
 
   const [brainActive, setBrainActive] = useState<boolean | null>(null);
@@ -98,9 +99,14 @@ export default function BrainPage() {
 
   const groupedHistory = useMemo(() => groupByDate(historyConvos), [historyConvos]);
 
+  // ── Access Gates effect (must be after all hooks) ──
   useEffect(() => {
-    if (!authLoading && !user) navigate("/login?returnTo=/brain");
-  }, [user, authLoading, navigate]);
+    if (!authLoading && !flagLoading && !brainEnabled) {
+      if (!user) navigate("/login");
+      else navigate("/lab/brain");
+    }
+  }, [user, authLoading, brainEnabled, flagLoading, navigate]);
+
 
   useEffect(() => {
     if (!user) return;
@@ -344,7 +350,17 @@ export default function BrainPage() {
     toast.success("Resposta copiada!");
   };
 
-  if (authLoading || !user) return <div className="min-h-screen bg-background" />;
+  if (authLoading || flagLoading || !user) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!brainEnabled) return null;
 
   if (lovableConnected === false) {
     return (

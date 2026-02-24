@@ -241,8 +241,12 @@ export default function Index() {
           <p className="lv-caption">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
           <div className="flex items-center gap-4">
             <Link to="/community" className="lv-caption hover:text-foreground transition-colors">Comunidade</Link>
-            <Link to="/register?tipo=afiliado" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>
+            <Link to="/afiliados" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>
             <Link to="/whitelabel" className="lv-caption hover:text-foreground transition-colors">White Label</Link>
+            <Link to="/faq" className="lv-caption hover:text-foreground transition-colors">FAQ</Link>
+            <Link to="/termos" className="lv-caption hover:text-foreground transition-colors">Termos</Link>
+            <Link to="/ajuda" className="lv-caption hover:text-foreground transition-colors">Ajuda</Link>
+            <Link to="/suporte" className="lv-caption hover:text-foreground transition-colors">Suporte</Link>
           </div>
         </div>
       </footer>

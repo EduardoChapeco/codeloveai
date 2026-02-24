@@ -14,11 +14,14 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 //  6. Auto-rollback on 3 consecutive task failures
 // ══════════════════════════════════════════════════════════════
 
+import { obfuscate } from "../_shared/crypto.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-const LOVABLE_API = "https://api.lovable.app/v1";
+
+const EXT_API = "https://api.lovable.app/v1";
 
 // ─── Anti-question prefix ─────────────────────────────────────
 // Prevents Lovable from asking clarifying questions mid-task.
@@ -99,7 +102,7 @@ async function getAdminToken(sc: SupabaseClient): Promise<string | null> {
 }
 
 // ─── Lovable API helper ───────────────────────────────────────
-async function lovableFetch(url: string, opts: RequestInit, token: string) {
+async function extFetch(url: string, opts: RequestInit, token: string) {
   return fetch(url, {
     ...opts,
     headers: {
@@ -169,8 +172,8 @@ Rules:
 - Inject implementation instructions — no questions`;
 
   try {
-    const res = await lovableFetch(
-      `${LOVABLE_API}/projects/${brainProjectId}/chat`,
+    const res = await extFetch(
+      `${EXT_API}/projects/${brainProjectId}/chat`,
       { method: "POST", body: JSON.stringify({ message: architectPrompt, intent: "chat", chat_only: true }) },
       token
     );
@@ -183,7 +186,7 @@ Rules:
     const start = Date.now();
     while (Date.now() - start < maxWait) {
       await new Promise(r => setTimeout(r, 3000));
-      const pollRes = await lovableFetch(`${LOVABLE_API}/projects/${brainProjectId}/latest-message`, { method: "GET" }, token);
+      const pollRes = await extFetch(`${EXT_API}/projects/${brainProjectId}/latest-message`, { method: "GET" }, token);
       if (pollRes.ok) {
         const msg = await pollRes.json() as Record<string, unknown>;
         if (msg && !msg.is_streaming) {
@@ -229,8 +232,8 @@ async function evaluateStopCondition(
   // Layer 1: file_exists — check Lovable source for file at path
   if (type === "file_exists") {
     try {
-      const srcRes = await lovableFetch(
-        `${LOVABLE_API}/projects/${lovableProjectId}/source-code`,
+      const srcRes = await extFetch(
+        `${EXT_API}/projects/${lovableProjectId}/source-code`,
         { method: "GET" },
         lovableToken
       );
@@ -246,8 +249,8 @@ async function evaluateStopCondition(
   // Layer 2: source_contains — check file content for keyword
   if (type === "source_contains") {
     try {
-      const srcRes = await lovableFetch(
-        `${LOVABLE_API}/projects/${lovableProjectId}/source-code`,
+      const srcRes = await extFetch(
+        `${EXT_API}/projects/${lovableProjectId}/source-code`,
         { method: "GET" },
         lovableToken
       );
@@ -300,8 +303,8 @@ async function executeTask(
   const enhancedPrompt = AQ_PREFIX + task.prompt;
 
   try {
-    const res = await lovableFetch(
-      `${LOVABLE_API}/projects/${lovableProjectId}/chat`,
+    const res = await extFetch(
+      `${EXT_API}/projects/${lovableProjectId}/chat`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -350,8 +353,8 @@ async function executeTask(
       }
 
       // Also poll Lovable's own latest-message for streaming completion
-      const pollRes = await lovableFetch(
-        `${LOVABLE_API}/projects/${lovableProjectId}/latest-message`,
+      const pollRes = await extFetch(
+        `${EXT_API}/projects/${lovableProjectId}/latest-message`,
         { method: "GET" },
         lovableToken
       );
@@ -654,8 +657,8 @@ Deno.serve(async (req: Request) => {
       const lovableToken = await getLovableToken(sc, userId);
       if (!lovableToken) return json({ error: "Token expired" }, 403);
 
-      const srcRes = await lovableFetch(
-        `${LOVABLE_API}/projects/${project.lovable_project_id}/source-code`,
+      const srcRes = await extFetch(
+        `${EXT_API}/projects/${project.lovable_project_id}/source-code`,
         { method: "GET" },
         lovableToken
       );
@@ -738,8 +741,8 @@ Deno.serve(async (req: Request) => {
       if (!orch) return json({ error: "Orchestrator project not found" }, 404);
 
       try {
-        const createRes = await lovableFetch(
-          `${LOVABLE_API}/workspaces/${workspace_id}/projects`,
+        const createRes = await extFetch(
+          `${EXT_API}/workspaces/${workspace_id}/projects`,
           { method: "POST", body: JSON.stringify({ name: project_name || "Starble Project", is_public: false }) },
           lovableToken
         );
@@ -778,8 +781,8 @@ Deno.serve(async (req: Request) => {
       if (!lovableToken) return json({ error: "Token expired" }, 403);
 
       try {
-        const srcRes = await lovableFetch(
-          `${LOVABLE_API}/projects/${orch.lovable_project_id}/source-code`,
+        const srcRes = await extFetch(
+          `${EXT_API}/projects/${orch.lovable_project_id}/source-code`,
           { method: "GET" },
           lovableToken
         );
@@ -820,8 +823,8 @@ Deno.serve(async (req: Request) => {
       let seoScore: number | null = null;
 
       try {
-        const srcRes = await lovableFetch(
-          `${LOVABLE_API}/projects/${orch.lovable_project_id}/source-code`,
+        const srcRes = await extFetch(
+          `${EXT_API}/projects/${orch.lovable_project_id}/source-code`,
           { method: "GET" }, lovableToken
         );
         if (srcRes.ok) {
