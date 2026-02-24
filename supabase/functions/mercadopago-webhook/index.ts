@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
 // WALLET TOPUP HANDLER
 // ═══════════════════════════════════════════════════
 async function handleWalletTopup(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: any,
   refData: Record<string, unknown>,
   sanitizedPaymentId: string,
   payment: Record<string, unknown>
@@ -187,7 +187,7 @@ async function handleWalletTopup(
 // WHITE LABEL PURCHASE HANDLER
 // ═══════════════════════════════════════════════════
 async function handleWhiteLabelPurchase(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: any,
   refData: Record<string, unknown>,
   sanitizedPaymentId: string,
   payment: Record<string, unknown>,
@@ -416,7 +416,7 @@ async function handleWhiteLabelPurchase(
 // STANDARD MEMBER PURCHASE HANDLER (with WL split)
 // ═══════════════════════════════════════════════════
 async function handleMemberPurchase(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: any,
   refData: Record<string, unknown>,
   sanitizedPaymentId: string,
   payment: Record<string, unknown>,

@@ -168,11 +168,12 @@ Deno.serve(async (req) => {
       const tenantConfig = await serviceClient
         .from("tenants").select("token_cost").eq("id", tenantId).maybeSingle();
       
-      if (tenantConfig?.data?.token_cost > 0) {
+      const tokenCost = tenantConfig?.data?.token_cost ?? 0;
+      if (tokenCost > 0) {
         const { data: wallet } = await serviceClient
           .from("tenant_wallets").select("balance").eq("tenant_id", tenantId).maybeSingle();
         
-        if (!wallet || wallet.balance < tenantConfig.data.token_cost) {
+        if (!wallet || wallet.balance < tokenCost) {
           result.token_error = "Saldo insuficiente no wallet do tenant para gerar token";
           return new Response(JSON.stringify(result), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -212,18 +213,18 @@ Deno.serve(async (req) => {
               result.token_expires = tokenData.expires;
 
               // Debit tenant wallet
-              if (tenantConfig?.data?.token_cost > 0) {
+              if (tokenCost > 0) {
                 const { data: tw } = await serviceClient
                   .from("tenant_wallets").select("balance, total_debited").eq("tenant_id", tenantId).maybeSingle();
                 if (tw) {
                   await serviceClient.from("tenant_wallets").update({
-                    balance: tw.balance - tenantConfig.data.token_cost,
-                    total_debited: tw.total_debited + tenantConfig.data.token_cost,
+                    balance: tw.balance - tokenCost,
+                    total_debited: tw.total_debited + tokenCost,
                   }).eq("tenant_id", tenantId);
 
                   await serviceClient.from("tenant_wallet_transactions").insert({
                     tenant_id: tenantId,
-                    amount: -tenantConfig.data.token_cost,
+                    amount: -tokenCost,
                     type: "token_cost",
                     description: `Token gerado para ${sanitizedEmail}`,
                   });
