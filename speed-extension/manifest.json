@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Speed",
+  "short_name": "Speed",
+  "version": "1.0.0",
+  "description": "Speed — AI chat para Lovable.dev",
+  "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
+  "action": {
+    "default_icon": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
+    "default_title": "Speed"
+  },
+  "side_panel": { "default_path": "panel.html" },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://lovable.dev/*"],
+    "js": ["content.js"],
+    "run_at": "document_start"
+  }],
+  "web_accessible_resources": [{
+    "resources": ["injected.js", "icon16.png", "icon48.png", "icon128.png"],
+    "matches": ["https://lovable.dev/*"]
+  }],
+  "permissions": ["storage", "alarms", "tabs", "scripting", "activeTab", "sidePanel"],
+  "host_permissions": [
+    "https://lovable.dev/*",
+    "https://api.lovable.dev/*",
+    "https://starble.lovable.app/*",
+    "https://*.lovable.app/*",
+    "https://qlhhmmboxlufvdtpbrsm.supabase.co/*",
+    "https://securetoken.googleapis.com/*",
+    "https://identitytoolkit.googleapis.com/*"
+  ]
+}
