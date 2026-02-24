@@ -1,41 +1,35 @@
 
 
-# Fix All Build Errors — Implementation Plan
+# Apply Remaining Build Fixes from plan.md
 
-## Root Cause Analysis
-All build errors stem from 4 issues across edge functions:
+## Overview
+4 out of 5 build fixes documented in `.lovable/plan.md` were never applied. These are type-safety fixes only -- no logic changes.
 
-### Fix 1: `TenantInfo` interface missing `id` field
-**File:** `supabase/functions/_shared/tenant-resolver.ts`
-- The DB query selects `id` but the interface only has `tenant_id`
-- Add `id: string` to the `TenantInfo` interface (line 12-17)
-- Add `id: DEFAULT_TENANT_ID` to the fallback object (line 80-85)
-- **This fixes errors in:** `activate-free-plan`, `admin-create-user`, `admin-token-actions`, `affiliate-enroll`, `auto-onboard`, `chat-relay`, `create-checkout`
-
-### Fix 2: `mercadopago-webhook` strict type inference
+## Fix 1: `mercadopago-webhook/index.ts` -- strict type inference
 **File:** `supabase/functions/mercadopago-webhook/index.ts`
-- Change function parameter types from `ReturnType<typeof createClient>` to `any` for all 3 handler functions:
-  - `handleWalletTopup` (line 136)
-  - `handleWhiteLabelPurchase` (line 190)
-  - `handleMemberPurchase` (line 419)
-- This resolves all the `never` type and overload errors
+- Lines 136, 190, 419: Change `supabaseAdmin: ReturnType<typeof createClient>` to `supabaseAdmin: any`
+- This resolves all `never` type and overload errors caused by generic type inference
 
-### Fix 3: `string | undefined` assignment errors
-**Files:** `create-checkout/index.ts` (line 37), `create-white-label-checkout/index.ts` (line 31)
-- Change `let userEmail: string;` to `let userEmail: string = "";`
-- `claims.email` can be undefined, so the variable needs a default value
+## Fix 2: `create-checkout/index.ts` -- undefined email
+**File:** `supabase/functions/create-checkout/index.ts`
+- Line 37: Change `let userEmail: string;` to `let userEmail: string = "";`
 
-### Fix 4: Null check on `tenantConfig.data`
+## Fix 3: `create-white-label-checkout/index.ts` -- undefined email
+**File:** `supabase/functions/create-white-label-checkout/index.ts`
+- Line 31: Change `let userEmail: string;` to `let userEmail: string = "";`
+
+## Fix 4: `admin-create-user/index.ts` -- null check on tenantConfig
 **File:** `supabase/functions/admin-create-user/index.ts`
-- Extract `tokenCost` with null coalescing: `const tokenCost = tenantConfig?.data?.token_cost ?? 0;`
+- Add `const tokenCost = tenantConfig?.data?.token_cost ?? 0;` before line 175
 - Replace all `tenantConfig.data.token_cost` references (lines 175, 220, 221, 226) with `tokenCost`
 
-### Fix 5: `getClaims` method not found in `chat-relay`
-**File:** `supabase/functions/chat-relay/index.ts` (line 2)
-- Uses `https://esm.sh/@supabase/supabase-js@2.49.1` (pinned old version) — update to `@2` (unpinned) to match other functions that work with `getClaims`
+## Fix 5: `chat-relay/index.ts` -- pinned old SDK version
+**File:** `supabase/functions/chat-relay/index.ts`
+- Line 2: Change `@supabase/supabase-js@2.49.1` to `@supabase/supabase-js@2`
 
 ## Summary
-- **9 files modified** (1 shared module + 8 edge functions)
-- **~30 type errors resolved** from 4 root causes
-- No logic changes — only type safety fixes
+- 5 files modified
+- ~25 type errors resolved
+- No logic changes -- only type safety fixes
+- All edge functions will be redeployed automatically after changes
 
