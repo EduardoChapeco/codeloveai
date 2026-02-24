@@ -930,6 +930,7 @@ export type Database = {
       }
       licenses: {
         Row: {
+          active: boolean
           affiliate_id: string | null
           created_at: string
           daily_messages: number
@@ -937,15 +938,15 @@ export type Database = {
           expires_at: string
           hourly_limit: number | null
           id: string
-          is_active: boolean
+          key: string
           last_validated_at: string | null
           plan: string
           plan_type: string
           tenant_id: string | null
-          token: string
           user_id: string
         }
         Insert: {
+          active?: boolean
           affiliate_id?: string | null
           created_at?: string
           daily_messages?: number
@@ -953,15 +954,15 @@ export type Database = {
           expires_at: string
           hourly_limit?: number | null
           id?: string
-          is_active?: boolean
+          key: string
           last_validated_at?: string | null
           plan?: string
           plan_type?: string
           tenant_id?: string | null
-          token: string
           user_id: string
         }
         Update: {
+          active?: boolean
           affiliate_id?: string | null
           created_at?: string
           daily_messages?: number
@@ -969,12 +970,11 @@ export type Database = {
           expires_at?: string
           hourly_limit?: number | null
           id?: string
-          is_active?: boolean
+          key?: string
           last_validated_at?: string | null
           plan?: string
           plan_type?: string
           tenant_id?: string | null
-          token?: string
           user_id?: string
         }
         Relationships: [
@@ -991,6 +991,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "licenses_user_id_profiles_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
