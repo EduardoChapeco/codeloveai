@@ -130,14 +130,14 @@ export default function LovableConnect() {
     if (clfTokenRef.current) return clfTokenRef.current;
     // Try to load from DB
     if (user) {
-      const { data } = await supabase
+      const { data } = await (supabase
         .from("licenses")
         .select("key, expires_at")
         .eq("user_id", user.id)
         .eq("active", true)
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle();
+        .maybeSingle() as any);
       if (data) {
         const row = data as unknown as { key: string; expires_at: string | null };
         setClfToken(row.key);

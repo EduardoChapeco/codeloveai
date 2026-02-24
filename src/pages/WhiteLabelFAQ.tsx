@@ -55,7 +55,7 @@ const faqs: FaqItem[] = [
 ];
 
 export default function WhiteLabelFAQ() {
-  useSEO("FAQ White Label — Starble", "Perguntas frequentes sobre o programa White Label da Starble");
+  useSEO({ title: "FAQ White Label — Starble", description: "Perguntas frequentes sobre o programa White Label da Starble" });
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
