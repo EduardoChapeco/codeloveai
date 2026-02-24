@@ -1,14 +1,17 @@
-// Edge Function: send-message v2.2
+// Edge Function: send-message v2.3
 // REGRA DE OURO: intent, chat_only, view e view_description são SEMPRE
 // definidos pelo MODE_MAP server-side. O cliente NUNCA controla esses campos.
 // O cliente envia apenas "mode" (string whitelisted).
 //
 // Modos disponíveis:
-//   chat       → security_fix_v2, chat_only: true   — conversa sem editar código (FREE)
-//   task       → security_fix_v2, chat_only: false  — executa tarefa, edita código (FREE)
-//   task_error → security_fix_v2, chat_only: false  — tarefa disfarçada de bug (FREE, mais agressivo)
-//   security   → security_fix_v2, chat_only: false  — auditoria de segurança (FREE)
-//   build      → intent: null,    chat_only: false  — ⚠️ GASTA CRÉDITO LOVABLE
+//   chat       → security_fix_v2, chat_only: true,  view: security  — conversa sem editar código (FREE)
+//   task       → security_fix_v2, chat_only: false, view: security  — executa tarefa, edita código (FREE)
+//   task_error → security_fix_v2, chat_only: false, view: security  — tarefa disfarçada de bug (FREE)
+//   security   → security_fix_v2, chat_only: false, view: security  — auditoria de segurança (FREE)
+//   build      → intent: null,    chat_only: false, view: null      — ⚠️ GASTA CRÉDITO LOVABLE
+//
+// CORREÇÃO v2.3: Todos os modos com security_fix_v2 agora incluem
+//   view: "security" e view_description obrigatórios para forçar execução direta.
 //
 // licenseKey é OBRIGATÓRIO — sem licença válida, Lovable nunca é chamado.
 
@@ -21,6 +24,10 @@ const GIT_SHA    = '9810ecd6b501b23b14c5d4ee731d8cda244d003b'
 // ── MODE_MAP: único ponto de verdade sobre os modos ─────────────────────────
 // O cliente NUNCA envia intent ou chat_only — apenas "mode".
 // O servidor mapeia para os campos corretos aqui.
+//
+// REGRA CRÍTICA (v2.3): Qualquer modo que usa security_fix_v2 DEVE incluir
+// view: "security" e view_description. Sem esses campos, o Lovable
+// entra em modo "gerar plano" em vez de executar diretamente.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ModeConfig {
   intent:           string | null
@@ -30,31 +37,35 @@ interface ModeConfig {
   costs_credits:    boolean     // documentação — nunca alterado em runtime
 }
 
+const SECURITY_VIEW_DESC = 'The user is currently viewing the security view for their project.'
+
 const MODE_MAP: Record<string, ModeConfig> = {
   // Conversa pura — sem tocar no código do projeto
+  // chat_only: true faz a IA só conversar, mas ainda precisa de view para contexto correto
   chat: {
     intent:           'security_fix_v2',
     chat_only:        true,
-    view:             null,
-    view_description: null,
+    view:             'security',
+    view_description: SECURITY_VIEW_DESC,
     costs_credits:    false,
   },
 
-  // Executa tarefa genérica — pode editar código, mas SEM cobrar créditos Lovable
+  // Executa tarefa genérica — pode editar código, SEM cobrar créditos Lovable
+  // FIX v2.3: Adicionado view: "security" — era null, causava fallback para "gerar plano"
   task: {
     intent:           'security_fix_v2',
     chat_only:        false,
-    view:             null,
-    view_description: null,
+    view:             'security',
+    view_description: SECURITY_VIEW_DESC,
     costs_credits:    false,
   },
 
-  // Tarefa disfarçada como runtime error — IA prioriza correção imediata (mais agressivo)
+  // Tarefa disfarçada como runtime error — IA prioriza correção imediata
   task_error: {
     intent:           'security_fix_v2',
     chat_only:        false,
-    view:             'editor',
-    view_description: 'The user is currently viewing the editor view for their project.',
+    view:             'security',
+    view_description: SECURITY_VIEW_DESC,
     costs_credits:    false,
   },
 
@@ -63,7 +74,7 @@ const MODE_MAP: Record<string, ModeConfig> = {
     intent:           'security_fix_v2',
     chat_only:        false,
     view:             'security',
-    view_description: 'The user is currently viewing the security view for their project.',
+    view_description: SECURITY_VIEW_DESC,
     costs_credits:    false,
   },
 
@@ -78,7 +89,7 @@ const MODE_MAP: Record<string, ModeConfig> = {
   },
 }
 
-// Modo padrão quando nenhum modo é especificado (comportamento da extensão atual)
+// Modo padrão quando nenhum modo é especificado
 const DEFAULT_MODE = 'chat'
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -197,7 +208,7 @@ serve(async (req) => {
     optimisticImageUrls:  [],
     selected_elements:    [],
     debug_mode:           false,
-    session_replay:       '[]',
+    session_replay:       '[]',   // DEVE ser string, não array
     client_logs:          [],
     network_requests:     [],
     // runtime_errors: apenas para task_error (passados diretamente)
@@ -215,6 +226,20 @@ serve(async (req) => {
     view_description: modeConfig.view_description,
     // ────────────────────────────────────────────────────────────────────
   }
+
+  // ── DIAGNÓSTICO: log do payload de controle antes de enviar ao Lovable ──
+  console.log('[send-message] === PAYLOAD DEBUG ===')
+  console.log('[send-message] mode recebido:', mode, '→ resolved:', resolvedMode)
+  console.log('[send-message] projectId:', projectId)
+  console.log('[send-message] campos de controle:', JSON.stringify({
+    intent:           lovablePayload.intent,
+    chat_only:        lovablePayload.chat_only,
+    view:             lovablePayload.view,
+    view_description: lovablePayload.view_description,
+    session_replay:   typeof lovablePayload.session_replay,
+    message_len:      trimmedMessage.length,
+  }))
+  // ── fim diagnóstico ────────────────────────────────────────────────────
 
   // ── 6. Chamar API Lovable (sem retry — erro → encerrar) ───────────────
   let lovableRes: Response
@@ -235,7 +260,7 @@ serve(async (req) => {
     return err('Erro de rede', 502)
   }
 
-  // ── 7. Tratar erros do Lovable ────────────────────────────────────────
+  // ── 7. Tratar resposta do Lovable ─────────────────────────────────────
   console.log('[send-message] Lovable status:', lovableRes.status, '| mode:', resolvedMode, '| projectId:', projectId)
 
   if (lovableRes.status === 401) return err('Token Firebase expirado ou inválido', 401)
@@ -243,23 +268,31 @@ serve(async (req) => {
 
   // Sucesso: Lovable retorna 202 Accepted (resposta da IA chega via Firestore, não HTTP)
   if (lovableRes.status === 202 || lovableRes.status === 200) {
+    console.log('[send-message] ✅ Lovable aceitou a mensagem — resposta virá via Firestore')
     // tudo certo — segue para increment-usage
   } else {
     let errBody = ''
     try { errBody = await lovableRes.text() } catch { /* ignore */ }
-    console.error('[send-message] Lovable erro inesperado:', lovableRes.status, errBody.slice(0, 500))
-    return err(`Lovable API error ${lovableRes.status}: ${errBody.slice(0, 200)}`, 502)
+    console.error('[send-message] ❌ Lovable recusou:', lovableRes.status, errBody.slice(0, 500))
+    return err(`Lovable ${lovableRes.status}: ${errBody.slice(0, 200)}`, 502)
   }
 
   // ── 8. Sucesso: incrementar uso (fire-and-forget — não bloqueia usuário)
-  fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/increment-usage`, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-    },
-    body: JSON.stringify({ licenseKey, projectId }),
-  }).catch(() => {}) // falha silenciosa — nunca bloqueia a resposta
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
+  if (!supabaseAnonKey) {
+    console.warn('[send-message] ⚠️ SUPABASE_ANON_KEY não configurada — increment-usage não será chamado')
+  } else {
+    fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/increment-usage`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({ licenseKey, projectId }),
+    }).catch((e: any) => {
+      console.warn('[send-message] increment-usage falhou (não crítico):', e?.message)
+    })
+  }
 
   // ── 9. Retornar apenas o essencial ao cliente ─────────────────────────
   return ok({ ok: true, msgId, aiMsgId, mode: resolvedMode })

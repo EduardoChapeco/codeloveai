@@ -7,11 +7,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PLANS: Record<string, { title: string; price: number; days: number }> = {
-  "1_day": { title: "Plano 1 Dia", price: 19.9, days: 1 },
-  "7_days": { title: "Plano 7 Dias", price: 89.9, days: 7 },
-  "lifetime": { title: "Plano Vitalício", price: 199.0, days: 3650 },
-};
+const CORS_ORIGINS = [
+  "https://Starbleai.lovable.app",
+  "https://id-preview--804f123e-068a-44af-90b4-2843ed8e7d2a.lovable.app",
+];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -68,44 +67,57 @@ Deno.serve(async (req) => {
 
     const { plan, affiliate_code, payment_method } = await req.json();
 
-    // Fetch plan from DB (modern v2)
-    let planData: { title: string; price: number; days: number } | null = null;
-    let selectedPlanId: string | null = null;
-
-    if (plan && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(plan)) {
-      const { data: dbPlan } = await serviceClient
-        .from("plans")
-        .select("id, name, price, billing_cycle")
-        .eq("id", plan)
-        .maybeSingle();
-
-      if (dbPlan) {
-        selectedPlanId = dbPlan.id;
-        let days = 30;
-        if (dbPlan.billing_cycle === "daily") days = 1;
-        if (dbPlan.billing_cycle === "weekly") days = 7;
-        if (dbPlan.billing_cycle === "yearly") days = 365;
-        if (dbPlan.billing_cycle === "lifetime") days = 3650;
-
-        planData = {
-          title: dbPlan.name,
-          price: dbPlan.price / 100, // stored in cents
-          days,
-        };
-      }
-    }
-
-    // Fallback to hardcoded plans (legacy v1 support)
-    if (!planData && PLANS[plan]) {
-      planData = PLANS[plan];
-    }
-
-    if (!planData) {
-      return new Response(JSON.stringify({ error: "Plano inválido ou não encontrado" }), {
+    // ── Fetch plan EXCLUSIVELY from DB — no hardcoded fallback ───────────────
+    // plan must be a valid UUID referencing the plans table
+    if (!plan || typeof plan !== "string") {
+      return new Response(JSON.stringify({ error: "Plano inválido" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(plan);
+    if (!isUUID) {
+      return new Response(JSON.stringify({ error: "ID de plano inválido. Use o UUID do plano." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: dbPlan } = await serviceClient
+      .from("plans")
+      .select("id, name, price, billing_cycle, type, is_active, is_public")
+      .eq("id", plan)
+      .maybeSingle();
+
+    if (!dbPlan || !dbPlan.is_active || !dbPlan.is_public) {
+      return new Response(JSON.stringify({ error: "Plano não encontrado ou inativo" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Block free/trial plans from paid checkout
+    if (dbPlan.type === "trial" || dbPlan.type === "free") {
+      return new Response(JSON.stringify({ error: "Este plano é gratuito e não requer checkout" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    let days = 30;
+    if (dbPlan.billing_cycle === "daily") days = 1;
+    if (dbPlan.billing_cycle === "weekly") days = 7;
+    if (dbPlan.billing_cycle === "yearly") days = 365;
+    if (dbPlan.billing_cycle === "lifetime") days = 3650;
+
+    // price stored in cents in DB — convert to BRL
+    const planData = {
+      title: dbPlan.name,
+      price: dbPlan.price / 100,
+      days,
+    };
+    const selectedPlanId = dbPlan.id;
 
     let finalPrice = planData.price;
     let discountApplied = 0;

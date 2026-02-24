@@ -10,7 +10,7 @@ import {
   BarChart3, CheckCircle, XCircle, Loader2, Save, ArrowLeft,
   Globe, Palette, FileText, Eye, EyeOff, RefreshCw, Shield, BookOpen, LogIn,
   Package, UserPlus, Copy, Link as LinkIcon, CloudLightning, Key, Activity,
-  ShieldAlert, Unlink, ExternalLink, Webhook,
+  ShieldAlert, Unlink, ExternalLink, Webhook, ToggleLeft, ToggleRight, Sliders,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -123,7 +123,16 @@ interface Plan {
   created_at: string;
 }
 
-type Tab = "tenants" | "plans" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud";
+interface FeatureFlag {
+  id: string;
+  feature: string;
+  enabled_for: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+type Tab = "tenants" | "plans" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -141,7 +150,13 @@ export default function AdminGlobal() {
   const [wlAffiliates, setWlAffiliates] = useState<WlAffiliate[]>([]);
   const [wlSubs, setWlSubs] = useState<WlSubscription[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Feature flag editing state
+  const [flagEditing, setFlagEditing] = useState<string | null>(null); // id being edited
+  const [flagEditValue, setFlagEditValue] = useState<string>("");
+  const [flagSaving, setFlagSaving] = useState(false);
 
   // Plans edit sheet
   const [planSheetOpen, setPlanSheetOpen] = useState(false);
@@ -202,6 +217,8 @@ export default function AdminGlobal() {
     setWlAffiliates((wlAffRes.data as WlAffiliate[]) || []);
     setWlSubs((wlSubsRes.data as WlSubscription[]) || []);
     setPlans((plansRes.data as Plan[]) || []);
+    const { data: flagsData } = await supabase.from("feature_flags").select("*").order("feature", { ascending: true });
+    setFeatureFlags((flagsData as FeatureFlag[]) || []);
     setLoading(false);
   };
 
@@ -250,6 +267,32 @@ export default function AdminGlobal() {
   const togglePlanActive = async (id: string, current: boolean) => {
     await supabase.from("plans").update({ is_active: !current }).eq("id", id);
     toast.success(current ? "Plano desativado" : "Plano ativado");
+    fetchAll();
+  };
+
+  // ── Feature Flag helpers ─────────────────────────────────────────────────
+  const toggleFlagScope = async (flag: FeatureFlag) => {
+    const newVal = flag.enabled_for === "all" ? "admin" : "all";
+    const { error } = await supabase
+      .from("feature_flags")
+      .update({ enabled_for: newVal, updated_at: new Date().toISOString() })
+      .eq("id", flag.id);
+    if (error) return toast.error("Erro ao atualizar flag");
+    toast.success(`${flag.feature}: ${newVal === "all" ? "✅ Habilitado para todos" : "🔒 Apenas admin"}`);
+    fetchAll();
+  };
+
+  const saveFlagEdit = async (id: string) => {
+    if (!flagEditValue.trim()) return;
+    setFlagSaving(true);
+    const { error } = await supabase
+      .from("feature_flags")
+      .update({ enabled_for: flagEditValue.trim(), updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setFlagSaving(false);
+    if (error) return toast.error("Erro ao salvar");
+    toast.success("Flag atualizada!");
+    setFlagEditing(null);
     fetchAll();
   };
 
@@ -403,6 +446,7 @@ export default function AdminGlobal() {
             {([
               { id: "tenants", label: "Tenants", icon: Building2 },
               { id: "plans", label: "Planos", icon: DollarSign },
+              { id: "feature_flags", label: "Feature Flags", icon: Sliders },
               { id: "lovable_cloud", label: "Lovable Cloud", icon: CloudLightning },
               { id: "wl_plans", label: "Planos WL", icon: Package },
               { id: "wl_affiliates", label: "Afiliados WL", icon: UserPlus },
@@ -505,6 +549,98 @@ export default function AdminGlobal() {
               {plans.length === 0 && (
                 <div className="lv-card text-center py-10">
                   <p className="lv-body text-muted-foreground">Nenhum plano encontrado. Execute a migration primeiro.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ─── FEATURE FLAGS TAB ─── */}
+          {tab === "feature_flags" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="lv-body-strong">Feature Flags — {featureFlags.length} flags</p>
+                  <p className="lv-caption text-muted-foreground mt-0.5">Controle de acesso por feature. Valores: <code className="text-xs bg-muted px-1 rounded">all</code>, <code className="text-xs bg-muted px-1 rounded">admin</code>, <code className="text-xs bg-muted px-1 rounded">plan:pro</code>, <code className="text-xs bg-muted px-1 rounded">user:uuid</code></p>
+                </div>
+                <button onClick={fetchAll} className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-2">
+                  <RefreshCw className="h-3.5 w-3.5" /> Atualizar
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {featureFlags.map(flag => {
+                  const isAll = flag.enabled_for === "all";
+                  const isEditing = flagEditing === flag.id;
+                  return (
+                    <div key={flag.id} className="lv-card flex items-center gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <code className="text-sm font-mono font-bold">{flag.feature}</code>
+                          <span className={`lv-badge text-[10px] ${isAll ? 'lv-badge-success' : 'lv-badge-muted'}`}>
+                            {flag.enabled_for}
+                          </span>
+                        </div>
+                        {flag.description && (
+                          <p className="lv-caption text-muted-foreground">{flag.description}</p>
+                        )}
+                        {isEditing && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <input
+                              className="lv-input h-8 text-xs flex-1"
+                              value={flagEditValue}
+                              onChange={e => setFlagEditValue(e.target.value)}
+                              placeholder="all | admin | plan:pro | user:uuid"
+                              onKeyDown={e => { if (e.key === 'Enter') saveFlagEdit(flag.id); if (e.key === 'Escape') setFlagEditing(null); }}
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => saveFlagEdit(flag.id)}
+                              disabled={flagSaving}
+                              className="lv-btn-primary h-8 px-3 text-xs flex items-center gap-1"
+                            >
+                              {flagSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                              Salvar
+                            </button>
+                            <button onClick={() => setFlagEditing(null)} className="lv-btn-secondary h-8 px-3 text-xs">
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Toggle rápido: all ↔ admin */}
+                        <button
+                          onClick={() => toggleFlagScope(flag)}
+                          className={`flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium transition-all ${
+                            isAll
+                              ? 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                          }`}
+                          title={isAll ? 'Clique para restringir apenas a admins' : 'Clique para liberar para todos'}
+                        >
+                          {isAll
+                            ? <><ToggleRight className="h-4 w-4" /> Todos</>
+                            : <><ToggleLeft className="h-4 w-4" /> Admin</>}
+                        </button>
+                        {/* Edição avançada */}
+                        <button
+                          onClick={() => { setFlagEditing(isEditing ? null : flag.id); setFlagEditValue(flag.enabled_for); }}
+                          className="lv-btn-icon h-8 w-8"
+                          title="Editar valor avançado (plan:x, user:uuid)"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {featureFlags.length === 0 && (
+                <div className="lv-card text-center py-10">
+                  <Sliders className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                  <p className="lv-body text-muted-foreground">Nenhuma feature flag encontrada.</p>
+                  <p className="lv-caption text-muted-foreground mt-1">Execute a migration <code>20260224090000_advanced_rls_feature_flags.sql</code> primeiro.</p>
                 </div>
               )}
             </div>
