@@ -17,7 +17,7 @@ const VIEW             = 'security'
 const VIEW_DESCRIPTION = 'The user is currently viewing the security view for their project.'
 // ────────────────────────────────────────────────────────────────────────
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -58,23 +58,23 @@ serve(async (req) => {
     files?:      unknown[]
   }
 
-  // ── 3. Validações de entrada ──────────────────────────────────────────
+  // ── 3. Validações de entrada — licenseKey PRIMEIRO (CRÍTICO) ────────────
+  // licenseKey OBRIGATÓRIO antes de qualquer coisa — sem licença, nunca toca no Lovable
+  if (!licenseKey || !licenseKey.startsWith('CLF1.'))
+    return err('licenseKey inválida', 400)
+
   if (!token || !token.startsWith('eyJ'))
     return err('Token Firebase inválido', 400)
 
-  if (!projectId || !UUID_REGEX.test(projectId))
-    return err('projectId inválido (deve ser UUID)', 400)
+  if (!projectId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(projectId))
+    return err('projectId inválido', 400)
 
-  const msg = typeof message === 'string' ? message.trim() : ''
-  if (!msg)
-    return err('message obrigatória e não pode ser vazia', 400)
+  const trimmedMessage = typeof message === 'string' ? message.trim() : ''
+  if (!trimmedMessage)
+    return err('message não pode estar vazia', 400)
 
   if (!msgId || !aiMsgId)
     return err('msgId e aiMsgId são obrigatórios', 400)
-
-  // licenseKey é OBRIGATÓRIO — sem ela, bloqueamos antes de tocar no Lovable
-  if (!licenseKey || !licenseKey.startsWith('CLF1.'))
-    return err('licenseKey inválida — prefixo CLF1. obrigatório', 400)
 
   if (files !== undefined && !Array.isArray(files))
     return err('files deve ser array', 400)
@@ -113,7 +113,7 @@ serve(async (req) => {
   // ── 5. Montar payload — campos de controle 100% hardcoded ─────────────
   const lovablePayload = {
     id:              msgId,
-    message:         msg,
+    message:         trimmedMessage,
     ai_message_id:   aiMsgId,
     files:           Array.isArray(files) ? files.slice(0, 10) : [],
 
@@ -153,22 +153,23 @@ serve(async (req) => {
       },
       body: JSON.stringify(lovablePayload),
     })
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error'
-    return err('Erro de rede ao conectar ao Lovable: ' + msg, 502)
+  } catch {
+    return err('Erro de rede', 502)
   }
 
   // ── 7. Tratar erros do Lovable (sem expor detalhes internos) ──────────
   if (lovableRes.status === 401) return err('Token Firebase expirado ou inválido', 401)
   if (lovableRes.status === 429) return err('Rate limit do Lovable — aguarde alguns minutos', 429)
-  if (!lovableRes.ok)            return err('Lovable API error — tente novamente', 502)
+  if (!lovableRes.ok)            return err('Lovable API error', 502)
 
   // ── 8. Sucesso: incrementar uso (fire-and-forget — não bloqueia usuário)
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  fetch(`${supabaseUrl}/functions/v1/increment-usage`, {
+  fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/increment-usage`, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ licenseKey }),
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+    },
+    body: JSON.stringify({ licenseKey, projectId }),
   }).catch(() => {}) // falha silenciosa — nunca bloqueia a resposta
 
   // ── 9. Retornar apenas o essencial ao cliente ─────────────────────────
