@@ -48,6 +48,7 @@ const ProjectEditor = lazyRetry(() => import("./pages/ProjectEditor"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
 const WhiteLabelOnboarding = lazyRetry(() => import("./pages/WhiteLabelOnboarding"));
 const TenantDashboard = lazyRetry(() => import("./pages/TenantDashboard"));
+const WhiteLabelFAQ = lazyRetry(() => import("./pages/WhiteLabelFAQ"));
 
 const queryClient = new QueryClient();
 
@@ -84,6 +85,8 @@ const App = () => (
                 <Route path="/brain" element={<Brain />} />
                 <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
                 <Route path="/whitelabel/onboarding" element={<WhiteLabelOnboarding />} />
+                <Route path="/wl/setup" element={<WhiteLabelOnboarding />} />
+                <Route path="/faq/whitelabel" element={<WhiteLabelFAQ />} />
                 <Route path="/tenant/dashboard" element={<TenantDashboard />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

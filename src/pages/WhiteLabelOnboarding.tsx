@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -40,6 +40,28 @@ export default function WhiteLabelOnboarding() {
   const [subdomainAvailable, setSubdomainAvailable] = useState<boolean | null>(null);
   const [checkingSubdomain, setCheckingSubdomain] = useState(false);
   const [saving, setSaving] = useState(false);
+  const previewRef = useRef<HTMLIFrameElement>(null);
+
+  // Push branding changes to the iframe preview
+  const updatePreviewIframe = useCallback(() => {
+    const iframe = previewRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({
+      type: "updatePreview",
+      config: {
+        appName: state.branding.platformName || "Meu Booster",
+        logoUrl: state.branding.logoUrl || null,
+        primaryColor: state.branding.primaryColor,
+        secondaryColor: state.branding.secondaryColor,
+        planType: state.billing.planType,
+      },
+    }, "*");
+  }, [state.branding, state.billing.planType]);
+
+  // Update preview whenever branding or billing changes
+  useEffect(() => {
+    if (state.step === 2) updatePreviewIframe();
+  }, [state.branding, state.billing.planType, state.step, updatePreviewIframe]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
@@ -245,11 +267,19 @@ export default function WhiteLabelOnboarding() {
               {subdomainAvailable === false && <p className="lv-caption mt-1 text-red-500">✗ Já está em uso</p>}
             </div>
 
-            {/* Preview */}
-            <div className="rounded-xl p-4" style={{ background: state.branding.primaryColor }}>
-              <div className="flex items-center gap-3">
-                {state.branding.logoUrl ? <img src={state.branding.logoUrl} alt="" className="h-6 rounded" /> : null}
-                <span className="text-white font-semibold text-sm">{state.branding.platformName || "Sua Plataforma"}</span>
+            {/* Live Extension Preview */}
+            <div className="flex flex-col items-center">
+              <p className="lv-caption mb-2 text-center">Preview da extensão</p>
+              <div className="rounded-2xl overflow-hidden border border-border/40 shadow-lg" style={{ width: 400, height: 500 }}>
+                <iframe
+                  ref={previewRef}
+                  src="/wl-preview.html"
+                  title="Preview da extensão"
+                  width={400}
+                  height={500}
+                  className="border-0"
+                  onLoad={updatePreviewIframe}
+                />
               </div>
             </div>
 
