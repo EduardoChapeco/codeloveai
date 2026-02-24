@@ -1,21 +1,21 @@
 // supabase/functions/send-message/index.ts
-// REGRA: usa EXCLUSIVAMENTE security_fix_v2 — NUNCA gasta crédito do usuário
+// REGRA ABSOLUTA: chat_only=true + intent=security_fix_v2 em TODOS os modos.
+// NUNCA aceitar chat_only=false vindo da extensão ou de qualquer modo.
 
-const GIT_SHA = '3d7a3673c6f02b606137a12ddc0ab88f6b775113';
+const GIT_SHA = '9810ecd6b501b23b14c5d4ee731d8cda244d003b';
+const LOVABLE_API = 'https://api.lovable.dev';
 
-const AQ_PREFIX = 'IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n';
-
-// Modos gratuitos — ÚNICA fonte de verdade
-// build está AUSENTE propositalmente — é pago e proibido
-const MODE_MAP: Record<string, { intent: string; chat_only: boolean; view: string | null; view_description: string | null }> = {
-  chat:       { intent: 'security_fix_v2', chat_only: true,  view: null,       view_description: null },
-  security:   { intent: 'security_fix_v2', chat_only: false, view: 'security', view_description: 'The user is currently viewing the security view for their project.' },
-  task:       { intent: 'security_fix_v2', chat_only: false, view: null,       view_description: null },
-  task_error: { intent: 'security_fix_v2', chat_only: false, view: 'editor',   view_description: 'The user encountered a critical runtime error that needs immediate fixing.' },
-  git:        { intent: 'security_fix_v2', chat_only: false, view: 'editor',   view_description: null },
+// VIEW_MAP: apenas controla view/view_description por modo.
+// chat_only é SEMPRE true — não está aqui para não dar margem a erro.
+const VIEW_MAP: Record<string, { view: string; view_description: string }> = {
+  chat:       { view: 'security', view_description: 'The user is viewing the security analysis.' },
+  security:   { view: 'security', view_description: 'The user is performing a critical security refactor and code hardening.' },
+  task:       { view: 'security', view_description: 'The user is viewing the security analysis.' },
+  task_error: { view: 'editor',   view_description: 'The user encountered a critical runtime error that needs immediate fixing.' },
+  git:        { view: 'editor',   view_description: 'The user is performing a git operation.' },
 };
 
-const DEFAULT_MODE = 'task'; // fallback seguro — nunca build
+const DEFAULT_VIEW = VIEW_MAP.task;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,19 +23,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-function uuid(): string {
+function makeUuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
 
-function aiMsgId(): string {
+function makeAiMsgId(): string {
   const C = '01PbWWqgKDBDorh525uecKaGZD21FGSoCeR';
   return 'aimsg_' + Array.from({ length: 26 }, () => C[Math.floor(Math.random() * 32)]).join('');
 }
 
-function err(message: string, status = 400) {
+function errResponse(message: string, status = 400): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -45,90 +45,103 @@ function err(message: string, status = 400) {
 Deno.serve(async (req) => {
   // CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    return err('Method not allowed', 405);
+    return errResponse('Method not allowed', 405);
   }
 
-  // Parse body
+  // ── Parse body ────────────────────────────────────────────────────────────
   let body: any;
   try {
     body = await req.json();
   } catch {
-    return err('Body JSON inválido');
+    return errResponse('Body JSON inválido');
   }
 
-  const { token, projectId, message, msgId, aiMsgId: aiMsgIdIn, licenseKey, files, mode: modeIn } = body;
+  const {
+    token,
+    projectId,
+    message,
+    msgId,
+    aiMsgId: aiMsgIdIn,
+    licenseKey,
+    files,
+    mode: modeIn,
+  } = body;
 
-  // ── Validações ───────────────────────────────────────────────────────────
-  if (!token || !token.startsWith('eyJ')) {
-    return err('Token Firebase inválido', 401);
+  // ── Validações obrigatórias ───────────────────────────────────────────────
+  if (!token || typeof token !== 'string' || !token.startsWith('eyJ')) {
+    return errResponse('Token Firebase inválido', 401);
   }
-  if (!projectId || !/^[0-9a-f-]{36}$/.test(projectId)) {
-    return err('projectId inválido');
+
+  if (
+    !projectId ||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(projectId)
+  ) {
+    return errResponse('projectId inválido');
   }
+
   if (!message || typeof message !== 'string' || !message.trim()) {
-    return err('message obrigatória');
+    return errResponse('message obrigatória');
   }
 
-  // ── Selecionar modo — NUNCA build, NUNCA intent:null ────────────────────
-  // Se vier "build" ou qualquer modo desconhecido → forçar "task"
-  const modeKey = (modeIn && modeIn !== 'build' && MODE_MAP[modeIn]) ? modeIn : DEFAULT_MODE;
-  const mode = MODE_MAP[modeKey];
+  if (!licenseKey || typeof licenseKey !== 'string' || !licenseKey.startsWith('CLF1.')) {
+    return errResponse('licenseKey inválida', 401);
+  }
 
-  // Log para diagnóstico
-  console.log(`[send-message] mode recebido: "${modeIn}" → usando: "${modeKey}"`);
-  console.log(`[send-message] intent: ${mode.intent} | chat_only: ${mode.chat_only} | view: ${mode.view}`);
-
-  // ── Validar licença (opcional — não bloqueia se validate-hwid falhar) ───
-  if (licenseKey) {
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      if (supabaseUrl && serviceKey) {
-        const licResp = await fetch(`${supabaseUrl}/rest/v1/licenses?key=eq.${licenseKey}&status=eq.active&select=id`, {
+  // ── Validar licença no banco ──────────────────────────────────────────────
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && serviceKey) {
+      const licResp = await fetch(
+        `${supabaseUrl}/rest/v1/licenses?key=eq.${encodeURIComponent(licenseKey)}&status=eq.active&select=id`,
+        {
           headers: {
-            'Authorization': `Bearer ${serviceKey}`,
-            'apikey': serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            apikey: serviceKey,
           },
-        });
-        if (licResp.ok) {
-          const licenses = await licResp.json();
-          if (!licenses || licenses.length === 0) {
-            console.warn('[send-message] licença não encontrada:', licenseKey.slice(0, 20));
-            return err('Licença inválida ou expirada', 401);
-          }
+        }
+      );
+      if (licResp.ok) {
+        const lics = await licResp.json();
+        if (!Array.isArray(lics) || lics.length === 0) {
+          return errResponse('Licença inválida ou expirada', 401);
         }
       }
-    } catch (e) {
-      // Não bloquear por falha de rede na validação
-      console.warn('[send-message] validate license error:', e.message);
+      // Se a chamada ao banco falhar, deixa passar (fail-open) para não bloquear o usuário
     }
+  } catch (e) {
+    console.error('[send-message] Erro ao validar licença:', e);
   }
 
-  // ── Montar payload para o Lovable ────────────────────────────────────────
-  // Aplicar AQ_PREFIX para modos que editam código (chat_only: false)
-  const finalMessage = mode.chat_only
-    ? message.trim()
-    : (AQ_PREFIX + message.trim());
+  // ── Selecionar view por modo ──────────────────────────────────────────────
+  const viewCfg = (modeIn && VIEW_MAP[modeIn]) ? VIEW_MAP[modeIn] : DEFAULT_VIEW;
 
+  console.log(
+    `[send-message] mode="${modeIn ?? 'undefined'}" → view="${viewCfg.view}" | chat_only=true (hardcoded)`
+  );
+
+  // ── Montar payload para o Lovable ─────────────────────────────────────────
+  // CRÍTICO: chat_only é SEMPRE true — hardcoded aqui, nunca vindo de fora.
+  // CRÍTICO: intent é SEMPRE security_fix_v2 — hardcoded aqui, nunca vindo de fora.
   const lovablePayload = {
-    id: msgId || uuid(),
-    message: finalMessage,
-    ai_message_id: aiMsgIdIn || aiMsgId(),
-    intent: mode.intent,           // SEMPRE 'security_fix_v2'
-    chat_only: mode.chat_only,     // NUNCA true para modos de edição
-    view: mode.view,
-    view_description: mode.view_description,
+    id: msgId || makeUuid(),
+    message: message.trim(),
+    ai_message_id: aiMsgIdIn || makeAiMsgId(),
+    intent: 'security_fix_v2',        // HARDCODED — nunca alterar
+    chat_only: true,                   // HARDCODED — nunca alterar
+    view: viewCfg.view,
+    view_description: viewCfg.view_description,
     thread_id: 'main',
     model: null,
-    files: files ?? [],
+    files: Array.isArray(files) ? files : [],
     optimisticImageUrls: [],
     selected_elements: [],
     debug_mode: false,
-    session_replay: '[]',          // STRING obrigatória, não array
+    session_replay: '[]',
     client_logs: [],
     network_requests: [],
     runtime_errors: [],
@@ -140,60 +153,51 @@ Deno.serve(async (req) => {
     },
   };
 
-  // Log do payload crítico antes de enviar
-  console.log('[send-message] lovablePayload crítico:', JSON.stringify({
-    intent: lovablePayload.intent,
-    chat_only: lovablePayload.chat_only,
-    view: lovablePayload.view,
-    message_preview: lovablePayload.message.slice(0, 80),
-  }));
-
-  // ── Enviar ao Lovable ────────────────────────────────────────────────────
+  // ── Enviar ao Lovable ─────────────────────────────────────────────────────
   let lovableRes: Response;
   try {
-    lovableRes = await fetch(`https://api.lovable.dev/projects/${projectId}/chat`, {
+    lovableRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'X-Client-Git-SHA': GIT_SHA,
-        'Origin': 'https://lovable.dev',
-        'Referer': 'https://lovable.dev/',
+        Authorization: `Bearer ${token}`,
+        'x-client-git-sha': GIT_SHA,
+        Origin: 'https://lovable.dev',
+        Referer: 'https://lovable.dev/',
       },
       body: JSON.stringify(lovablePayload),
     });
-  } catch (e) {
-    console.error('[send-message] fetch error:', e.message);
-    return err(`Falha de conexão com Lovable: ${e.message}`, 502);
+  } catch (e: any) {
+    console.error('[send-message] Falha de conexão com Lovable:', e);
+    return errResponse(`Falha de conexão: ${e.message}`, 502);
   }
 
-  // Log do status retornado pelo Lovable
-  console.log('[send-message] Lovable status:', lovableRes.status);
+  // ── Tratar resposta do Lovable ────────────────────────────────────────────
+  if (lovableRes.status === 401) {
+    return errResponse('Token expirado — recarregue o Lovable', 401);
+  }
 
-  // ── Tratar resposta ──────────────────────────────────────────────────────
-  // Lovable retorna 202 Accepted (assíncrono) — a IA responde via Firestore
+  if (lovableRes.status === 429) {
+    return errResponse('Rate limit do Lovable — aguarde alguns segundos', 429);
+  }
+
   if (lovableRes.status === 202 || lovableRes.status === 200) {
-    // Incrementar uso (não bloqueia se falhar)
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-      if (supabaseUrl && anonKey && licenseKey) {
-        fetch(`${supabaseUrl}/functions/v1/increment-usage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
-          body: JSON.stringify({ licenseKey }),
-        }).catch(() => {});
-      }
-    } catch (_) {}
+    // Incrementar uso de forma assíncrona (não bloquear a resposta)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    if (supabaseUrl && anonKey) {
+      fetch(`${supabaseUrl}/functions/v1/increment-usage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({ licenseKey }),
+      }).catch((e) => console.error('[send-message] Erro ao incrementar uso:', e));
+    }
 
     return new Response(
-      JSON.stringify({
-        ok: true,
-        msgId: lovablePayload.id,
-        aiMsgId: lovablePayload.ai_message_id,
-        mode: modeKey,
-        intent: mode.intent,
-      }),
+      JSON.stringify({ ok: true, msgId: lovablePayload.id, aiMsgId: lovablePayload.ai_message_id }),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -201,18 +205,8 @@ Deno.serve(async (req) => {
     );
   }
 
-  if (lovableRes.status === 401) {
-    return err('Token Firebase expirado — recarregue o Lovable', 401);
-  }
-
-  if (lovableRes.status === 429) {
-    return err('Rate limit do Lovable — aguarde alguns segundos', 429);
-  }
-
-  // Erro inesperado — logar body completo para diagnóstico
-  let errBody = '';
-  try { errBody = await lovableRes.text(); } catch (_) {}
-  console.error('[send-message] Lovable error:', lovableRes.status, errBody.slice(0, 500));
-
-  return err(`Lovable retornou ${lovableRes.status}: ${errBody.slice(0, 200)}`, 502);
+  // Qualquer outro erro do Lovable
+  const errTxt = await lovableRes.text().catch(() => '(sem body)');
+  console.error(`[send-message] Lovable ${lovableRes.status}:`, errTxt.slice(0, 300));
+  return errResponse(`Lovable ${lovableRes.status}: ${errTxt.slice(0, 80)}`, 502);
 });
