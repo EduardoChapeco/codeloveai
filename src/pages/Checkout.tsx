@@ -21,28 +21,19 @@ interface Plan {
 }
 
 // Hardcoded fallback plans (used when DB returns nothing)
+// Prices must match the `plans` table: daily=490 cents, monthly=9700 cents
 const fallbackPlans: Plan[] = [
   {
-    id: "1_day", name: "1 Dia", price: 19.90, originalPrice: "R$49,90", period: "por dia",
-    description: "Perfeito para testar a extensão antes de se comprometer.",
-    features: ["Envios ilimitados por 24h", "Sem descontar créditos", "Ativação imediata", "Suporte via chat"],
-  },
-  {
-    id: "7_days", name: "7 Dias", price: 89.90, originalPrice: "R$249,90", period: "por semana",
-    description: "Ideal para sprints rápidos ou projetos de curta duração.",
+    id: "daily", name: "Diário", price: 4.90, originalPrice: "", period: "por dia",
+    description: "Mensagens ilimitadas por 24 horas. Ative quando precisar.",
     popular: true,
-    features: ["Envios ilimitados por 7 dias", "Sem descontar créditos", "Ativação imediata", "Suporte prioritário"],
+    features: ["Mensagens ilimitadas por 24h", "Projetos ilimitados", "Ativação imediata", "Sem mensalidade fixa"],
   },
   {
-    id: "lifetime", name: "Vitalício", price: 199.00, originalPrice: "R$499,00", period: "acesso vitalício*",
-    description: "Acesso enquanto a extensão estiver funcional. Serviço considerado concluído após ativação do token.",
-    highlight: true,
-    features: [
-      "Acesso vitalício enquanto a extensão funcionar",
-      "Sem descontar créditos",
-      "Suporte VIP dedicado",
-      "Serviço concluído após ativação",
-    ],
+    id: "monthly", name: "Mensal", price: 97.00, originalPrice: "", period: "por mês",
+    description: "O melhor custo-benefício para quem usa todos os dias.",
+    highlight: false,
+    features: ["Mensagens ilimitadas", "Projetos ilimitados", "Renovação automática", "Suporte prioritário"],
   },
 ];
 
@@ -125,6 +116,7 @@ export default function Checkout() {
           .select("id, name, type, price, billing_cycle, description, features, highlight_label, display_order, is_public, is_active")
           .eq("is_public", true)
           .eq("is_active", true)
+          .neq("type", "trial")  // Free trial plan handled separately via /free route
           .order("display_order", { ascending: true });
         if (data && data.length > 0) {
           setDbPlans(data.map((p: Record<string, unknown>) => ({
@@ -139,7 +131,7 @@ export default function Checkout() {
             highlight: !!(p.highlight_label) && (p.highlight_label as string)?.toLowerCase() !== "popular",
           })));
         }
-      } catch {} finally { setLoadingPlans(false); }
+      } catch (err) { console.error("Error fetching plans:", err); } finally { setLoadingPlans(false); }
     };
     fetchPlans();
   }, []);
@@ -154,7 +146,7 @@ export default function Checkout() {
           .eq("user_id", user.id)
           .maybeSingle();
         if (data) setAffiliateDiscount(data.discount_percent);
-      } catch {}
+      } catch (err) { console.error("Error fetching affiliate discount:", err); }
       finally { setLoadingDiscount(false); }
     };
     checkAffiliate();
@@ -229,7 +221,8 @@ export default function Checkout() {
         toast.error("Erro ao criar checkout. Tente novamente.");
         setStep("terms");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      console.error("Checkout error:", err);
       toast.error("Erro ao processar pagamento. Tente novamente.");
       setStep("terms");
     } finally {

@@ -230,14 +230,26 @@ serve(async (req) => {
       },
       body: JSON.stringify(lovablePayload),
     })
-  } catch {
+  } catch (e: any) {
+    console.error('[send-message] Erro de rede ao chamar Lovable:', e?.message)
     return err('Erro de rede', 502)
   }
 
-  // ── 7. Tratar erros do Lovable (sem expor detalhes internos) ──────────
+  // ── 7. Tratar erros do Lovable ────────────────────────────────────────
+  console.log('[send-message] Lovable status:', lovableRes.status, '| mode:', resolvedMode, '| projectId:', projectId)
+
   if (lovableRes.status === 401) return err('Token Firebase expirado ou inválido', 401)
   if (lovableRes.status === 429) return err('Rate limit do Lovable — aguarde alguns minutos', 429)
-  if (!lovableRes.ok)            return err('Lovable API error', 502)
+
+  // Sucesso: Lovable retorna 202 Accepted (resposta da IA chega via Firestore, não HTTP)
+  if (lovableRes.status === 202 || lovableRes.status === 200) {
+    // tudo certo — segue para increment-usage
+  } else {
+    let errBody = ''
+    try { errBody = await lovableRes.text() } catch { /* ignore */ }
+    console.error('[send-message] Lovable erro inesperado:', lovableRes.status, errBody.slice(0, 500))
+    return err(`Lovable API error ${lovableRes.status}: ${errBody.slice(0, 200)}`, 502)
+  }
 
   // ── 8. Sucesso: incrementar uso (fire-and-forget — não bloqueia usuário)
   fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/increment-usage`, {

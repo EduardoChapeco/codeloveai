@@ -135,13 +135,13 @@ Deno.serve(async (req) => {
       .insert({
         user_id: userId,
         tenant_id: tenantId,
-        key: `FREE-${sanitizedCode.substring(5, 15)}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        key: `CLF1.FREE-${sanitizedCode.substring(5, 15)}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
         active: true,
-        plan: "Free Trial",
-        plan_type: "daily_token",
+        plan: "Grátis",
+        plan_type: "messages",   // alinhado com send-message MODE_MAP (plan_type 'messages' tem daily_messages)
         type: "trial",
         status: "active",
-        daily_messages: 50,
+        daily_messages: 10,      // 10 mensagens conforme plano free_trial na tabela plans
         expires_at: expiresAt.toISOString(),
         trial_expires_at: expiresAt.toISOString(),
       });
