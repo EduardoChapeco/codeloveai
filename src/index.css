@@ -109,6 +109,11 @@
     --mesh-1: 211 100% 85%;
     --mesh-2: 199 90% 88%;
     --mesh-3: 263 60% 90%;
+
+    /* Liquid Glass tokens */
+    --liquid-glass-bg: rgba(255, 255, 255, 0.45);
+    --liquid-glass-border: rgba(255, 255, 255, 0.65);
+    --light-specular: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.95);
   }
 
   /* ━━━ DARK MODE ━━━ */
@@ -171,6 +176,11 @@
       --mesh-1: 211 80% 14%;
       --mesh-2: 199 70% 11%;
       --mesh-3: 263 50% 13%;
+
+      /* Liquid Glass Dark */
+      --liquid-glass-bg: rgba(20, 20, 22, 0.65);
+      --liquid-glass-border: rgba(255, 255, 255, 0.08);
+      --light-specular: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.08);
   }
 }
 
@@ -392,6 +402,29 @@
   .dark .clf-glass-sm {
       background: rgba(22, 22, 24, 0.72);
       border: 0.5px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* Liquid Glass — Ultra Premium */
+  .clf-liquid-glass {
+    background: var(--liquid-glass-bg);
+    backdrop-filter: blur(30px) saturate(200%) brightness(1.02);
+    -webkit-backdrop-filter: blur(30px) saturate(200%) brightness(1.02);
+    border: 0.5px solid var(--liquid-glass-border);
+    box-shadow: 
+      0 8px 32px -4px rgba(0, 0, 0, 0.08),
+      0 1px 1px rgba(0, 0, 0, 0.02),
+      var(--light-specular);
+  }
+
+  .clf-glass-sidebar {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(25px) saturate(180%);
+    -webkit-backdrop-filter: blur(25px) saturate(180%);
+    border-right: 0.5px solid rgba(0, 0, 0, 0.06);
+  }
+  .dark .clf-glass-sidebar {
+    background: rgba(10, 10, 12, 0.45);
+    border-right: 0.5px solid rgba(255, 255, 255, 0.08);
   }
 
   /* ─────────────────────────────────

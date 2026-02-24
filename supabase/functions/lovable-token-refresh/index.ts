@@ -141,10 +141,10 @@ Deno.serve(async (req) => {
 
     const firebaseApiKey = getFirebaseApiKey();
 
-    // Get all active lovable accounts
+    // Get all active lovable accounts (including admin accounts)
     const { data: accounts } = await serviceClient
       .from("lovable_accounts")
-      .select("id, user_id, token_encrypted, refresh_token_encrypted, last_verified_at, token_expires_at, auto_refresh_enabled, refresh_failure_count")
+      .select("id, user_id, token_encrypted, refresh_token_encrypted, last_verified_at, token_expires_at, auto_refresh_enabled, refresh_failure_count, is_admin_account")
       .eq("status", "active");
 
     if (!accounts || accounts.length === 0) {
@@ -182,7 +182,7 @@ Deno.serve(async (req) => {
           account.auto_refresh_enabled &&
           account.refresh_token_encrypted &&
           firebaseApiKey &&
-          (account.refresh_failure_count || 0) < 5 // Stop after 5 consecutive failures
+          (account.refresh_failure_count || 0) < 5
         ) {
           console.log(`[Token Refresh] Attempting Firebase refresh for user ${account.user_id}`);
 
@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
           if (refreshResult) {
             // Success! Update with new tokens
             const expiresIn = parseInt(refreshResult.expires_in || "3600", 10);
-            const tokenExpiresAt = new Date(Date.now() + (expiresIn - 300) * 1000).toISOString(); // 5 min safety margin
+            const tokenExpiresAt = new Date(Date.now() + (expiresIn - 300) * 1000).toISOString();
 
             await serviceClient
               .from("lovable_accounts")
@@ -208,11 +208,36 @@ Deno.serve(async (req) => {
               })
               .eq("id", account.id);
 
+            // If this is an admin account, also sync to internal.admin_secrets
+            if (account.is_admin_account) {
+              const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+              const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+              
+              for (const [k, v] of [
+                ["admin_lovable_token", refreshResult.id_token],
+                ["admin_lovable_refresh_token", refreshResult.refresh_token]
+              ]) {
+                await fetch(`${supabaseUrl}/rest/v1/admin_secrets?on_conflict=key`, {
+                  method: "POST",
+                  headers: {
+                    "apikey": serviceKey,
+                    "Authorization": `Bearer ${serviceKey}`,
+                    "Content-Type": "application/json",
+                    "Prefer": "resolution=merge-duplicates",
+                    "Accept-Profile": "internal",
+                    "Content-Profile": "internal",
+                  },
+                  body: JSON.stringify({ key: k, value: v, updated_at: new Date().toISOString() }),
+                });
+              }
+              console.log(`[Token Refresh] ✅ Admin secrets synced for user ${account.user_id}`);
+            }
+
             console.log(`[Token Refresh] ✅ Successfully refreshed token for user ${account.user_id}`);
             results.push({ user_id: account.user_id, valid: true, refreshed: true, method: "firebase_refresh" });
             continue;
           } else {
-            // Refresh failed — increment failure count
+            // Refresh failed
             const newFailCount = (account.refresh_failure_count || 0) + 1;
             const shouldExpire = newFailCount >= 5;
 
@@ -224,25 +249,19 @@ Deno.serve(async (req) => {
               })
               .eq("id", account.id);
 
-            if (shouldExpire) {
-              console.warn(`[Token Refresh] ❌ Max failures reached for user ${account.user_id}, marking expired`);
-              results.push({ user_id: account.user_id, valid: false, refreshed: false, method: "max_failures" });
-            } else {
-              console.warn(`[Token Refresh] ⚠️ Refresh failed for user ${account.user_id} (attempt ${newFailCount}/5)`);
-              results.push({ user_id: account.user_id, valid: true, refreshed: false, method: "retry_later" });
-            }
+            results.push({ user_id: account.user_id, valid: false, refreshed: false, method: shouldExpire ? "max_failures" : "retry_later" });
             continue;
           }
         }
 
-        // Step 3: No refresh token available or auto_refresh disabled — mark expired
+        // Step 3
         await serviceClient
           .from("lovable_accounts")
           .update({ status: "expired" })
           .eq("id", account.id);
         results.push({ user_id: account.user_id, valid: false, refreshed: false, method: "no_refresh_token" });
-      } catch {
-        // Network error — skip, don't expire
+      } catch (err) {
+        console.error(`[Token Refresh] Error for account ${account.id}:`, err);
         results.push({ user_id: account.user_id, valid: true, refreshed: false, method: "network_error" });
       }
     }

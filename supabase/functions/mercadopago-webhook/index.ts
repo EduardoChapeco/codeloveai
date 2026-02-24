@@ -428,25 +428,45 @@ async function handleMemberPurchase(
   const affiliateCode = refData.affiliate_code as string | null;
   const refTenantId = refData.tenant_id as string | null;
 
-  if (!userId || typeof userId !== "string" || !plan || typeof plan !== "string" || !PLAN_DAYS[plan]) {
-    return new Response(JSON.stringify({ error: "Invalid plan data" }), {
+  // Resolve plan details
+  const uuidRegexSimple = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let resolvedPlanName = plan;
+  let days = 30;
+  let expectedPrice = 0;
+
+  if (uuidRegexSimple.test(plan)) {
+    const { data: dbPlan } = await supabaseAdmin
+      .from("plans")
+      .select("name, price, billing_cycle")
+      .eq("id", plan)
+      .maybeSingle();
+    
+    if (dbPlan) {
+      resolvedPlanName = dbPlan.name;
+      expectedPrice = dbPlan.price / 100;
+      if (dbPlan.billing_cycle === "daily") days = 1;
+      else if (dbPlan.billing_cycle === "weekly") days = 7;
+      else if (dbPlan.billing_cycle === "yearly") days = 365;
+      else if (dbPlan.billing_cycle === "lifetime") days = 3650;
+      else days = 30;
+    }
+  }
+
+  if (!expectedPrice && PLAN_DAYS[plan]) {
+    days = PLAN_DAYS[plan];
+    expectedPrice = PLAN_PRICES[plan];
+  }
+
+  if (!expectedPrice) {
+    return new Response(JSON.stringify({ error: "Plano inválido ou preço não encontrado" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-
-  if (!uuidRegex.test(userId)) {
-    return new Response(JSON.stringify({ error: "Invalid user reference" }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const tenantId = (refTenantId && uuidRegex.test(refTenantId)) ? refTenantId : DEFAULT_TENANT_ID;
 
   // Price validation
   const paidAmount = payment.transaction_amount as number;
-  const expectedPrice = PLAN_PRICES[plan];
   const minPrice = expectedPrice * 0.79;
-  if (typeof paidAmount === "number" && (paidAmount < minPrice || paidAmount > expectedPrice + 0.01)) {
+  if (typeof paidAmount === "number" && (paidAmount < minPrice || paidAmount > expectedPrice + 0.05)) {
     console.error(`Price mismatch: paid ${paidAmount}, expected ${expectedPrice}`);
     return new Response(JSON.stringify({ error: "Price mismatch" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },

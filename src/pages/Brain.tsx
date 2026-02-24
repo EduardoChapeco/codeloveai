@@ -101,10 +101,11 @@ export default function BrainPage() {
         body: { action: "status" },
       });
       if (!error && data) {
-        setBrainActive(data.active);
-        setLovableConnected(data.connected !== false);
+        const statusData = data as { active: boolean; connected?: boolean };
+        setBrainActive(statusData.active);
+        setLovableConnected(statusData.connected !== false);
       } else {
-        const errorMsg = (data as any)?.error || "";
+        const errorMsg = (data as { error?: string })?.error || "";
         if (errorMsg.includes("não conectado") || errorMsg.includes("not_connected")) {
           setLovableConnected(false);
           setBrainActive(false);
@@ -145,12 +146,13 @@ export default function BrainPage() {
       const { data, error } = await supabase.functions.invoke("loveai-brain", {
         body: { action: "setup" },
       });
-      if (error) throw { message: (data as any)?.error || error.message || "Erro ao ativar Brain" };
-      if (data?.error) throw { message: data.error };
+      if (error) throw { message: (data as { error?: string })?.error || error.message || "Erro ao ativar Star AI" };
+      if (data && (data as { error?: string }).error) throw { message: (data as { error?: string }).error };
       setBrainActive(true);
-      toast.success(data.already_exists ? "Brain já estava ativo!" : "Brain ativado com sucesso! 🧠");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao ativar Brain");
+      toast.success((data as { already_exists?: boolean })?.already_exists ? "Star AI já estava ativo!" : "Star AI ativado com sucesso! 🧠");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      toast.error(errorMsg);
     } finally {
       setSettingUp(false);
     }
@@ -180,23 +182,23 @@ export default function BrainPage() {
         body: { action: "send", message: userMsg, brain_type: brainType },
       });
       if (error) {
-        const errData = data as any;
+        const errData = data as { code?: string; error?: string };
         if (errData?.code === "token_expired") {
           setLovableConnected(false);
           setBrainActive(false);
         }
         throw { message: errData?.error || error.message };
       }
-      if (data?.error) {
-        if (data?.code === "token_expired") {
+      const responseData = data as { conversation_id: string; brain_message_id: string; chat_mode?: string; error?: string; code?: string };
+      if (responseData?.error) {
+        if (responseData?.code === "token_expired") {
           setLovableConnected(false);
           setBrainActive(false);
         }
-        throw { message: data.error };
+        throw { message: responseData.error };
       }
 
-      const conversationId = data.conversation_id;
-      const brainProjectId = data.brain_project_id;
+      const conversationId = responseData.conversation_id;
       const chatMode = data.chat_mode || "security_fix";
 
       setAllConversations(prev =>
@@ -216,7 +218,7 @@ export default function BrainPage() {
         await new Promise(r => setTimeout(r, 4000));
         try {
           const { data: captureData, error: captureError } = await supabase.functions.invoke("loveai-brain", {
-            body: { action: "capture", conversation_id: conversationId, brain_project_id: brainProjectId, brain_message_id: data.brain_message_id },
+            body: { action: "capture", conversation_id: conversationId, brain_message_id: data.brain_message_id },
           });
           
           if (captureError) {
@@ -244,13 +246,14 @@ export default function BrainPage() {
         setAllConversations(prev =>
           prev.map(c => c.id === conversationId ? { ...c, status: "timeout" } : c)
         );
-        toast.error("Brain não respondeu a tempo (180s). Tente novamente.");
+        toast.error("Star AI não respondeu a tempo (180s). Tente novamente.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       setAllConversations(prev =>
         prev.map(c => c.id === tempId ? { ...c, status: "failed" } : c)
       );
-      toast.error(err.message || "Erro ao enviar mensagem");
+      toast.error(errorMsg);
     } finally {
       setSending(false);
       setCapturing(false);
@@ -280,10 +283,10 @@ export default function BrainPage() {
           </div>
           <h1 className="text-2xl font-bold mb-3">Lovable não conectado</h1>
           <p className="text-muted-foreground mb-2">
-            Para usar o LoveAI Brain, você precisa conectar sua conta Lovable primeiro.
+            Para usar o Star AI, você precisa conectar sua conta Lovable primeiro.
           </p>
           <p className="text-sm text-muted-foreground/70 mb-8">
-            O Brain utiliza o Lovable como motor de processamento. Conecte seu token nas configurações.
+            O Star AI utiliza o Lovable como motor de processamento. Conecte seu token nas configurações.
           </p>
           <Link to="/lovable/connect" className="lv-btn-primary h-12 px-8 text-sm inline-flex items-center gap-2">
             <LinkIcon className="h-4 w-4" /> Conectar Lovable
@@ -300,15 +303,15 @@ export default function BrainPage() {
           <div className="h-20 w-20 rounded-3xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
             <BrainIcon className="h-10 w-10 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold mb-3">LoveAI Brain</h1>
+          <h1 className="text-2xl font-bold mb-3">Star AI</h1>
           <p className="text-muted-foreground mb-2">
-            O Brain é sua IA pessoal alimentada pelo Lovable.
+            O Star AI é sua IA pessoal alimentada pelo Lovable.
           </p>
           <p className="text-sm text-muted-foreground/70 mb-8">
             Funciona via modos gratuitos — sem gastar créditos do Lovable.
           </p>
           <button onClick={setupBrain} disabled={settingUp} className="lv-btn-primary h-12 px-8 text-sm inline-flex items-center gap-2">
-            {settingUp ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando Brain...</> : <><Power className="h-4 w-4" /> Ativar LoveAI Brain</>}
+            {settingUp ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando Star AI...</> : <><Power className="h-4 w-4" /> Ativar Star AI</>}
           </button>
         </div>
       </AppLayout>
@@ -375,7 +378,7 @@ export default function BrainPage() {
               <BrainIcon className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-semibold">LoveAI Brain</p>
+              <p className="text-sm font-semibold">Star AI</p>
               <p className="text-[11px] text-muted-foreground">🟢 Ativo</p>
             </div>
             <div className="ml-auto flex items-center gap-1 flex-wrap justify-end">
@@ -402,7 +405,7 @@ export default function BrainPage() {
                 <BrainIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/20" />
                 <p className="font-medium mb-1">Inicie uma conversa</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Envie uma mensagem e o Brain processará via modos gratuitos do Lovable.
+                  Envie uma mensagem e o Star AI processará via modos gratuitos do Lovable.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
                   <span className="px-2 py-1 rounded-md bg-muted/50">🔒 Security Fix</span>
@@ -424,10 +427,10 @@ export default function BrainPage() {
                   </div>
                 </div>
                 <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-muted/60 px-4 py-3">
+                  <div className="max-w-[85%] rounded-[22px] rounded-bl-md clf-liquid-glass px-5 py-4 shadow-sm border-black/[0.03] dark:border-white/[0.03]">
                     {convo.status === "processing" && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">Processando...</span>
+                      <div className="flex items-center gap-3 text-primary">
+                        <Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm font-medium tracking-tight">Analisando prompt...</span>
                       </div>
                     )}
                     {convo.status === "timeout" && (
@@ -466,7 +469,7 @@ export default function BrainPage() {
                   value={message}
                   onChange={e => setMessage(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={`Pergunte algo ao Brain (${brainTypes.find(b => b.id === brainType)?.label})...`}
+                  placeholder={`Pergunte algo ao Star AI (${brainTypes.find(b => b.id === brainType)?.label})...`}
                   rows={1}
                   disabled={sending || capturing}
                   className="w-full min-h-[44px] max-h-[160px] py-3 px-4 pr-12 resize-none text-sm rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -488,7 +491,7 @@ export default function BrainPage() {
             </div>
             {capturing && (
               <p className="text-center text-xs text-muted-foreground mt-2 animate-pulse">
-                ⏳ Aguardando resposta do Brain (até 180s)...
+                ⏳ Aguardando resposta do Star AI (até 180s)...
               </p>
             )}
           </div>

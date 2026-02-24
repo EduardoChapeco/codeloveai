@@ -20,8 +20,8 @@ interface Plan {
   discountedPrice?: number;
 }
 
-// Base plans, terms, UNLIMITED_DEADLINE, useCountdown, formatBRL
-const basePlans = [
+// Hardcoded fallback plans (used when DB returns nothing)
+const fallbackPlans: Plan[] = [
   {
     id: "1_day", name: "1 Dia", price: 19.90, originalPrice: "R$49,90", period: "por dia",
     description: "Perfeito para testar a extensão antes de se comprometer.",
@@ -85,9 +85,14 @@ function useCountdown(deadline: number) {
   return { days, hours, minutes, seconds, expired: timeLeft <= 0 };
 }
 
-function formatBRL(value: number) {
-  return `R$${value.toFixed(2).replace(".", ",")}`;
+function formatBRL(value: number | undefined) {
+  return `R$${(value ?? 0).toFixed(2).replace(".", ",")}`;
 }
+
+// Billing cycle label map
+const billingCycleLabels: Record<string, string> = {
+  daily: "por dia", weekly: "por semana", monthly: "por mês",
+};
 
 export default function Checkout() {
   const { user, loading: authLoading } = useAuth();
@@ -108,6 +113,36 @@ export default function Checkout() {
 
   const [affiliateDiscount, setAffiliateDiscount] = useState(0);
   const [loadingDiscount, setLoadingDiscount] = useState(true);
+  const [dbPlans, setDbPlans] = useState<Plan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+
+  // Fetch plans from DB
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        const { data } = await supabase
+          .from("plans")
+          .select("id, name, type, price, billing_cycle, description, features, highlight_label, display_order, is_public, is_active")
+          .eq("is_public", true)
+          .eq("is_active", true)
+          .order("display_order", { ascending: true });
+        if (data && data.length > 0) {
+          setDbPlans(data.map((p: Record<string, unknown>) => ({
+            id: p.id as string,
+            name: p.name as string,
+            price: (p.price as number) / 100, // price is stored in centavos
+            originalPrice: "",
+            period: billingCycleLabels[(p.billing_cycle as string)] || (p.billing_cycle as string),
+            description: (p.description as string) || "",
+            features: Array.isArray(p.features) ? (p.features as string[]) : [],
+            popular: (p.highlight_label as string)?.toLowerCase() === "popular",
+            highlight: !!(p.highlight_label) && (p.highlight_label as string)?.toLowerCase() !== "popular",
+          })));
+        }
+      } catch {} finally { setLoadingPlans(false); }
+    };
+    fetchPlans();
+  }, []);
 
   useEffect(() => {
     if (!user) { setLoadingDiscount(false); return; }
@@ -125,6 +160,8 @@ export default function Checkout() {
     checkAffiliate();
   }, [user]);
 
+  // Use DB plans if available, otherwise fallback
+  const basePlans = dbPlans.length > 0 ? dbPlans : fallbackPlans;
   const plans = basePlans.map(p => ({
     ...p,
     discountedPrice: affiliateDiscount > 0
@@ -200,7 +237,7 @@ export default function Checkout() {
     }
   };
 
-  if (authLoading || loadingDiscount) {
+  if (authLoading || loadingDiscount || loadingPlans) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

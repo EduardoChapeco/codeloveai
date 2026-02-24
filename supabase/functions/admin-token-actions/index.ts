@@ -97,11 +97,16 @@ Deno.serve(async (req) => {
         });
       }
 
+      // v1: unbind via Worker
       const resp = await fetch(`${WORKER_URL}/admin/unbind`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Admin-Secret": adminSecret },
         body: JSON.stringify({ token: userToken }),
       });
+
+      // v2: also clear device_id in licenses table
+      await serviceClient.from("licenses").update({ device_id: null })
+        .eq("key", userToken);
 
       const data = await resp.text();
       return new Response(data, {
@@ -141,13 +146,39 @@ Deno.serve(async (req) => {
         });
       }
 
-      const planMap: Record<string, string> = {
+      // Map v2 plan types to worker-compatible plans
+      const planToWorkerMap: Record<string, string> = {
         "test_5h": "test_5h", "test_1d": "test_1d", "days_15": "days_15",
         "days_30": "days_30", "days_90": "days_90", "days_1000": "days_90",
+        // v1 / legacy mappings
+        "1_day": "test_1d", "7_days": "days_15", "1_month": "days_30", "12_months": "days_90", "lifetime": "days_90",
+        // v2 plan types → default worker plan
+        "daily_token": "test_1d", "free_trial": "test_1d", "messages": "days_30", "hourly": "days_30",
       };
 
-      const requestedPlan = plan || "days_30";
-      const workerPlan = planMap[requestedPlan];
+      // Expiry days for v2 licenses
+      const planDaysMap: Record<string, number> = {
+        "test_5h": 1, "test_1d": 1, "days_15": 15,
+        "days_30": 30, "days_90": 90, "days_1000": 3650,
+        "1_day": 1, "7_days": 7, "1_month": 30, "12_months": 365, "lifetime": 36500,
+        "daily_token": 1, "free_trial": 365, "messages": 30, "hourly": 30,
+      };
+
+      // Default limits per v2 plan type
+      const planLimitsMap: Record<string, { daily_messages: number | null; hourly_limit: number | null }> = {
+        "daily_token": { daily_messages: null, hourly_limit: null },
+        "free_trial": { daily_messages: 10, hourly_limit: null },
+        "messages": { daily_messages: 200, hourly_limit: null },
+        "hourly": { daily_messages: null, hourly_limit: 20 },
+        "1_day": { daily_messages: 50, hourly_limit: null },
+        "7_days": { daily_messages: 100, hourly_limit: null },
+        "1_month": { daily_messages: 200, hourly_limit: null },
+        "12_months": { daily_messages: 500, hourly_limit: null },
+        "lifetime": { daily_messages: null, hourly_limit: null },
+      };
+
+      const requestedPlan = plan || "daily_token";
+      const workerPlan = planToWorkerMap[requestedPlan];
 
       if (!workerPlan) {
         return new Response(JSON.stringify({ error: `Plano inválido: ${requestedPlan}` }), {
@@ -172,9 +203,32 @@ Deno.serve(async (req) => {
           if (data.token && body.user_id) {
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             if (uuidRegex.test(body.user_id)) {
+              // v1: write to tokens table (backward compat with Worker)
               await serviceClient.from("tokens").update({ is_active: false }).eq("user_id", body.user_id);
               await serviceClient.from("tokens").insert({
                 user_id: body.user_id, token: data.token, is_active: true, tenant_id: tenantId,
+              });
+
+              // v2: also write to licenses table (dual-write)
+              const expiresAt = new Date();
+              expiresAt.setDate(expiresAt.getDate() + (planDaysMap[requestedPlan] || 30));
+              const limits = planLimitsMap[requestedPlan] || { daily_messages: 50, hourly_limit: null };
+
+              await serviceClient.from("licenses").update({ active: false, status: "expired" })
+                .eq("user_id", body.user_id).eq("active", true);
+              await serviceClient.from("licenses").insert({
+                user_id: body.user_id,
+                key: data.token,
+                active: true,
+                status: "active",
+                plan: requestedPlan,
+                plan_type: requestedPlan,
+                type: requestedPlan,
+                expires_at: expiresAt.toISOString(),
+                daily_messages: limits.daily_messages,
+                hourly_limit: limits.hourly_limit,
+                messages_used_today: 0,
+                tenant_id: tenantId,
               });
 
               // Debit tenant wallet
@@ -192,7 +246,7 @@ Deno.serve(async (req) => {
 
                     await serviceClient.from("tenant_wallet_transactions").insert({
                       tenant_id: tenantId, amount: -tc.token_cost, type: "token_cost",
-                      description: `Token gerado para ${sanitizedEmail}`,
+                      description: `Licença gerada para ${sanitizedEmail}`,
                     });
                   }
                 }

@@ -68,16 +68,45 @@ Deno.serve(async (req) => {
 
     const { plan, affiliate_code, payment_method } = await req.json();
 
-    // Validate plan input
-    const validPlans = ["1_day", "7_days", "lifetime"];
-    if (!plan || typeof plan !== "string" || !validPlans.includes(plan)) {
-      return new Response(JSON.stringify({ error: "Plano inválido" }), {
+    // Fetch plan from DB (modern v2)
+    let planData: { title: string; price: number; days: number } | null = null;
+    let selectedPlanId: string | null = null;
+
+    if (plan && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(plan)) {
+      const { data: dbPlan } = await serviceClient
+        .from("plans")
+        .select("id, name, price, billing_cycle")
+        .eq("id", plan)
+        .maybeSingle();
+
+      if (dbPlan) {
+        selectedPlanId = dbPlan.id;
+        let days = 30;
+        if (dbPlan.billing_cycle === "daily") days = 1;
+        if (dbPlan.billing_cycle === "weekly") days = 7;
+        if (dbPlan.billing_cycle === "yearly") days = 365;
+        if (dbPlan.billing_cycle === "lifetime") days = 3650;
+
+        planData = {
+          title: dbPlan.name,
+          price: dbPlan.price / 100, // stored in cents
+          days,
+        };
+      }
+    }
+
+    // Fallback to hardcoded plans (legacy v1 support)
+    if (!planData && PLANS[plan]) {
+      planData = PLANS[plan];
+    }
+
+    if (!planData) {
+      return new Response(JSON.stringify({ error: "Plano inválido ou não encontrado" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const planData = PLANS[plan];
     let finalPrice = planData.price;
     let discountApplied = 0;
 

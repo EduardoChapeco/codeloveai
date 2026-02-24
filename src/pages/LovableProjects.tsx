@@ -244,104 +244,108 @@ export default function LovableProjects() {
             <p className="lv-caption">Nenhum projeto encontrado neste workspace.</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
-              <div key={project.id} className="lv-card space-y-3">
-                {/* Screenshot */}
+              <div key={project.id} className="clf-liquid-glass space-y-4 flex flex-col group hover:brightness-[1.02] transition-all p-5 rounded-[22px]">
+                {/* Screenshot / Visual */}
                 {project.latest_screenshot_url ? (
-                  <div className="rounded-xl overflow-hidden border border-border/40 bg-muted h-36">
-                    <img src={project.latest_screenshot_url} alt={project.display_name || project.name} className="w-full h-full object-cover" />
+                  <div className="rounded-[16px] overflow-hidden border border-black/[0.03] dark:border-white/[0.05] bg-black/[0.02] dark:bg-white/[0.02] h-44 relative group-hover:shadow-lg transition-all">
+                    <img src={project.latest_screenshot_url} alt={project.display_name || project.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-border/40 bg-muted/50 h-36 flex items-center justify-center">
-                    <Globe className="h-8 w-8 text-muted-foreground/30" />
+                  <div className="rounded-[16px] border border-black/[0.03] dark:border-white/[0.05] bg-black/[0.03] dark:bg-white/[0.03] h-44 flex items-center justify-center">
+                    <Globe className="h-10 w-10 text-muted-foreground/20" />
                   </div>
                 )}
 
-                {/* Name */}
-                <div>
+                {/* Info Section */}
+                <div className="flex-1">
                   {renamingId === project.id ? (
                     <div className="flex items-center gap-2">
                       <input
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
-                        className="lv-input flex-1 h-8 text-sm font-semibold"
+                        className="lv-input flex-1 h-9 text-sm font-semibold px-3"
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === "Enter") handleRename(project.id);
                           if (e.key === "Escape") setRenamingId(null);
                         }}
                       />
-                      <button onClick={() => handleRename(project.id)} className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center">
-                        <Check className="h-3 w-3 text-primary-foreground" />
+                      <button onClick={() => handleRename(project.id)} className="h-8 w-8 rounded-xl bg-primary shadow-lg shadow-primary/20 flex items-center justify-center text-white">
+                        <Check className="h-4 w-4" />
                       </button>
-                      <button onClick={() => setRenamingId(null)} className="h-7 w-7 rounded-lg bg-muted flex items-center justify-center">
-                        <X className="h-3 w-3 text-foreground" />
+                      <button onClick={() => setRenamingId(null)} className="h-8 w-8 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center">
+                        <X className="h-4 w-4" />
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <h3 className="lv-body-strong truncate flex-1">
-                        {project.display_name || project.name || project.id}
-                      </h3>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="lv-body-strong text-[15px] truncate text-foreground group-hover:text-primary transition-colors">
+                          {project.display_name || project.name || project.id}
+                        </h3>
+                        {project.name && project.name !== project.display_name && (
+                          <p className="lv-caption font-mono mt-0.5 truncate opacity-60">ID: {project.id}</p>
+                        )}
+                      </div>
                       <button
                         onClick={() => { setRenamingId(project.id); setRenameValue(project.display_name || project.name || ""); }}
-                        className="lv-btn-icon h-6 w-6"
+                        className="lv-btn-icon h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                         title="Renomear"
                       >
-                        <Pencil className="h-3 w-3" />
+                        <Pencil className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   )}
-                  {project.name && project.name !== project.display_name && (
-                    <p className="lv-caption font-mono mt-0.5 truncate">{project.name}</p>
-                  )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex gap-2 flex-wrap">
+                {/* Actions Grid */}
+                <div className="grid grid-cols-2 gap-2 pt-2">
                   <button
                     onClick={() => handleDeploy(project.id)}
                     disabled={deploying === project.id}
-                    className="lv-btn-primary h-8 px-3 text-xs flex items-center gap-1.5"
-                    title="Publicar projeto"
+                    className="lv-btn-primary h-10 px-0 text-xs flex items-center justify-center gap-2 shadow-md"
                   >
-                    {deploying === project.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
+                    {deploying === project.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
                     Deploy
                   </button>
 
                   <button
-                    onClick={() => navigate(`/lovable/preview?projectId=${project.id}`)}
-                    className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1.5"
-                    title="Abrir preview"
+                    onClick={() => navigate(`/projeto/${project.id}/editar`)}
+                    className="lv-btn-accent h-10 px-0 text-xs flex items-center justify-center gap-2 shadow-md"
                   >
-                    <Eye className="h-3 w-3" /> Preview
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </button>
+
+                  <button
+                    onClick={() => navigate(`/lovable/preview?projectId=${project.id}`)}
+                    className="lv-btn-secondary h-10 px-0 text-xs flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Preview
                   </button>
 
                   <button
                     onClick={() => handleAnalytics(project.id)}
                     disabled={analyticsLoading === project.id}
-                    className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1.5"
-                    title="Ver analytics"
+                    className="lv-btn-secondary h-10 px-0 text-xs flex items-center justify-center gap-2 shadow-sm"
                   >
-                    {analyticsLoading === project.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <BarChart3 className="h-3 w-3" />}
+                    {analyticsLoading === project.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="h-3.5 w-3.5" />}
+                    Analytics
                   </button>
 
-                  {project.published_url && (
+                  {project.published_url ? (
                     <a href={project.published_url} target="_blank" rel="noopener noreferrer"
-                      className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1.5"
+                      className="lv-btn-ghost col-span-2 h-9 text-xs flex items-center justify-center gap-2 hover:bg-primary/5 active:bg-primary/10 rounded-xl"
                     >
-                      <Globe className="h-3 w-3" /> Site
+                      <Globe className="h-3.5 w-3.5 text-primary" /> Ver Site Publicado <ExternalLink className="h-3 w-3 opacity-40" />
                     </a>
+                  ) : (
+                    <div className="col-span-2 h-9 flex items-center justify-center">
+                      <p className="lv-caption italic opacity-40">Projeto não publicado</p>
+                    </div>
                   )}
-
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(project.id); toast.success("ID copiado!"); }}
-                    className="lv-btn-secondary h-8 w-8 flex items-center justify-center"
-                    title="Copiar ID"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </button>
                 </div>
               </div>
             ))}

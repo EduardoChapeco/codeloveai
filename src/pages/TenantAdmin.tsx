@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,11 +22,14 @@ interface TenantMember {
   profile?: { name: string; email: string };
 }
 
-interface TenantToken {
+interface TenantLicense {
   id: string;
   user_id: string;
-  token: string;
-  is_active: boolean;
+  key: string;
+  active: boolean;
+  plan_type: string;
+  status: string;
+  expires_at: string | null;
   created_at: string;
   user_name?: string;
   user_email?: string;
@@ -46,7 +49,7 @@ interface WalletTransaction {
   created_at: string;
 }
 
-type Tab = "brand" | "users" | "tokens" | "finances";
+type Tab = "brand" | "users" | "licenses" | "finances";
 
 // Add member state
 interface AddMemberState {
@@ -70,7 +73,7 @@ export default function TenantAdmin() {
 
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<TenantMember[]>([]);
-  const [tokens, setTokens] = useState<TenantToken[]>([]);
+  const [licenses, setLicenses] = useState<TenantLicense[]>([]);
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [wlSub, setWlSub] = useState<{
@@ -83,7 +86,7 @@ export default function TenantAdmin() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [genTokenOpen, setGenTokenOpen] = useState(false);
-  const [genToken, setGenToken] = useState<GenTokenState>({ email: "", plan: "days_30" });
+  const [genToken, setGenToken] = useState<GenTokenState>({ email: "", plan: "daily_token" });
   const [genTokenLoading, setGenTokenLoading] = useState(false);
   const [topupOpen, setTopupOpen] = useState(false);
   const [topupAmount, setTopupAmount] = useState("");
@@ -96,6 +99,12 @@ export default function TenantAdmin() {
     domain_custom: "",
   });
   const [savingBrand, setSavingBrand] = useState(false);
+  const [dbPlans, setDbPlans] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    supabase.from("plans").select("id, name").eq("is_active", true).order("display_order", { ascending: true })
+      .then(({ data }) => setDbPlans(data || []));
+  }, []);
 
   // Access check
   const canAccess = isTenantAdmin || isGlobalAdmin;
@@ -120,15 +129,14 @@ export default function TenantAdmin() {
       });
       fetchAll();
     }
-  }, [tenant, canAccess]);
+  }, [tenant, canAccess, fetchAll]);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     if (!tenant) return;
     setLoading(true);
 
-    const [membersRes, tokensRes, walletRes, txRes, wlSubRes] = await Promise.all([
+    const [membersRes, walletRes, txRes, wlSubRes] = await Promise.all([
       supabase.from("tenant_users").select("*").eq("tenant_id", tenant.id),
-      supabase.from("tokens").select("*").eq("tenant_id", tenant.id).order("created_at", { ascending: false }),
       supabase.from("tenant_wallets").select("balance, total_credited, total_debited").eq("tenant_id", tenant.id).maybeSingle(),
       supabase.from("tenant_wallet_transactions").select("*").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(50),
       supabase.from("white_label_subscriptions").select("status, period, amount_cents, starts_at, expires_at, plan_id").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -145,19 +153,23 @@ export default function TenantAdmin() {
       setMembers([]);
     }
 
-    // Enrich tokens with user info
-    const tokenList = tokensRes.data || [];
-    if (tokenList.length > 0) {
-      const userIds = [...new Set(tokenList.map(t => t.user_id))];
+    // Enrich licenses with user info (v2)
+    const { data: licensesList } = await supabase.from("licenses")
+      .select("id, user_id, key, active, plan_type, status, expires_at, created_at")
+      .eq("tenant_id", tenant.id)
+      .order("created_at", { ascending: false });
+    const licenseList = licensesList || [];
+    if (licenseList.length > 0) {
+      const userIds = [...new Set(licenseList.map(l => l.user_id))];
       const { data: profiles } = await supabase.from("profiles").select("user_id, name, email").in("user_id", userIds);
       const profileMap = new Map((profiles || []).map(p => [p.user_id, p]));
-      setTokens(tokenList.map(t => ({
-        ...t,
-        user_name: profileMap.get(t.user_id)?.name || "?",
-        user_email: profileMap.get(t.user_id)?.email || "?",
+      setLicenses(licenseList.map(l => ({
+        ...l,
+        user_name: profileMap.get(l.user_id)?.name || "?",
+        user_email: profileMap.get(l.user_id)?.email || "?",
       })));
     } else {
-      setTokens([]);
+      setLicenses([]);
     }
 
     setWallet(walletRes.data as WalletInfo | null);
@@ -176,7 +188,7 @@ export default function TenantAdmin() {
     }
     
     setLoading(false);
-  };
+  }, [tenant]);
 
   const saveBrand = async () => {
     if (!tenant) return;
@@ -218,15 +230,15 @@ export default function TenantAdmin() {
     fetchAll();
   };
 
-  const revokeToken = async (tokenId: string) => {
-    await supabase.from("tokens").update({ is_active: false }).eq("id", tokenId);
-    toast.success("Token revogado!");
+  const revokeLicense = async (licenseId: string) => {
+    await supabase.from("licenses").update({ active: false, status: "suspended" }).eq("id", licenseId);
+    toast.success("Licença revogada!");
     fetchAll();
   };
 
-  const copyToken = (token: string) => {
-    navigator.clipboard.writeText(token);
-    toast.success("Token copiado!");
+  const copyLicenseKey = (key: string) => {
+    navigator.clipboard.writeText(key);
+    toast.success("Licença copiada!");
   };
 
   const handleTopup = async () => {
@@ -272,8 +284,8 @@ export default function TenantAdmin() {
     if (error || data?.error) return toast.error(data?.error || "Erro ao gerar token");
     
     setGenTokenOpen(false);
-    setGenToken({ email: "", plan: "days_30" });
-    toast.success("Token gerado com sucesso!");
+    setGenToken({ email: "", plan: "daily_token" });
+    toast.success("Licença gerada com sucesso!");
     fetchAll();
   };
 
@@ -352,7 +364,7 @@ export default function TenantAdmin() {
             {([
               { id: "brand", label: "Marca & Domínio", icon: Palette },
               { id: "users", label: "Usuários", icon: Users },
-              { id: "tokens", label: "Tokens", icon: Key },
+              { id: "licenses", label: "Licenças", icon: Key },
               { id: "finances", label: "Financeiro", icon: Wallet },
             ] as const).map(t => (
               <button
@@ -475,14 +487,14 @@ export default function TenantAdmin() {
             </div>
           )}
 
-          {/* ─── TOKENS TAB ─── */}
-          {tab === "tokens" && (
+          {/* ─── LICENSES TAB ─── */}
+          {tab === "licenses" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="lv-body-strong">{tokens.length} token(s)</p>
+                <p className="lv-body-strong">{licenses.length} licença(s)</p>
                 <div className="flex items-center gap-3">
                   {wallet && (
-                    <p className="lv-caption">Saldo: R${Number(wallet.balance).toFixed(2)} • Custo/token: R${Number(tenant?.token_cost || 0).toFixed(2)}</p>
+                    <p className="lv-caption">Saldo: R${Number(wallet.balance).toFixed(2)} • Custo/licença: R${Number(tenant?.token_cost || 0).toFixed(2)}</p>
                   )}
                   <button
                     onClick={() => setTopupOpen(true)}
@@ -494,7 +506,7 @@ export default function TenantAdmin() {
                     onClick={() => setGenTokenOpen(true)}
                     className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-2"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Gerar Token
+                    <Plus className="h-3.5 w-3.5" /> Gerar Licença
                   </button>
                 </div>
               </div>
@@ -519,29 +531,30 @@ export default function TenantAdmin() {
                 </div>
               )}
               <div className="space-y-2">
-                {tokens.map(t => (
-                  <div key={t.id} className="lv-card-sm flex items-center justify-between">
+                {licenses.map(l => (
+                  <div key={l.id} className="lv-card-sm flex items-center justify-between">
                     <div>
-                      <p className="lv-body-strong">{t.user_name}</p>
-                      <p className="lv-caption">{t.user_email}</p>
-                      <p className="lv-caption font-mono text-[10px]">{t.token.slice(0, 20)}...</p>
+                      <p className="lv-body-strong">{l.user_name}</p>
+                      <p className="lv-caption">{l.user_email}</p>
+                      <p className="lv-caption font-mono text-[10px]">{l.key.slice(0, 20)}...</p>
+                      <p className="lv-caption text-[10px]">{l.plan_type} • Exp: {l.expires_at ? format(new Date(l.expires_at), "dd/MM/yyyy") : "—"}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`lv-badge ${t.is_active ? "lv-badge-success" : "lv-badge-muted"}`}>
-                        {t.is_active ? "Ativo" : "Revogado"}
+                      <span className={`lv-badge ${l.active && l.status === "active" ? "lv-badge-success" : "lv-badge-muted"}`}>
+                        {l.active && l.status === "active" ? "Ativo" : l.status}
                       </span>
-                      <button onClick={() => copyToken(t.token)} className="lv-btn-icon h-8 w-8">
+                      <button onClick={() => copyLicenseKey(l.key)} className="lv-btn-icon h-8 w-8">
                         <Copy className="h-3.5 w-3.5" />
                       </button>
-                      {t.is_active && (
-                        <button onClick={() => revokeToken(t.id)} className="lv-btn-icon h-8 w-8 text-destructive">
+                      {l.active && (
+                        <button onClick={() => revokeLicense(l.id)} className="lv-btn-icon h-8 w-8 text-destructive">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>
                   </div>
                 ))}
-                {tokens.length === 0 && <p className="lv-caption text-center py-8">Nenhum token gerado.</p>}
+                {licenses.length === 0 && <p className="lv-caption text-center py-8">Nenhuma licença gerada.</p>}
               </div>
             </div>
           )}
@@ -615,12 +628,12 @@ export default function TenantAdmin() {
         </SheetContent>
       </Sheet>
 
-      {/* Generate Token Sheet */}
+      {/* Generate License Sheet */}
       <Sheet open={genTokenOpen} onOpenChange={setGenTokenOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Gerar Token</SheetTitle>
-            <SheetDescription>Gere um token para um membro do tenant. Custo: R${Number(tenant?.token_cost || 0).toFixed(2)} por token.</SheetDescription>
+            <SheetTitle>Gerar Licença</SheetTitle>
+            <SheetDescription>Gere uma licença para um membro do tenant. Custo: R${Number(tenant?.token_cost || 0).toFixed(2)} por licença.</SheetDescription>
           </SheetHeader>
           <div className="space-y-4 mt-6">
             <div>
@@ -628,24 +641,29 @@ export default function TenantAdmin() {
               <input className="lv-input w-full" value={genToken.email} onChange={e => setGenToken({ ...genToken, email: e.target.value })} placeholder="usuario@email.com" />
             </div>
             <div>
-              <label className="lv-caption block mb-1">Plano</label>
+              <label className="lv-caption block mb-1">Tipo de Plano</label>
               <select className="lv-input w-full" value={genToken.plan} onChange={e => setGenToken({ ...genToken, plan: e.target.value })}>
-                <option value="test_5h">Teste 5h</option>
-                <option value="test_1d">Teste 1 dia</option>
-                <option value="days_15">15 dias</option>
-                <option value="days_30">30 dias</option>
-                <option value="days_90">90 dias</option>
+                <optgroup label="Padrão">
+                  <option value="daily_token">Token Diário (24h)</option>
+                  <option value="messages">Mensal (Mensagens)</option>
+                  <option value="hourly">Por Hora</option>
+                </optgroup>
+                {dbPlans.length > 0 && (
+                  <optgroup label="SaaS v2">
+                    {dbPlans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </optgroup>
+                )}
               </select>
             </div>
             {wallet && (
               <div className="lv-card-sm bg-muted/50">
                 <p className="lv-caption">Saldo disponível: <strong className="text-foreground">R${Number(wallet.balance).toFixed(2)}</strong></p>
-                <p className="lv-caption">Custo por token: <strong className="text-foreground">R${Number(tenant?.token_cost || 0).toFixed(2)}</strong></p>
+                <p className="lv-caption">Custo por licença: <strong className="text-foreground">R${Number(tenant?.token_cost || 0).toFixed(2)}</strong></p>
               </div>
             )}
             <button onClick={handleGenerateToken} disabled={genTokenLoading} className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2">
               {genTokenLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
-              Gerar Token
+              Gerar Licença
             </button>
           </div>
         </SheetContent>

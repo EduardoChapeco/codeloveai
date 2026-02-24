@@ -91,22 +91,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check if user already has any free plan
-    const { data: anyFree } = await serviceClient
-      .from("subscriptions")
-      .select("id")
-      .eq("user_id", userId)
-      .like("payment_id", "free_%")
-      .limit(1);
+    // Check if user already has any free plan or license
+    const [{ data: anyFreeSub }, { data: anyFreeLicense }] = await Promise.all([
+      serviceClient.from("subscriptions").select("id").eq("user_id", userId).like("payment_id", "free_%").limit(1),
+      serviceClient.from("licenses").select("id").eq("user_id", userId).eq("type", "trial").limit(1)
+    ]);
 
-    if (anyFree && anyFree.length > 0) {
+    if ((anyFreeSub && anyFreeSub.length > 0) || (anyFreeLicense && anyFreeLicense.length > 0)) {
       return new Response(JSON.stringify({ error: "Cada usuário pode usar apenas 1 plano gratuito" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Create 1-day subscription
+    // Create 1-day subscription (Legacy v1)
     const startsAt = new Date();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 1);
@@ -125,10 +123,31 @@ Deno.serve(async (req) => {
 
     if (insertError) {
       console.error("Insert error:", insertError);
-      return new Response(JSON.stringify({ error: "Erro ao ativar plano" }), {
+      return new Response(JSON.stringify({ error: "Erro ao ativar plano legado" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Create License (Modern v2)
+    const { error: licenseError } = await serviceClient
+      .from("licenses")
+      .insert({
+        user_id: userId,
+        tenant_id: tenantId,
+        key: `FREE-${sanitizedCode.substring(5, 15)}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        active: true,
+        plan: "Free Trial",
+        plan_type: "daily_token",
+        type: "trial",
+        status: "active",
+        daily_messages: 50,
+        expires_at: expiresAt.toISOString(),
+        trial_expires_at: expiresAt.toISOString(),
+      });
+
+    if (licenseError) {
+      console.error("License insert error:", licenseError);
     }
 
     // Notify admin

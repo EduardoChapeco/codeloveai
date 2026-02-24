@@ -13,6 +13,18 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import AppLayout from "@/components/AppLayout";
 
+interface MemberLicense {
+  id: string;
+  key: string;
+  active: boolean;
+  plan: string;
+  plan_type: string;
+  status: string;
+  expires_at: string | null;
+  daily_messages: number | null;
+  messages_used_today: number;
+}
+
 interface Token {
   id: string;
   token: string;
@@ -22,7 +34,7 @@ interface Token {
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const brandName = "Starble";
+  const brandName = tenant?.name || "Starble";
   useSEO({ title: "Dashboard" });
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [tokensLoaded, setTokensLoaded] = useState(false);
@@ -33,6 +45,7 @@ export default function Dashboard() {
 
   const navigate = useNavigate();
   const [tokens, setTokens] = useState<Token[]>([]);
+  const [license, setLicense] = useState<MemberLicense | null>(null);
   const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
   const [latestExt, setLatestExt] = useState<{ file_url: string; version: string; instructions: string } | null>(null);
 
@@ -46,11 +59,25 @@ export default function Dashboard() {
     supabase.from("profiles").select("name, email").eq("user_id", user.id).single()
       .then(({ data }) => setProfile(data));
 
+    // Fetch modern license (v2)
+    supabase.from("licenses")
+      .select("id, key, active, plan, plan_type, status, expires_at, daily_messages, messages_used_today")
+      .eq("user_id", user.id)
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setLicense(data as unknown as MemberLicense);
+      });
+
+    // Fetch legacy tokens (v1)
     supabase.from("tokens").select("*").eq("user_id", user.id)
       .then(({ data }) => {
         const tokenList = data || [];
         setTokens(tokenList);
         setTokensLoaded(true);
+        
         const activeToken = tokenList.find((t: Token) => t.is_active);
         if (activeToken) {
           const email = user.email || "";
@@ -84,54 +111,38 @@ export default function Dashboard() {
       });
   }, [user]);
 
-  // Auto-generate 365-day token for ALL users
+  // Auto-generate 1-year token for ALL users (Legacy)
   useEffect(() => {
     if (!user || !tokensLoaded || tokenGenerating) return;
     const hasActiveToken = tokens.some((t) => t.is_active);
-    if (hasActiveToken) return;
+    const hasActiveLicense = license?.active;
+    if (hasActiveToken || hasActiveLicense) return;
 
-    const tokenKey = `clf_auto_token_${user.id}`;
+    const tokenKey = `clf_auto_token_v2_${user.id}`;
     if (localStorage.getItem(tokenKey) === "true") return;
 
     setTokenGenerating(true);
     const generateToken = async () => {
       try {
-        const { data: existingTokens } = await supabase
-          .from("tokens").select("id").eq("user_id", user.id).eq("is_active", true).limit(1);
-        if (existingTokens && existingTokens.length > 0) {
-          localStorage.setItem(tokenKey, "true");
-          setTokenGenerating(false);
-          return;
-        }
-
         const { data, error } = await supabase.functions.invoke("admin-token-actions", {
           body: {
             action: "generate",
             email: user.email,
             name: user.user_metadata?.name || user.email?.split("@")[0] || "Usuário",
-            plan: "days_365",
+            plan: isAdmin ? "lifetime" : "free_trial",
             user_id: user.id,
           },
         });
         if (!error && data?.token) {
           setTokens([{ id: "auto", token: data.token, is_active: true }]);
-          supabase.auth.getSession().then(({ data: sessionData }) => {
-            const jwt = sessionData?.session?.access_token;
-            if (jwt) {
-              localStorage.setItem('clf_token', jwt);
-              localStorage.setItem('clf_email', user.email || '');
-              localStorage.setItem('clf_name', user.user_metadata?.name || '');
-              window.postMessage({ type: 'clf_sso_token', token: jwt, email: user.email, name: user.user_metadata?.name || '' }, window.location.origin);
-            }
-          });
-          toast.success("Token de 1 ano gerado automaticamente! 🎉");
+          toast.success(isAdmin ? "Acesso Master Vitalício ativado! 👑" : "Plano de 1 ano ativado automaticamente! 🎉");
         }
         localStorage.setItem(tokenKey, "true");
       } catch { /* retry next time */ }
       setTokenGenerating(false);
     };
     generateToken();
-  }, [user, tokensLoaded, tokens, tokenGenerating]);
+  }, [user, tokensLoaded, tokens, tokenGenerating, license, isAdmin]);
 
   // Detect extension
   useEffect(() => {
@@ -159,6 +170,52 @@ export default function Dashboard() {
     toast.success("Token copiado!");
   };
 
+  const getStatusDisplay = () => {
+    if (license) {
+      const expiryDate = license.expires_at ? new Date(license.expires_at) : null;
+      const isExpired = expiryDate && expiryDate < new Date();
+      
+      return {
+        title: license.plan || "Plano Ativo",
+        desc: isExpired ? `Expirado em ${format(expiryDate!, "dd/MM/yyyy")}` : 
+              expiryDate ? `Ativo até ${format(expiryDate, "dd/MM/yyyy")}` : "Ilimitado",
+        badge: isExpired ? "Expirado" : "Ativo",
+        variant: isExpired ? "destructive" : "success",
+        usage: license.daily_messages ? `${license.messages_used_today || 0} / ${license.daily_messages} msgs/dia` : null
+      };
+    }
+    
+    if (activeTokens.length > 0) {
+      return {
+        title: "Acesso Legado",
+        desc: "Seu token legado está ativo",
+        badge: "Ativo",
+        variant: "success",
+        usage: null
+      };
+    }
+
+    if (tokenGenerating) {
+      return {
+        title: "Processando...",
+        desc: "Gerando seu acesso, por favor aguarde",
+        badge: "...",
+        variant: "primary",
+        usage: null
+      };
+    }
+
+    return {
+      title: "Sem Acesso",
+      desc: "Você ainda não possui um plano ativo",
+      badge: "Inativo",
+      variant: "secondary",
+      usage: null
+    };
+  };
+
+  const status = getStatusDisplay();
+
   if (authLoading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
       <p className="lv-overline">Carregando...</p>
@@ -170,38 +227,66 @@ export default function Dashboard() {
       <div className="min-h-full">
         <div className="max-w-5xl mx-auto px-6 py-8 space-y-5">
           {/* Header */}
-          <div>
-            <p className="lv-overline mb-1">Área do membro</p>
-            <h1 className="lv-heading-lg">Dashboard</h1>
-            <p className="lv-body mt-1">Plataforma 100% gratuita — mensagens ilimitadas</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="lv-overline mb-1">Área do membro</p>
+              <h1 className="lv-heading-lg">Dashboard</h1>
+              <p className="lv-body mt-1">
+                {license?.plan_type === 'custom' ? "Plano Profissional Ativo" : "Plataforma — Ferramentas de IA"}
+              </p>
+            </div>
+            {!license && !activeTokens.length && (
+              <Link to="/plans" className="lv-btn-primary h-10 px-6 flex items-center gap-2">
+                <Zap className="h-4 w-4" /> Ver Planos
+              </Link>
+            )}
           </div>
 
           {/* ━━━ BENTO GRID ━━━ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* Status — full width */}
-            <div className="lv-card md:col-span-2">
-              <p className="lv-overline mb-3">Status do acesso</p>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="lv-stat text-2xl">Acesso Gratuito</p>
-                  <p className="lv-body mt-1">
-                    {activeTokens.length > 0 ? "Seu acesso está ativo — 1 ano de uso incluído" : tokenGenerating ? "Gerando seu token..." : "Token será gerado automaticamente"}
-                  </p>
+            <div className="clf-liquid-glass md:col-span-2 rounded-[22px] p-6 lg:p-8">
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                <div className="flex-1">
+                  <p className="lv-overline mb-3">Status do acesso</p>
+                  <p className="lv-stat text-3xl lg:text-4xl">{status.title}</p>
+                  <p className="lv-body mt-2 text-muted-foreground/80">{status.desc}</p>
+                  {status.usage && (
+                    <div className="mt-6 flex flex-col gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Uso Diário</p>
+                      <div className="h-2 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden max-w-sm">
+                        <div 
+                          className="h-full bg-primary shadow-[0_0_12px_rgba(0,113,227,0.4)] transition-all duration-1000" 
+                          style={{ width: `${Math.min(100, ((license?.messages_used_today || 0) / (license?.daily_messages || 1)) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="lv-caption font-semibold">{status.usage}</p>
+                    </div>
+                  )}
                 </div>
-                <span className="lv-badge lv-badge-success">Grátis</span>
+                <div className="flex flex-col items-end gap-3 shrink-0">
+                  <span className={`lv-badge px-4 py-1.5 rounded-full ${status.variant === 'success' ? 'lv-badge-success' : status.variant === 'destructive' ? 'bg-destructive/10 text-destructive' : 'lv-badge-primary'}`}>
+                    {status.badge}
+                  </span>
+                  {(license?.status === 'suspended' || (license?.expires_at && new Date(license.expires_at) < new Date())) && (
+                    <Link to="/plans" className="lv-btn-primary h-10 px-6 text-[11px] font-bold uppercase tracking-widest shadow-xl">
+                      Renovar Agora
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
 
 
             {/* Extensão */}
-            <div className="lv-card">
-              <div className="flex items-center gap-3 mb-4">
-                <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${extensionDetected ? 'bg-green-500/10' : 'bg-primary/10'}`}>
-                  <Puzzle className={`h-5 w-5 ${extensionDetected ? 'text-green-600' : 'text-primary'}`} />
+            <div className="clf-liquid-glass p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 ${extensionDetected ? 'bg-green-500/10' : 'bg-primary/10'}`}>
+                  <Puzzle className={`h-6 w-6 ${extensionDetected ? 'text-green-600' : 'text-primary'}`} />
                 </div>
                 <div className="flex-1">
-                  <p className="lv-body-strong">
+                  <p className="lv-body-strong text-base">
                     Extensão{latestExt ? ` v${latestExt.version}` : ""}
                   </p>
                   <p className="lv-caption">
@@ -209,14 +294,16 @@ export default function Dashboard() {
                   </p>
                 </div>
                 {extensionDetected && (
-                  <span className="lv-badge lv-badge-success">✓</span>
+                  <span className="lv-badge lv-badge-success scale-110">✓</span>
                 )}
               </div>
               {extensionDetected ? (
-                <p className="lv-caption text-green-600">Extensão detectada no navegador.</p>
+                <div className="bg-green-500/5 rounded-xl p-3 border border-green-500/10 text-center">
+                  <p className="lv-caption text-green-600 font-medium">Extensão detectada no navegador.</p>
+                </div>
               ) : (
                 <button
-                  className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2"
+                  className="lv-btn-primary w-full h-11 text-sm flex items-center justify-center gap-2 shadow-lg"
                   disabled={!latestExt}
                   onClick={async () => {
                     if (!latestExt) return;
@@ -230,33 +317,33 @@ export default function Dashboard() {
             </div>
 
             {/* Notes */}
-            <div className="lv-card">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <StickyNote className="h-5 w-5 text-primary" />
+            <div className="clf-liquid-glass p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <StickyNote className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <p className="lv-body-strong">Notas</p>
+                  <p className="lv-body-strong text-base">Notas</p>
                   <p className="lv-caption">{notesCount === 0 ? 'Nenhuma nota' : `${notesCount} nota${notesCount > 1 ? 's' : ''}`}</p>
                 </div>
               </div>
-              <Link to="/notes" className="lv-btn-secondary h-9 px-3 text-xs inline-flex items-center gap-1.5">
-                <StickyNote className="h-3.5 w-3.5" /> {notesCount > 0 ? 'Ver notas' : 'Criar nota'}
+              <Link to="/notes" className="lv-btn-secondary w-full h-11 px-4 text-sm inline-flex items-center justify-center gap-1.5 shadow-sm">
+                <StickyNote className="h-4 w-4" /> {notesCount > 0 ? 'Ver notas' : 'Criar nota'}
               </Link>
             </div>
 
             {/* Lovable Connection Status */}
-            <div className="lv-card">
-              <div className="flex items-center gap-3 mb-4">
+            <div className="clf-liquid-glass p-6">
+              <div className="flex items-center gap-3 mb-6">
                 <div
-                  className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
+                  className="h-12 w-12 rounded-2xl flex items-center justify-center shrink-0"
                   style={{
                     background: lovableStatus === "active" ? "rgba(52,199,89,0.12)" :
                       lovableStatus === "expired" ? "rgba(255,59,48,0.10)" : "rgba(0,113,227,0.10)",
                   }}
                 >
                   <Link2
-                    className="h-5 w-5"
+                    className="h-6 w-6"
                     style={{
                       color: lovableStatus === "active" ? "#34c759" :
                         lovableStatus === "expired" ? "#ff3b30" : "#0071e3",
@@ -264,7 +351,7 @@ export default function Dashboard() {
                   />
                 </div>
                 <div>
-                  <p className="lv-body-strong">Lovable</p>
+                  <p className="lv-body-strong text-base">Lovable</p>
                   <p className="lv-caption">
                     {lovableStatus === "active" && "Token ativo"}
                     {lovableStatus === "expired" && "Token expirado"}
@@ -273,10 +360,12 @@ export default function Dashboard() {
                 </div>
               </div>
               {lovableStatus === "active" ? (
-                <span className="lv-badge lv-badge-success">✓ Conectado</span>
+                <div className="bg-green-500/5 rounded-xl p-3 border border-green-500/10 text-center">
+                  <span className="lv-badge lv-badge-success">✓ Conectado</span>
+                </div>
               ) : (
-                <Link to="/lovable/connect" className="lv-btn-secondary h-9 px-3 text-xs inline-flex items-center gap-1.5">
-                  <Link2 className="h-3.5 w-3.5" /> {lovableStatus === "expired" ? "Reconectar" : "Conectar"}
+                <Link to="/lovable/connect" className="lv-btn-secondary w-full h-11 px-4 text-sm inline-flex items-center justify-center gap-1.5 shadow-sm">
+                  <Link2 className="h-4 w-4" /> {lovableStatus === "expired" ? "Reconectar" : "Conectar"}
                 </Link>
               )}
             </div>
@@ -284,17 +373,19 @@ export default function Dashboard() {
 
           {/* Admin shortcuts */}
           {(isTenantAdmin || isAdmin) && (
-            <Link to="/admin/tenant" className="lv-card flex items-center justify-between group hover:border-primary/30 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <Link to="/admin/tenant" className="clf-liquid-glass p-5 flex items-center justify-between group hover:brightness-[1.03] transition-all">
+              <div className="flex items-center gap-4">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0 shadow-inner">
                   <Building2 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="lv-body-strong">Administrar Tenant</p>
+                  <p className="lv-body-strong text-base">Administrar Tenant</p>
                   <p className="lv-caption">Gerencie membros, tokens e configurações</p>
                 </div>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+              <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all">
+                Abrir <ChevronRight className="h-4 w-4" />
+              </div>
             </Link>
           )}
 
@@ -310,22 +401,22 @@ export default function Dashboard() {
           )}
 
           {/* How to use */}
-          <div className="lv-card">
-            <p className="lv-overline mb-4">Como usar</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="clf-liquid-glass p-8">
+            <p className="lv-overline mb-6">Como começar</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { step: "01", title: "Baixar", desc: "Faça download da extensão acima", icon: Download },
-                { step: "02", title: "Instalar", desc: "Ative no Chrome em Gerenciar Extensões", icon: Monitor },
-                { step: "03", title: "Conectar", desc: "Gere seu token em Lovable Connect", icon: Key },
-                { step: "04", title: "Pronto", desc: "Abra lovable.dev e a extensão ativa automaticamente", icon: Zap },
+                { step: "01", title: "Baixar", desc: "Faça download da extensão oficial", icon: Download },
+                { step: "02", title: "Instalar", desc: "Ative o Modo do Desenvolvedor no Chrome", icon: Monitor },
+                { step: "03", title: "Conectar", desc: "Vincule sua conta Lovable com segurança", icon: Key },
+                { step: "04", title: "Pronto", desc: "Inicie o lovable.dev e deixe a mágica acontecer", icon: Zap },
               ].map((item) => (
-                <div key={item.step} className="rounded-xl bg-muted/50 p-4 relative">
-                  <span className="text-[32px] font-bold text-foreground/5 absolute top-2 right-3 leading-none">{item.step}</span>
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
-                    <item.icon className="h-4 w-4 text-primary" />
+                <div key={item.step} className="rounded-2xl border border-black/[0.03] dark:border-white/[0.03] bg-black/[0.02] dark:bg-white/[0.02] p-6 relative group overflow-hidden">
+                  <span className="text-[48px] font-black text-foreground/5 absolute -bottom-1 -right-1 leading-none group-hover:text-primary/10 transition-colors">{item.step}</span>
+                  <div className="h-10 w-10 rounded-xl bg-primary shadow-lg shadow-primary/20 flex items-center justify-center mb-4 text-white">
+                    <item.icon className="h-5 w-5" />
                   </div>
-                  <p className="lv-body-strong text-xs mb-1">{item.title}</p>
-                  <p className="lv-caption">{item.desc}</p>
+                  <p className="lv-body-strong text-sm mb-1.5">{item.title}</p>
+                  <p className="lv-caption leading-relaxed">{item.desc}</p>
                 </div>
               ))}
             </div>

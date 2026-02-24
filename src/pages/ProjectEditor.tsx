@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
@@ -42,7 +42,7 @@ export default function ProjectEditor() {
   const [sending, setSending] = useState(false);
   const [projectName, setProjectName] = useState("");
 
-  // LoveAI Modal
+  // Star AI Modal
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiMode, setAiMode] = useState<BrainType>("design");
   const [aiPrompt, setAiPrompt] = useState("");
@@ -60,13 +60,14 @@ export default function ProjectEditor() {
     if (!id || !user) return;
     loadProject();
     loadSandboxUrl();
-  }, [id, user]);
+  }, [id, user, loadProject, loadSandboxUrl]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  const loadProject = async () => {
+  const loadProject = useCallback(async () => {
+    if (!id) return;
     try {
       const { data } = await supabase
         .from("lovable_projects")
@@ -75,9 +76,10 @@ export default function ProjectEditor() {
         .maybeSingle();
       if (data) setProjectName(data.display_name || data.name || id || "");
     } catch { /* silent */ }
-  };
+  }, [id]);
 
-  const loadSandboxUrl = async () => {
+  const loadSandboxUrl = useCallback(async () => {
+    if (!id) return;
     setLoadingPreview(true);
     try {
       // Start sandbox first
@@ -97,7 +99,7 @@ export default function ProjectEditor() {
     } finally {
       setLoadingPreview(false);
     }
-  };
+  }, [id, invoke]);
 
   const sendChatMessage = async () => {
     if (!message.trim() || sending || !id) return;
@@ -154,18 +156,71 @@ export default function ProjectEditor() {
         target_project_id: id,
         brain_type: "code",
         user_message: userMsg,
-        status: "completed",
+        status: "processing",
       });
 
-      toast.success("Mensagem enviada ao projeto!");
+      // Poll for AI response via latest-message
+      const aiResponseId = crypto.randomUUID();
+      setChatMessages(prev => [...prev, {
+        id: aiResponseId,
+        role: "ai",
+        content: "Processando...",
+        timestamp: new Date().toISOString(),
+        status: "sending",
+      }]);
 
-      // Reload iframe after a delay
-      setTimeout(() => iframeRef.current?.contentWindow?.location.reload(), 3000);
-    } catch (err: any) {
+      let captured = false;
+      const maxPolls = 20; // 20 * 3s = 60s timeout
+      await new Promise(r => setTimeout(r, 5000)); // Initial wait
+
+      for (let i = 0; i < maxPolls; i++) {
+        try {
+          const latestMsg = await invoke<{ content?: string; is_streaming?: boolean; role?: string }>({
+            route: `/projects/${id}/latest-message`,
+          });
+
+          if (latestMsg && !latestMsg.is_streaming && latestMsg.content && latestMsg.role === "assistant") {
+            setChatMessages(prev =>
+              prev.map(m => m.id === aiResponseId
+                ? { ...m, content: latestMsg.content!, status: "sent" }
+                : m
+              )
+            );
+            captured = true;
+
+            // Update conversation status
+            await supabase.from("loveai_conversations")
+              .update({ status: "completed", ai_response: latestMsg.content })
+              .eq("user_id", user!.id)
+              .eq("target_project_id", id)
+              .order("created_at", { ascending: false })
+              .limit(1);
+
+            break;
+          }
+        } catch {
+          // Network error, continue polling
+        }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+
+      if (!captured) {
+        setChatMessages(prev =>
+          prev.map(m => m.id === aiResponseId
+            ? { ...m, content: "Tempo esgotado — a resposta pode ainda estar processando.", status: "error" }
+            : m
+          )
+        );
+      }
+
+      // Reload iframe to show changes
+      setTimeout(() => iframeRef.current?.contentWindow?.location.reload(), 2000);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Erro ao enviar mensagem";
       setChatMessages(prev =>
         prev.map(m => m.id === tempId ? { ...m, status: "error" } : m)
       );
-      toast.error(err.message || "Erro ao enviar mensagem");
+      toast.error(errorMsg);
     } finally {
       setSending(false);
     }
@@ -185,16 +240,17 @@ export default function ProjectEditor() {
       if (error || data?.error) throw { message: data?.error || error?.message };
 
       const { data: captureData } = await supabase.functions.invoke("loveai-brain", {
-        body: { action: "capture", conversation_id: data.conversation_id, brain_project_id: data.brain_project_id },
+        body: { action: "capture", conversation_id: data.conversation_id },
       });
 
       if (captureData?.response) {
         setAiResponse(captureData.response);
       } else {
-        toast.error("Brain não respondeu a tempo.");
+        toast.error("Star AI não respondeu a tempo.");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao processar com LoveAI");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      toast.error(errorMsg);
     } finally {
       setAiLoading(false);
     }
@@ -260,7 +316,7 @@ export default function ProjectEditor() {
           <div className="h-10 border-b border-border/60 px-4 flex items-center justify-between shrink-0">
             <span className="text-xs font-semibold">Chat do Projeto</span>
             <button onClick={() => setShowAiModal(true)} className="h-7 px-2.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1.5 text-xs font-medium transition-colors">
-              <BrainCircuit className="h-3.5 w-3.5" /> LoveAI
+              <BrainCircuit className="h-3.5 w-3.5" /> Star AI
             </button>
           </div>
 
@@ -312,14 +368,14 @@ export default function ProjectEditor() {
           </div>
         </div>
 
-        {/* LoveAI Modal */}
+        {/* Star AI Modal */}
         {showAiModal && (
           <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
             <div className="bg-background border border-border rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl">
               <div className="flex items-center justify-between px-5 py-3 border-b border-border/60">
                 <div className="flex items-center gap-2">
                   <BrainCircuit className="h-5 w-5 text-primary" />
-                  <span className="font-semibold text-sm">LoveAI Brain</span>
+                  <span className="font-semibold text-sm">Star AI</span>
                 </div>
                 <button onClick={() => setShowAiModal(false)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted">
                   <X className="h-4 w-4" />
@@ -377,7 +433,7 @@ export default function ProjectEditor() {
                   className="h-8 px-4 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BrainCircuit className="h-3.5 w-3.5" />}
-                  {aiLoading ? "Processando..." : "Processar com Brain"}
+                  {aiLoading ? "Processando..." : "Processar com Star AI"}
                 </button>
               </div>
             </div>

@@ -60,7 +60,7 @@ export default function AppSidebar() {
   // ─── Admin contextual sidebar ───
   if (isAdminPage && isAdmin) {
     return (
-      <Sidebar collapsible="icon">
+      <Sidebar collapsible="icon" className="clf-glass-sidebar">
         <SidebarHeader className="p-2">
           <SidebarMenu>
             <SidebarMenuItem>
@@ -188,7 +188,7 @@ export default function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="clf-glass-sidebar">
       <SidebarHeader className="p-2 relative">
         <SidebarMenu>
           <SidebarMenuItem>
