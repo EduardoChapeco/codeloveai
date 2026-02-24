@@ -1,0 +1,103 @@
+name: CodeLove Git Bridge — Auto Task Runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".lovable/tasks/**"
+
+jobs:
+  run-pending-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Find and send pending tasks
+        env:
+          LOVABLE_TOKEN: ${{ secrets.LOVABLE_TOKEN }}
+          LOVABLE_PROJECT_ID: ${{ secrets.LOVABLE_PROJECT_ID }}
+        run: |
+          echo "🔍 Scanning for pending tasks..."
+
+          LOVABLE_API="https://api.lovable.dev"
+
+          # Find all .md files with status: pending
+          for file in .lovable/tasks/*.md; do
+            [ -f "$file" ] || continue
+
+            # Check if file has status: pending in frontmatter
+            if ! head -20 "$file" | grep -q "status: pending"; then
+              echo "⏭️ Skipping $file (not pending)"
+              continue
+            fi
+
+            echo "📄 Processing: $file"
+
+            # Extract task content (remove frontmatter)
+            TASK_CONTENT=$(sed '1{/^---$/d}; /^---$/,/^---$/d' "$file")
+
+            if [ -z "$TASK_CONTENT" ]; then
+              echo "⚠️ Empty task content in $file, skipping"
+              continue
+            fi
+
+            # Generate unique IDs
+            MSG_ID="umsg_$(date +%s%N | head -c 16)"
+            AI_MSG_ID="aimsg_$(date +%s%N | head -c 16)"
+
+            # Build the payload — task-as-error pattern (free, no credits)
+            PAYLOAD=$(cat <<EOF
+          {
+            "id": "${MSG_ID}",
+            "ai_message_id": "${AI_MSG_ID}",
+            "thread_id": "main",
+            "message": "For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n\`\`\`\n${TASK_CONTENT}\n\`\`\`\n\nAfter completing this task, update the file ${file} and change 'status: pending' to 'status: done' in the frontmatter.",
+            "mode": "instant",
+            "debug_mode": false,
+            "view": "error",
+            "view_description": "The user is currently viewing the error for their project. This shows a static version of the code, with a diff view available. Editing is only possible for paid users and for the latest edit. It shows the actual error in their code at the top.",
+            "model": null,
+            "session_replay": "[]",
+            "client_logs": [],
+            "network_requests": [],
+            "runtime_errors": []
+          }
+          EOF
+          )
+
+            # Send to Lovable API
+            echo "🚀 Sending task to Lovable AI..."
+            HTTP_STATUS=$(curl -s -o /tmp/lovable_response.json -w "%{http_code}" \
+              -X POST "${LOVABLE_API}/projects/${LOVABLE_PROJECT_ID}/chat" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${LOVABLE_TOKEN}" \
+              -H "Origin: https://lovable.dev" \
+              -H "Referer: https://lovable.dev/" \
+              -d "$PAYLOAD")
+
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
+              echo "✅ Task sent successfully: $file (HTTP $HTTP_STATUS)"
+            elif [ "$HTTP_STATUS" = "401" ]; then
+              echo "❌ Token expired (HTTP 401). Update the LOVABLE_TOKEN secret."
+              echo "   Go to: Settings → Secrets → Actions → Update LOVABLE_TOKEN"
+              cat /tmp/lovable_response.json 2>/dev/null
+              exit 1
+            else
+              echo "❌ Failed to send task: $file (HTTP $HTTP_STATUS)"
+              cat /tmp/lovable_response.json 2>/dev/null
+            fi
+
+            # Small delay between tasks
+            sleep 2
+
+          done
+
+          echo "🏁 Done processing tasks."
