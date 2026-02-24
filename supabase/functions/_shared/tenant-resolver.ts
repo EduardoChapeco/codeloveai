@@ -10,6 +10,7 @@
 const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
 export interface TenantInfo {
+  id: string;
   tenant_id: string;
   commission_percent: number;
   token_cost: number;
@@ -78,6 +79,7 @@ export async function resolveTenant(
     .maybeSingle();
 
   return defaultTenant || {
+    id: DEFAULT_TENANT_ID,
     tenant_id: DEFAULT_TENANT_ID,
     commission_percent: 0,
     token_cost: 0,
