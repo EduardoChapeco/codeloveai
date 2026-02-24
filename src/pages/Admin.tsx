@@ -1,18 +1,27 @@
-﻿import { useEffect, useState, useRef } from "react";
+﻿import { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
-import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2, UserPlus, Eye, EyeOff } from "lucide-react";
+import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2, UserPlus, Eye, EyeOff, Puzzle, Download, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import AppLayout from "@/components/AppLayout";
 
-interface MemberToken {
+interface MemberLicense {
   id: string;
-  token: string;
-  is_active: boolean;
+  key: string;
+  active: boolean;
+  plan: string;
+  plan_type: string;
+  type: string;
+  status: string;
+  expires_at: string | null;
+  daily_messages: number | null;
+  hourly_limit: number | null;
+  messages_used_today: number;
+  device_id: string | null;
   created_at: string;
 }
 
@@ -20,9 +29,8 @@ interface Member {
   user_id: string;
   name: string;
   email: string;
-  subscription?: { plan: string; status: string; expires_at: string };
-  token?: string;
-  tokens: MemberToken[];
+  license?: MemberLicense;
+  licenses: MemberLicense[];
   isAffiliate?: boolean;
 }
 
@@ -55,16 +63,56 @@ interface Invoice {
   affiliate_code?: string;
 }
 
+interface AdminNotification {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  user_id: string | null;
+  reference_id: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+interface TenantExtension {
+  id: string;
+  tenant_id: string;
+  file_url: string;
+  version: string;
+  instructions: string;
+  is_latest: boolean;
+  is_enabled: boolean;
+  activation_cost: number;
+  created_at: string;
+}
+
 const planOptions = [
-  { value: "1_day", label: "1 Dia", days: 1 },
-  { value: "7_days", label: "7 Dias", days: 7 },
-  { value: "1_month", label: "1 Mês", days: 30 },
-  { value: "12_months", label: "12 Meses", days: 365 },
+  { value: "daily_token", label: "Token Diário (24h)", days: 1 },
+  { value: "messages", label: "Mensal (Mensagens)", days: 30 },
+  { value: "hourly", label: "Por Hora", days: 30 },
 ];
 
 const planLabels: Record<string, string> = {
-  "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
+  "daily_token": "Token Diário", "messages": "Mensal", "hourly": "Por Hora",
+  "trial": "Trial", "custom": "Custom", "monthly": "Mensal",
 };
+
+interface NewUserResult {
+  email: string;
+  role: string;
+  plan?: string;
+  token?: string;
+  token_error?: string;
+  error?: string;
+}
+
+interface WorkerResult {
+  token?: string;
+  user_id?: string;
+  email?: string;
+  plan?: string;
+  error?: string;
+}
 
 type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "worker-tokens";
 
@@ -73,7 +121,7 @@ export default function Admin() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   useSEO({ title: "Admin" });
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tab = (searchParams.get("tab") || "members") as Tab;
   const [members, setMembers] = useState<Member[]>([]);
   const [affiliates, setAffiliates] = useState<AffiliateInfo[]>([]);
@@ -86,8 +134,8 @@ export default function Admin() {
   const [extVersion, setExtVersion] = useState("");
   const [extFile, setExtFile] = useState<File | null>(null);
   const [extInstructions, setExtInstructions] = useState("");
-  const [extensions, setExtensions] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [extensions, setExtensions] = useState<TenantExtension[]>([]);
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   // freeLinks removed
   const [paymentNotes, setPaymentNotes] = useState<Record<string, string>>({});
 
@@ -97,9 +145,9 @@ export default function Admin() {
   const [workerPlan, setWorkerPlan] = useState("days_30");
   const [workerUserId, setWorkerUserId] = useState("");
   const [workerLoading, setWorkerLoading] = useState(false);
-  const [workerResult, setWorkerResult] = useState<any>(null);
+  const [workerResult, setWorkerResult] = useState<WorkerResult | null>(null);
   const [searchEmail, setSearchEmail] = useState("");
-  const [searchResult, setSearchResult] = useState<any>(null);
+  const [searchResult, setSearchResult] = useState<unknown>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [unbindToken, setUnbindToken] = useState("");
   const [unbindLoading, setUnbindLoading] = useState(false);
@@ -108,7 +156,7 @@ export default function Admin() {
   // Chat state
   const [chatUsers, setChatUsers] = useState<{ user_id: string; name: string; email: string; unread: number }[]>([]);
   const [selectedChatUser, setSelectedChatUser] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<{ id: string; sender_id: string; content: string; created_at: string }[]>([]);
   const [adminMessage, setAdminMessage] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -121,8 +169,14 @@ export default function Admin() {
   const [newUserRole, setNewUserRole] = useState("member");
   const [newUserAutoToken, setNewUserAutoToken] = useState(true);
   const [newUserLoading, setNewUserLoading] = useState(false);
-  const [newUserResult, setNewUserResult] = useState<any>(null);
+  const [newUserResult, setNewUserResult] = useState<NewUserResult | null>(null);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [dbPlans, setDbPlans] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    supabase.from("plans").select("id, name").eq("is_active", true).order("display_order", { ascending: true })
+      .then(({ data }) => setDbPlans(data || []));
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !adminLoading) {
@@ -132,38 +186,46 @@ export default function Admin() {
   }, [user, isAdmin, authLoading, adminLoading, navigate]);
 
   // Fetch members
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     const { data: profiles } = await supabase.from("profiles").select("*");
     if (!profiles) return;
 
     const { data: allAffiliates } = await supabase.from("affiliates").select("user_id");
     const affUserIds = new Set((allAffiliates || []).map((a) => a.user_id));
 
-    const memberList: Member[] = [];
-    for (const p of profiles) {
-      const { data: subs } = await supabase.from("subscriptions").select("*")
-        .eq("user_id", p.user_id).order("created_at", { ascending: false }).limit(1);
-      const { data: toks } = await supabase.from("tokens").select("*")
-        .eq("user_id", p.user_id).order("created_at", { ascending: false });
+    // Buscar todas as licenças de uma vez (v2)
+    const { data: allLicenses } = await supabase.from("licenses")
+      .select("id, key, active, plan, plan_type, type, status, expires_at, daily_messages, hourly_limit, messages_used_today, device_id, user_id, created_at")
+      .order("created_at", { ascending: false });
 
-      const allTokens: MemberToken[] = (toks || []).map(t => ({
-        id: t.id, token: t.token, is_active: t.is_active, created_at: t.created_at,
-      }));
-      const activeToken = allTokens.find(t => t.is_active);
-
-      memberList.push({
-        user_id: p.user_id, name: p.name, email: p.email,
-        subscription: subs?.[0] ? { plan: subs[0].plan, status: subs[0].status, expires_at: subs[0].expires_at } : undefined,
-        token: activeToken?.token,
-        tokens: allTokens,
-        isAffiliate: affUserIds.has(p.user_id),
+    const licensesByUser = new Map<string, MemberLicense[]>();
+    for (const lic of (allLicenses || [])) {
+      const uid = lic.user_id;
+      if (!licensesByUser.has(uid)) licensesByUser.set(uid, []);
+      licensesByUser.get(uid)!.push({
+        id: lic.id, key: lic.key, active: lic.active, plan: lic.plan,
+        plan_type: lic.plan_type, type: lic.type, status: lic.status,
+        expires_at: lic.expires_at, daily_messages: lic.daily_messages,
+        hourly_limit: lic.hourly_limit, messages_used_today: lic.messages_used_today || 0,
+        device_id: lic.device_id, created_at: lic.created_at,
       });
     }
+
+    const memberList: Member[] = profiles.map(p => {
+      const userLicenses = licensesByUser.get(p.user_id) || [];
+      const activeLicense = userLicenses.find(l => l.active && l.status === 'active');
+      return {
+        user_id: p.user_id, name: p.name, email: p.email,
+        license: activeLicense,
+        licenses: userLicenses,
+        isAffiliate: affUserIds.has(p.user_id),
+      };
+    });
     setMembers(memberList);
-  };
+  }, []);
 
   // Fetch affiliates
-  const fetchAffiliates = async () => {
+  const fetchAffiliates = useCallback(async () => {
     const { data: affs } = await supabase.from("affiliates").select("*");
     if (!affs) return;
 
@@ -180,7 +242,7 @@ export default function Admin() {
       const allRefs = refs || [];
       const weeklyConfirmed = allRefs.filter((r) => r.confirmed && new Date(r.created_at) >= monday).length;
       const pending = allRefs.filter((r) => !r.confirmed).length;
-      const totalCommission = allRefs.reduce((sum, r) => sum + Number((r as any).commission_amount || 0), 0);
+      const totalCommission = allRefs.reduce((sum, r) => sum + Number((r as { commission_amount?: number }).commission_amount || 0), 0);
 
       list.push({
         id: a.id, user_id: a.user_id, affiliate_code: a.affiliate_code,
@@ -192,10 +254,10 @@ export default function Admin() {
       });
     }
     setAffiliates(list);
-  };
+  }, []);
 
   // Fetch invoices
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     const { data } = await supabase.from("affiliate_invoices").select("*").order("week_start", { ascending: false });
     if (!data) return;
 
@@ -209,19 +271,19 @@ export default function Admin() {
       affiliate_code: affMap.get(inv.affiliate_id)?.affiliate_code || "?",
     }));
     setInvoices(enriched);
-  };
+  }, []);
 
-  const fetchExtensions = async () => {
+  const fetchExtensions = useCallback(async () => {
     const { data } = await supabase.from("extension_files").select("*").order("created_at", { ascending: false });
     setExtensions(data || []);
-  };
+  }, []);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     const { data } = await supabase.from("admin_notifications").select("*").order("created_at", { ascending: false }).limit(50);
     setNotifications(data || []);
-  };
+  }, []);
 
-  const fetchChatUsers = async () => {
+  const fetchChatUsers = useCallback(async () => {
     if (!user) return;
     const { data: msgs } = await supabase
       .from("messages")
@@ -249,9 +311,9 @@ export default function Admin() {
     }));
     chatList.sort((a, b) => b.unread - a.unread);
     setChatUsers(chatList);
-  };
+  }, [user]);
 
-  const fetchChatMessages = async (otherUserId: string) => {
+  const fetchChatMessages = useCallback(async (otherUserId: string) => {
     if (!user) return;
     const { data } = await supabase
       .from("messages")
@@ -262,7 +324,7 @@ export default function Admin() {
     await supabase.from("messages").update({ is_read: true })
       .eq("sender_id", otherUserId).eq("receiver_id", user.id).eq("is_read", false);
     fetchChatUsers();
-  };
+  }, [user, fetchChatUsers]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -273,7 +335,17 @@ export default function Admin() {
       fetchNotifications();
       fetchChatUsers();
     }
-  }, [isAdmin]);
+  }, [isAdmin, fetchMembers, fetchAffiliates, fetchInvoices, fetchExtensions, fetchNotifications, fetchChatUsers]);
+
+  useEffect(() => {
+    if (user && isAdmin && selectedChatUser) {
+      fetchChatMessages(selectedChatUser);
+      // Mark as read
+      supabase.from("messages").update({ is_read: true })
+        .eq("sender_id", selectedChatUser).eq("receiver_id", user.id)
+        .then(() => fetchChatUsers());
+    }
+  }, [user, isAdmin, selectedChatUser, fetchChatMessages, fetchChatUsers]);
 
   // Realtime
   useEffect(() => {
@@ -289,7 +361,7 @@ export default function Admin() {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, isAdmin, selectedChatUser]);
+  }, [user, isAdmin, selectedChatUser, fetchChatUsers, fetchChatMessages, fetchNotifications]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -311,22 +383,45 @@ export default function Admin() {
     fetchNotifications();
   };
 
-  // Member actions
-  const assignToken = async (userId: string) => {
-    const token = tokenInput[userId];
-    if (!token) return toast.error("Insira um token.");
-    await supabase.from("tokens").update({ is_active: false }).eq("user_id", userId);
-    const { error } = await supabase.from("tokens").insert({ user_id: userId, token, is_active: true });
+  // Member actions — v2 uses "licenses" table
+  const assignLicenseKey = async (userId: string) => {
+    const key = tokenInput[userId];
+    if (!key) return toast.error("Insira uma chave de licença.");
+    // Desativar licenças anteriores
+    await supabase.from("licenses").update({ active: false, status: "expired" }).eq("user_id", userId).eq("active", true);
+    const { error } = await supabase.from("licenses").insert({
+      user_id: userId, key, active: true, status: "active",
+      plan: "days_30", plan_type: "daily_token", type: "daily_token",
+    });
     if (error) return toast.error(error.message);
-    toast.success("Token atribuído!");
+    toast.success("Licença atribuída!");
     setTokenInput((prev) => ({ ...prev, [userId]: "" }));
     fetchMembers();
   };
 
-  const destroyToken = async (userId: string) => {
-    if (!confirm("Destruir/revogar TODOS os tokens deste usuário?")) return;
-    await supabase.from("tokens").update({ is_active: false }).eq("user_id", userId);
-    toast.success("Todos os tokens foram revogados!");
+  const revokeLicenses = async (userId: string) => {
+    if (!confirm("Revogar TODAS as licenças deste usuário?")) return;
+    await supabase.from("licenses").update({ active: false, status: "suspended" }).eq("user_id", userId);
+    toast.success("Todas as licenças foram revogadas!");
+    fetchMembers();
+  };
+
+  const resetDailyUsage = async (userId: string) => {
+    const member = members.find(m => m.user_id === userId);
+    if (!member?.license) return toast.error("Usuário sem licença ativa.");
+    await supabase.from("licenses").update({ messages_used_today: 0 }).eq("id", member.license.id);
+    const today = new Date().toISOString().split('T')[0];
+    await supabase.from("daily_usage").delete().eq("license_id", member.license.id).eq("date", today);
+    toast.success("Uso diário resetado!");
+    fetchMembers();
+  };
+
+  const unlockDevice = async (userId: string) => {
+    const member = members.find(m => m.user_id === userId);
+    if (!member?.license) return toast.error("Usuário sem licença ativa.");
+    if (!confirm("Desbloquear dispositivo? O usuário poderá vincular um novo.")) return;
+    await supabase.from("licenses").update({ device_id: null }).eq("id", member.license.id);
+    toast.success("Dispositivo desbloqueado!");
     fetchMembers();
   };
 
@@ -337,26 +432,38 @@ export default function Admin() {
     if (!plan) return;
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + plan.days);
-    const { error } = await supabase.from("subscriptions").insert({
-      user_id: userId, plan: plan.value as any, status: "active" as any,
-      starts_at: new Date().toISOString(), expires_at: expiresAt.toISOString(),
-    });
-    if (error) return toast.error(error.message);
+    // Atualizar licença ativa existente ou criar nova
+    const member = members.find(m => m.user_id === userId);
+    if (member?.license) {
+      const { error } = await supabase.from("licenses").update({
+        plan_type: plan.value, type: plan.value,
+        expires_at: expiresAt.toISOString(), status: "active", active: true,
+        messages_used_today: 0,
+      }).eq("id", member.license.id);
+      if (error) return toast.error(error.message);
+    } else {
+      const { error } = await supabase.from("licenses").insert({
+        user_id: userId, plan_type: plan.value, type: plan.value,
+        plan: plan.label, status: "active", active: true,
+        key: `CLF1.ADMIN.${Date.now()}`,
+        expires_at: expiresAt.toISOString(),
+      });
+      if (error) return toast.error(error.message);
+    }
     toast.success("Plano atribuído!");
     fetchMembers();
   };
 
-  const cancelSubscription = async (userId: string) => {
-    if (!confirm("Cancelar assinatura? O afiliado verá o cancelamento.")) return;
-    await supabase.from("subscriptions").update({ status: "cancelled" as any }).eq("user_id", userId).eq("status", "active");
-    toast.success("Cancelada!");
+  const suspendLicense = async (userId: string) => {
+    if (!confirm("Suspender licença? O usuário perderá o acesso.")) return;
+    await supabase.from("licenses").update({ status: "suspended", active: false }).eq("user_id", userId).eq("active", true);
+    toast.success("Licença suspensa!");
     fetchMembers();
   };
 
   const banUser = async (userId: string) => {
-    if (!confirm("Banir usuário? Isso revoga token + cancela plano.")) return;
-    await supabase.from("tokens").update({ is_active: false }).eq("user_id", userId);
-    await supabase.from("subscriptions").update({ status: "cancelled" as any }).eq("user_id", userId).eq("status", "active");
+    if (!confirm("Banir usuário? Isso revoga todas as licenças.")) return;
+    await supabase.from("licenses").update({ active: false, status: "suspended" }).eq("user_id", userId);
     toast.success("Banido!");
     fetchMembers();
   };
@@ -364,7 +471,7 @@ export default function Admin() {
   // Affiliate actions
   const createAffiliate = async () => {
     if (!newAffUserId || !newAffCode || !newAffName) return toast.error("Preencha todos os campos.");
-    await supabase.from("user_roles").insert({ user_id: newAffUserId, role: "affiliate" as any });
+    await supabase.from("user_roles").insert({ user_id: newAffUserId, role: "affiliate" });
     const { error } = await supabase.from("affiliates").insert({
       user_id: newAffUserId, affiliate_code: newAffCode.toUpperCase(), display_name: newAffName,
     });
@@ -402,9 +509,12 @@ export default function Admin() {
     }).eq("user_id", affiliateUserId);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    await supabase.from("subscriptions").insert({
-      user_id: affiliateUserId, plan: "7_days" as any, status: "active" as any,
-      starts_at: new Date().toISOString(), expires_at: expiresAt.toISOString(),
+    // Criar uma licença v2 de 7 dias
+    await supabase.from("licenses").insert({
+      user_id: affiliateUserId, plan: "7_days_coin_redeem", plan_type: "daily_token",
+      type: "daily_token", status: "active", active: true,
+      key: `CLF1.REDEEM.${Date.now()}`,
+      expires_at: expiresAt.toISOString(),
     });
     await supabase.from("codecoin_transactions").insert({
       user_id: affiliateUserId, amount: -2, type: "redeemed", description: "Resgate: 7 dias free",
@@ -479,8 +589,8 @@ export default function Admin() {
         toast.success("Token gerado com sucesso!");
         if (workerUserId) fetchMembers();
       }
-    } catch (err: any) {
-      toast.error("Erro: " + (err.message || "Falha ao gerar token"));
+    } catch (err) {
+      toast.error("Erro: " + (err instanceof Error ? err.message : "Falha ao gerar token"));
     }
     setWorkerLoading(false);
   };
@@ -495,8 +605,8 @@ export default function Admin() {
       });
       if (error) throw error;
       setSearchResult(data);
-    } catch (err: any) {
-      toast.error("Erro: " + (err.message || "Falha ao buscar"));
+    } catch (err) {
+      toast.error("Erro: " + (err instanceof Error ? err.message : "Falha ao buscar"));
     }
     setSearchLoading(false);
   };
@@ -512,8 +622,8 @@ export default function Admin() {
       if (error) throw error;
       toast.success("Dispositivo desbloqueado!");
       setUnbindToken("");
-    } catch (err: any) {
-      toast.error("Erro: " + (err.message || "Falha ao desbloquear"));
+    } catch (err) {
+      toast.error("Erro: " + (err instanceof Error ? err.message : "Falha ao desbloquear"));
     }
     setUnbindLoading(false);
   };
@@ -540,8 +650,8 @@ export default function Admin() {
       setNewUserResult(data);
       toast.success("Usuário criado com sucesso!");
       fetchMembers();
-    } catch (err: any) {
-      toast.error("Erro: " + (err.message || "Falha ao criar usuário"));
+    } catch (err) {
+      toast.error("Erro: " + (err instanceof Error ? err.message : "Falha ao criar usuário"));
     }
     setNewUserLoading(false);
   };
@@ -567,7 +677,7 @@ export default function Admin() {
     open: "EM ABERTO", closed: "FECHADA", paid: "PAGA", cancelled: "CANCELADA",
   };
   const invoiceStatusClass: Record<string, string> = {
-    open: "ep-badge-live", closed: "bg-yellow-500/20 text-yellow-700", paid: "bg-green-500/20 text-green-700", cancelled: "ep-badge-offline",
+    open: "lv-badge-success animate-pulse", closed: "lv-badge-muted opacity-50", paid: "lv-badge-success", cancelled: "lv-badge-destructive opacity-50",
   };
 
   return (
@@ -575,80 +685,143 @@ export default function Admin() {
     <div className="min-h-screen bg-background">
 
       <div className="max-w-6xl mx-auto px-8 py-12 space-y-8">
-        <div>
-          <p className="ep-subtitle mb-2">PAINEL ADMINISTRATIVO</p>
-          <h1 className="ep-section-title">GERENCIAR</h1>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <p className="lv-overline mb-2">PAINEL ADMINISTRATIVO</p>
+            <h1 className="lv-heading-lg">Gerenciar</h1>
+          </div>
+          
+          <div className="flex gap-2 flex-wrap bg-primary/5 p-1 rounded-2xl border border-primary/10">
+            {(["members", "affiliates", "invoices", "worker-tokens", "extension", "notifications", "messages"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setSearchParams({ tab: t })}
+                className={`h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 flex items-center gap-2 ${
+                  tab === t 
+                  ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105" 
+                  : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                }`}
+              >
+                {t === "members" && <Users className="h-3 w-3" />}
+                {t === "affiliates" && <UserPlus className="h-3 w-3" />}
+                {t === "invoices" && <FileText className="h-3 w-3" />}
+                {t === "worker-tokens" && <Zap className="h-3 w-3" />}
+                {t === "extension" && <Upload className="h-3 w-3" />}
+                {t === "notifications" && <Bell className="h-3 w-3" />}
+                {t === "messages" && <MessageSquare className="h-3 w-3" />}
+                {
+                  { 
+                    members: "Membros", 
+                    affiliates: "Afiliados", 
+                    invoices: "Faturas", 
+                    "worker-tokens": "Tokens API", 
+                    extension: "Extensão", 
+                    notifications: "Alertas", 
+                    messages: "Chat" 
+                  }[t]
+                }
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Tab title */}
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold capitalize">{
-            { members: "Membros", affiliates: "Afiliados", invoices: "Faturas", "worker-tokens": "Tokens API", extension: "Extensão", notifications: "Notificações", messages: "Mensagens" }[tab]
-          }</h2>
+        {/* Tab Subtitle */}
+        <div className="flex items-center justify-between">
+          <p className="lv-label">
+            Exibindo: <span className="text-foreground">{
+              { 
+                members: "Gestão de Membros e Licenças", 
+                affiliates: "Programa de Afiliados", 
+                invoices: "Faturamento Semanal", 
+                "worker-tokens": "Gerador de Tokens Externo", 
+                extension: "Distribuição da Extensão", 
+                notifications: "Notificações do Sistema", 
+                messages: "Atendimento ao Cliente" 
+              }[tab]
+            }</span>
+          </p>
+          
+          {tab === "members" && (
+            <button onClick={() => { resetCreateUserForm(); setCreateUserOpen(true); }}
+              className="lv-btn-primary h-9 px-5 text-[10px] font-black tracking-widest flex items-center gap-2">
+              <UserPlus className="h-3 w-3" /> NOVO USUÁRIO
+            </button>
+          )}
         </div>
 
         {/* Members Tab */}
         {tab === "members" && (
           <div className="space-y-4">
-            <button onClick={() => { resetCreateUserForm(); setCreateUserOpen(true); }}
-              className="ep-btn-secondary h-10 px-6 text-[9px] flex items-center gap-2">
-              <UserPlus className="h-3 w-3" /> CRIAR USUÁRIO
-            </button>
             {members.map((m) => (
-              <div key={m.user_id} className="ep-card">
+              <div key={m.user_id} className="clf-liquid-glass rounded-[24px] p-6">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-foreground">{m.name || "Sem nome"}</p>
-                      {m.isAffiliate && <span className="ep-badge ep-badge-live text-[8px]">AFILIADO</span>}
+                    <div className="flex items-center gap-3 mb-1">
+                      <p className="lv-body-strong text-[15px]">{m.name || "Sem nome"}</p>
+                      {m.isAffiliate && <span className="lv-badge lv-badge-primary">AFILIADO</span>}
                     </div>
-                    <p className="text-xs text-muted-foreground font-medium">{m.email}</p>
-                    {m.subscription && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`ep-badge ${m.subscription.status === "active" && new Date(m.subscription.expires_at) > new Date() ? "ep-badge-live" : "ep-badge-offline"}`}>
-                          {planLabels[m.subscription.plan] || m.subscription.plan}
+                    <p className="lv-caption font-mono uppercase tracking-tighter opacity-60">{m.email}</p>
+                    {m.license && (
+                      <div className="flex items-center gap-2 mt-3 flex-wrap">
+                        <span className={`lv-badge ${m.license.status === "active" && m.license.active ? "lv-badge-success" : "lv-badge-destructive"}`}>
+                          {planLabels[m.license.plan_type] || m.license.plan_type} — {m.license.status}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          Exp: {format(new Date(m.subscription.expires_at), "dd/MM/yyyy")}
-                        </span>
+                        {m.license.expires_at && (
+                          <span className="text-xs text-muted-foreground">
+                            Exp: {format(new Date(m.license.expires_at), "dd/MM/yyyy")}
+                          </span>
+                        )}
+                        {m.license.daily_messages && (
+                          <span className="text-xs text-muted-foreground">
+                            Uso: {m.license.messages_used_today}/{m.license.daily_messages}
+                          </span>
+                        )}
+                        {m.license.device_id && (
+                          <span className="text-xs text-blue-500 font-mono">
+                            🔒 {m.license.device_id.substring(0, 8)}…
+                          </span>
+                        )}
                       </div>
                     )}
-                    {m.token && (
+                    {m.license?.key && (
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-muted-foreground">Token ativo:</span>
-                        <code className="font-mono text-xs bg-muted px-2 py-0.5 rounded-[8px]">
-                          {m.token.substring(0, 10)}••••{m.token.substring(m.token.length - 4)}
+                        <span className="text-xs text-muted-foreground">Licença ativa:</span>
+                        <code className="lv-mono bg-primary/5 text-primary border border-primary/10 px-2 py-0.5 rounded-lg">
+                          {m.license.key.substring(0, 10)}••••{m.license.key.substring(m.license.key.length - 4)}
                         </code>
-                        <button onClick={() => { navigator.clipboard.writeText(m.token!); toast.success("Token copiado!"); }}
-                          className="ep-btn-icon h-6 w-6 rounded-[6px]">
-                          <Copy className="h-2.5 w-2.5" />
+                        <button onClick={() => { navigator.clipboard.writeText(m.license!.key); toast.success("Licença copiada!"); }}
+                          className="lv-btn-icon h-7 w-7 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg">
+                          <Copy className="h-3 w-3" />
                         </button>
-                        {m.tokens.length > 1 && (
+                        {m.licenses.length > 1 && (
                           <button onClick={() => setExpandedTokens(expandedTokens === m.user_id ? null : m.user_id)}
                             className="text-[9px] font-bold text-muted-foreground hover:text-foreground transition-colors">
-                            {m.tokens.length} TOKENS {expandedTokens === m.user_id ? "▲" : "▼"}
+                            {m.licenses.length} LICENÇAS {expandedTokens === m.user_id ? "▲" : "▼"}
                           </button>
                         )}
                       </div>
                     )}
-                    {expandedTokens === m.user_id && m.tokens.length > 0 && (
-                      <div className="mt-2 space-y-1.5 pl-4 border-l-2 border-border">
-                        {m.tokens.map(t => (
-                          <div key={t.id} className="flex items-center gap-2">
-                            <span className={`ep-badge text-[7px] ${t.is_active ? "ep-badge-live" : "ep-badge-offline"}`}>
-                              {t.is_active ? "ATIVO" : "INATIVO"}
-                            </span>
-                            <code className="font-mono text-[10px] text-muted-foreground">
-                              {t.token.substring(0, 10)}••••{t.token.substring(t.token.length - 4)}
-                            </code>
-                            <button onClick={() => { navigator.clipboard.writeText(t.token); toast.success("Token copiado!"); }}
-                              className="ep-btn-icon h-5 w-5 rounded-[4px]">
-                              <Copy className="h-2 w-2" />
-                            </button>
-                            <span className="text-[9px] text-muted-foreground">
-                              {format(new Date(t.created_at), "dd/MM/yy HH:mm")}
-                            </span>
-                          </div>
+                    {expandedTokens === m.user_id && m.licenses.length > 0 && (
+                      <div className="mt-2 space-y-1.5 pl-4 border-l-2 border-primary/10">
+                        {m.licenses.map(l => (
+                          <div key={l.id} className="flex items-center gap-2.5 py-1 px-2 hover:bg-primary/5 rounded-lg transition-colors group">
+                            <span className={`lv-badge text-[8px] ${l.active ? "lv-badge-success" : "lv-badge-muted"}`}>
+                               {l.active ? "ATIVO" : l.status.toUpperCase()}
+                             </span>
+                             <code className="lv-mono text-[10px] opacity-70">
+                               {l.key.substring(0, 10)}••••{l.key.substring(l.key.length - 4)}
+                             </code>
+                             <span className="text-[10px] font-bold text-muted-foreground">
+                               {planLabels[l.plan_type] || l.plan_type}
+                             </span>
+                             <button onClick={() => { navigator.clipboard.writeText(l.key); toast.success("Licença copiada!"); }}
+                               className="opacity-0 group-hover:opacity-100 lv-btn-icon h-5 w-5 rounded-[4px] bg-primary/10 text-primary">
+                               <Copy className="h-2 w-2" />
+                             </button>
+                             <span className="text-[9px] text-muted-foreground ml-auto">
+                               {format(new Date(l.created_at), "dd/MM/yy HH:mm")}
+                             </span>
+                           </div>
                         ))}
                       </div>
                     )}
@@ -657,35 +830,43 @@ export default function Admin() {
                     <div className="flex items-center gap-2">
                       <select value={planInput[m.user_id] || ""}
                         onChange={(e) => setPlanInput((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
-                        className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border">
+                        className="lv-input h-10 rounded-xl text-xs px-4 w-40">
                         <option value="">Plano...</option>
                         {planOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                       </select>
-                      <button onClick={() => assignPlan(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px]">
-                        <UserCheck className="h-3 w-3" />
+                      <button onClick={() => assignPlan(m.user_id)} className="lv-btn-primary h-10 px-4 text-[10px] font-black">
+                        <UserCheck className="h-4 w-4 shrink-0" />
                       </button>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input placeholder="Token..." value={tokenInput[m.user_id] || ""}
+                      <input placeholder="Chave de licença personalizada..." value={tokenInput[m.user_id] || ""}
                         onChange={(e) => setTokenInput((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
-                        className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
-                      <button onClick={() => assignToken(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px]">
-                        <Key className="h-3 w-3" />
+                        className="lv-input h-10 rounded-xl text-xs px-4 min-w-[200px] flex-1" />
+                      <button onClick={() => assignLicenseKey(m.user_id)} className="lv-btn-secondary h-10 px-4 text-[10px] font-black border-primary/20 text-primary">
+                        <Key className="h-4 w-4 shrink-0" />
                       </button>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {m.token && (
-                        <button onClick={() => destroyToken(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30">
-                          <Trash2 className="h-3 w-3 mr-1" /> REVOGAR TOKEN
-                        </button>
+                      {m.license && (
+                        <>
+                          <button onClick={() => revokeLicenses(m.user_id)} className="lv-btn-danger h-9 px-4 text-[10px] font-black">
+                            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> REVOGAR
+                          </button>
+                          <button onClick={() => suspendLicense(m.user_id)} className="lv-btn-secondary h-9 px-4 text-[10px] font-black border-destructive/20 text-destructive">
+                            <XCircle className="h-3.5 w-3.5 mr-1.5" /> SUSPENDER
+                          </button>
+                          <button onClick={() => resetDailyUsage(m.user_id)} className="lv-btn-secondary h-9 px-4 text-[10px] font-black">
+                            <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> RESET USO
+                          </button>
+                          {m.license.device_id && (
+                            <button onClick={() => unlockDevice(m.user_id)} className="lv-btn-secondary h-9 px-4 text-[10px] font-black">
+                              <Unlock className="h-3.5 w-3.5 mr-1.5" /> DESBLOQUEAR
+                            </button>
+                          )}
+                        </>
                       )}
-                      {m.subscription?.status === "active" && new Date(m.subscription.expires_at) > new Date() && (
-                        <button onClick={() => cancelSubscription(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30">
-                          <XCircle className="h-3 w-3 mr-1" /> CANCELAR
-                        </button>
-                      )}
-                      <button onClick={() => banUser(m.user_id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30">
-                        <Ban className="h-3 w-3 mr-1" /> BANIR
+                      <button onClick={() => banUser(m.user_id)} className="lv-btn-secondary h-9 px-4 text-[10px] font-black border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive hover:text-white">
+                        <Ban className="h-3.5 w-3.5 mr-1.5" /> BANIR
                       </button>
                     </div>
                   </div>
@@ -693,9 +874,9 @@ export default function Admin() {
               </div>
             ))}
             {members.length === 0 && (
-              <div className="ep-empty">
-                <UserX className="h-10 w-10 mx-auto mb-4" />
-                <p className="ep-empty-title">NENHUM MEMBRO</p>
+              <div className="lv-empty">
+                <UserX className="h-12 w-12 opacity-20 mb-2" />
+                <p className="lv-overline">NENHUM MEMBRO ENCONTRADO</p>
               </div>
             )}
           </div>
@@ -704,11 +885,11 @@ export default function Admin() {
         {/* Affiliates Tab */}
         {tab === "affiliates" && (
           <div className="space-y-6">
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">CRIAR AFILIADO</p>
+            <div className="clf-liquid-glass p-6">
+              <p className="lv-overline mb-4">CRIAR NOVO AFILIADO</p>
               <div className="flex flex-col md:flex-row gap-3">
                 <select value={newAffUserId} onChange={(e) => setNewAffUserId(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border flex-1">
+                  className="lv-input h-10 rounded-xl text-xs px-4 flex-1">
                   <option value="">Selecionar membro...</option>
                   {members.filter((m) => !m.isAffiliate).map((m) => (
                     <option key={m.user_id} value={m.user_id}>{m.name || m.email}</option>
@@ -716,50 +897,62 @@ export default function Admin() {
                 </select>
                 <input placeholder="Código (ex: ABC123)" value={newAffCode}
                   onChange={(e) => setNewAffCode(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
+                  className="lv-input h-10 rounded-xl text-xs px-4 w-40" />
                 <input placeholder="Nome de exibição" value={newAffName}
                   onChange={(e) => setNewAffName(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
-                <button onClick={createAffiliate} className="ep-btn-primary h-10 px-6 text-[9px]">CRIAR</button>
+                  className="lv-input h-10 rounded-xl text-xs px-4 flex-1" />
+                <button onClick={createAffiliate} className="lv-btn-primary h-10 px-6 text-[10px] font-black tracking-widest">
+                  CRIAR AFILIADO
+                </button>
               </div>
             </div>
 
             {affiliates.map((a) => (
-              <div key={a.id} className="ep-card">
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-foreground">{a.display_name}</p>
-                    <p className="text-xs text-muted-foreground font-medium font-mono">Código: {a.affiliate_code}</p>
+              <div key={a.id} className="clf-liquid-glass p-8">
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-8">
+                  <div className="flex-1 space-y-4">
+                    <div>
+                      <p className="lv-body-strong text-lg">{a.display_name}</p>
+                      <p className="lv-caption font-mono uppercase tracking-widest opacity-60">Código: {a.affiliate_code}</p>
+                    </div>
+
                     {a.bankInfo ? (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        PIX: {a.bankInfo.pix_key_type.toUpperCase()} — {a.bankInfo.pix_key} ({a.bankInfo.holder_name})
-                      </p>
+                      <div className="bg-primary/5 border border-primary/10 rounded-xl p-3 flex items-center gap-3">
+                        <DollarSign className="h-4 w-4 text-primary" />
+                        <p className="text-[11px] font-bold text-primary italic">
+                          PIX: {a.bankInfo.pix_key_type.toUpperCase()} • {a.bankInfo.pix_key} • {a.bankInfo.holder_name}
+                        </p>
+                      </div>
                     ) : (
-                      <p className="text-xs text-yellow-600 mt-1">⚠ Dados bancários não cadastrados</p>
+                      <div className="bg-destructive/5 border border-destructive/10 rounded-xl p-3 flex items-center gap-3">
+                        <Ban className="h-4 w-4 text-destructive" />
+                        <p className="lv-caption text-destructive font-bold uppercase">Dados bancários não cadastrados</p>
+                      </div>
                     )}
-                    <div className="flex items-center gap-4 mt-3">
-                      <div className="text-center">
-                        <p className="text-lg font-bold">{a.coins?.balance || 0}</p>
-                        <p className="text-[9px] text-muted-foreground">COINS</p>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-white/5 dark:bg-black/5 p-4 rounded-2xl border border-black/5">
+                        <p className="lv-stat text-2xl">{a.coins?.balance || 0}</p>
+                        <p className="lv-overline opacity-60">COINS</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold">{a.totalReferrals}</p>
-                        <p className="text-[9px] text-muted-foreground">VENDAS</p>
+                      <div className="bg-white/5 dark:bg-black/5 p-4 rounded-2xl border border-black/5">
+                        <p className="lv-stat text-2xl">{a.totalReferrals}</p>
+                        <p className="lv-overline opacity-60">VENDAS</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-green-600">R${a.totalCommission.toFixed(2)}</p>
-                        <p className="text-[9px] text-muted-foreground">COMISSÃO TOTAL</p>
+                      <div className="bg-green-500/5 p-4 rounded-2xl border border-green-500/10">
+                        <p className="lv-stat text-2xl text-green-600">R${a.totalCommission.toFixed(2)}</p>
+                        <p className="lv-overline text-green-600 opacity-60">COMISSÃO</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold">{a.pendingReferrals}</p>
-                        <p className="text-[9px] text-muted-foreground">PENDENTES</p>
+                      <div className="bg-white/5 dark:bg-black/5 p-4 rounded-2xl border border-black/5">
+                        <p className="lv-stat text-2xl text-yellow-600">{a.pendingReferrals}</p>
+                        <p className="lv-overline text-yellow-600 opacity-60">PENDENTES</p>
                       </div>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-3 shrink-0">
                     {(a.coins?.balance || 0) >= 2 && (
-                      <button onClick={() => redeemCoins(a.user_id)} className="ep-btn-primary h-10 px-4 text-[9px]">
-                        <Coins className="h-3 w-3 mr-1" /> RESGATAR 2 COINS
+                      <button onClick={() => redeemCoins(a.user_id)} className="lv-btn-primary h-11 px-6 text-[10px] font-black bg-green-600 hover:bg-green-700">
+                        <Coins className="h-4 w-4 mr-2" /> RESGATAR 2 COINS
                       </button>
                     )}
                     <button onClick={() => {
@@ -771,8 +964,8 @@ export default function Admin() {
                             pendingRefs.forEach((r) => confirmReferral(a.id, a.user_id, r.id));
                           }
                         });
-                    }} className="ep-btn-secondary h-10 px-4 text-[9px]">
-                      <UserCheck className="h-3 w-3 mr-1" /> CONFIRMAR PENDENTES
+                    }} className="lv-btn-secondary h-11 px-6 text-[10px] font-black">
+                      <UserCheck className="h-4 w-4 mr-2 text-primary" /> CONFIRMAR PENDENTES
                     </button>
                   </div>
                 </div>
@@ -780,9 +973,9 @@ export default function Admin() {
             ))}
 
             {affiliates.length === 0 && (
-              <div className="ep-empty">
-                <Users className="h-10 w-10 mx-auto mb-4" />
-                <p className="ep-subtitle">NENHUM AFILIADO</p>
+              <div className="lv-empty">
+                <Users className="h-12 w-12 opacity-20 mb-2" />
+                <p className="lv-overline">NENHUM AFILIADO ENCONTRADO</p>
               </div>
             )}
           </div>
@@ -791,68 +984,85 @@ export default function Admin() {
         {/* Invoices Tab */}
         {tab === "invoices" && (
           <div className="space-y-6">
-            <div className="ep-card">
-              <p className="ep-subtitle mb-2">FATURAS SEMANAIS DOS AFILIADOS</p>
-              <p className="text-xs text-muted-foreground font-medium">
-                Comissão de 30% sobre cada venda. Feche a fatura e pague via PIX ao afiliado.
+            <div className="clf-liquid-glass p-6">
+              <p className="lv-overline mb-2">GESTÃO DE FATURAMENTO</p>
+              <p className="lv-caption font-medium max-w-2xl">
+                Comissão padrão: <span className="text-foreground font-black">30%</span> • Feche faturas semanais após validar as vendas e realize o pagamento via PIX para liquidar o débito.
               </p>
             </div>
 
             {invoices.length === 0 && (
-              <div className="ep-empty">
-                <FileText className="h-10 w-10 mx-auto mb-4" />
-                <p className="ep-subtitle">NENHUMA FATURA</p>
-                <p className="text-xs text-muted-foreground mt-2">As faturas são criadas automaticamente quando há vendas via afiliados.</p>
+              <div className="lv-empty">
+                <FileText className="h-12 w-12 opacity-20 mb-2" />
+                <p className="lv-overline">NENHUMA FATURA DISPONÍVEL</p>
               </div>
             )}
 
             {invoices.map((inv) => (
-              <div key={inv.id} className={`ep-card ${inv.status === "open" ? "border-yellow-500/30" : ""}`}>
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-bold text-foreground">{inv.affiliate_name}</p>
-                      <span className="text-xs text-muted-foreground font-mono">({inv.affiliate_code})</span>
-                      <span className={`ep-badge text-[8px] ${invoiceStatusClass[inv.status] || "ep-badge-offline"}`}>
+              <div key={inv.id} className={`clf-liquid-glass p-6 ${inv.status === "open" ? "border-primary/20 bg-primary/[0.02]" : ""}`}>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <p className="lv-body-strong text-base">{inv.affiliate_name}</p>
+                      <span className="lv-caption font-mono tracking-tighter opacity-40">({inv.affiliate_code})</span>
+                      <span className={`lv-badge ${
+                        inv.status === 'paid' ? 'lv-badge-success' : 
+                        inv.status === 'closed' ? 'lv-badge-warning' : 
+                        inv.status === 'cancelled' ? 'lv-badge-destructive' : 'lv-badge-primary'
+                      }`}>
                         {invoiceStatusLabel[inv.status] || inv.status}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground font-medium">
-                      Semana: {inv.week_start} → {inv.week_end}
-                    </p>
-                    <div className="flex items-center gap-4 mt-2">
-                      <span className="text-xs font-medium">{inv.total_sales} venda(s)</span>
-                      <span className="text-sm font-bold text-green-600">R${Number(inv.total_commission).toFixed(2)}</span>
+                    
+                    <div className="flex items-center gap-2 lv-caption">
+                      <Clock className="h-3 w-3" />
+                      Semana: <span className="font-bold text-foreground">{inv.week_start}</span> → <span className="font-bold text-foreground">{inv.week_end}</span>
                     </div>
+
+                    <div className="flex items-center gap-6 pt-2">
+                       <div className="flex items-baseline gap-1">
+                          <span className="lv-stat text-2xl">R${Number(inv.total_commission).toFixed(2)}</span>
+                          <span className="lv-caption font-black uppercase tracking-widest opacity-40">Líquido</span>
+                       </div>
+                       <div className="flex items-center gap-2 px-3 py-1 bg-black/5 dark:bg-white/5 rounded-full border border-black/5">
+                          <Zap className="h-3 w-3 text-primary" />
+                          <span className="text-[10px] font-bold">{inv.total_sales} vendas</span>
+                       </div>
+                    </div>
+
                     {inv.paid_at && (
-                      <p className="text-xs text-green-600 mt-1">
-                        Pago em {format(new Date(inv.paid_at), "dd/MM/yyyy HH:mm")}
-                        {inv.payment_notes && ` — ${inv.payment_notes}`}
-                      </p>
+                      <div className="bg-green-500/5 border border-green-500/10 rounded-xl p-3 flex flex-col gap-1">
+                        <p className="text-[10px] font-black text-green-600 uppercase">✓ Liquidação Confirmada</p>
+                        <p className="lv-caption text-green-700/80 italic">
+                          Pago em {format(new Date(inv.paid_at), "dd/MM/yyyy HH:mm")}
+                          {inv.payment_notes && ` — ${inv.payment_notes}`}
+                        </p>
+                      </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-2">
+
+                  <div className="flex flex-col gap-3 shrink-0">
                     {inv.status === "open" && (
-                      <button onClick={() => closeInvoice(inv.id)} className="ep-btn-secondary h-10 px-4 text-[9px]">
-                        <FileText className="h-3 w-3 mr-1" /> FECHAR FATURA
+                      <button onClick={() => closeInvoice(inv.id)} className="lv-btn-primary h-11 px-6 text-[10px] font-black tracking-widest">
+                        <FileText className="h-4 w-4 mr-2" /> FECHAR FATURA
                       </button>
                     )}
                     {inv.status === "closed" && (
-                      <>
+                      <div className="flex flex-col gap-2">
                         <input
-                          placeholder="Notas do pagamento (opcional)"
+                          placeholder="Compromisso de pagamento / Notas"
                           value={paymentNotes[inv.id] || ""}
                           onChange={(e) => setPaymentNotes(prev => ({ ...prev, [inv.id]: e.target.value }))}
-                          className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border"
+                          className="lv-input h-10 min-w-[280px] text-xs px-4"
                         />
-                        <button onClick={() => markInvoicePaid(inv.id)} className="ep-btn-primary h-10 px-4 text-[9px]">
-                          <CheckCircle className="h-3 w-3 mr-1" /> MARCAR COMO PAGA
+                        <button onClick={() => markInvoicePaid(inv.id)} className="lv-btn-primary h-11 px-6 text-[10px] font-black bg-green-600 hover:bg-green-700">
+                          <CheckCircle className="h-4 w-4 mr-2" /> MARCAR COMO PAGA
                         </button>
-                      </>
+                      </div>
                     )}
                     {(inv.status === "open" || inv.status === "closed") && (
-                      <button onClick={() => cancelInvoice(inv.id)} className="ep-btn-secondary h-10 px-4 text-[9px] text-destructive border-destructive/30">
-                        <XCircle className="h-3 w-3 mr-1" /> CANCELAR
+                      <button onClick={() => cancelInvoice(inv.id)} className="lv-btn-secondary h-11 px-6 text-[10px] font-black text-destructive border-destructive/20 hover:bg-destructive hover:text-white">
+                        <XCircle className="h-4 w-4 mr-2" /> CANCELAR
                       </button>
                     )}
                   </div>
@@ -865,49 +1075,70 @@ export default function Admin() {
         {/* Extension Tab */}
         {tab === "extension" && (
           <div className="space-y-6">
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">UPLOAD DA EXTENSÃO</p>
-              <div className="space-y-3">
-                <div className="flex flex-col md:flex-row gap-3">
-                  <input placeholder="Versão (ex: 1.0.3)" value={extVersion}
-                    onChange={(e) => setExtVersion(e.target.value)}
-                    className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
-                  <input type="file" accept=".zip,.crx,.xpi,.txt"
-                    onChange={(e) => setExtFile(e.target.files?.[0] || null)}
-                    className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
+            <div className="clf-liquid-glass p-8">
+              <p className="lv-overline mb-4 text-primary">UPLOAD DA NOVA VERSÃO</p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="lv-label">Versão do Build</label>
+                    <input placeholder="ex: 2.1.0" value={extVersion}
+                      onChange={(e) => setExtVersion(e.target.value)}
+                      className="lv-input" />
+                  </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="lv-label">Arquivo (.zip / .crx)</label>
+                    <input type="file" accept=".zip,.crx,.xpi,.txt"
+                      onChange={(e) => setExtFile(e.target.files?.[0] || null)}
+                      className="lv-input file:hidden pt-2.5" />
+                  </div>
                 </div>
-                <textarea
-                  placeholder="Instruções de instalação..."
-                  value={extInstructions}
-                  onChange={(e) => setExtInstructions(e.target.value)}
-                  rows={5}
-                  className="ep-input w-full rounded-[14px] text-xs px-4 py-3 border border-border resize-none"
-                />
-                <button onClick={uploadExtension} className="ep-btn-primary h-10 px-6 text-[9px]">
-                  <Upload className="h-3 w-3 mr-1" /> ENVIAR EXTENSÃO
+                <div className="space-y-1.5">
+                  <label className="lv-label">Changelog / Instruções</label>
+                  <textarea
+                    placeholder="Quais são as novidades desta versão?"
+                    value={extInstructions}
+                    onChange={(e) => setExtInstructions(e.target.value)}
+                    rows={4}
+                    className="lv-textarea"
+                  />
+                </div>
+                <button onClick={uploadExtension} className="lv-btn-primary w-full md:w-auto h-11 px-8 text-[11px] font-black uppercase tracking-widest">
+                  <Upload className="h-4 w-4 mr-2" /> PUBLICAR VERSÃO
                 </button>
               </div>
             </div>
 
-            {extensions.map((ext) => (
-              <div key={ext.id} className="ep-card">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-sm font-bold text-foreground">v{ext.version}</p>
-                    <p className="text-xs text-muted-foreground">{format(new Date(ext.created_at), "dd/MM/yyyy HH:mm")}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {extensions.map((ext) => (
+                <div key={ext.id} className="clf-liquid-glass p-6 group">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <Puzzle className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="lv-body-strong text-base">v{ext.version}</p>
+                        <p className="lv-caption opacity-60">{format(new Date(ext.created_at), "dd/MM/yyyy HH:mm")}</p>
+                      </div>
+                    </div>
+                    <span className={`lv-badge ${ext.is_latest ? "lv-badge-success" : "lv-badge-muted"}`}>
+                      {ext.is_latest ? "PRODUÇÃO" : "ARQUIVADA"}
+                    </span>
                   </div>
-                  <span className={`ep-badge ${ext.is_latest ? "ep-badge-live" : "ep-badge-offline"}`}>
-                    {ext.is_latest ? "ATUAL" : "ANTIGA"}
-                  </span>
+                  {ext.instructions && (
+                    <div className="bg-black/5 dark:bg-white/5 rounded-2xl p-4 border border-black/5">
+                      <p className="lv-overline text-[8px] mb-2 opacity-40 italic">Changelog</p>
+                      <pre className="text-xs text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap">{ext.instructions}</pre>
+                    </div>
+                  )}
+                  <div className="mt-4 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                     <button className="lv-btn-icon h-8 w-8 rounded-lg bg-primary/10 text-primary">
+                        <Download className="h-4 w-4" />
+                     </button>
+                  </div>
                 </div>
-                {ext.instructions && (
-                  <div className="bg-muted rounded-[12px] p-4 mt-2">
-                    <p className="ep-subtitle text-[9px] mb-2">INSTRUÇÕES</p>
-                    <pre className="text-xs text-muted-foreground font-medium whitespace-pre-wrap">{ext.instructions}</pre>
-                  </div>
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
@@ -915,25 +1146,26 @@ export default function Admin() {
         {tab === "notifications" && (
           <div className="space-y-4">
             {notifications.length === 0 && (
-              <div className="ep-empty">
-                <Bell className="h-10 w-10 mx-auto mb-4" />
-                <p className="ep-subtitle">NENHUMA NOTIFICAÇÃO</p>
+              <div className="lv-empty">
+                <Bell className="h-12 w-12 opacity-20 mb-2" />
+                <p className="lv-overline">NENHUMA NOTIFICAÇÃO NO MOMENTO</p>
               </div>
             )}
             {notifications.map((n) => (
-              <div key={n.id} className={`ep-card flex items-start justify-between gap-4 ${!n.is_read ? "border-foreground/20" : ""}`}>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    {!n.is_read && <span className="h-2 w-2 rounded-full bg-foreground shrink-0" />}
-                    <p className="text-sm font-bold text-foreground">{n.title}</p>
+              <div key={n.id} className={`clf-liquid-glass p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-300 ${!n.is_read ? "border-primary/20 bg-primary/[0.02] shadow-primary/[0.05]" : "opacity-70 grayscale-[0.5]"}`}>
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-3">
+                    {!n.is_read && <span className="h-2.5 w-2.5 rounded-full bg-primary animate-pulse shrink-0" />}
+                    <p className="lv-body-strong text-base">{n.title}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground font-medium">{n.description}</p>
-                  <p className="text-[10px] text-muted-foreground mt-2">
+                  <p className="lv-caption text-[13px] leading-relaxed opacity-80">{n.description}</p>
+                  <div className="flex items-center gap-2 lv-caption text-[9px] opacity-40 uppercase font-black tracking-widest mt-2">
+                    <Clock className="h-3 w-3" />
                     {format(new Date(n.created_at), "dd/MM/yyyy HH:mm")}
-                  </p>
+                  </div>
                 </div>
                 {!n.is_read && (
-                  <button onClick={() => markNotificationRead(n.id)} className="ep-btn-secondary h-8 px-3 text-[8px]">
+                  <button onClick={() => markNotificationRead(n.id)} className="lv-btn-secondary h-10 px-6 text-[10px] font-black shrink-0 tracking-widest">
                     MARCAR LIDA
                   </button>
                 )}
@@ -944,79 +1176,118 @@ export default function Admin() {
 
         {/* Messages Tab */}
         {tab === "messages" && (
-          <div className="flex gap-6 min-h-[500px]">
-            <div className="w-64 shrink-0 space-y-2">
-              <p className="ep-subtitle mb-3">CONVERSAS</p>
-              {chatUsers.length === 0 && (
-                <p className="text-xs text-muted-foreground">Nenhuma conversa.</p>
-              )}
-              {chatUsers.map((cu) => (
-                <button
-                  key={cu.user_id}
-                  onClick={() => { setSelectedChatUser(cu.user_id); fetchChatMessages(cu.user_id); }}
-                  className={`w-full text-left ep-card-sm flex items-center justify-between ${
-                    selectedChatUser === cu.user_id ? "border-foreground/30" : ""
-                  }`}
-                >
-                  <div>
-                    <p className="text-xs font-bold text-foreground">{cu.name || cu.email}</p>
-                    <p className="text-[10px] text-muted-foreground">{cu.email}</p>
-                  </div>
-                  {cu.unread > 0 && (
-                    <span className="h-5 w-5 rounded-full bg-foreground text-background text-[9px] flex items-center justify-center font-bold">
-                      {cu.unread}
-                    </span>
+          <div className="flex flex-col md:flex-row gap-6 min-h-[600px]">
+            <div className="w-full md:w-80 shrink-0 space-y-4">
+              <div className="clf-liquid-glass p-6">
+                <p className="lv-overline mb-4">CANAL DE ATENDIMENTO</p>
+                <div className="space-y-2">
+                  {chatUsers.length === 0 && (
+                    <div className="py-12 text-center opacity-30">
+                      <MessageSquare className="h-10 w-10 mx-auto mb-2" />
+                      <p className="lv-caption">Nenhuma conversa ativa</p>
+                    </div>
                   )}
-                </button>
-              ))}
+                  {chatUsers.map((cu) => (
+                    <button
+                      key={cu.user_id}
+                      onClick={() => { setSelectedChatUser(cu.user_id); fetchChatMessages(cu.user_id); }}
+                      className={`w-full text-left p-4 rounded-2xl border transition-all duration-300 flex items-center justify-between group ${
+                        selectedChatUser === cu.user_id 
+                        ? "bg-primary border-primary shadow-lg shadow-primary/20 scale-[1.02]" 
+                        : "bg-white/5 border-black/5 hover:bg-primary/5 hover:border-primary/20"
+                      }`}
+                    >
+                      <div className="min-w-0 pr-4">
+                        <p className={`text-[13px] font-bold truncate ${selectedChatUser === cu.user_id ? "text-white" : "text-foreground"}`}>
+                          {cu.name || cu.email}
+                        </p>
+                        <p className={`text-[10px] font-mono opacity-60 truncate ${selectedChatUser === cu.user_id ? "text-white/80" : "text-muted-foreground"}`}>
+                          {cu.email}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {cu.unread > 0 && (
+                          <span className="h-5 min-w-[20px] rounded-full bg-white text-primary text-[10px] flex items-center justify-center font-black px-1.5 shadow-sm">
+                            {cu.unread}
+                          </span>
+                        )}
+                        <ChevronRight className={`h-4 w-4 transition-transform ${selectedChatUser === cu.user_id ? "text-white translate-x-1" : "text-muted-foreground/30 group-hover:text-primary"}`} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div className="flex-1 ep-card flex flex-col">
+            <div className="flex-1 clf-liquid-glass flex flex-col overflow-hidden">
               {!selectedChatUser ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm text-muted-foreground">Selecione uma conversa</p>
+                <div className="flex-1 flex flex-col items-center justify-center opacity-30 p-12">
+                   <div className="h-20 w-20 rounded-[32px] bg-primary/10 flex items-center justify-center mb-6">
+                      <MessageSquare className="h-10 w-10 text-primary" />
+                   </div>
+                  <p className="lv-body-strong text-lg">Selecione uma conversa</p>
+                  <p className="lv-caption mt-2">Clique em um usuário na lista lateral para ver o histórico</p>
                 </div>
               ) : (
                 <>
-                  <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[400px]">
+                  <div className="px-8 py-5 border-b border-black/5 bg-primary/5 flex items-center justify-between">
+                     <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-white font-black text-sm">
+                           {(chatUsers.find(u => u.user_id === selectedChatUser)?.name || "Z")[0].toUpperCase()}
+                        </div>
+                        <div>
+                           <p className="lv-body-strong">{chatUsers.find(u => u.user_id === selectedChatUser)?.name || "Usuário"}</p>
+                           <p className="lv-caption text-[10px] opacity-60">Canal de suporte direto</p>
+                        </div>
+                     </div>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4 max-h-[450px] scroll-smooth">
                     {chatMessages.map((msg) => (
                       <div
                         key={msg.id}
                         className={`flex ${msg.sender_id === user?.id ? "justify-end" : "justify-start"}`}
                       >
                         <div
-                          className={`max-w-[75%] px-3 py-2 rounded-[12px] text-xs ${
+                          className={`max-w-[85%] px-5 py-3 rounded-[20px] text-[13px] shadow-sm relative group ${
                             msg.sender_id === user?.id
-                              ? "bg-foreground text-background"
-                              : "bg-muted text-foreground"
+                              ? "bg-primary text-white rounded-br-none"
+                              : "bg-black/5 dark:bg-white/5 border border-black/5 text-foreground rounded-bl-none"
                           }`}
                         >
-                          <p className="font-medium">{msg.content}</p>
-                          <p className={`text-[9px] mt-1 ${
-                            msg.sender_id === user?.id ? "text-background/60" : "text-muted-foreground"
+                          <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                          <div className={`mt-2 flex items-center justify-end gap-2 text-[9px] font-bold opacity-0 group-hover:opacity-60 transition-opacity ${
+                            msg.sender_id === user?.id ? "text-white" : "text-muted-foreground"
                           }`}>
-                            {format(new Date(msg.created_at), "HH:mm dd/MM")}
-                          </p>
+                            <Clock className="h-2.5 w-2.5" />
+                            {format(new Date(msg.created_at), "HH:mm • dd/MM")}
+                          </div>
                         </div>
                       </div>
                     ))}
                     <div ref={chatEndRef} />
                   </div>
-                  <div className="px-4 py-3 border-t border-border flex items-center gap-2">
-                    <input
-                      value={adminMessage}
-                      onChange={(e) => setAdminMessage(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendAdminMessage()}
-                      placeholder="Responder..."
-                      className="ep-input h-10 rounded-[12px] text-xs px-3 border border-border flex-1"
-                    />
-                    <button
-                      onClick={sendAdminMessage}
-                      disabled={!adminMessage.trim()}
-                      className="ep-btn-primary h-10 w-10 rounded-[12px] flex items-center justify-center"
-                    >
-                      <Send className="h-4 w-4" />
-                    </button>
+
+                  <div className="p-6 bg-black/[0.02] border-t border-black/5">
+                    <div className="relative group/chatbox flex items-center gap-3">
+                      <div className="relative flex-1">
+                        <input
+                          value={adminMessage}
+                          onChange={(e) => setAdminMessage(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendAdminMessage()}
+                          placeholder="Digite sua resposta e pressione Enter..."
+                          className="lv-input h-12 rounded-2xl pl-12 pr-6 border-2 border-transparent focus:border-primary/30 transition-all shadow-inner"
+                        />
+                        <Send className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/40 group-focus-within/chatbox:text-primary transition-colors" />
+                      </div>
+                      <button
+                        onClick={sendAdminMessage}
+                        disabled={!adminMessage.trim()}
+                        className="lv-btn-primary h-12 w-12 rounded-2xl flex items-center justify-center scale-95 hover:scale-105 active:scale-95 disabled:scale-100"
+                      >
+                        <Zap className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -1027,124 +1298,128 @@ export default function Admin() {
         {/* Worker Tokens Tab */}
         {tab === "worker-tokens" && (
           <div className="space-y-6">
-            {/* Generate Token */}
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">GERAR TOKEN VIA API (WORKER)</p>
-              <p className="text-xs text-muted-foreground font-medium mb-4">
-                Gera um token de ativação diretamente no Worker externo. Opcionalmente vincula ao usuário no banco.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                <input placeholder="Email do cliente *" value={workerEmail}
-                  onChange={(e) => setWorkerEmail(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
-                <input placeholder="Nome (opcional)" value={workerName}
-                  onChange={(e) => setWorkerName(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border" />
-                <select value={workerPlan} onChange={(e) => setWorkerPlan(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border">
-                  <option value="test_5h">Teste 5h</option>
-                  <option value="test_1d">Teste 1 dia</option>
-                  <option value="days_15">15 Dias</option>
-                  <option value="days_30">30 Dias</option>
-                  <option value="days_90">90 Dias</option>
-                </select>
-                <select value={workerUserId} onChange={(e) => setWorkerUserId(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 bg-muted border border-border">
-                  <option value="">Vincular ao usuário (opcional)</option>
-                  {members.map((m) => (
-                    <option key={m.user_id} value={m.user_id}>{m.name || m.email}</option>
-                  ))}
-                </select>
+            <div className="clf-liquid-glass p-8">
+              <p className="lv-overline mb-4 text-primary">FORJA DE TOKENS (SISTEMA EXTERNO)</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div className="space-y-4">
+                   <div className="space-y-1.5">
+                      <label className="lv-label">Email do Cliente *</label>
+                      <input placeholder="usuario@dominio.com" value={workerEmail}
+                        onChange={(e) => setWorkerEmail(e.target.value)}
+                        className="lv-input" />
+                   </div>
+                   <div className="space-y-1.5">
+                      <label className="lv-label">Nome de Ativação</label>
+                      <input placeholder="Ex: Star AI" value={workerName}
+                        onChange={(e) => setWorkerName(e.target.value)}
+                        className="lv-input" />
+                   </div>
+                </div>
+                <div className="space-y-4">
+                   <div className="space-y-1.5">
+                      <label className="lv-label">Duração / Plano</label>
+                      <select value={workerPlan} onChange={(e) => setWorkerPlan(e.target.value)}
+                        className="lv-input">
+                        <option value="test_5h">⚡ Teste 5 horas</option>
+                        <option value="test_1d">⚡ Teste 1 dia</option>
+                        <option value="days_15">💎 15 Dias Pro</option>
+                        <option value="days_30">💎 30 Dias Lux</option>
+                        <option value="days_90">👑 90 Dias Prime</option>
+                        <option value="lifetime">🌌 Master / Vitalício</option>
+                      </select>
+                   </div>
+                   <div className="space-y-1.5">
+                      <label className="lv-label">Sincronizar com Perfil Local</label>
+                      <select value={workerUserId} onChange={(e) => setWorkerUserId(e.target.value)}
+                        className="lv-input">
+                        <option value="">Não vincular (Token isolado)</option>
+                        {members.map((m) => (
+                          <option key={m.user_id} value={m.user_id}>{m.name || m.email}</option>
+                        ))}
+                      </select>
+                   </div>
+                </div>
               </div>
               <button onClick={generateTokenViaWorker} disabled={workerLoading}
-                className="ep-btn-primary h-10 px-6 text-[9px]">
-                {workerLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Zap className="h-3 w-3 mr-1" />}
-                GERAR TOKEN
+                className="lv-btn-primary h-12 px-8 text-[11px] font-black uppercase tracking-[0.2em] w-full md:w-auto shadow-xl">
+                {workerLoading ? <Loader2 className="h-5 w-5 animate-spin mr-3" /> : <Zap className="h-5 w-5 mr-3" />}
+                INICIAR FORJA DE TOKEN
               </button>
+
               {workerResult?.token && (
-                <div className="mt-4 ep-card-sm border-green-500/30">
-                  <p className="text-xs font-bold text-green-600 mb-1">Token gerado!</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0 bg-muted px-3 py-2 rounded-[8px]">
-                      <code className="font-mono text-xs text-muted-foreground">
-                        {workerResult.token.substring(0, 12)}••••••••{workerResult.token.substring(workerResult.token.length - 6)}
-                      </code>
-                    </div>
+                <div className="mt-8 bg-green-500/5 border border-green-500/10 rounded-3xl p-6 clf-fade-up">
+                  <div className="flex items-center gap-3 mb-4">
+                     <CheckCircle className="h-6 w-6 text-green-600" />
+                     <p className="text-sm font-black text-green-700 uppercase tracking-widest">Token Gerado com Sucesso</p>
+                  </div>
+                  <div className="flex flex-col md:flex-row items-center gap-4 bg-white/20 dark:bg-black/20 p-4 rounded-2xl border border-white/10">
+                    <code className="lv-mono text-[13px] break-all flex-1 text-center md:text-left selection:bg-green-200">
+                      {workerResult.token}
+                    </code>
                     <button onClick={() => { navigator.clipboard.writeText(workerResult.token); toast.success("Copiado!"); }}
-                      className="ep-btn-secondary h-8 px-3 text-[8px] flex items-center gap-1 shrink-0">
-                      <Copy className="h-3 w-3" /> COPIAR
+                      className="lv-btn-secondary h-10 px-6 font-black text-[10px] shrink-0 border-green-500/20 text-green-700">
+                      <Copy className="h-4 w-4 mr-2" /> COPIAR
                     </button>
                   </div>
                   {workerResult.expires && (
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Expira: {new Date(workerResult.expires * 1000).toLocaleString("pt-BR")}
+                    <p className="lv-caption text-green-600/60 mt-4 text-center md:text-left font-bold uppercase tracking-widest text-[9px]">
+                      Expiração Programada: {new Date(workerResult.expires * 1000).toLocaleString("pt-BR")}
                     </p>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Search Tokens by Email */}
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">BUSCAR TOKENS POR EMAIL</p>
-              <div className="flex items-center gap-3 mb-4">
-                <input placeholder="Email do cliente" value={searchEmail}
-                  onChange={(e) => setSearchEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && searchTokensByEmail()}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
-                <button onClick={searchTokensByEmail} disabled={searchLoading}
-                  className="ep-btn-secondary h-10 px-4 text-[9px]">
-                  {searchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                </button>
-              </div>
-              {searchResult && (
-                <div className="space-y-2">
-                  {Array.isArray(searchResult) ? searchResult.map((item: any, i: number) => (
-                    <div key={i} className="ep-card-sm">
-                      <code className="font-mono text-xs text-muted-foreground break-all">{JSON.stringify(item, null, 2)}</code>
-                    </div>
-                  )) : (
-                    <div className="ep-card-sm">
-                      <pre className="font-mono text-xs text-muted-foreground whitespace-pre-wrap">{JSON.stringify(searchResult, null, 2)}</pre>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <div className="clf-liquid-glass p-8">
+                  <p className="lv-overline mb-4 text-primary">AUDITORIA DE TOKENS</p>
+                  <div className="flex items-center gap-3 mb-6">
+                    <input placeholder="Email para pesquisar histórico..." value={searchEmail}
+                      onChange={(e) => setSearchEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && searchTokensByEmail()}
+                      className="lv-input h-11" />
+                    <button onClick={searchTokensByEmail} disabled={searchLoading}
+                      className="lv-btn-secondary h-11 w-11 p-0 shrink-0">
+                      {searchLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
+                    </button>
+                  </div>
+                  {searchResult && (
+                    <div className="bg-black/5 dark:bg-white/5 rounded-2xl p-4 border border-black/5 overflow-x-auto">
+                      <pre className="lv-mono text-[10px] opacity-60 leading-relaxed">{JSON.stringify(searchResult, null, 2)}</pre>
                     </div>
                   )}
-                </div>
-              )}
+               </div>
+
+               <div className="clf-liquid-glass p-8">
+                  <p className="lv-overline mb-4 text-destructive">LIBERAÇÃO DE HARDWARE</p>
+                  <p className="lv-caption mb-6">Reseta o vínculo de IDs fixos (HWID) para permitir migração de dispositivo.</p>
+                  <div className="flex flex-col gap-3">
+                    <input placeholder="Token do cliente (CLF1...)" value={unbindToken}
+                      onChange={(e) => setUnbindToken(e.target.value)}
+                      className="lv-input h-11" />
+                    <button onClick={unbindDevice} disabled={unbindLoading}
+                      className="lv-btn-danger h-11 font-black text-[10px] uppercase tracking-widest">
+                      {unbindLoading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Unlock className="h-5 w-5 mr-2" />}
+                      FORÇAR DESBLOQUEIO
+                    </button>
+                  </div>
+               </div>
             </div>
 
-            {/* Unbind Device */}
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">DESBLOQUEAR DISPOSITIVO</p>
-              <p className="text-xs text-muted-foreground font-medium mb-4">
-                Remove o vínculo de dispositivo de um token, permitindo que seja usado em outro navegador/máquina.
-              </p>
-              <div className="flex items-center gap-3">
-                <input placeholder="Token do cliente (CLF1.eyJ...)" value={unbindToken}
-                  onChange={(e) => setUnbindToken(e.target.value)}
-                  className="ep-input h-10 rounded-[14px] text-xs px-3 border border-border flex-1" />
-                <button onClick={unbindDevice} disabled={unbindLoading}
-                  className="ep-btn-secondary h-10 px-4 text-[9px]">
-                  {unbindLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlock className="h-3 w-3 mr-1" />}
-                  DESBLOQUEAR
-                </button>
-              </div>
-            </div>
-
-            {/* Token Stats */}
-            <div className="ep-card">
-              <p className="ep-subtitle mb-4">ESTATÍSTICAS DE TOKENS</p>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="text-center">
-                  <p className="text-2xl font-bold">{members.filter(m => m.token).length}</p>
-                  <p className="text-[9px] text-muted-foreground">COM TOKEN</p>
+            <div className="clf-liquid-glass p-8">
+              <p className="lv-overline mb-6">MÉTRICAS DE DISTRIBUIÇÃO</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                <div className="text-center md:text-left space-y-1">
+                  <p className="lv-stat text-4xl">{members.filter(m => m.licenses.length > 0).length}</p>
+                  <p className="lv-overline opacity-60">LICENCIADOS</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold">{members.filter(m => m.subscription?.status === "active" && new Date(m.subscription.expires_at) > new Date()).length}</p>
-                  <p className="text-[9px] text-muted-foreground">ATIVOS</p>
+                <div className="text-center md:text-left space-y-1">
+                  <p className="lv-stat text-4xl text-primary">{members.filter(m => m.license?.active).length}</p>
+                  <p className="lv-overline text-primary opacity-60">FLUXO ATIVO</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold">{members.filter(m => m.subscription && (m.subscription.status !== "active" || new Date(m.subscription.expires_at) <= new Date())).length}</p>
-                  <p className="text-[9px] text-muted-foreground">EXPIRADOS</p>
+                <div className="text-center md:text-left space-y-1">
+                  <p className="lv-stat text-4xl text-destructive">{members.filter(m => m.license && !m.license.active).length}</p>
+                  <p className="lv-overline text-destructive opacity-60">RETENÇÃO/EXPIRADO</p>
                 </div>
               </div>
             </div>
@@ -1166,101 +1441,114 @@ export default function Admin() {
             <SheetDescription>Crie uma conta com plano e token opcionais vinculados ao sistema.</SheetDescription>
           </SheetHeader>
 
-          <div className="p-12 lg:p-16 space-y-10 flex-1">
-            <div className="relative group/input">
-              <label className="ep-sheet-label">EMAIL *</label>
+          <div className="p-8 lg:p-12 space-y-8 flex-1">
+            <div className="space-y-2 group/input">
+              <p className="lv-overline ml-1 opacity-60">EMAIL DE ACESSO *</p>
               <div className="relative">
-                <span className="absolute left-8 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground/40 group-focus-within/input:text-foreground transition-colors">@</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center text-muted-foreground/40 font-black">@</span>
                 <input type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)}
-                  placeholder="usuario@email.com" className="ep-sheet-input w-full" />
-                <div className="absolute inset-x-12 -bottom-3 h-1 bg-foreground scale-x-0 group-focus-within/input:scale-x-100 transition-transform duration-700 rounded-sm" />
+                  placeholder="usuario@email.com" className="lv-input h-12 rounded-2xl pl-10 pr-6 border-2 border-transparent focus:border-primary/20 transition-all font-medium text-sm" />
               </div>
             </div>
 
-            <div className="relative group/input">
-              <label className="ep-sheet-label">NOME</label>
+            <div className="space-y-2 group/input">
+              <p className="lv-overline ml-1 opacity-60">NOME COMPLETO</p>
               <div className="relative">
-                <Users className="absolute left-8 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground/40 group-focus-within/input:text-foreground transition-colors" />
+                <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/40 transition-colors" />
                 <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)}
-                  placeholder="Nome do usuário" className="ep-sheet-input w-full" />
+                  placeholder="Nome do usuário" className="lv-input h-12 rounded-2xl pl-12 pr-6 border-2 border-transparent focus:border-primary/20 transition-all font-medium text-sm" />
               </div>
             </div>
 
-            <div className="relative group/input">
-              <label className="ep-sheet-label">SENHA *</label>
+            <div className="space-y-2 group/input">
+              <p className="lv-overline ml-1 opacity-60">SENHA MESTRA *</p>
               <div className="relative">
-                <Key className="absolute left-8 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground/40 group-focus-within/input:text-foreground transition-colors" />
+                <Key className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/40 transition-colors" />
                 <input type={showNewPassword ? "text" : "password"} value={newUserPassword}
                   onChange={(e) => setNewUserPassword(e.target.value)} placeholder="Mínimo 6 caracteres"
-                  className="ep-sheet-input w-full" />
+                  className="lv-input h-12 rounded-2xl pl-12 pr-12 border-2 border-transparent focus:border-primary/20 transition-all font-medium text-sm" />
                 <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-8 top-1/2 -translate-y-1/2 h-10 w-10 rounded-[12px] flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
-                  {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground transition-all">
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            <div className="relative group/input">
-              <label className="ep-sheet-label">PLANO</label>
-              <select value={newUserPlan} onChange={(e) => setNewUserPlan(e.target.value)}
-                className="ep-sheet-input w-full pl-8 appearance-none cursor-pointer">
-                <option value="">Sem plano</option>
-                {planOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2 group/input">
+                <p className="lv-overline ml-1 opacity-60">PLANO INICIAL</p>
+                <select value={newUserPlan} onChange={(e) => setNewUserPlan(e.target.value)}
+                  className="lv-input h-12 rounded-2xl px-4 appearance-none cursor-pointer border-2 border-transparent focus:border-primary/20 transition-all text-xs font-bold uppercase tracking-widest">
+                  <option value="">Sem plano</option>
+                  <optgroup label="PADRÃO">
+                    {planOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </optgroup>
+                  {dbPlans.length > 0 && (
+                    <optgroup label="CUSTOM">
+                      {dbPlans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+
+              <div className="space-y-2 group/input">
+                <p className="lv-overline ml-1 opacity-60">NÍVEL DE ACESSO</p>
+                <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}
+                  className="lv-input h-12 rounded-2xl px-4 appearance-none cursor-pointer border-2 border-transparent focus:border-primary/20 transition-all text-xs font-bold uppercase tracking-widest">
+                  <option value="member">Membro</option>
+                  <option value="admin">Admin</option>
+                  <option value="affiliate">Afiliado</option>
+                </select>
+              </div>
             </div>
 
-            <div className="relative group/input">
-              <label className="ep-sheet-label">PAPEL</label>
-              <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}
-                className="ep-sheet-input w-full pl-8 appearance-none cursor-pointer">
-                <option value="member">Membro</option>
-                <option value="admin">Admin</option>
-                <option value="affiliate">Afiliado</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-4 p-6 rounded-[24px] border border-border">
+            <div className="flex items-center justify-between p-5 rounded-3xl bg-primary/5 border border-primary/10">
+              <div className="flex items-center gap-3">
+                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Zap className="h-4 w-4 text-primary" />
+                 </div>
+                 <span className="lv-overline text-[9px]">Gerar token (CLF1)</span>
+              </div>
               <button type="button" onClick={() => setNewUserAutoToken(!newUserAutoToken)}
-                className={`h-8 w-14 rounded-[10px] transition-colors duration-300 ${newUserAutoToken ? "bg-foreground" : "bg-muted border border-border"}`}>
-                <div className={`h-6 w-6 rounded-[8px] bg-background transition-transform mx-1 ${newUserAutoToken ? "translate-x-6" : "translate-x-0"}`} />
+                className={`h-7 w-12 rounded-full transition-colors duration-300 relative ${newUserAutoToken ? "bg-primary" : "bg-muted-foreground/20"}`}>
+                <div className={`h-5 w-5 rounded-full bg-white transition-transform shadow-md absolute top-1 ${newUserAutoToken ? "left-6" : "left-1"}`} />
               </button>
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">Gerar token automaticamente</span>
             </div>
 
             <button onClick={createUserAdmin} disabled={newUserLoading}
-              className="ep-sheet-btn group">
-              {newUserLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UserPlus className="h-5 w-5" />}
-              {newUserLoading ? "DEPLOYING NODE..." : "AUTHORIZE ACTIVATION"}
-              {!newUserLoading && <span className="group-hover:translate-x-3 transition-transform">→</span>}
+              className="lv-btn-primary h-14 w-full rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-primary/20 group">
+              {newUserLoading ? <Loader2 className="h-5 w-5 animate-spin mr-3" /> : <UserPlus className="h-5 w-5 mr-3" />}
+              {newUserLoading ? "SINCRONIZANDO..." : "AUTORIZAR ATIVAÇÃO"}
+              {!newUserLoading && <span className="ml-2 opacity-40 group-hover:translate-x-2 transition-transform inline-block">→</span>}
             </button>
 
             {newUserResult && (
-              <div className="rounded-[32px] border border-border p-8 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.5em] text-foreground">✓ NODE DEPLOYED</p>
-                <p className="text-sm font-medium text-muted-foreground">Email: {newUserResult.email}</p>
-                <p className="text-sm font-medium text-muted-foreground">Papel: {newUserResult.role}</p>
-                {newUserResult.plan && <p className="text-sm font-medium text-muted-foreground">Plano: {planLabels[newUserResult.plan] || newUserResult.plan}</p>}
+              <div className="rounded-[32px] bg-green-500/5 border border-green-500/10 p-8 space-y-4 clf-fade-up">
+                <p className="lv-overline text-green-600 font-black tracking-[0.3em]">✓ ACESSO LIBERADO</p>
+                <div className="space-y-2">
+                  <p className="lv-caption text-foreground"><span className="opacity-40">Email:</span> {newUserResult.email}</p>
+                  <p className="lv-caption text-foreground"><span className="opacity-40">Papel:</span> {newUserResult.role}</p>
+                  {newUserResult.plan && <p className="lv-caption text-foreground"><span className="opacity-40">Plano:</span> {planLabels[newUserResult.plan] || newUserResult.plan}</p>}
+                </div>
                 {newUserResult.token && (
-                  <div className="mt-4">
-                    <p className="ep-sheet-label mb-2">TOKEN</p>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0 bg-muted px-6 py-4 rounded-[16px]">
-                        <code className="font-mono text-sm text-muted-foreground">
-                          {newUserResult.token.substring(0, 12)}••••••••{newUserResult.token.substring(newUserResult.token.length - 6)}
-                        </code>
-                      </div>
+                  <div className="mt-4 pt-4 border-t border-green-500/10">
+                    <p className="lv-overline text-[8px] mb-2 opacity-60">TOKEN DE ATIVAÇÃO</p>
+                    <div className="flex items-center gap-2 bg-white/20 dark:bg-black/20 p-4 rounded-2xl border border-white/10">
+                      <code className="lv-mono text-[12px] break-all flex-1 text-green-700">
+                        {newUserResult.token.substring(0, 15)}••••{newUserResult.token.substring(newUserResult.token.length - 6)}
+                      </code>
                       <button onClick={() => { navigator.clipboard.writeText(newUserResult.token); toast.success("Token copiado!"); }}
-                        className="h-14 w-14 rounded-[20px] border border-border flex items-center justify-center text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-300">
+                        className="lv-btn-icon h-9 w-9 bg-green-500/10 text-green-700 hover:bg-green-500 hover:text-white transition-all">
                         <Copy className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                 )}
-                {newUserResult.token_error && <p className="text-sm text-destructive font-medium">{newUserResult.token_error}</p>}
+                {newUserResult.token_error && <p className="text-xs text-destructive font-black uppercase tracking-widest">{newUserResult.token_error}</p>}
               </div>
             )}
 
-            <p className="ep-sheet-footer">Starble CORE SYSTEM v4.2</p>
+            <p className="text-center text-[9px] font-black uppercase tracking-[0.4em] opacity-30 pt-4">Cloud Architecture v4.5</p>
           </div>
         </SheetContent>
       </Sheet>

@@ -6,19 +6,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function validateLicense(adminClient: any, licenseKey: string, hwid: string) {
+async function validateLicense(adminClient: ReturnType<typeof createClient>, licenseKey: string, hwid: string) {
   const { data: license } = await adminClient
     .from("licenses")
-    .select("token, plan, expires_at, is_active, device_id")
-    .eq("token", licenseKey)
-    .eq("is_active", true)
+    .select("key, plan, expires_at, active, device_id")
+    .eq("key", licenseKey)
+    .eq("active", true)
     .maybeSingle();
 
   if (!license) return { valid: false, error: "License not found or inactive" };
   if (new Date(license.expires_at) < new Date()) return { valid: false, error: "License expired" };
 
-  if (hwid && license.device_id !== hwid) {
-    await adminClient.from("licenses").update({ device_id: hwid }).eq("token", licenseKey);
+  if (hwid && license.device_id && license.device_id !== hwid) {
+    return { valid: false, error: "Device not authorized" };
+  }
+  if (hwid && !license.device_id) {
+    await adminClient.from("licenses").update({ device_id: hwid }).eq("key", licenseKey);
   }
 
   return { valid: true, plan: license.plan };

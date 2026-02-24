@@ -78,6 +78,117 @@ async function tryRefreshToken(sc: any, uid: string): Promise<string | null> {
   return null;
 }
 
+// ─── ADMIN Token helpers (for admin-owned brain) ───
+let _cachedAdminToken: string | null = null;
+
+async function getAdminLovableToken(sc: any): Promise<string | null> {
+  if (_cachedAdminToken) return _cachedAdminToken;
+  
+  // 1. Try env var first
+  const envToken = Deno.env.get("ADMIN_LOVABLE_TOKEN");
+  if (envToken) {
+    _cachedAdminToken = envToken;
+    return envToken;
+  }
+
+  // 2. Try internal.admin_secrets table
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/admin_secrets?key=eq.admin_lovable_token&select=value`,
+      {
+        headers: {
+          "apikey": serviceKey,
+          "Authorization": `Bearer ${serviceKey}`,
+          "Accept-Profile": "internal",
+        },
+      }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        _cachedAdminToken = data[0].value;
+        return _cachedAdminToken;
+      }
+    }
+  } catch (e) {
+    console.error("[Brain] Failed to fetch admin secret:", e);
+  }
+
+  return null;
+}
+
+async function tryRefreshAdminToken(sc: any): Promise<string | null> {
+  // We now have a dedicated admin-oauth-sync function for this,
+  // but we can also trigger it via lovable-token-refresh.
+  // For now, let's keep it simple: the cron job refreshes it.
+  // If we really need an on-demand refresh here:
+  const apiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
+  if (!apiKey) return null;
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    
+    // Fetch refresh token
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/admin_secrets?key=eq.admin_lovable_refresh_token&select=value`,
+      {
+        headers: {
+          "apikey": serviceKey,
+          "Authorization": `Bearer ${serviceKey}`,
+          "Accept-Profile": "internal",
+        },
+      }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const refreshToken = Array.isArray(data) && data.length > 0 ? data[0].value : null;
+      if (refreshToken) {
+        const fbRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
+        });
+        if (fbRes.ok) {
+          const fbData = await fbRes.json();
+          if (fbData.id_token) {
+            // Update table
+            await fetch(`${supabaseUrl}/rest/v1/admin_secrets?on_conflict=key`, {
+              method: "POST",
+              headers: {
+                "apikey": serviceKey,
+                "Authorization": `Bearer ${serviceKey}`,
+                "Content-Type": "application/json",
+                "Prefer": "resolution=merge-duplicates",
+                "Accept-Profile": "internal",
+                "Content-Profile": "internal",
+              },
+              body: JSON.stringify({
+                key: "admin_lovable_token",
+                value: fbData.id_token,
+                updated_at: new Date().toISOString()
+              }),
+            });
+            _cachedAdminToken = fbData.id_token;
+            console.log("[Brain] Admin token refreshed and saved to secrets");
+            return fbData.id_token;
+          }
+        }
+      }
+    }
+  } catch (e) { console.error("[Brain] Admin refresh failed:", e); }
+  return null;
+}
+
+/** Resolve token: prefer admin token for brain operations, fallback to user token */
+function resolveToken(adminToken: string | null, userToken: string): { token: string; isAdmin: boolean } {
+  if (adminToken) return { token: adminToken, isAdmin: true };
+  return { token: userToken, isAdmin: false };
+}
+
 async function lovableFetch(url: string, opts: RequestInit, sc: any, uid: string, token: string): Promise<{ res: Response; token: string }> {
   // HAR-required headers: Origin + Referer are mandatory for Lovable API
   const h: any = {
@@ -91,6 +202,17 @@ async function lovableFetch(url: string, opts: RequestInit, sc: any, uid: string
   }
   let res = await fetch(url, { ...opts, headers: h });
   if (res.status === 401) {
+    // Try admin refresh first if token looks like admin
+    const adminToken = await getAdminLovableToken(sc);
+    if (adminToken === token) {
+      const nt = await tryRefreshAdminToken(sc);
+      if (nt) {
+        h.Authorization = `Bearer ${nt}`;
+        res = await fetch(url, { ...opts, headers: h });
+        return { res, token: nt };
+      }
+    }
+    // Fallback: try user refresh
     const nt = await tryRefreshToken(sc, uid);
     if (nt) {
       h.Authorization = `Bearer ${nt}`;
@@ -317,6 +439,14 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = body.action;
 
+    // Helper to get brain project internally
+    const getBrainProject = async (scClient: any, uid: string) => {
+      const { data } = await scClient.from("user_brain_projects")
+        .select("lovable_project_id, brain_owner, lovable_workspace_id")
+        .eq("user_id", uid).eq("status", "active").maybeSingle();
+      return data;
+    };
+
     // ─── STATUS ───
     if (action === "status") {
       const { token: lToken, expired } = await getLovableToken(sc, userId);
@@ -359,7 +489,11 @@ Deno.serve(async (req) => {
 
     // ─── Require Lovable connection for remaining actions ───
     const { token: lovableToken, expired } = await getLovableToken(sc, userId);
-    if (expired || !lovableToken) return json({ error: "Lovable não conectado.", code: "not_connected" }, 403);
+    // Admin token can bypass user connection requirement for brain operations
+    const adminToken = await getAdminLovableToken(sc);
+    if (!adminToken && (expired || !lovableToken)) {
+      return json({ error: "Lovable não conectado.", code: "not_connected" }, 403);
+    }
 
     // ─── SETUP ───
     if (action === "setup") {
@@ -368,11 +502,17 @@ Deno.serve(async (req) => {
 
       if (existing) return json({ success: true, brain_project_id: existing.lovable_project_id, already_exists: true });
 
-      // Get workspace
-      const { res: wsRes, token: t1 } = await lovableFetch(`${LOVABLE_API}/user/workspaces`, { method: "GET" }, sc, userId, lovableToken);
+      // Resolve which token to use: prefer admin for brain creation
+      const { token: setupToken, isAdmin } = resolveToken(adminToken, lovableToken);
+      console.log(`[Brain] Setup using ${isAdmin ? "ADMIN" : "USER"} token`);
+
+      // Get workspace (from admin or user account)
+      const { res: wsRes, token: t1 } = await lovableFetch(`${LOVABLE_API}/user/workspaces`, { method: "GET" }, sc, userId, setupToken);
       if (!wsRes.ok) {
         if (wsRes.status === 401) {
-          await sc.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
+          if (!isAdmin) {
+            await sc.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
+          }
           return json({ error: "Token expirado. Reconecte.", code: "token_expired" }, 401);
         }
         return json({ error: "Falha ao obter workspaces." }, 502);
@@ -424,6 +564,7 @@ Deno.serve(async (req) => {
       await sc.from("user_brain_projects").insert({
         user_id: userId, lovable_project_id: brainProjectId,
         lovable_workspace_id: workspaceId, status: "active",
+        brain_owner: isAdmin ? "admin" : "user",
       });
 
       // Inject brain config
@@ -440,7 +581,8 @@ Deno.serve(async (req) => {
         }, sc, userId, t2);
       } catch { /* ok */ }
 
-      return json({ success: true, brain_project_id: brainProjectId, workspace_id: workspaceId });
+      console.log(`[Brain] ✅ Created brain project ${brainProjectId} (owner: ${isAdmin ? "admin" : "user"})`);
+      return json({ success: true, already_exists: false, owner: isAdmin ? "admin" : "user" });
     }
 
     // ─── PAGE_SPEED — Free Lighthouse analysis ───
@@ -478,12 +620,17 @@ Deno.serve(async (req) => {
         return json({ error: "Mensagem inválida (1-10000 chars)" }, 400);
       }
 
-      const { data: brain } = await sc.from("user_brain_projects")
-        .select("lovable_project_id").eq("user_id", userId).eq("status", "active").maybeSingle();
-      if (!brain) return json({ error: "Brain não configurado. Execute setup primeiro." }, 404);
+      const brain = await getBrainProject(sc, userId);
+      if (!brain) return json({ error: "Star AI não configurado. Execute setup primeiro." }, 404);
 
       const brainProjectId = brain.lovable_project_id;
       const chatMode: ChatMode = (requestedMode as ChatMode) || brainTypeToMode(brain_type);
+
+      // Use admin token for brain operations when brain is admin-owned
+      const { token: brainToken } = resolveToken(
+        brain.brain_owner === "admin" ? adminToken : null,
+        lovableToken
+      );
 
       // ─── SEO MODE: Auto-fetch PageSpeed and build proper message ───
       let finalPrompt: string;
@@ -499,7 +646,7 @@ Deno.serve(async (req) => {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ url_source: "publish", strategy: "desktop", categories: ["seo"] }),
-            }, sc, userId, lovableToken
+            }, sc, userId, brainToken
           );
           if (speedRes.ok) speedData = await speedRes.json();
         } catch (e) { console.warn("[Brain] PageSpeed fetch failed:", e); }
@@ -537,7 +684,7 @@ Deno.serve(async (req) => {
       try {
         const { res: srcRes } = await lovableFetch(
           `${LOVABLE_API}/projects/${brainProjectId}/source-code`,
-          { method: "GET" }, sc, userId, lovableToken
+          { method: "GET" }, sc, userId, brainToken
         );
         if (srcRes.ok) {
           const srcText = await srcRes.text();
@@ -564,17 +711,19 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }, sc, userId, lovableToken
+        }, sc, userId, brainToken
       );
 
       if (!chatRes.ok) {
         const errText = await chatRes.text().catch(() => "");
         console.error(`[Brain] Chat failed (${chatMode}):`, chatRes.status, errText.substring(0, 500));
         if (chatRes.status === 401 || chatRes.status === 403) {
-          await sc.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
+          if (brain.brain_owner !== "admin") {
+            await sc.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
+          }
           return json({ error: "Token expirado. Reconecte.", code: "token_expired" }, 401);
         }
-        return json({ error: "Falha ao enviar para o Brain." }, 502);
+        return json({ error: "Falha ao enviar para Star AI." }, 502);
       }
 
       console.log(`[Brain] ✅ Sent via ${chatMode}`);
@@ -598,17 +747,20 @@ Deno.serve(async (req) => {
         conversation_id: convo?.id,
         brain_message_id: msgId,
         ai_message_id: aiMsgId,
-        brain_project_id: brainProjectId,
         chat_mode: chatMode,
       });
     }
 
     // ─── TOOL_APPROVE — Auto-approve tool use step (Mode 4, free) ───
     if (action === "tool_approve") {
-      const { brain_project_id, prev_session_id, tool_use_id } = body;
+      const { prev_session_id, tool_use_id } = body;
 
-      if (!brain_project_id || !prev_session_id || !tool_use_id) {
-        return json({ error: "brain_project_id, prev_session_id e tool_use_id obrigatórios" }, 400);
+      const brain = await getBrainProject(sc, userId);
+      if (!brain) return json({ error: "Brain not found" }, 404);
+      const brainProjectId = brain.lovable_project_id;
+
+      if (!prev_session_id || !tool_use_id) {
+        return json({ error: "prev_session_id e tool_use_id obrigatórios" }, 400);
       }
 
       const msgId = generateTypeId("umsg");
@@ -619,7 +771,7 @@ Deno.serve(async (req) => {
       });
 
       const { res: approveRes } = await lovableFetch(
-        `${LOVABLE_API}/projects/${brain_project_id}/chat`,
+        `${LOVABLE_API}/projects/${brainProjectId}/chat`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -637,20 +789,29 @@ Deno.serve(async (req) => {
 
     // ─── CAPTURE — Extract response (4-tier strategy) ───
     if (action === "capture") {
-      const { conversation_id, brain_project_id, brain_message_id } = body;
-      if (!conversation_id || !brain_project_id) return json({ error: "conversation_id e brain_project_id obrigatórios" }, 400);
+      const { conversation_id, brain_message_id } = body;
+      
+      const brain = await getBrainProject(sc, userId);
+      if (!brain) return json({ error: "Brain not found" }, 404);
+      const brainProjectId = brain.lovable_project_id;
 
-      const { token: captureToken, expired: te } = await getLovableToken(sc, userId);
-      const activeToken = te ? lovableToken : captureToken;
+      if (!conversation_id) return json({ error: "conversation_id obrigatório" }, 400);
+
+      // Resolve token: prefer admin for brain-owned projects
+      const { data: brainInfo } = await sc.from("user_brain_projects")
+        .select("brain_owner").eq("lovable_project_id", brainProjectId).maybeSingle();
+      const { token: captureToken } = resolveToken(
+        brainInfo?.brain_owner === "admin" ? adminToken : null,
+        lovableToken
+      );
 
       let response: string | null = null;
 
       // ═══ STRATEGY 1: latest-message (HAR-exact pattern) ═══
-      // HAR pattern: just check !is_streaming && content — that's it
       try {
         const { res: r } = await lovableFetch(
-          `${LOVABLE_API}/projects/${brain_project_id}/latest-message`,
-          { method: "GET" }, sc, userId, activeToken
+          `${LOVABLE_API}/projects/${brainProjectId}/latest-message`,
+          { method: "GET" }, sc, userId, captureToken
         );
         if (r.ok) {
           const msg = await r.json();
@@ -677,18 +838,16 @@ Deno.serve(async (req) => {
       if (!response) {
         try {
           const { res: r } = await lovableFetch(
-            `${LOVABLE_API}/projects/${brain_project_id}/messages?limit=5&order=desc`,
-            { method: "GET" }, sc, userId, activeToken
+            `${LOVABLE_API}/projects/${brainProjectId}/messages?limit=5&order=desc`,
+            { method: "GET" }, sc, userId, captureToken
           );
           if (r.ok) {
             const d = await r.json();
             const msgs = Array.isArray(d) ? d : (d?.messages || d?.data || d?.items || []);
             console.log("[Capture] S2 messages count:", msgs.length);
-            // Find first AI message (not user message)
             for (const m of msgs) {
               const c = m.content || m.message || m.text || "";
               const role = m.role || m.type || "";
-              // Skip if this looks like our sent user prompt
               if (role === "user" || role === "human") continue;
               if (c.length > 10) {
                 response = c;
@@ -704,8 +863,8 @@ Deno.serve(async (req) => {
       if (!response) {
         try {
           const { res: r } = await lovableFetch(
-            `${LOVABLE_API}/projects/${brain_project_id}/chat-history?limit=5`,
-            { method: "GET" }, sc, userId, activeToken
+            `${LOVABLE_API}/projects/${brainProjectId}/chat-history?limit=5`,
+            { method: "GET" }, sc, userId, captureToken
           );
           if (r.ok) {
             const d = await r.json();
@@ -728,12 +887,12 @@ Deno.serve(async (req) => {
       if (!response) {
         try {
           const { data: snap } = await sc.from("project_source_snapshots")
-            .select("snapshot_hash").eq("project_id", brain_project_id).maybeSingle();
+            .select("snapshot_hash").eq("project_id", brainProjectId).maybeSingle();
           const prevHash = snap?.snapshot_hash || null;
 
           const { res: srcRes } = await lovableFetch(
-            `${LOVABLE_API}/projects/${brain_project_id}/source-code`,
-            { method: "GET" }, sc, userId, activeToken
+            `${LOVABLE_API}/projects/${brainProjectId}/source-code`,
+            { method: "GET" }, sc, userId, captureToken
           );
 
           if (srcRes.ok) {
@@ -773,7 +932,7 @@ Deno.serve(async (req) => {
             }
 
             await sc.from("project_source_snapshots").upsert({
-              project_id: brain_project_id, snapshot_hash: curHash, last_checked: new Date().toISOString(),
+              project_id: brainProjectId, snapshot_hash: curHash, last_checked: new Date().toISOString(),
             }, { onConflict: "project_id" });
           }
         } catch (e) { console.warn("[Capture] source-code err:", e); }
@@ -789,9 +948,56 @@ Deno.serve(async (req) => {
       return json({ success: true, status: "processing" });
     }
 
+    // ─── CAPTURE_POLL — Quick polling (up to 30s) via latest-message ───
+    if (action === "capture_poll") {
+      const { conversation_id, max_wait = 30 } = body;
+
+      const brain = await getBrainProject(sc, userId);
+      if (!brain) return json({ error: "Brain not found" }, 404);
+      const brainProjectId = brain.lovable_project_id;
+
+      const { data: brainInfo2 } = await sc.from("user_brain_projects")
+        .select("brain_owner").eq("lovable_project_id", brainProjectId).maybeSingle();
+      const { token: pollToken } = resolveToken(
+        brainInfo2?.brain_owner === "admin" ? adminToken : null,
+        lovableToken
+      );
+
+      const maxMs = Math.min(max_wait, 30) * 1000;
+      const start = Date.now();
+      const interval = 3000; // 3s between polls
+
+      while (Date.now() - start < maxMs) {
+        try {
+          const { res: r } = await lovableFetch(
+            `${LOVABLE_API}/projects/${brainProjectId}/latest-message`,
+            { method: "GET" }, sc, userId, pollToken
+          );
+          if (r.ok) {
+            const msg = await r.json();
+            if (msg && !msg.is_streaming) {
+              const content = msg.content || msg.message || msg.text || "";
+              if (content.length > 10 && msg.role !== "user") {
+                // Update conversation if provided
+                if (conversation_id) {
+                  await sc.from("loveai_conversations").update({
+                    ai_response: content, status: "completed",
+                  }).eq("id", conversation_id);
+                }
+                return json({ success: true, response: content, status: "completed" });
+              }
+            }
+          }
+        } catch { /* continue polling */ }
+        await new Promise(r => setTimeout(r, interval));
+      }
+
+      return json({ success: true, status: "processing" });
+    }
+
     return json({ error: "Ação não reconhecida" }, 400);
   } catch (error) {
-    console.error("LoveAI Brain error:", error);
+    console.error("Star AI Brain error:", error);
     return json({ error: "Erro interno" }, 500);
   }
 });
