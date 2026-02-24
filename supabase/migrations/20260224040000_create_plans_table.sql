@@ -84,15 +84,5 @@ CREATE POLICY "Plans are public"
 DROP POLICY IF EXISTS "Only admins can modify plans" ON plans;
 CREATE POLICY "Only admins can modify plans"
   ON plans FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.user_id = auth.uid() AND profiles.role = 'admin'
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.user_id = auth.uid() AND profiles.role = 'admin'
-    )
-  );
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());

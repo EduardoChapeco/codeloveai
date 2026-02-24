@@ -1,5 +1,80 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// ── HMAC-SHA256 helper — valida notificações do Mercado Pago ─────────────────
+// Referência: https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
+//
+// O MP envia o header:  x-signature: ts=<timestamp>,v1=<hmac_hex>
+// A assinatura é feita sobre a string: "id:<payment_id>;request-id:<x-request-id>;ts:<ts>"
+// usando HMAC-SHA256 com a MERCADO_PAGO_WEBHOOK_SECRET configurada no painel do MP.
+// ──────────────────────────────────────────────────────────────────────────────
+async function verifyMercadoPagoSignature(req: Request, rawBody: string): Promise<boolean> {
+  const secret = Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET");
+  if (!secret) {
+    // Se a variável não está configurada, logamos aviso mas não bloqueamos
+    // (permite deploy seguro antes de configurar o secret no painel do MP)
+    console.warn("[mp-webhook] ⚠️  MERCADO_PAGO_WEBHOOK_SECRET não configurado — pulando validação HMAC");
+    return true;
+  }
+
+  const xSignature  = req.headers.get("x-signature");
+  const xRequestId  = req.headers.get("x-request-id") ?? "";
+
+  if (!xSignature) {
+    console.error("[mp-webhook] ❌ x-signature ausente");
+    return false;
+  }
+
+  // Extrair ts= e v1= do header
+  const parts: Record<string, string> = {};
+  for (const part of xSignature.split(",")) {
+    const [k, v] = part.split("=");
+    if (k && v) parts[k.trim()] = v.trim();
+  }
+
+  const ts   = parts["ts"];
+  const hash = parts["v1"];
+  if (!ts || !hash) {
+    console.error("[mp-webhook] ❌ x-signature malformado:", xSignature);
+    return false;
+  }
+
+  // Extrair data.id do body já parseado (passado como rawBody)
+  let dataId = "";
+  try {
+    const parsed = JSON.parse(rawBody);
+    dataId = String(parsed?.data?.id ?? "");
+  } catch { /* ignore — dataId vazio */ }
+
+  // Construir a string de assinatura conforme especificação do MP
+  // Formato: "id:<data.id>;request-id:<x-request-id>;ts:<ts>"
+  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts}`;
+
+  // HMAC-SHA256 via Web Crypto (disponível no Deno)
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const msgData = encoder.encode(manifest);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw", keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
+  const computedHex     = Array.from(new Uint8Array(signatureBuffer))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const valid = computedHex === hash;
+  if (!valid) {
+    console.error("[mp-webhook] ❌ Assinatura HMAC inválida.", { manifest, expected: hash, computed: computedHex });
+  } else {
+    console.log("[mp-webhook] ✅ Assinatura HMAC válida.");
+  }
+  return valid;
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -37,7 +112,27 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = await req.json();
+    // Ler o body como texto para poder validar o HMAC ANTES de parsear
+    const rawBody = await req.text();
+
+    // ── VALIDAÇÃO HMAC (Mercado Pago Webhook Signature) ─────────────────────
+    const signatureValid = await verifyMercadoPagoSignature(req, rawBody);
+    if (!signatureValid) {
+      console.error("[mp-webhook] Requisição rejeitada — assinatura inválida");
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (body.type !== "payment" && body.action !== "payment.updated") {
       return new Response(JSON.stringify({ received: true }), {
@@ -45,7 +140,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const paymentId = body.data?.id;
+    const paymentId = (body.data as { id?: unknown })?.id;
     if (!paymentId || (typeof paymentId !== "number" && typeof paymentId !== "string")) {
       return new Response(JSON.stringify({ error: "Invalid payment ID" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
