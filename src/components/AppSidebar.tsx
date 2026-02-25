@@ -9,6 +9,7 @@ import {
   ArrowLeft, Bell, Send, Upload,
   PanelLeftClose, PanelLeft, Building2, StickyNote, Brain, Users, Unlock, FileText,
   Zap, CreditCard, BookOpen, LifeBuoy, Workflow, Scale,
+  Rocket, Globe, Handshake,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -172,6 +173,12 @@ export default function AppSidebar() {
     { to: "/termos", label: "Termos de Uso", icon: Scale },
   ];
 
+  const exploreItems = [
+    { to: "/afiliados", label: "Programa de Afiliados", icon: Users },
+    { to: "/whitelabel", label: "White Label", icon: Globe },
+    { to: "/parceiros", label: "Parceiros", icon: Handshake },
+  ];
+
   const adminItems = [
     ...(isTenantAdmin || isAdmin ? [{ to: "/admin/tenant", label: "Admin Tenant", icon: Shield }] : []),
     ...(isAdmin ? [
@@ -184,6 +191,7 @@ export default function AppSidebar() {
   const lovableActive = lovableItems.some(i => isActive(i.to));
   const accountActive = accountItems.some(i => isActive(i.to));
   const helpActive = helpItems.some(i => isActive(i.to));
+  const exploreActive = exploreItems.some(i => isActive(i.to));
 
   const renderNavItem = (item: { to: string; label: string; icon: React.ElementType }) => {
     const active = isActive(item.to);
@@ -287,6 +295,27 @@ export default function AppSidebar() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   {helpItems.map(renderNavItem)}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
+
+        {/* Explorar — Landing pages públicas */}
+        <Collapsible defaultOpen={exploreActive} className="group/collapsible">
+          <SidebarGroup>
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:text-muted-foreground transition-colors">
+                Explorar
+                {!collapsed && (
+                  <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                )}
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {exploreItems.map(renderNavItem)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
