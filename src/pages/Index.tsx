@@ -1,11 +1,12 @@
-﻿import { useState, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Zap, Clock, MessageSquare, Shield, ChevronDown, Puzzle, Code2, Sparkles, Users, Building2, ArrowRight, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
 import AppLayout from "@/components/AppLayout";
 import MeshBackground from "@/components/MeshBackground";
+import { hexToHSL, getThemePreset } from "@/lib/tenant-themes";
 
 const benefits = [
   { icon: Zap, title: "Envios ilimitados", desc: "Envie quantas mensagens quiser, sem limite algum." },
@@ -50,16 +51,76 @@ export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = "Starble Ai";
+  const [searchParams] = useSearchParams();
+  const isPreview = searchParams.get("_preview") === "1";
+  const brandName = isPreview ? (searchParams.get("name") || "Starble Ai") : "Starble Ai";
   useSEO({ title: brandName, description: "A extensão que turbina o Lovable sem gastar seus créditos. Mensagens ilimitadas, White Label e programa de afiliados." });
   const demoRef = useRef<HTMLDivElement>(null);
 
+  // Apply theme overrides when in preview mode
+  useEffect(() => {
+    if (!isPreview) return;
+    const root = document.documentElement;
+    const overrides: Record<string, string> = {};
+
+    const preset = searchParams.get("preset");
+    if (preset) {
+      const themePreset = getThemePreset(preset);
+      if (themePreset) {
+        Object.entries(themePreset.variables).forEach(([key, value]) => {
+          overrides[key] = value;
+        });
+      }
+    }
+
+    const primary = searchParams.get("primary");
+    const secondary = searchParams.get("secondary");
+    const accent = searchParams.get("accent");
+    if (primary) overrides["--primary"] = hexToHSL(primary);
+    if (secondary) overrides["--secondary"] = hexToHSL(secondary);
+    if (accent) overrides["--accent"] = hexToHSL(accent);
+
+    const radius = searchParams.get("radius");
+    if (radius) overrides["--radius"] = `${radius}px`;
+
+    const font = searchParams.get("font");
+    if (font) {
+      const fontMap: Record<string, string> = {
+        inter: "'Inter', sans-serif", poppins: "'Poppins', sans-serif",
+        dm_sans: "'DM Sans', sans-serif", space_grotesk: "'Space Grotesk', sans-serif",
+        nunito: "'Nunito', sans-serif", system: "system-ui, sans-serif",
+      };
+      if (fontMap[font]) root.style.fontFamily = fontMap[font];
+    }
+
+    const logoUrl = searchParams.get("logo");
+    if (logoUrl) {
+      // We'll handle logo in the rendering below via isPreview
+    }
+
+    Object.entries(overrides).forEach(([key, value]) => {
+      root.style.setProperty(key, value);
+    });
+
+    return () => {
+      Object.keys(overrides).forEach((key) => {
+        root.style.removeProperty(key);
+      });
+      root.style.fontFamily = "";
+    };
+  }, [isPreview, searchParams]);
+
   const scrollToDemo = () => demoRef.current?.scrollIntoView({ behavior: "smooth" });
 
-  const guestNav = !authLoading && !user ? (
+  const previewLogoUrl = isPreview ? searchParams.get("logo") : null;
+
+  const guestNav = ((!authLoading && !user) || isPreview) ? (
     <nav className="sticky top-0 z-20 px-6 py-3 flex items-center justify-between">
       <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between w-full">
-        <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
+        <div className="flex items-center gap-2">
+          {previewLogoUrl && <img src={decodeURIComponent(previewLogoUrl)} alt="" className="h-6 w-6 object-contain rounded-md" />}
+          <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
+        </div>
         <div className="flex items-center gap-2">
           <Link to="/community" className="lv-btn-ghost h-9 px-3 text-xs">Comunidade</Link>
           <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
@@ -71,7 +132,7 @@ export default function Index() {
 
   const content = (
     <div className="min-h-screen relative">
-      {!authLoading && !user && <MeshBackground />}
+      {(!authLoading && !user) && <MeshBackground />}
       {guestNav}
 
       {/* ━━━ HERO ━━━ */}
@@ -243,6 +304,9 @@ export default function Index() {
     </div>
   );
 
+  if (isPreview) {
+    return content;
+  }
   if (!authLoading && user) {
     return <AppLayout>{content}</AppLayout>;
   }
