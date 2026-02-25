@@ -3,23 +3,24 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-speed-client",
 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ valid: false, error: "Method not allowed" }), {
+    return new Response(JSON.stringify({ ok: false, valid: false, error: "Method not allowed" }), {
       status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   try {
-    const { licenseKey, hwid } = await req.json();
+    const { licenseKey, hwid, token, extension } = await req.json();
+    const resolvedKey = licenseKey || token;
 
-    if (!licenseKey || typeof licenseKey !== "string") {
-      return new Response(JSON.stringify({ valid: false, error: "licenseKey required" }), {
+    if (!resolvedKey || typeof resolvedKey !== "string") {
+      return new Response(JSON.stringify({ ok: false, valid: false, error: "licenseKey required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
         if (rl.window_start > oneMinuteAgo) {
           if (rl.count >= 10) {
             return new Response(
-              JSON.stringify({ valid: false, error: "Rate limit exceeded" }),
+              JSON.stringify({ ok: false, valid: false, error: "Rate limit exceeded" }),
               { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
@@ -56,45 +57,45 @@ Deno.serve(async (req) => {
       }
     }
 
-    // FIX: Use correct column names — "key" and "active" (not "token"/"is_active")
     const { data: license } = await adminClient
       .from("licenses")
       .select("id, key, plan, plan_type, type, status, expires_at, active, device_id, user_id, tenant_id, daily_messages, hourly_limit, token_valid_until, trial_expires_at, trial_used, messages_used_today, plan_id")
-      .eq("key", licenseKey)
+      .eq("key", resolvedKey)
       .eq("active", true)
       .maybeSingle();
 
     if (!license) {
-      return new Response(JSON.stringify({ valid: false, error: "License not found or inactive" }), {
+      return new Response(JSON.stringify({ ok: false, valid: false, error: "License not found or inactive" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Check expiration
     const now = new Date();
+
+    // Check expiration
     if (license.expires_at && new Date(license.expires_at) < now) {
-      return new Response(JSON.stringify({ valid: false, error: "License expired" }), {
+      return new Response(JSON.stringify({ ok: false, valid: false, error: "License expired" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Check trial expiration
     if (license.type === 'trial' && license.trial_expires_at && new Date(license.trial_expires_at) < now) {
-      return new Response(JSON.stringify({ valid: false, error: "Trial expired" }), {
+      return new Response(JSON.stringify({ ok: false, valid: false, error: "Trial expired" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Check daily token expiration
     if (license.type === 'daily_token' && license.token_valid_until && new Date(license.token_valid_until) < now) {
-      return new Response(JSON.stringify({ valid: false, error: "Daily token expired, please renew" }), {
+      return new Response(JSON.stringify({ ok: false, valid: false, error: "Daily token expired, please renew" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Check daily message limit
     if (license.daily_messages && license.messages_used_today >= license.daily_messages) {
-      return new Response(JSON.stringify({ valid: false, error: "Daily message limit reached" }), {
+      return new Response(JSON.stringify({ ok: false, valid: false, error: "Daily message limit reached" }), {
         status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -106,7 +107,7 @@ Deno.serve(async (req) => {
           .update({ device_id: hwid, last_validated_at: now.toISOString() })
           .eq("id", license.id);
       } else if (license.device_id !== hwid) {
-        return new Response(JSON.stringify({ valid: false, error: "Device not authorized" }), {
+        return new Response(JSON.stringify({ ok: false, valid: false, error: "Device not authorized" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } else {
@@ -137,10 +138,63 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Fallback plan-based permissions if no plan_extensions
+    if (allowedExtensions.length === 0) {
+      const planLower = (license.plan || "free").toLowerCase();
+      const PLAN_MAP: Record<string, string[]> = {
+        free: [],
+        trial: [],
+        speed: ["speed"],
+        individual: ["speed"],
+        individual_mensal: ["speed"],
+        pro: ["speed", "boost"],
+        pro_mensal: ["speed", "boost"],
+        booster: ["speed", "boost"],
+        enterprise: ["speed", "boost", "labs"],
+        labs: ["speed", "boost", "labs"],
+      };
+      allowedExtensions = PLAN_MAP[planLower] || [];
+    }
+
+    // Determine billingType
+    const billingType = license.plan_type === "hourly" ? "time" : "messages";
+
+    // Fetch user info (obfuscated — no sensitive data)
+    let userInfo: Record<string, unknown> = { id: license.user_id };
+    try {
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("full_name, email")
+        .eq("user_id", license.user_id)
+        .maybeSingle();
+      if (profile) {
+        userInfo = { id: license.user_id, email: profile.email, name: profile.full_name };
+      }
+    } catch (_) { /* profiles may not exist */ }
+
+    // Audit log (fire and forget)
+    adminClient.from("extension_audit_log").insert({
+      license_key_hash: resolvedKey.substring(0, 10) + "...",
+      extension_key: extension || "speed",
+      action: "validate",
+      metadata: { plan: license.plan, hwid: hwid || null },
+    }).then(() => {}).catch(() => {});
+
+    // Return enriched response matching Speed extension format
     return new Response(
       JSON.stringify({
+        ok: true,
         valid: true,
-        plan: license.plan,
+        user: userInfo,
+        plan: {
+          code: (license.plan || "free").toUpperCase(),
+          allowedExtensions,
+          billingType,
+          dailyMessages: license.daily_messages,
+          usedToday: license.messages_used_today || 0,
+          expiresAt: license.expires_at,
+        },
+        // Legacy fields for backward compatibility
         planType: license.plan_type,
         type: license.type,
         status: license.status,
@@ -157,7 +211,7 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("validate-license error:", err);
-    return new Response(JSON.stringify({ valid: false, error: "Internal server error" }), {
+    return new Response(JSON.stringify({ ok: false, valid: false, error: "Internal server error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
