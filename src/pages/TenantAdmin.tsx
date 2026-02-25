@@ -112,6 +112,7 @@ export default function TenantAdmin() {
   const [saving, setSaving] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [hasChanges, setHasChanges] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0);
 
   // Add member inline
   const [addMemberEmail, setAddMemberEmail] = useState("");
@@ -347,111 +348,22 @@ export default function TenantAdmin() {
     return <AppLayout><div className="min-h-full flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
 
-  // ── Live Preview Component ──
-  const fontFamilyMap: Record<string, string> = {
-    system: "system-ui, sans-serif", inter: "'Inter', sans-serif", poppins: "'Poppins', sans-serif",
-    dm_sans: "'DM Sans', sans-serif", space_grotesk: "'Space Grotesk', sans-serif", nunito: "'Nunito', sans-serif",
+  // ── Live Preview URL Builder ──
+  const buildPreviewUrl = () => {
+    const params = new URLSearchParams();
+    params.set("_preview", "1");
+    if (form.name) params.set("name", form.name);
+    if (form.theme_preset) params.set("preset", form.theme_preset);
+    if (form.primary_color) params.set("primary", form.primary_color.replace("#", ""));
+    if (form.secondary_color) params.set("secondary", form.secondary_color.replace("#", ""));
+    if (form.accent_color) params.set("accent", form.accent_color.replace("#", ""));
+    params.set("radius", String(form.border_radius));
+    if (form.font_family && form.font_family !== "system") params.set("font", form.font_family);
+    if (form.logo_url) params.set("logo", form.logo_url);
+    return `/?${params.toString()}`;
   };
-  const previewFont = fontFamilyMap[normalizeFontFamily(form.font_family)] || fontFamilyMap.system;
-  const previewRadius = `${Math.max(0, Math.min(24, form.border_radius))}px`;
-  const isDarkPreset = form.theme_preset === "midnight" || form.theme_preset === "neon-cyber";
-  const previewBg = isDarkPreset ? "#0F172A" : "#FFFFFF";
-  const previewText = isDarkPreset ? "#E2E8F0" : "#1E293B";
-  const previewMuted = isDarkPreset ? "#334155" : "#F1F5F9";
-  const previewMutedText = isDarkPreset ? "#94A3B8" : "#64748B";
 
-  const LivePreview = () => (
-    <div
-      className="border border-border rounded-2xl overflow-hidden transition-all duration-300"
-      style={{
-        width: previewDevice === "mobile" ? 375 : "100%",
-        maxWidth: previewDevice === "mobile" ? 375 : "100%",
-        margin: previewDevice === "mobile" ? "0 auto" : undefined,
-        fontFamily: previewFont,
-        background: previewBg,
-        color: previewText,
-      }}
-    >
-      {/* Nav bar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: previewMuted }}>
-        {form.logo_url ? (
-          <img src={form.logo_url} alt="" className="h-7 w-7 object-contain" style={{ borderRadius: `${Math.min(form.border_radius, 8)}px` }} />
-        ) : (
-          <div className="h-7 w-7 flex items-center justify-center text-white text-[10px] font-bold" style={{ background: form.primary_color, borderRadius: `${Math.min(form.border_radius, 8)}px` }}>
-            {form.name?.[0]?.toUpperCase() || "T"}
-          </div>
-        )}
-        <span className="text-sm font-bold" style={{ color: previewText }}>{form.name || "Tenant"}</span>
-        <div className="flex-1" />
-        <div className="flex gap-1.5">
-          {["Dashboard", "Projetos", "Chat"].map(item => (
-            <span key={item} className="text-[10px] px-2 py-1" style={{ color: previewMutedText, borderRadius: previewRadius }}>{item}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* Hero area */}
-      <div className="p-6 space-y-4">
-        <div>
-          <h2 className="text-lg font-bold" style={{ color: previewText }}>Bem-vindo ao {form.name || "Tenant"}</h2>
-          <p className="text-xs mt-1" style={{ color: previewMutedText }}>{form.meta_description || "Descrição do seu workspace personalizado."}</p>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <button className="px-4 py-2 text-white text-xs font-semibold" style={{ background: form.primary_color, borderRadius: previewRadius }}>
-            Botão Primário
-          </button>
-          <button className="px-4 py-2 text-xs font-semibold border-2" style={{ color: form.secondary_color, borderColor: form.secondary_color, borderRadius: previewRadius, background: "transparent" }}>
-            Botão Secundário
-          </button>
-          <button className="px-4 py-2 text-xs font-semibold" style={{ background: form.accent_color + "20", color: form.accent_color, borderRadius: previewRadius }}>
-            Accent
-          </button>
-        </div>
-
-        {/* Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: "Projetos", value: "12", icon: "📁" },
-            { label: "Mensagens", value: "847", icon: "💬" },
-          ].map(card => (
-            <div key={card.label} className="p-3 border" style={{ borderColor: previewMuted, borderRadius: previewRadius, background: previewMuted + "80" }}>
-              <p className="text-lg">{card.icon}</p>
-              <p className="text-lg font-bold mt-1" style={{ color: form.primary_color }}>{card.value}</p>
-              <p className="text-[10px]" style={{ color: previewMutedText }}>{card.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Module badges */}
-        <div>
-          <p className="text-[10px] uppercase tracking-wider font-semibold mb-2" style={{ color: previewMutedText }}>Módulos Ativos</p>
-          <div className="flex flex-wrap gap-1.5">
-            {Object.entries(form.modules).filter(([, v]) => v).map(([key]) => (
-              <span key={key} className="px-2 py-0.5 text-[9px] font-medium" style={{ background: form.primary_color + "15", color: form.primary_color, borderRadius: previewRadius }}>
-                {MODULE_LABELS[key] || key}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Input preview */}
-        <div className="p-3 border" style={{ borderColor: previewMuted, borderRadius: previewRadius }}>
-          <p className="text-[10px] font-semibold mb-1.5" style={{ color: previewMutedText }}>Input Preview</p>
-          <div className="h-8 border px-3 flex items-center text-xs" style={{ borderColor: previewMuted, borderRadius: previewRadius, color: previewMutedText }}>
-            Digite algo aqui...
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="px-4 py-2 border-t text-center" style={{ borderColor: previewMuted }}>
-        <p className="text-[9px]" style={{ color: previewMutedText }}>
-          {form.domain_custom || `${tenant?.slug}.starble.app`} • {form.meta_title || form.name}
-        </p>
-      </div>
-    </div>
-  );
+  const refreshPreview = () => setPreviewKey(k => k + 1);
 
   // ── Section Header ──
   const SectionTitle = ({ icon: Icon, title, description }: { icon: any; title: string; description: string }) => (
@@ -699,16 +611,42 @@ export default function TenantAdmin() {
                 <div className="sticky top-6">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Preview ao Vivo</p>
-                    <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-                      <button onClick={() => setPreviewDevice("desktop")} className={`p-1.5 rounded-md transition-colors ${previewDevice === "desktop" ? "bg-background shadow-sm" : ""}`}>
-                        <Monitor className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={refreshPreview} className="lv-btn-secondary h-7 w-7 p-0 flex items-center justify-center" title="Recarregar preview">
+                        <RefreshCw className="h-3 w-3" />
                       </button>
-                      <button onClick={() => setPreviewDevice("mobile")} className={`p-1.5 rounded-md transition-colors ${previewDevice === "mobile" ? "bg-background shadow-sm" : ""}`}>
-                        <Smartphone className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                        <button onClick={() => setPreviewDevice("desktop")} className={`p-1.5 rounded-md transition-colors ${previewDevice === "desktop" ? "bg-background shadow-sm" : ""}`}>
+                          <Monitor className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => setPreviewDevice("mobile")} className={`p-1.5 rounded-md transition-colors ${previewDevice === "mobile" ? "bg-background shadow-sm" : ""}`}>
+                          <Smartphone className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <LivePreview />
+                  <div
+                    className="border border-border rounded-2xl overflow-hidden bg-background transition-all duration-300"
+                    style={{
+                      width: previewDevice === "mobile" ? 375 : "100%",
+                      maxWidth: previewDevice === "mobile" ? 375 : "100%",
+                      height: previewDevice === "mobile" ? 667 : 600,
+                      margin: previewDevice === "mobile" ? "0 auto" : undefined,
+                    }}
+                  >
+                    <iframe
+                      key={previewKey}
+                      src={buildPreviewUrl()}
+                      className="w-full h-full border-0"
+                      title="Tenant Preview"
+                      style={{
+                        transform: previewDevice === "desktop" ? "scale(0.65)" : "scale(0.85)",
+                        transformOrigin: "top left",
+                        width: previewDevice === "desktop" ? "154%" : "118%",
+                        height: previewDevice === "desktop" ? "154%" : "118%",
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
