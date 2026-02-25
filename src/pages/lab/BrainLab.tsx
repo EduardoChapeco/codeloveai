@@ -61,7 +61,7 @@ export default function BrainLab() {
     if (!email.trim()) return;
     setSubmitting(true);
     try {
-      await supabase.from("lab_waitlist").insert({ email: email.trim(), feature: "brain" });
+      await (supabase as any).from("lab_waitlist").insert({ email: email.trim(), feature: "brain" });
       setJoined(true);
       toast.success("🎉 Você está na lista! Avisaremos em breve.");
     } catch {

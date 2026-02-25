@@ -321,9 +321,9 @@ export default function OrchestratorProjectPanel() {
     if (!orchestratorProjectId || !user) return;
     setLoadingProject(true);
     const [{ data: proj }, { data: taskList }, { data: logList }] = await Promise.all([
-      supabase.from("orchestrator_projects").select("*").eq("id", orchestratorProjectId).eq("user_id", user.id).maybeSingle(),
-      supabase.from("orchestrator_tasks").select("*").eq("project_id", orchestratorProjectId).order("task_index"),
-      supabase.from("orchestrator_logs").select("*").eq("project_id", orchestratorProjectId).order("created_at", { ascending: true }).limit(200),
+      (supabase as any).from("orchestrator_projects").select("*").eq("id", orchestratorProjectId).eq("user_id", user.id).maybeSingle(),
+      (supabase as any).from("orchestrator_tasks").select("*").eq("project_id", orchestratorProjectId).order("task_index"),
+      (supabase as any).from("orchestrator_logs").select("*").eq("project_id", orchestratorProjectId).order("created_at", { ascending: true }).limit(200),
     ]);
     if (proj) {
       setProject(proj as OrchestratorProject);
@@ -578,11 +578,10 @@ export default function OrchestratorProjectPanel() {
     // Fetch skill prompt from agent_skills
     setActionLoading(intent);
     try {
-      const { data: skill } = await supabase.from("agent_skills").select("prompt_template, name").eq("intent", intent).limit(1).maybeSingle();
+      const { data: skill } = await (supabase as any).from("agent_skills").select("prompt_template, name").eq("intent", intent).limit(1).maybeSingle();
       if (!skill) return toast.error("Skill não encontrada.");
-      // Send to Lovable chat
-      setMessage(skill.prompt_template);
-      toast.info(`Skill "${skill.name}" carregada no campo de chat. Envie para aplicar.`);
+      setMessage((skill as any).prompt_template);
+      toast.info(`Skill "${(skill as any).name}" carregada no campo de chat. Envie para aplicar.`);
     } catch {
       toast.error("Erro ao carregar skill.");
     } finally {

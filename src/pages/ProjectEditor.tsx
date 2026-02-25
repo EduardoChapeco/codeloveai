@@ -56,11 +56,17 @@ export default function ProjectEditor() {
     if (!authLoading && !user) navigate("/login");
   }, [user, authLoading, navigate]);
 
+  const loadProjectRef = useRef<(() => void) | null>(null);
+  const loadSandboxUrlRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     if (!id || !user) return;
-    loadProject();
-    loadSandboxUrl();
-  }, [id, user, loadProject, loadSandboxUrl]);
+    // Defer to next tick so refs are assigned
+    setTimeout(() => {
+      loadProjectRef.current?.();
+      loadSandboxUrlRef.current?.();
+    }, 0);
+  }, [id, user]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -77,6 +83,7 @@ export default function ProjectEditor() {
       if (data) setProjectName(data.display_name || data.name || id || "");
     } catch { /* silent */ }
   }, [id]);
+  loadProjectRef.current = loadProject;
 
   const loadSandboxUrl = useCallback(async () => {
     if (!id) return;
@@ -100,6 +107,7 @@ export default function ProjectEditor() {
       setLoadingPreview(false);
     }
   }, [id, invoke]);
+  loadSandboxUrlRef.current = loadSandboxUrl;
 
   const sendChatMessage = async () => {
     if (!message.trim() || sending || !id) return;

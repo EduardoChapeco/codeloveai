@@ -36,7 +36,7 @@ export default function VoiceLab() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await supabase.from("lab_waitlist").insert({ email: email.trim(), feature: "voice" });
+      await (supabase as any).from("lab_waitlist").insert({ email: email.trim(), feature: "voice" });
       setJoined(true);
       toast.success("🎙️ Você está na lista!");
     } catch {

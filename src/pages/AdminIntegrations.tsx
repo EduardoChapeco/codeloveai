@@ -84,7 +84,7 @@ type Provider = keyof typeof PROVIDERS;
 
 // ─── Status Badge ─────────────────────────────────────────────
 
-function UsageBadge({ key: k }: { key: ApiKey }) {
+function UsageBadge({ key: k }: { key: any }) {
   const pct = k.daily_limit ? (k.requests_today / k.daily_limit) * 100 : 0;
   if (!k.is_active) return (
     <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
@@ -347,7 +347,7 @@ function ProviderSection({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate">{k.label}</span>
-                      <UsageBadge key={k} />
+                      <UsageBadge key={k.id} />
                     </div>
 
                     {/* Masked key */}

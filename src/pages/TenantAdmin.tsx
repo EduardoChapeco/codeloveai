@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -99,6 +99,7 @@ export default function TenantAdmin() {
     domain_custom: "",
   });
   const [savingBrand, setSavingBrand] = useState(false);
+  const fetchAllRef = useRef<(() => void) | null>(null);
   const [dbPlans, setDbPlans] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -127,9 +128,9 @@ export default function TenantAdmin() {
         terms_template: tenant.terms_template || "",
         domain_custom: tenant.domain_custom || "",
       });
-      fetchAll();
+      fetchAllRef.current?.();
     }
-  }, [tenant, canAccess, fetchAll]);
+  }, [tenant, canAccess]);
 
   const fetchAll = useCallback(async () => {
     if (!tenant) return;
@@ -189,6 +190,7 @@ export default function TenantAdmin() {
     
     setLoading(false);
   }, [tenant]);
+  fetchAllRef.current = fetchAll;
 
   const saveBrand = async () => {
     if (!tenant) return;
