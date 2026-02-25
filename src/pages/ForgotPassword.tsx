@@ -40,7 +40,7 @@ export default function ForgotPassword() {
           )}
         </Link>
 
-        <div className="lv-card p-8">
+        <div className="clf-liquid-glass p-8">
           <h1 className="lv-heading-md text-center mb-6">Recuperar senha</h1>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

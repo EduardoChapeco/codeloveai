@@ -64,7 +64,7 @@ export default function Register() {
           )}
         </Link>
 
-        <div className="lv-card p-8">
+        <div className="clf-liquid-glass p-8">
           <h1 className="lv-heading-md text-center mb-6">Criar conta</h1>
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
