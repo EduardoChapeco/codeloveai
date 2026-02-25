@@ -329,12 +329,23 @@ async function handleWhiteLabelPurchase(
     });
   }
 
-  // Price validation (21% tolerance for affiliate discounts)
+  // Price validation — calculate exact expected price with WL affiliate discount
   const expectedTotalCents = setupPriceCents + subscriptionPriceCents;
   const paidAmount = (payment.transaction_amount as number) * 100;
-  const minPrice = expectedTotalCents * 0.79;
+  let wlMaxDiscountPercent = 0;
+  const affiliateWlCode = refData.affiliate_wl_code as string | null;
+  if (affiliateWlCode) {
+    const { data: wlAffDiscount } = await supabaseAdmin
+      .from("white_label_affiliates")
+      .select("commission_percent")
+      .eq("code", affiliateWlCode)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (wlAffDiscount) wlMaxDiscountPercent = wlAffDiscount.commission_percent || 0;
+  }
+  const minPrice = expectedTotalCents * (1 - wlMaxDiscountPercent / 100) - 1;
   if (paidAmount < minPrice || paidAmount > expectedTotalCents + 1) {
-    console.error(`WL Price mismatch: paid ${paidAmount}, expected ${expectedTotalCents}`);
+    console.error(`WL Price mismatch: paid ${paidAmount}, expected ${expectedTotalCents}, discount ${wlMaxDiscountPercent}%`);
     return new Response(JSON.stringify({ error: "Price mismatch" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -558,11 +569,21 @@ async function handleMemberPurchase(
     });
   }
 
-  // Price validation
+  // Price validation — calculate exact expected price with affiliate discount
   const paidAmount = payment.transaction_amount as number;
-  const minPrice = expectedPrice * 0.79;
+  let maxDiscountPercent = 0;
+  if (affiliateCode) {
+    const { data: aff } = await supabaseAdmin
+      .from("affiliates")
+      .select("discount_percent")
+      .eq("affiliate_code", affiliateCode)
+      .eq("type", "simple")
+      .maybeSingle();
+    if (aff) maxDiscountPercent = aff.discount_percent || 0;
+  }
+  const minPrice = expectedPrice * (1 - maxDiscountPercent / 100) - 0.02;
   if (typeof paidAmount === "number" && (paidAmount < minPrice || paidAmount > expectedPrice + 0.05)) {
-    console.error(`Price mismatch: paid ${paidAmount}, expected ${expectedPrice}`);
+    console.error(`Price mismatch: paid ${paidAmount}, expected ${expectedPrice}, discount ${maxDiscountPercent}%`);
     return new Response(JSON.stringify({ error: "Price mismatch" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

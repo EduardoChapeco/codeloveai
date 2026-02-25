@@ -451,6 +451,100 @@ export type Database = {
           },
         ]
       }
+      automation_rules: {
+        Row: {
+          action_type: string
+          created_at: string
+          cron_expression: string | null
+          id: string
+          is_active: boolean
+          last_run_at: string | null
+          message_template: string
+          name: string
+          project_id: string
+          run_count: number
+          tenant_id: string | null
+          trigger_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_type?: string
+          created_at?: string
+          cron_expression?: string | null
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          message_template?: string
+          name: string
+          project_id: string
+          run_count?: number
+          tenant_id?: string | null
+          trigger_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          cron_expression?: string | null
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          message_template?: string
+          name?: string
+          project_id?: string
+          run_count?: number
+          tenant_id?: string | null
+          trigger_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_runs: {
+        Row: {
+          created_at: string
+          id: string
+          result: string | null
+          rule_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          result?: string | null
+          rule_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          result?: string | null
+          rule_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_runs_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           created_at: string
