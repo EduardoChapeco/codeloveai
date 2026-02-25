@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import AppLayout from "@/components/AppLayout";
+import MemberDetailPanel from "@/components/admin/MemberDetailPanel";
 
 interface MemberLicense {
   id: string;
@@ -177,6 +178,7 @@ export default function Admin() {
   const [unbindToken, setUnbindToken] = useState("");
   const [unbindLoading, setUnbindLoading] = useState(false);
   const [expandedTokens, setExpandedTokens] = useState<string | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   // Chat state
   const [chatUsers, setChatUsers] = useState<{ user_id: string; name: string; email: string; unread: number }[]>([]);
@@ -862,132 +864,74 @@ export default function Admin() {
         {/* Members Tab */}
         {tab === "members" && (
           <div className="space-y-4">
-            {members.map((m) => (
-              <div key={m.user_id} className="clf-liquid-glass rounded-[24px] p-6">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-1">
-                      <p className="lv-body-strong text-[15px]">{m.name || "Sem nome"}</p>
-                      {m.isAffiliate && <span className="lv-badge lv-badge-primary">AFILIADO</span>}
-                    </div>
-                    <p className="lv-caption font-mono uppercase tracking-tighter opacity-60">{m.email}</p>
-                    {m.license && (
-                      <div className="flex items-center gap-2 mt-3 flex-wrap">
-                        <span className={`lv-badge ${m.license.status === "active" && m.license.active ? "lv-badge-success" : "lv-badge-destructive"}`}>
-                          {planLabels[m.license.plan_type] || m.license.plan_type} — {m.license.status}
-                        </span>
-                        {m.license.expires_at && (
-                          <span className="text-xs text-muted-foreground">
-                            Exp: {format(new Date(m.license.expires_at), "dd/MM/yyyy")}
-                          </span>
-                        )}
-                        {m.license.daily_messages && (
-                          <span className="text-xs text-muted-foreground">
-                            Uso: {m.license.messages_used_today}/{m.license.daily_messages}
-                          </span>
-                        )}
-                        {m.license.device_id && (
-                          <span className="text-xs text-blue-500 font-mono">
-                            🔒 {m.license.device_id.substring(0, 8)}…
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {m.license?.key && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-muted-foreground">Licença ativa:</span>
-                        <code className="lv-mono bg-primary/5 text-primary border border-primary/10 px-2 py-0.5 rounded-lg">
-                          {m.license.key.substring(0, 10)}••••{m.license.key.substring(m.license.key.length - 4)}
-                        </code>
-                        <button onClick={() => { navigator.clipboard.writeText(m.license!.key); toast.success("Licença copiada!"); }}
-                          className="lv-btn-icon h-7 w-7 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg">
-                          <Copy className="h-3 w-3" />
-                        </button>
-                        {m.licenses.length > 1 && (
-                          <button onClick={() => setExpandedTokens(expandedTokens === m.user_id ? null : m.user_id)}
-                            className="text-[9px] font-bold text-muted-foreground hover:text-foreground transition-colors">
-                            {m.licenses.length} LICENÇAS {expandedTokens === m.user_id ? "▲" : "▼"}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {expandedTokens === m.user_id && m.licenses.length > 0 && (
-                      <div className="mt-2 space-y-1.5 pl-4 border-l-2 border-primary/10">
-                        {m.licenses.map(l => (
-                          <div key={l.id} className="flex items-center gap-2.5 py-1 px-2 hover:bg-primary/5 rounded-lg transition-colors group">
-                            <span className={`lv-badge text-[8px] ${l.active ? "lv-badge-success" : "lv-badge-muted"}`}>
-                               {l.active ? "ATIVO" : l.status.toUpperCase()}
-                             </span>
-                             <code className="lv-mono text-[10px] opacity-70">
-                               {l.key.substring(0, 10)}••••{l.key.substring(l.key.length - 4)}
-                             </code>
-                             <span className="text-[10px] font-bold text-muted-foreground">
-                               {planLabels[l.plan_type] || l.plan_type}
-                             </span>
-                             <button onClick={() => { navigator.clipboard.writeText(l.key); toast.success("Licença copiada!"); }}
-                               className="opacity-0 group-hover:opacity-100 lv-btn-icon h-5 w-5 rounded-[4px] bg-primary/10 text-primary">
-                               <Copy className="h-2 w-2" />
-                             </button>
-                             <span className="text-[9px] text-muted-foreground ml-auto">
-                               {format(new Date(l.created_at), "dd/MM/yy HH:mm")}
-                             </span>
-                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2">
-                      <select value={planInput[m.user_id] || ""}
-                        onChange={(e) => setPlanInput((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
-                        className="lv-input h-10 rounded-xl text-xs px-4 w-40">
-                        <option value="">Plano...</option>
-                        {planOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                      </select>
-                      <button onClick={() => assignPlan(m.user_id)} className="lv-btn-primary h-10 px-4 text-[10px] font-black">
-                        <UserCheck className="h-4 w-4 shrink-0" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input placeholder="Chave de licença personalizada..." value={tokenInput[m.user_id] || ""}
-                        onChange={(e) => setTokenInput((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
-                        className="lv-input h-10 rounded-xl text-xs px-4 min-w-[200px] flex-1" />
-                      <button onClick={() => assignLicenseKey(m.user_id)} className="lv-btn-secondary h-10 px-4 text-[10px] font-black border-primary/20 text-primary">
-                        <Key className="h-4 w-4 shrink-0" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {m.license && (
-                        <>
-                          <button onClick={() => revokeLicenses(m.user_id)} className="lv-btn-danger h-9 px-4 text-[10px] font-black">
-                            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> REVOGAR
-                          </button>
-                          <button onClick={() => suspendLicense(m.user_id)} className="lv-btn-secondary h-9 px-4 text-[10px] font-black border-destructive/20 text-destructive">
-                            <XCircle className="h-3.5 w-3.5 mr-1.5" /> SUSPENDER
-                          </button>
-                          <button onClick={() => resetDailyUsage(m.user_id)} className="lv-btn-secondary h-9 px-4 text-[10px] font-black">
-                            <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> RESET USO
-                          </button>
-                          {m.license.device_id && (
-                            <button onClick={() => unlockDevice(m.user_id)} className="lv-btn-secondary h-9 px-4 text-[10px] font-black">
-                              <Unlock className="h-3.5 w-3.5 mr-1.5" /> DESBLOQUEAR
-                            </button>
-                          )}
-                        </>
-                      )}
-                      <button onClick={() => banUser(m.user_id)} className="lv-btn-secondary h-9 px-4 text-[10px] font-black border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive hover:text-white">
-                        <Ban className="h-3.5 w-3.5 mr-1.5" /> BANIR
-                      </button>
-                    </div>
-                  </div>
+            {selectedMemberId ? (
+              <MemberDetailPanel
+                userId={selectedMemberId}
+                currentAdminId={user!.id}
+                onBack={() => setSelectedMemberId(null)}
+              />
+            ) : (
+              <>
+                {/* Search */}
+                <div className="clf-liquid-glass p-4">
+                  <input
+                    placeholder="Buscar por nome ou email..."
+                    className="lv-input"
+                    onChange={(e) => {
+                      const q = e.target.value.toLowerCase();
+                      // Simple client-side filter via CSS visibility
+                      document.querySelectorAll("[data-member-card]").forEach((el) => {
+                        const text = el.getAttribute("data-member-search") || "";
+                        (el as HTMLElement).style.display = text.includes(q) ? "" : "none";
+                      });
+                    }}
+                  />
                 </div>
-              </div>
-            ))}
-            {members.length === 0 && (
-              <div className="lv-empty">
-                <UserX className="h-12 w-12 opacity-20 mb-2" />
-                <p className="lv-overline">NENHUM MEMBRO ENCONTRADO</p>
-              </div>
+
+                {members.map((m) => (
+                  <div
+                    key={m.user_id}
+                    data-member-card
+                    data-member-search={`${m.name?.toLowerCase() || ""} ${m.email?.toLowerCase() || ""}`}
+                    onClick={() => setSelectedMemberId(m.user_id)}
+                    className="clf-liquid-glass rounded-[20px] p-5 cursor-pointer hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-bold text-sm group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                        {(m.name?.[0] || m.email?.[0] || "?").toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold truncate">{m.name || "Sem nome"}</p>
+                          {m.isAffiliate && <span className="lv-badge lv-badge-primary text-[8px]">AFILIADO</span>}
+                        </div>
+                        <p className="lv-caption font-mono text-[11px] truncate">{m.email}</p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {m.license ? (
+                          <span className={`lv-badge text-[9px] ${m.license.active && m.license.status === "active" ? "lv-badge-success" : "lv-badge-destructive"}`}>
+                            {m.license.plan} — {m.license.status}
+                          </span>
+                        ) : (
+                          <span className="lv-badge lv-badge-muted text-[9px]">SEM LICENÇA</span>
+                        )}
+                        {m.license?.daily_messages && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {m.license.messages_used_today}/{m.license.daily_messages}
+                          </span>
+                        )}
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {members.length === 0 && (
+                  <div className="lv-empty">
+                    <UserX className="h-12 w-12 opacity-20 mb-2" />
+                    <p className="lv-overline">NENHUM MEMBRO ENCONTRADO</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
