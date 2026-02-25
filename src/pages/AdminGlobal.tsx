@@ -19,6 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import AppLayout from "@/components/AppLayout";
 import LovableCloudTab from "@/components/admin/LovableCloudTab";
 import ModulesManagementTab from "@/components/admin/ModulesManagementTab";
+import ApiKeysManagementTab from "@/components/admin/ApiKeysManagementTab";
 import ExtensionsManagementTab from "@/components/admin/ExtensionsManagementTab";
 
 interface TenantRow {
@@ -136,7 +137,7 @@ interface FeatureFlag {
   updated_at: string;
 }
 
-type Tab = "tenants" | "plans" | "extensions" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules";
+type Tab = "tenants" | "plans" | "extensions" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules" | "api_keys";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -468,6 +469,7 @@ export default function AdminGlobal() {
               { id: "commissions", label: "Comissões", icon: BarChart3 },
               { id: "wallets", label: "Wallets", icon: Wallet },
               { id: "ledger", label: "Ledger", icon: BookOpen },
+              { id: "api_keys", label: "API Keys", icon: Key },
               { id: "operations", label: "Operações", icon: Shield },
             ] as const).map(t => (
               <button
@@ -866,6 +868,9 @@ export default function AdminGlobal() {
 
           {/* ─── LOVABLE CLOUD TAB ─── */}
           {tab === "lovable_cloud" && <LovableCloudTab />}
+
+          {/* ─── API KEYS TAB ─── */}
+          {tab === "api_keys" && <ApiKeysManagementTab />}
 
           {/* ─── OPERATIONS TAB ─── */}
           {tab === "operations" && (
