@@ -60,7 +60,7 @@ export default function Index() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = "Starble";
+  const brandName = "Starble Ai";
   useSEO({ title: brandName, description: "A extensão que turbina o Lovable sem gastar seus créditos. Mensagens ilimitadas, White Label e programa de afiliados." });
   const demoRef = useRef<HTMLDivElement>(null);
 
