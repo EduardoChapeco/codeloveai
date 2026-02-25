@@ -42,55 +42,7 @@ async function getUserId(req: Request, anonSc: SupabaseClient): Promise<string |
   } catch { return null; }
 }
 
-async function getLovableToken(sc: SupabaseClient, userId: string): Promise<string | null> {
-  const { data } = await sc
-    .from("lovable_accounts")
-    .select("token_encrypted, token_expires_at, refresh_token_encrypted, status")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (!data || data.status !== "active" || !data.token_encrypted) return null;
-
-  // Token expiry check — Phase 9
-  if (data.token_expires_at) {
-    const expiresAt = new Date(data.token_expires_at as string).getTime();
-    const nowMs = Date.now();
-    const bufferMs = 5 * 60 * 1000; // 5 min buffer
-    if (nowMs + bufferMs >= expiresAt) {
-      // Try to refresh
-      if (data.refresh_token_encrypted) {
-        const refreshed = await refreshLovableToken(sc, userId, data.refresh_token_encrypted as string);
-        if (refreshed) return refreshed;
-      }
-      return null; // expired and can't refresh
-    }
-  }
-
-  return data.token_encrypted as string;
-}
-
-async function refreshLovableToken(sc: SupabaseClient, userId: string, refreshToken: string): Promise<string | null> {
-  try {
-    const res = await fetch("https://api.lovable.app/v1/auth/refresh", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as { access_token: string; expires_in?: number };
-    if (!data.access_token) return null;
-
-    const expiresAt = data.expires_in
-      ? new Date(Date.now() + data.expires_in * 1000).toISOString()
-      : null;
-
-    await sc.from("lovable_accounts").update({
-      token_encrypted: data.access_token,
-      token_expires_at: expiresAt,
-    }).eq("user_id", userId);
-
-    return data.access_token;
-  } catch { return null; }
-}
+// getLovableToken and refreshLovableToken removed — all operations now use admin token
 
 async function getAdminToken(sc: SupabaseClient): Promise<string | null> {
   const { data } = await sc
@@ -138,17 +90,17 @@ async function generatePRD(
   sc: SupabaseClient,
   userId: string,
   clientPrompt: string,
-  lovableToken: string,
-  adminToken: string | null
+  adminToken: string
 ): Promise<{ tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string }> } | null> {
-  // Use admin Brain if available, else user's project
+  // Get user's brain project (admin-owned)
   const { data: brainRow } = await sc
-    .from("lovable_accounts")
-    .select("brain_project_id")
+    .from("user_brain_projects")
+    .select("lovable_project_id")
     .eq("user_id", userId)
+    .eq("status", "active")
     .maybeSingle();
-  const brainProjectId = (brainRow?.brain_project_id as string) || null;
-  const token = adminToken || lovableToken;
+  const brainProjectId = brainRow?.lovable_project_id || null;
+  const token = adminToken;
   if (!brainProjectId) return null;
 
   const architectPrompt = `${AQ_PREFIX}You are a senior software architect. A client wants to build: "${clientPrompt}"
@@ -409,11 +361,8 @@ Deno.serve(async (req: Request) => {
       const { client_prompt, workspace_id } = body as { client_prompt: string; workspace_id?: string };
       if (!client_prompt?.trim()) return json({ error: "client_prompt required" }, 400);
 
-      const [lovableToken, adminToken] = await Promise.all([
-        getLovableToken(sc, userId),
-        getAdminToken(sc),
-      ]);
-      if (!lovableToken) return json({ error: "Lovable account not connected or token expired" }, 403);
+      const adminToken = await getAdminToken(sc);
+      if (!adminToken) return json({ error: "Platform Brain unavailable. Contact administrator." }, 503);
 
       const { data: project, error: projErr } = await sc
         .from("orchestrator_projects")
@@ -434,7 +383,7 @@ Deno.serve(async (req: Request) => {
       (async () => {
         try {
           await addLog(sc, projectId, "🧠 Brain generating PRD…", "info");
-          const prd = await generatePRD(sc, userId, client_prompt, lovableToken, adminToken);
+          const prd = await generatePRD(sc, userId, client_prompt, adminToken);
 
           if (!prd || !prd.tasks?.length) {
             const fallback = [{ title: "Implementar projeto completo", intent: "chat", prompt: client_prompt }];
@@ -483,12 +432,12 @@ Deno.serve(async (req: Request) => {
       if (project.status === "failed") return json({ status: "failed", error: project.last_error });
       if (project.status === "planning") return json({ status: "still_planning" });
 
-      // Token expiry check — Phase 9
-      const lovableToken = await getLovableToken(sc, userId);
-      if (!lovableToken) {
-        await addLog(sc, project_id, "❌ Lovable token expired or refresh failed — pausing", "error");
-        await sc.from("orchestrator_projects").update({ status: "paused", last_error: "Token expired" }).eq("id", project_id);
-        return json({ error: "Lovable token expired. Please reconnect your Lovable account." }, 403);
+      // Token check — use admin token for all operations
+      const adminTk = await getAdminToken(sc);
+      if (!adminTk) {
+        await addLog(sc, project_id, "❌ Admin token unavailable — pausing", "error");
+        await sc.from("orchestrator_projects").update({ status: "paused", last_error: "Admin token unavailable" }).eq("id", project_id);
+        return json({ error: "Platform Brain unavailable. Contact administrator." }, 503);
       }
 
       if (!project.lovable_project_id) return json({ error: "No Lovable project linked." }, 400);
@@ -518,7 +467,7 @@ Deno.serve(async (req: Request) => {
         },
         project_id,
         project.lovable_project_id as string,
-        lovableToken
+        adminTk
       );
 
       if (!result.success) {
@@ -550,7 +499,7 @@ Deno.serve(async (req: Request) => {
       if (stopCond) {
         const sc2Result = await evaluateStopCondition(
           sc, project_id, stopCond,
-          project.lovable_project_id as string, lovableToken
+          project.lovable_project_id as string, adminTk
         );
         stopMet = sc2Result.met;
         stopReason = sc2Result.reason;
@@ -656,13 +605,13 @@ Deno.serve(async (req: Request) => {
         .select("lovable_project_id").eq("id", project_id).eq("user_id", userId).maybeSingle();
       if (!project?.lovable_project_id) return json({ error: "No Lovable project linked" }, 404);
 
-      const lovableToken = await getLovableToken(sc, userId);
-      if (!lovableToken) return json({ error: "Token expired" }, 403);
+      const adminTk2 = await getAdminToken(sc);
+      if (!adminTk2) return json({ error: "Platform unavailable" }, 503);
 
       const srcRes = await extFetch(
         `${EXT_API}/projects/${project.lovable_project_id}/source-code`,
         { method: "GET" },
-        lovableToken
+        adminTk2
       );
       if (!srcRes.ok) return json({ error: `Source-code API ${srcRes.status}` }, 502);
 
@@ -735,8 +684,8 @@ Deno.serve(async (req: Request) => {
       };
       if (!project_id || !workspace_id) return json({ error: "project_id and workspace_id required" }, 400);
 
-      const lovableToken = await getLovableToken(sc, userId);
-      if (!lovableToken) return json({ error: "Token expired" }, 403);
+      const adminTk3 = await getAdminToken(sc);
+      if (!adminTk3) return json({ error: "Platform unavailable" }, 503);
 
       const { data: orch } = await sc.from("orchestrator_projects")
         .select("id, status").eq("id", project_id).eq("user_id", userId).maybeSingle();
@@ -746,7 +695,7 @@ Deno.serve(async (req: Request) => {
         const createRes = await extFetch(
           `${EXT_API}/workspaces/${workspace_id}/projects`,
           { method: "POST", body: JSON.stringify({ name: project_name || "Starble Project", is_public: false }) },
-          lovableToken
+          adminTk3
         );
         if (!createRes.ok) {
           const errText = await createRes.text();
@@ -779,14 +728,14 @@ Deno.serve(async (req: Request) => {
         .eq("id", project_id).eq("user_id", userId).maybeSingle();
       if (!orch?.lovable_project_id) return json({ error: "Project not linked" }, 404);
 
-      const lovableToken = await getLovableToken(sc, userId);
-      if (!lovableToken) return json({ error: "Token expired" }, 403);
+      const adminTk4 = await getAdminToken(sc);
+      if (!adminTk4) return json({ error: "Platform unavailable" }, 503);
 
       try {
         const srcRes = await extFetch(
           `${EXT_API}/projects/${orch.lovable_project_id}/source-code`,
           { method: "GET" },
-          lovableToken
+          adminTk4
         );
         if (!srcRes.ok) return json({ idle: false, reason: `Source-code API ${srcRes.status}` });
 
@@ -813,8 +762,8 @@ Deno.serve(async (req: Request) => {
         .eq("id", project_id).eq("user_id", userId).maybeSingle();
       if (!orch?.lovable_project_id) return json({ error: "Project not linked" }, 404);
 
-      const lovableToken = await getLovableToken(sc, userId);
-      if (!lovableToken) return json({ error: "Token expired" }, 403);
+      const adminTk5 = await getAdminToken(sc);
+      if (!adminTk5) return json({ error: "Platform unavailable" }, 503);
 
       await sc.from("orchestrator_projects").update({ status: "auditing" }).eq("id", project_id);
       await addLog(sc, project_id, "🔍 Audit checkpoint started", "info", undefined, task_id);
@@ -827,7 +776,7 @@ Deno.serve(async (req: Request) => {
       try {
         const srcRes = await extFetch(
           `${EXT_API}/projects/${orch.lovable_project_id}/source-code`,
-          { method: "GET" }, lovableToken
+          { method: "GET" }, adminTk5
         );
         if (srcRes.ok) {
           const srcData = await srcRes.json() as Record<string, unknown>;
@@ -852,7 +801,7 @@ Deno.serve(async (req: Request) => {
           const condition = task?.stop_condition as string | null;
           if (condition) {
             const sc2Result = await evaluateStopCondition(
-              sc, project_id, condition, orch.lovable_project_id as string, lovableToken
+              sc, project_id, condition, orch.lovable_project_id as string, adminTk5
             );
             stopConditionMet = sc2Result.met;
             await addLog(sc, project_id, `Stop condition "${condition}": ${sc2Result.met ? "✅" : "⚠️"} ${sc2Result.reason}`, "info", undefined, task_id);

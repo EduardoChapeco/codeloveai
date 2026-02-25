@@ -10,52 +10,12 @@ import { generateTypeId, hashText, obfuscate } from "../_shared/crypto.ts";
 
 const TARGET_API = "https://api.lovable.dev";
 
-// generateTypeId and hashText moved to _shared/crypto.ts
-
-// hashText moved to _shared/crypto.ts
-
-// --- Token helpers ---
-async function getLovableToken(sc: any, uid: string): Promise<{ token: string; expired: boolean }> {
-  const { data } = await sc.from("lovable_accounts").select("token_encrypted, status").eq("user_id", uid).maybeSingle();
-  if (!data || data.status !== "active") return { token: "", expired: true };
-  return { token: data.token_encrypted, expired: false };
-}
-
-async function tryRefreshToken(sc: any, uid: string): Promise<string | null> {
-  const key = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
-  const { data: a } = await sc.from("lovable_accounts").select("refresh_token_encrypted, auto_refresh_enabled").eq("user_id", uid).maybeSingle();
-  if (!key || !a?.refresh_token_encrypted || !a?.auto_refresh_enabled) return null;
-  try {
-    const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${key}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(a.refresh_token_encrypted)}`,
-    });
-    if (r.ok) {
-      const d = await r.json();
-      if (d.id_token) {
-        const exp = parseInt(d.expires_in || "3600", 10);
-        await sc.from("lovable_accounts").update({
-          token_encrypted: d.id_token,
-          refresh_token_encrypted: d.refresh_token || a.refresh_token_encrypted,
-          token_expires_at: new Date(Date.now() + (exp - 300) * 1000).toISOString(),
-          last_verified_at: new Date().toISOString(),
-          status: "active",
-          refresh_failure_count: 0,
-        }).eq("user_id", uid);
-        return d.id_token;
-      }
-    }
-  } catch (e) { console.error("[Module-B] refresh failed:", e); }
-  return null;
-}
-
-// --- ADMIN Token helpers (for admin-owned brain) ---
+// â”€â”€â”€ ADMIN Token helpers (single source of truth for brain operations) â”€â”€â”€
 let _cachedAdminToken: string | null = null;
 
 async function getAdminLovableToken(sc: any): Promise<string | null> {
   if (_cachedAdminToken) return _cachedAdminToken;
-  
+
   // 1. Try env var first
   const envToken = Deno.env.get("ADMIN_LOVABLE_TOKEN");
   if (envToken) {
@@ -63,11 +23,33 @@ async function getAdminLovableToken(sc: any): Promise<string | null> {
     return envToken;
   }
 
-  // 2. Try internal.admin_secrets table
+  // 2. Try lovable_accounts table (is_admin_account = true)
+  const { data } = await sc.from("lovable_accounts")
+    .select("token_encrypted, refresh_token_encrypted, token_expires_at, status")
+    .eq("is_admin_account", true)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+
+  if (data?.token_encrypted) {
+    // Check expiry
+    if (data.token_expires_at) {
+      const expiresAt = new Date(data.token_expires_at).getTime();
+      if (Date.now() + 5 * 60 * 1000 >= expiresAt) {
+        // Try refresh
+        const refreshed = await tryRefreshAdminToken(sc, data.refresh_token_encrypted);
+        if (refreshed) return refreshed;
+        return null;
+      }
+    }
+    _cachedAdminToken = data.token_encrypted;
+    return data.token_encrypted;
+  }
+
+  // 3. Try internal.admin_secrets table
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
     const res = await fetch(
       `${supabaseUrl}/rest/v1/admin_secrets?key=eq.admin_lovable_token&select=value`,
       {
@@ -79,90 +61,83 @@ async function getAdminLovableToken(sc: any): Promise<string | null> {
       }
     );
     if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        _cachedAdminToken = data[0].value;
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows.length > 0) {
+        _cachedAdminToken = rows[0].value;
         return _cachedAdminToken;
       }
     }
   } catch (e) {
-    console.error("[Module-B] Failed to fetch admin secret:", e);
+    console.error("[Brain] Failed to fetch admin secret:", e);
   }
 
   return null;
 }
 
-async function tryRefreshAdminToken(sc: any): Promise<string | null> {
-  // We now have a dedicated admin-oauth-sync function for this,
-  // but we can also trigger it via lovable-token-refresh.
-  // For now, let's keep it simple: the cron job refreshes it.
-  // If we really need an on-demand refresh here:
+async function tryRefreshAdminToken(sc: any, refreshToken?: string | null): Promise<string | null> {
   const apiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
   if (!apiKey) return null;
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
-    // Fetch refresh token
-    const res = await fetch(
-      `${supabaseUrl}/rest/v1/admin_secrets?key=eq.admin_lovable_refresh_token&select=value`,
-      {
-        headers: {
-          "apikey": serviceKey,
-          "Authorization": `Bearer ${serviceKey}`,
-          "Accept-Profile": "internal",
-        },
-      }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      const refreshToken = Array.isArray(data) && data.length > 0 ? data[0].value : null;
-      if (refreshToken) {
-        const fbRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
-        });
-        if (fbRes.ok) {
-          const fbData = await fbRes.json();
-          if (fbData.id_token) {
-            // Update table
-            await fetch(`${supabaseUrl}/rest/v1/admin_secrets?on_conflict=key`, {
-              method: "POST",
-              headers: {
-                "apikey": serviceKey,
-                "Authorization": `Bearer ${serviceKey}`,
-                "Content-Type": "application/json",
-                "Prefer": "resolution=merge-duplicates",
-                "Accept-Profile": "internal",
-                "Content-Profile": "internal",
-              },
-              body: JSON.stringify({
-                key: "admin_lovable_token",
-                value: fbData.id_token,
-                updated_at: new Date().toISOString()
-              }),
-            });
-            _cachedAdminToken = fbData.id_token;
-            console.log("[Module-B] Admin token refreshed and saved to secrets");
-            return fbData.id_token;
-          }
+  // Get refresh token from param or from secrets table
+  let rt = refreshToken;
+  if (!rt) {
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/admin_secrets?key=eq.admin_lovable_refresh_token&select=value`,
+        {
+          headers: {
+            "apikey": serviceKey,
+            "Authorization": `Bearer ${serviceKey}`,
+            "Accept-Profile": "internal",
+          },
         }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        rt = Array.isArray(data) && data.length > 0 ? data[0].value : null;
+      }
+    } catch { /* */ }
+  }
+  if (!rt) return null;
+
+  try {
+    const fbRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(rt)}`,
+    });
+    if (fbRes.ok) {
+      const fbData = await fbRes.json();
+      if (fbData.id_token) {
+        const exp = parseInt(fbData.expires_in || "3600", 10);
+        const expiresAt = new Date(Date.now() + (exp - 300) * 1000).toISOString();
+
+        // Update lovable_accounts admin row
+        await sc.from("lovable_accounts").update({
+          token_encrypted: fbData.id_token,
+          refresh_token_encrypted: fbData.refresh_token || rt,
+          token_expires_at: expiresAt,
+          last_verified_at: new Date().toISOString(),
+          status: "active",
+          refresh_failure_count: 0,
+        }).eq("is_admin_account", true);
+
+        _cachedAdminToken = fbData.id_token;
+        console.log("[Brain] Admin token refreshed successfully");
+        return fbData.id_token;
       }
     }
-  } catch (e) { console.error("[Module-B] Admin refresh failed:", e); }
+  } catch (e) { console.error("[Brain] Admin refresh failed:", e); }
   return null;
 }
 
-/** Resolve token: prefer admin token for brain operations, fallback to user token */
-function resolveToken(adminToken: string | null, userToken: string): { token: string; isAdmin: boolean } {
-  if (adminToken) return { token: adminToken, isAdmin: true };
-  return { token: userToken, isAdmin: false };
-}
+// â”€â”€â”€ API fetch with auto-retry on 401 â”€â”€â”€
+async function adminFetch(url: string, opts: RequestInit, sc: any): Promise<Response> {
+  const token = await getAdminLovableToken(sc);
+  if (!token) throw new Error("Admin Lovable token not available");
 
-async function targetFetch(url: string, opts: RequestInit, sc: any, uid: string, token: string): Promise<{ res: Response; token: string }> {
-  // HAR-required headers: Origin + Referer are mandatory for Lovable API
   const h: any = {
     ...opts.headers,
     Authorization: `Bearer ${token}`,
@@ -172,31 +147,24 @@ async function targetFetch(url: string, opts: RequestInit, sc: any, uid: string,
   if (!h["Content-Type"] && opts.method === "POST") {
     h["Content-Type"] = "application/json";
   }
+
   let res = await fetch(url, { ...opts, headers: h });
+
   if (res.status === 401) {
-    // Try admin refresh first if token looks like admin
-    const adminToken = await getAdminLovableToken(sc);
-    if (adminToken === token) {
-      const nt = await tryRefreshAdminToken(sc);
-      if (nt) {
-        h.Authorization = `Bearer ${nt}`;
-        res = await fetch(url, { ...opts, headers: h });
-        return { res, token: nt };
-      }
-    }
-    // Fallback: try user refresh
-    const nt = await tryRefreshToken(sc, uid);
+    // Invalidate cache and try refresh
+    _cachedAdminToken = null;
+    const nt = await tryRefreshAdminToken(sc);
     if (nt) {
       h.Authorization = `Bearer ${nt}`;
       res = await fetch(url, { ...opts, headers: h });
-      return { res, token: nt };
     }
   }
-  return { res, token };
+
+  return res;
 }
 
 // ---------------------------------------------------------------
-// PAYLOAD BUILDERS — Exact HAR-matched payloads for free modes
+// PAYLOAD BUILDERS â€” Exact HAR-matched payloads for free modes
 // ---------------------------------------------------------------
 
 type ChatMode = "security_fix" | "error_fix" | "seo_fix" | "tool_approve";
@@ -223,7 +191,6 @@ function buildChatPayload(
     runtime_errors: [],
   };
 
-  // --- MODE 1: security_fix_v2 (HAR-exact - Safe) ---
   if (mode === "security_fix") {
     return {
       ...base,
@@ -232,7 +199,7 @@ function buildChatPayload(
       chat_only: false,
       debug_mode: false,
       view: "security",
-      view_description: extra?.view_description || "O usuário está visualizando a aba de segurança do projeto.",
+      view_description: extra?.view_description || "O usuÃ¡rio estÃ¡ visualizando a aba de seguranÃ§a do projeto.",
       files: [],
       selected_elements: [],
       optimisticImageUrls: [],
@@ -242,19 +209,17 @@ function buildChatPayload(
     };
   }
 
-  // --- MODE 2: error_fix / instant (HAR-exact - Safe) ---
   if (mode === "error_fix") {
     return {
       ...base,
-      message: `Para o código presente, recebi o seguinte erro.\n\nPor favor, pense passo a passo para resolvê-lo.\n\`\`\`\n${prompt}\n\`\`\``,
+      message: `Para o cÃ³digo presente, recebi o seguinte erro.\n\nPor favor, pense passo a passo para resolvÃª-lo.\n\`\`\`\n${prompt}\n\`\`\``,
       mode: "instant",
       debug_mode: false,
       view: "error",
-      view_description: "O usuário está visualizando o erro em seu projeto. Isso mostra uma versão estática do código com uma visualização de diff. A edição só é possível para usuários pagos e para a edição mais recente. Mostra o erro real no topo.",
+      view_description: "O usuÃ¡rio estÃ¡ visualizando o erro em seu projeto.",
     };
   }
 
-  // --- MODE 3: seo_fix (HAR-exact - Safe) ---
   if (mode === "seo_fix") {
     return {
       ...base,
@@ -262,11 +227,10 @@ function buildChatPayload(
       intent: "seo_fix",
       chat_only: false,
       view: "seo",
-      view_description: extra?.view_description || "O usuário está visualizando a visualização de análise de Page Speed do projeto. Isso utiliza o Google Lighthouse para analisar o desempenho real do app do usuário.",
+      view_description: extra?.view_description || "O usuÃ¡rio estÃ¡ visualizando a visualizaÃ§Ã£o de anÃ¡lise de Page Speed do projeto.",
     };
   }
 
-  // --- MODE 4: tool_approve / instant (HAR-exact - Safe) ---
   if (mode === "tool_approve") {
     return {
       ...base,
@@ -279,7 +243,7 @@ function buildChatPayload(
       user_input: {},
       current_page: "/",
       view: "preview",
-      view_description: "O usuário está visualizando a prévia.",
+      view_description: "O usuÃ¡rio estÃ¡ visualizando a prÃ©via.",
     };
   }
 
@@ -290,11 +254,11 @@ function buildChatPayload(
     intent: "security_fix_v2",
     chat_only: false,
     view: "security",
-    view_description: "O usuário está visualizando a aba de segurança do projeto.",
+    view_description: "O usuÃ¡rio estÃ¡ visualizando a aba de seguranÃ§a do projeto.",
   };
 }
 
-// --- Build SEO fix message from PageSpeed audit (HAR-exact template) ---
+// --- Build SEO fix message ---
 function buildSeoFixMessage(auditTitle: string, auditDescription: string, score: number, details: any): string {
   return `SEO Audit Issue (error): ${auditTitle}
 
@@ -308,69 +272,67 @@ IMPORTANT INSTRUCTIONS FOR FIXING THIS SEO ISSUE:
 - STRICTLY preserve the existing functional behavior, design, and UX of the application
 - ONLY make changes that are absolutely necessary to fix this specific SEO issue
 - DO NOT modify the application's visual design, layout, or user experience unless it's essential for the SEO fix
-- If you cannot clearly determine how to fix this issue safely, simply provide the analysis in chat mode instead of making code changes
-- Focus on technical SEO fixes like meta tags, HTML structure, accessibility attributes, etc. that don't affect the user experience
+- Focus on technical SEO fixes like meta tags, HTML structure, accessibility attributes, etc.
 
-Please analyze this SEO issue and implement only the minimal necessary changes to improve the website's SEO performance without affecting the application's functionality or user experience.`;
+Please analyze this SEO issue and implement only the minimal necessary changes.`;
 }
 
 function buildSeoViewDescription(results: any): string {
   const s = results.score || results.categories || {};
-  return `The user is currently viewing the Page Speed analysis view for their project. This uses Google Lighthouse to analyze the actual performance of the user's app and gives separate scores for both mobile and desktop performance. The page speed view is currently using the desktop version. The page speed view is currently showing the performance category. Page speed analysis was last run at Updated just now. The main scores for each category are performance: ${s.performance ?? "N/A"}, accessibility: ${s.accessibility ?? "N/A"}, best-practices: ${s.bestPractices ?? s["best-practices"] ?? "N/A"}, seo: ${s.seo ?? "N/A"}. The detailed results are ${JSON.stringify(results)}.`;
+  return `The user is currently viewing the Page Speed analysis view. Scores: performance: ${s.performance ?? "N/A"}, accessibility: ${s.accessibility ?? "N/A"}, best-practices: ${s.bestPractices ?? s["best-practices"] ?? "N/A"}, seo: ${s.seo ?? "N/A"}. Results: ${JSON.stringify(results)}.`;
 }
 
 // --- Build brain prompt based on brain_type ---
 function buildBrainPrompt(brainType: string, message: string): string {
   const ts = Date.now();
 
-  // For error/seo modes, the message IS the prompt (already formatted)
   if (brainType === "error" || brainType === "seo") return message;
 
   const prompts: Record<string, string> = {
-    general: `Analise e corrija os seguintes problemas de segurança encontrados:
+    general: `Analise e corrija os seguintes problemas de seguranÃ§a encontrados:
 
-SISTEMA STARBLE BRAIN — INSTRUÇÃO:
-Você é LoveAI, assistente de código e design da plataforma Starble.
-O usuário solicitou: "${message}"
+SISTEMA STARBLE BRAIN â€” INSTRUÃ‡ÃƒO:
+VocÃª Ã© LoveAI, assistente de cÃ³digo e design da plataforma Starble.
+O usuÃ¡rio solicitou: "${message}"
 
 REGRAS DE RESPOSTA:
-- Responda SOMENTE com o que foi pedido, sem criar páginas ou alterar o projeto
-- Se for uma pergunta técnica: responda em texto claro e objetivo
-- Se for um prompt de design/código: retorne um prompt estruturado e completo
-- Formato: plaintext legível
-- NÃO diga "vou criar", "adicionei" — apenas RESPONDA
-- RESPONDA EM PORTUGUÊS (Brasil)
+- Responda SOMENTE com o que foi pedido
+- Se for uma pergunta tÃ©cnica: responda em texto claro e objetivo
+- Se for um prompt de design/cÃ³digo: retorne um prompt estruturado e completo
+- Formato: plaintext legÃ­vel
+- NÃƒO diga "vou criar", "adicionei" â€” apenas RESPONDA
+- RESPONDA EM PORTUGUÃŠS (Brasil)
 
 IMPORTANTE: Escreva sua resposta COMPLETA no arquivo src/brain-output.json no formato:
 {"response": "SUA_RESPOSTA_AQUI", "timestamp": ${ts}, "status": "done"}`,
 
     design: `Analise e corrija os seguintes problemas de design encontrados no scan:
 
-SISTEMA STARBLE BRAIN — MODO DESIGN:
-O usuário quer: "${message}"
-Retorne um prompt de design COMPLETO e DETALHADO. Inclua: paleta de cores (hex), tipografia, espaçamentos, componentes, layout grid, sombras, bordas, animações, responsividade, tema light/dark.
+SISTEMA STARBLE BRAIN â€” MODO DESIGN:
+O usuÃ¡rio quer: "${message}"
+Retorne um prompt de design COMPLETO e DETALHADO. Inclua: paleta de cores (hex), tipografia, espaÃ§amentos, componentes, layout grid, sombras, bordas, animaÃ§Ãµes, responsividade, tema light/dark.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
 
-    code: `Analise e corrija os seguintes problemas de código encontrados:
+    code: `Analise e corrija os seguintes problemas de cÃ³digo encontrados:
 
-SISTEMA STARBLE BRAIN — MODO CODE:
-O usuário quer: "${message}"
-Retorne APENAS o código necessário. Formato: arquivos separados com caminho completo.
+SISTEMA STARBLE BRAIN â€” MODO CODE:
+O usuÃ¡rio quer: "${message}"
+Retorne APENAS o cÃ³digo necessÃ¡rio. Formato: arquivos separados com caminho completo.
 Priorize: TypeScript, React, TailwindCSS, shadcn/ui, Supabase.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
 
     scraper: `Analise e corrija os seguintes problemas no script de scraping:
 
-SISTEMA STARBLE BRAIN — MODO SCRAPER:
-O usuário quer extrair dados de: "${message}"
+SISTEMA STARBLE BRAIN â€” MODO SCRAPER:
+O usuÃ¡rio quer extrair dados de: "${message}"
 Retorne um script completo para captura dos dados. Inclua tratamento de erros e formato JSON.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
 
-    migration: `Analise e corrija os seguintes problemas de migração SQL:
+    migration: `Analise e corrija os seguintes problemas de migraÃ§Ã£o SQL:
 
-SISTEMA STARBLE BRAIN — MODO MIGRATION:
-O usuário quer migrar: "${message}"
-Gere o script SQL completo de migração incluindo: schemas, tabelas, RLS policies, triggers, functions e seed data.
+SISTEMA STARBLE BRAIN â€” MODO MIGRATION:
+O usuÃ¡rio quer migrar: "${message}"
+Gere o script SQL completo de migraÃ§Ã£o incluindo: schemas, tabelas, RLS policies, triggers, functions e seed data.
 Escreva sua resposta no arquivo src/brain-output.json: {"response": "...", "timestamp": ${ts}, "status": "done"}`,
   };
 
@@ -393,7 +355,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return json({ error: "Não autenticado" }, 401);
+      return json({ error: "NÃ£o autenticado" }, 401);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -403,7 +365,7 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) return json({ error: "Token inválido" }, 401);
+    if (claimsError || !claimsData?.claims) return json({ error: "Token invÃ¡lido" }, 401);
 
     const userId = claimsData.claims.sub as string;
     const sc = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -411,37 +373,24 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = body.action;
 
-    // Helper to get brain project internally
-    const getBrainProject = async (scClient: any, uid: string) => {
-      const { data } = await scClient.from("user_brain_projects")
-        .select("lovable_project_id, brain_owner, lovable_workspace_id")
+    // â”€â”€â”€ Resolve admin token (REQUIRED for all brain operations) â”€â”€â”€
+    const adminToken = await getAdminLovableToken(sc);
+
+    // Helper to get brain project for this user
+    const getBrainProject = async (uid: string) => {
+      const { data } = await sc.from("user_brain_projects")
+        .select("lovable_project_id, lovable_workspace_id")
         .eq("user_id", uid).eq("status", "active").maybeSingle();
       return data;
     };
 
     // --- STATUS ---
+    // Brain status no longer depends on user's Lovable account.
+    // It only checks if the admin token is valid and if a brain project exists.
     if (action === "status") {
-      const { token: lToken, expired } = await getLovableToken(sc, userId);
-      if (expired || !lToken) return json({ active: false, connected: false, reason: "identity_expired" });
-
-      // Actually validate the token against the Lovable API
-      let tokenValid = true;
-      try {
-        const { res: validateRes } = await targetFetch(
-          `${TARGET_API}/user/workspaces`,
-          { method: "GET" }, sc, userId, lToken
-        );
-        if (validateRes.status === 401 || validateRes.status === 403) {
-          // Token is invalid on Lovable's side — mark as expired
-          await sc.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
-          tokenValid = false;
-        }
-      } catch {
-        // Network error — don't mark as expired, just report unknown
-      }
-
-      if (!tokenValid) {
-        return json({ active: false, connected: false, reason: "token_expired" });
+      const hasAdmin = !!adminToken;
+      if (!hasAdmin) {
+        return json({ active: false, connected: false, reason: "platform_unavailable" });
       }
 
       const { data: brain } = await sc.from("user_brain_projects")
@@ -459,52 +408,40 @@ Deno.serve(async (req) => {
       return json({ conversations: data || [] });
     }
 
-    // --- Require Lovable connection for remaining actions ---
-    const { token: lovableToken, expired } = await getLovableToken(sc, userId);
-    // Admin token can bypass user connection requirement for brain operations
-    const adminToken = await getAdminLovableToken(sc);
-    if (!adminToken && (expired || !lovableToken)) {
-      return json({ error: "Lovable não conectado.", code: "not_connected" }, 403);
+    // --- Require admin token for all remaining brain actions ---
+    if (!adminToken) {
+      return json({ error: "Plataforma Brain indisponÃ­vel. Contate o administrador.", code: "platform_unavailable" }, 503);
     }
 
     // --- SETUP ---
+    // Always creates brain project in the ADMIN's workspace using ADMIN's token.
+    // The user never needs their own Lovable account for brain.
     if (action === "setup") {
-      const { data: existing } = await sc.from("user_brain_projects")
-        .select("lovable_project_id, status").eq("user_id", userId).eq("status", "active").maybeSingle();
+      const existing = await getBrainProject(userId);
+      if (existing) return json({ success: true, already_exists: true });
 
-      if (existing) return json({ success: true, brain_project_id: existing.lovable_project_id, already_exists: true });
-
-      // Resolve which token to use: prefer admin for brain creation
-      const { token: setupToken, isAdmin } = resolveToken(adminToken, lovableToken);
-      console.log(`[Module-B] Setup using ${isAdmin ? "SERVICE" : "IDENTITY"} token`);
-
-      // Get workspace (from admin or user account)
-      const { res: wsRes, token: t1 } = await targetFetch(`${TARGET_API}/user/workspaces`, { method: "GET" }, sc, userId, setupToken);
+      // Get admin's workspace
+      const wsRes = await adminFetch(`${TARGET_API}/user/workspaces`, { method: "GET" }, sc);
       if (!wsRes.ok) {
-        if (wsRes.status === 401) {
-          if (!isAdmin) {
-            await sc.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
-          }
-          return json({ error: "Token expirado. Reconecte.", code: "token_expired" }, 401);
-        }
-        return json({ error: "Falha ao obter workspaces." }, 502);
+        return json({ error: "Falha ao obter workspaces do admin." }, 502);
       }
       const wsBody = await wsRes.json();
       let wsList: any[] = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || wsBody?.results || wsBody?.items || []);
       if (wsList.length === 0 && wsBody?.id) wsList = [wsBody];
       const workspaceId = wsList?.[0]?.id;
-      if (!workspaceId) return json({ error: "Nenhum workspace encontrado" }, 404);
+      if (!workspaceId) return json({ error: "Nenhum workspace admin encontrado" }, 404);
 
       const msgId = generateTypeId("umsg");
       const aiMsgId = generateTypeId("aimsg");
 
-      const { res: createRes, token: t2 } = await targetFetch(
+      // Create brain project in admin's workspace
+      const createRes = await adminFetch(
         `${TARGET_API}/workspaces/${workspaceId}/projects`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            description: "Starble Brain - AI Assistant",
+            description: `Starble Brain - User ${obfuscate(userId)}`,
             visibility: "private",
             env_vars: {},
             metadata: { chat_mode_enabled: false },
@@ -516,67 +453,68 @@ Deno.serve(async (req) => {
               ai_message_id: aiMsgId,
             },
           }),
-        }, sc, userId, t1
+        }, sc
       );
       if (!createRes.ok) return json({ error: "Falha ao criar Brain project" }, 502);
 
       const project = await createRes.json();
       const brainProjectId = project?.id || project?.project_id;
-      if (!brainProjectId) return json({ error: "ID do projeto não retornado" }, 502);
+      if (!brainProjectId) return json({ error: "ID do projeto nÃ£o retornado" }, 502);
 
       // Cancel initial message to save credits
       try {
-        await targetFetch(
+        await adminFetch(
           `${TARGET_API}/projects/${brainProjectId}/chat/${msgId}/cancel`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
-          sc, userId, t2
+          sc
         );
       } catch { /* ok */ }
 
+      // Store mapping: this user â†’ this brain project (admin-owned)
       await sc.from("user_brain_projects").insert({
-        user_id: userId, lovable_project_id: brainProjectId,
-        lovable_workspace_id: workspaceId, status: "active",
-        brain_owner: isAdmin ? "admin" : "user",
+        user_id: userId,
+        lovable_project_id: brainProjectId,
+        lovable_workspace_id: workspaceId,
+        status: "active",
+        brain_owner: "admin",
       });
 
       // Inject brain config
       try {
-        await targetFetch(`${TARGET_API}/projects/${brainProjectId}/edit-code`, {
+        await adminFetch(`${TARGET_API}/projects/${brainProjectId}/edit-code`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             changes: [
-              { path: "src/brain-config.md", content: "# Starble Brain System\n\nEste projeto é o Brain da plataforma Starble.\nQuando receber mensagens via chat, responda SOMENTE com o resultado solicitado.\nNÃO crie páginas, componentes ou código a menos que explicitamente solicitado.\nFormato de resposta padrão: texto puro ou JSON conforme instruído no prompt.\n\nRESPONDA SEMPRE EM PORTUGUÊS (Brasil)." },
+              { path: "src/brain-config.md", content: "# Starble Brain System\n\nEste projeto Ã© o Brain da plataforma Starble.\nQuando receber mensagens via chat, responda SOMENTE com o resultado solicitado.\nNÃƒO crie pÃ¡ginas, componentes ou cÃ³digo a menos que explicitamente solicitado.\nFormato de resposta padrÃ£o: texto puro ou JSON conforme instruÃ­do no prompt.\n\nRESPONDA SEMPRE EM PORTUGUÃŠS (Brasil)." },
               { path: "src/brain-output.json", content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }) },
             ],
           }),
-        }, sc, userId, t2);
+        }, sc);
       } catch { /* ok */ }
 
-      console.log(`[Module-B] ? Created processing endpoint ${brainProjectId} (owner: ${isAdmin ? "service" : "identity"})`);
-      return json({ success: true, already_exists: false, owner: isAdmin ? "admin" : "user" });
+      console.log(`[Brain] âœ… Created brain ${brainProjectId} for user ${obfuscate(userId)} in admin workspace`);
+      return json({ success: true, already_exists: false });
     }
 
-    // --- PAGE_SPEED — Free Lighthouse analysis ---
+    // --- PAGE_SPEED â€” Free Lighthouse analysis ---
     if (action === "page_speed") {
       const { project_id, strategy = "desktop", categories = ["seo"] } = body;
 
-      // Use brain project if not specified
       let pid = project_id;
       if (!pid) {
-        const { data: brain } = await sc.from("user_brain_projects")
-          .select("lovable_project_id").eq("user_id", userId).eq("status", "active").maybeSingle();
+        const brain = await getBrainProject(userId);
         pid = brain?.lovable_project_id;
       }
       if (!pid) return json({ error: "Nenhum projeto especificado" }, 400);
 
-      const { res: speedRes } = await targetFetch(
+      const speedRes = await adminFetch(
         `${TARGET_API}/projects/${pid}/preview-page-speed`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url_source: "publish", strategy, categories }),
-        }, sc, userId, lovableToken
+        }, sc
       );
       if (!speedRes.ok) return json({ error: "Falha ao executar PageSpeed" }, 502);
 
@@ -584,79 +522,61 @@ Deno.serve(async (req) => {
       return json({ success: true, ...speedData });
     }
 
-    // --- SEND — Send message to Brain (all modes) ---
+    // --- SEND â€” Send message to Brain (all modes) ---
     if (action === "send") {
       const { message, brain_type = "general", target_project_id, chat_mode: requestedMode } = body;
 
       if (!message || typeof message !== "string" || message.length < 1 || message.length > 10000) {
-        return json({ error: "Mensagem inválida (1-10000 chars)" }, 400);
+        return json({ error: "Mensagem invÃ¡lida (1-10000 chars)" }, 400);
       }
 
-      const brain = await getBrainProject(sc, userId);
-      if (!brain) return json({ error: "Star AI não configurado. Execute setup primeiro." }, 404);
+      const brain = await getBrainProject(userId);
+      if (!brain) return json({ error: "Star AI nÃ£o configurado. Execute setup primeiro." }, 404);
 
       const brainProjectId = brain.lovable_project_id;
       const chatMode: ChatMode = (requestedMode as ChatMode) || brainTypeToMode(brain_type);
 
-      // Use admin token for brain operations when brain is admin-owned
-      const { token: brainToken } = resolveToken(
-        brain.brain_owner === "admin" ? adminToken : null,
-        lovableToken
-      );
-
-      // --- SEO MODE: Auto-fetch PageSpeed and build proper message ---
+      // --- SEO MODE ---
       let finalPrompt: string;
       let seoViewDesc: string | undefined;
 
       if (chatMode === "seo_fix") {
-        // Step 1: Fetch PageSpeed data
         let speedData: any = null;
         try {
-          const { res: speedRes } = await targetFetch(
+          const speedRes = await adminFetch(
             `${TARGET_API}/projects/${brainProjectId}/preview-page-speed`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ url_source: "publish", strategy: "desktop", categories: ["seo"] }),
-            }, sc, userId, brainToken
+            }, sc
           );
           if (speedRes.ok) speedData = await speedRes.json();
-        } catch (e) { console.warn("[Module-B] PageSpeed fetch failed:", e); }
+        } catch (e) { console.warn("[Brain] PageSpeed fetch failed:", e); }
 
         if (speedData?.results?.audits) {
-          // Step 2: Find error audits or use user message as context
           const errorAudits = speedData.results.audits.filter((a: any) => a.severity === "error");
-          const targetAudit = errorAudits[0]; // Fix first error audit
-
+          const targetAudit = errorAudits[0];
           if (targetAudit) {
-            finalPrompt = buildSeoFixMessage(
-              targetAudit.title || message,
-              targetAudit.description || "",
-              targetAudit.score ?? 0,
-              targetAudit.details || {}
-            );
+            finalPrompt = buildSeoFixMessage(targetAudit.title || message, targetAudit.description || "", targetAudit.score ?? 0, targetAudit.details || {});
           } else {
-            // No error audits — use user message as SEO issue
             finalPrompt = buildSeoFixMessage(message, "", 0, {});
           }
           seoViewDesc = buildSeoViewDescription(speedData.results);
         } else {
-          // PageSpeed unavailable — fallback to simple SEO prompt
           finalPrompt = buildSeoFixMessage(message, "", 0, {});
         }
       } else if (chatMode === "error_fix") {
-        // error_fix: message is the error text, template applied in buildChatPayload
         finalPrompt = message;
       } else {
-        // security_fix: build brain prompt
         finalPrompt = buildBrainPrompt(brain_type, message);
       }
 
-      // Take source snapshot for capture strategy 4
+      // Take source snapshot
       try {
-        const { res: srcRes } = await targetFetch(
+        const srcRes = await adminFetch(
           `${TARGET_API}/projects/${brainProjectId}/source-code`,
-          { method: "GET" }, sc, userId, brainToken
+          { method: "GET" }, sc
         );
         if (srcRes.ok) {
           const srcText = await srcRes.text();
@@ -675,30 +595,24 @@ Deno.serve(async (req) => {
         view_description: seoViewDesc,
       });
 
-      console.log(`[Module-B] Sending mode=${chatMode}, brain_type=${brain_type}, project=${brainProjectId}`);
+      console.log(`[Brain] Sending mode=${chatMode}, brain_type=${brain_type}, project=${brainProjectId}`);
 
-      const { res: chatRes } = await targetFetch(
+      const chatRes = await adminFetch(
         `${TARGET_API}/projects/${brainProjectId}/chat`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }, sc, userId, brainToken
+        }, sc
       );
 
       if (!chatRes.ok) {
         const errText = await chatRes.text().catch(() => "");
-        console.error(`[Module-B] Chat failed (${chatMode}):`, chatRes.status, errText.substring(0, 500));
-        if (chatRes.status === 401 || chatRes.status === 403) {
-          if (brain.brain_owner !== "admin") {
-            await sc.from("lovable_accounts").update({ status: "expired" }).eq("user_id", userId);
-          }
-          return json({ error: "Token expirado. Reconecte.", code: "token_expired" }, 401);
-        }
+        console.error(`[Brain] Chat failed (${chatMode}):`, chatRes.status, errText.substring(0, 500));
         return json({ error: "Falha ao enviar para Star AI." }, 502);
       }
 
-      console.log(`[Module-B] ? Request processed via ${chatMode}`);
+      console.log(`[Brain] âœ… Request processed via ${chatMode}`);
 
       // Save conversation
       const { data: convo } = await sc.from("loveai_conversations").insert({
@@ -723,16 +637,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // --- TOOL_APPROVE — Auto-approve tool use step (Mode 4, free) ---
+    // --- TOOL_APPROVE ---
     if (action === "tool_approve") {
       const { prev_session_id, tool_use_id } = body;
 
-      const brain = await getBrainProject(sc, userId);
+      const brain = await getBrainProject(userId);
       if (!brain) return json({ error: "Brain not found" }, 404);
       const brainProjectId = brain.lovable_project_id;
 
       if (!prev_session_id || !tool_use_id) {
-        return json({ error: "prev_session_id e tool_use_id obrigatórios" }, 400);
+        return json({ error: "prev_session_id e tool_use_id obrigatÃ³rios" }, 400);
       }
 
       const msgId = generateTypeId("umsg");
@@ -742,66 +656,49 @@ Deno.serve(async (req) => {
         tool_use_id,
       });
 
-      const { res: approveRes } = await targetFetch(
+      const approveRes = await adminFetch(
         `${TARGET_API}/projects/${brainProjectId}/chat`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }, sc, userId, lovableToken
+        }, sc
       );
 
       if (!approveRes.ok) {
         return json({ error: "Falha ao aprovar tool use" }, 502);
       }
 
-      console.log(`[Module-B] ? Tool approved: ${tool_use_id}`);
+      console.log(`[Brain] âœ… Tool approved: ${tool_use_id}`);
       return json({ success: true, message_id: msgId, ai_message_id: aiMsgId });
     }
 
-    // --- CAPTURE — Extract response (4-tier strategy) ---
+    // --- CAPTURE â€” Extract response (4-tier strategy) ---
     if (action === "capture") {
-      const { conversation_id, brain_message_id } = body;
-      
-      const brain = await getBrainProject(sc, userId);
+      const { conversation_id } = body;
+
+      const brain = await getBrainProject(userId);
       if (!brain) return json({ error: "Brain not found" }, 404);
       const brainProjectId = brain.lovable_project_id;
 
-      if (!conversation_id) return json({ error: "conversation_id obrigatório" }, 400);
-
-      // Resolve token: prefer admin for brain-owned projects
-      const { data: brainInfo } = await sc.from("user_brain_projects")
-        .select("brain_owner").eq("lovable_project_id", brainProjectId).maybeSingle();
-      const { token: captureToken } = resolveToken(
-        brainInfo?.brain_owner === "admin" ? adminToken : null,
-        lovableToken
-      );
+      if (!conversation_id) return json({ error: "conversation_id obrigatÃ³rio" }, 400);
 
       let response: string | null = null;
 
-      // --- STRATEGY 1: latest-message (HAR-exact pattern) ---
+      // --- STRATEGY 1: latest-message ---
       try {
-        const { res: r } = await targetFetch(
+        const r = await adminFetch(
           `${TARGET_API}/projects/${brainProjectId}/latest-message`,
-          { method: "GET" }, sc, userId, captureToken
+          { method: "GET" }, sc
         );
         if (r.ok) {
           const msg = await r.json();
-          console.log("[Capture] S1 latest-message:", JSON.stringify({
-            is_streaming: msg?.is_streaming,
-            content_len: (msg?.content || msg?.message || "").length,
-            role: msg?.role,
-            keys: Object.keys(msg || {}),
-          }));
-
           if (msg && !msg.is_streaming) {
             const content = msg.content || msg.message || msg.text || "";
             if (content.length > 10) {
               response = content;
-              console.log("[Capture] ? S1 /latest-message, len:", response!.length);
+              console.log("[Capture] âœ… S1 /latest-message, len:", response!.length);
             }
-          } else if (msg?.is_streaming) {
-            console.log("[Capture] S1 still streaming...");
           }
         }
       } catch (e) { console.warn("[Capture] S1 err:", e); }
@@ -809,21 +706,20 @@ Deno.serve(async (req) => {
       // --- STRATEGY 2: messages list ---
       if (!response) {
         try {
-          const { res: r } = await targetFetch(
+          const r = await adminFetch(
             `${TARGET_API}/projects/${brainProjectId}/messages?limit=5&order=desc`,
-            { method: "GET" }, sc, userId, captureToken
+            { method: "GET" }, sc
           );
           if (r.ok) {
             const d = await r.json();
             const msgs = Array.isArray(d) ? d : (d?.messages || d?.data || d?.items || []);
-            console.log("[Capture] S2 messages count:", msgs.length);
             for (const m of msgs) {
               const c = m.content || m.message || m.text || "";
               const role = m.role || m.type || "";
               if (role === "user" || role === "human") continue;
               if (c.length > 10) {
                 response = c;
-                console.log("[Capture] ? S2 /messages, len:", response!.length);
+                console.log("[Capture] âœ… S2 /messages, len:", response!.length);
                 break;
               }
             }
@@ -834,9 +730,9 @@ Deno.serve(async (req) => {
       // --- STRATEGY 3: chat-history ---
       if (!response) {
         try {
-          const { res: r } = await targetFetch(
+          const r = await adminFetch(
             `${TARGET_API}/projects/${brainProjectId}/chat-history?limit=5`,
-            { method: "GET" }, sc, userId, captureToken
+            { method: "GET" }, sc
           );
           if (r.ok) {
             const d = await r.json();
@@ -847,7 +743,7 @@ Deno.serve(async (req) => {
               if (role === "user" || role === "human") continue;
               if (c.length > 10) {
                 response = c;
-                console.log("[Capture] ? S3 /chat-history, len:", response!.length);
+                console.log("[Capture] âœ… S3 /chat-history, len:", response!.length);
                 break;
               }
             }
@@ -862,9 +758,9 @@ Deno.serve(async (req) => {
             .select("snapshot_hash").eq("project_id", brainProjectId).maybeSingle();
           const prevHash = snap?.snapshot_hash || null;
 
-          const { res: srcRes } = await targetFetch(
+          const srcRes = await adminFetch(
             `${TARGET_API}/projects/${brainProjectId}/source-code`,
-            { method: "GET" }, sc, userId, captureToken
+            { method: "GET" }, sc
           );
 
           if (srcRes.ok) {
@@ -894,7 +790,7 @@ Deno.serve(async (req) => {
                 const parsed = JSON.parse(clean);
                 if (parsed.response && parsed.response.length > 0 && parsed.status === "done") {
                   response = parsed.response;
-                  console.log("[Capture] ? via source-code brain-output.json");
+                  console.log("[Capture] âœ… via source-code brain-output.json");
                 }
               } catch {
                 if (outputContent.length > 20 && !outputContent.includes('"status":"idle"')) {
@@ -920,37 +816,29 @@ Deno.serve(async (req) => {
       return json({ success: true, status: "processing" });
     }
 
-    // --- CAPTURE_POLL — Quick polling (up to 30s) via latest-message ---
+    // --- CAPTURE_POLL â€” Quick polling (up to 30s) via latest-message ---
     if (action === "capture_poll") {
       const { conversation_id, max_wait = 30 } = body;
 
-      const brain = await getBrainProject(sc, userId);
+      const brain = await getBrainProject(userId);
       if (!brain) return json({ error: "Brain not found" }, 404);
       const brainProjectId = brain.lovable_project_id;
 
-      const { data: brainInfo2 } = await sc.from("user_brain_projects")
-        .select("brain_owner").eq("lovable_project_id", brainProjectId).maybeSingle();
-      const { token: pollToken } = resolveToken(
-        brainInfo2?.brain_owner === "admin" ? adminToken : null,
-        lovableToken
-      );
-
       const maxMs = Math.min(max_wait, 30) * 1000;
       const start = Date.now();
-      const interval = 3000; // 3s between polls
+      const interval = 3000;
 
       while (Date.now() - start < maxMs) {
         try {
-          const { res: r } = await targetFetch(
+          const r = await adminFetch(
             `${TARGET_API}/projects/${brainProjectId}/latest-message`,
-            { method: "GET" }, sc, userId, pollToken
+            { method: "GET" }, sc
           );
           if (r.ok) {
             const msg = await r.json();
             if (msg && !msg.is_streaming) {
               const content = msg.content || msg.message || msg.text || "";
               if (content.length > 10 && msg.role !== "user") {
-                // Update conversation if provided
                 if (conversation_id) {
                   await sc.from("loveai_conversations").update({
                     ai_response: content, status: "completed",
@@ -967,7 +855,7 @@ Deno.serve(async (req) => {
       return json({ success: true, status: "processing" });
     }
 
-    return json({ error: "Ação não reconhecida" }, 400);
+    return json({ error: "AÃ§Ã£o nÃ£o reconhecida" }, 400);
   } catch (error) {
     console.error("Star AI Brain error:", error);
     return json({ error: "Erro interno" }, 500);
