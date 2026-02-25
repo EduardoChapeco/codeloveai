@@ -78,13 +78,39 @@ Deno.serve(async (req: Request) => {
   if (supabaseUrl && serviceKey) {
     try {
       const licRes = await fetch(
-        `${supabaseUrl}/rest/v1/licenses?key=eq.${encodeURIComponent(licenseKey as string)}&status=eq.active&select=id`,
+        `${supabaseUrl}/rest/v1/licenses?key=eq.${encodeURIComponent(licenseKey as string)}&status=eq.active&select=id,plan_id`,
         { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
       );
       if (licRes.ok) {
         const lics = await licRes.json();
         if (!Array.isArray(lics) || lics.length === 0)
           return fail('Licenca invalida ou expirada', 401);
+
+        // Check if plan allows "speed" extension
+        const planId = lics[0].plan_id;
+        if (planId) {
+          const peRes = await fetch(
+            `${supabaseUrl}/rest/v1/plan_extensions?plan_id=eq.${planId}&select=extension_id`,
+            { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
+          );
+          if (peRes.ok) {
+            const peData = await peRes.json();
+            const extIds = (peData || []).map((pe: any) => pe.extension_id);
+            if (extIds.length > 0) {
+              const ecRes = await fetch(
+                `${supabaseUrl}/rest/v1/extension_catalog?id=in.(${extIds.join(',')})&select=slug`,
+                { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
+              );
+              if (ecRes.ok) {
+                const exts = await ecRes.json();
+                const slugs = (exts || []).map((e: any) => e.slug);
+                if (!slugs.includes('speed')) {
+                  return fail('Seu plano não inclui a extensão Speed. Faça upgrade.', 403);
+                }
+              }
+            }
+          }
+        }
       }
     } catch (e) { console.error('[speed-chat] Erro ao checar licenca:', e); }
   }
