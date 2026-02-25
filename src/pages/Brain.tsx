@@ -70,7 +70,8 @@ function groupByDate(convos: Conversation[]): Record<string, Conversation[]> {
 
 export default function BrainPage() {
   const { user, loading: authLoading } = useAuth();
-  const { enabled: brainEnabled, loading: flagLoading } = { enabled: true, loading: false };
+  const brainEnabled = true;
+  const flagLoading = false;
   const navigate = useNavigate();
 
   const [brainActive, setBrainActive] = useState<boolean | null>(null);
