@@ -35,7 +35,12 @@ function json(data: unknown, status = 200) {
 }
 
 // ─── Auth helpers ─────────────────────────────────────────────
-async function getUserId(req: Request, anonSc: SupabaseClient): Promise<string | null> {
+async function getUserId(req: Request, anonSc: SupabaseClient, body?: Record<string, unknown>): Promise<string | null> {
+  // Internal calls from orchestrator-tick use service role key + _internal_user_id
+  const isInternal = req.headers.get("x-orchestrator-internal") === "true";
+  if (isInternal && body?._internal_user_id) {
+    return body._internal_user_id as string;
+  }
   try {
     const { data: { user } } = await anonSc.auth.getUser();
     return user?.id || null;
@@ -470,11 +475,11 @@ Deno.serve(async (req: Request) => {
   });
 
   try {
-    const userId = await getUserId(req, anonSc);
-    if (!userId) return json({ error: "Unauthorized" }, 401);
-
     const body = await req.json() as Record<string, unknown>;
     const action = (body.action as string) || "";
+
+    const userId = await getUserId(req, anonSc, body);
+    if (!userId) return json({ error: "Unauthorized" }, 401);
 
     // ─── ACTION: start ────────────────────────────────────────
     if (action === "start") {
@@ -544,8 +549,11 @@ Deno.serve(async (req: Request) => {
       const { project_id } = body as { project_id: string };
       if (!project_id) return json({ error: "project_id required" }, 400);
 
-      const { data: project } = await sc.from("orchestrator_projects")
-        .select("*").eq("id", project_id).eq("user_id", userId).maybeSingle();
+      // For internal tick calls, don't filter by user_id (already validated)
+      const isInternal = req.headers.get("x-orchestrator-internal") === "true";
+      let projectQuery = sc.from("orchestrator_projects").select("*").eq("id", project_id);
+      if (!isInternal) projectQuery = projectQuery.eq("user_id", userId);
+      const { data: project } = await projectQuery.maybeSingle();
 
       if (!project) return json({ error: "Project not found" }, 404);
       if (project.status === "completed") return json({ status: "already_completed" });
