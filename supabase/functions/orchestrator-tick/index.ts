@@ -21,6 +21,10 @@ function json(data: unknown, status = 200) {
 }
 
 const LOVABLE_API = "https://api.lovable.dev";
+const LOVABLE_HEADERS = {
+  "Origin": "https://lovable.dev",
+  "Referer": "https://lovable.dev/",
+};
 const ORCHESTRATOR_FN = "/functions/v1/agentic-orchestrator";
 
 interface OrchestratorProject {
@@ -80,13 +84,16 @@ Deno.serve(async (req: Request) => {
         tickLog.push(`→ Project ${project.id} (user: ${project.user_id})`);
 
         // 2. Get user's lovable token — Phase 9: read access_token directly
+        // Use admin token instead of per-user tokens
         const { data: account } = await sc
           .from("lovable_accounts")
-          .select("access_token, token_expires_at, status")
-          .eq("user_id", project.user_id)
+          .select("token_encrypted, token_expires_at, status")
+          .eq("is_admin_account", true)
+          .eq("status", "active")
+          .limit(1)
           .maybeSingle();
 
-        if (!account?.access_token || account.status !== "active") {
+        if (!account?.token_encrypted || account.status !== "active") {
           tickLog.push(`  ⚠️ No active Lovable token for user ${project.user_id}, skipping`);
           skipped++;
           await sc.from("orchestrator_projects").update({
@@ -105,7 +112,7 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        const lovableToken = account.access_token as string;
+        const lovableToken = account.token_encrypted as string;
 
         // 3. Check if Lovable is idle (has the source code changed since last tick?)
         let isIdle = true;
@@ -115,7 +122,7 @@ Deno.serve(async (req: Request) => {
             {
               headers: {
                 Authorization: `Bearer ${lovableToken}`,
-                "Origin": "https://lovable.dev",
+                ...LOVABLE_HEADERS,
               },
             }
           );

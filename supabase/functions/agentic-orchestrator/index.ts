@@ -21,7 +21,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const EXT_API = "https://api.lovable.app/v1";
+const EXT_API = "https://api.lovable.dev";
 
 // ─── Anti-question prefix ─────────────────────────────────────
 // Prevents Lovable from asking clarifying questions mid-task.
@@ -62,6 +62,8 @@ async function extFetch(url: string, opts: RequestInit, token: string) {
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${token}`,
+      "Origin": "https://lovable.dev",
+      "Referer": "https://lovable.dev/",
       ...(opts.headers || {}),
     },
   });
