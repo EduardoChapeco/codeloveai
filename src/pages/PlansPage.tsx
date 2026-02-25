@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Check, Loader2, ArrowRight, FolderOpen } from "lucide-react";
+import { Check, Loader2, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
@@ -14,7 +14,7 @@ interface Plan {
   description: string;
   features: string[];
   popular?: boolean;
-  max_projects?: number | null;
+  dailyLimit?: number | null;
 }
 
 const billingCycleLabels: Record<string, string> = {
@@ -48,7 +48,7 @@ export default function PlansPage() {
             description: p.description || "",
             features: Array.isArray(p.features) ? p.features : [],
             popular: p.highlight_label?.toLowerCase() === "popular",
-            max_projects: p.max_projects,
+            dailyLimit: p.daily_message_limit,
           })));
         }
       } catch (err) {
@@ -102,11 +102,10 @@ export default function PlansPage() {
                 </div>
                 <p className="lv-body mb-4 min-h-[3rem]">{plan.description}</p>
                 
-                {/* Max Projects badge */}
-                {plan.max_projects != null && (
+                {/* Daily limit info */}
+                {plan.dailyLimit != null && (
                   <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-primary/5 border border-primary/10">
-                    <FolderOpen className="h-4 w-4 text-primary shrink-0" />
-                    <span className="text-sm font-semibold text-primary">Até {plan.max_projects} projeto{plan.max_projects > 1 ? "s" : ""}</span>
+                    <span className="text-sm font-semibold text-primary">{plan.dailyLimit} mensagens/dia</span>
                   </div>
                 )}
                 
@@ -121,14 +120,14 @@ export default function PlansPage() {
               </div>
 
               <button
-                onClick={() => navigate(`/checkout?plan=${plan.id}`)}
+                onClick={() => plan.price === 0 ? navigate("/free") : navigate(`/checkout?plan=${plan.id}`)}
                 className={`w-full h-11 flex items-center justify-center gap-2 text-sm font-medium rounded-xl transition-all ${
-                  plan.popular 
+                  plan.price > 0
                     ? "bg-primary text-primary-foreground hover:opacity-90" 
                     : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                 }`}
               >
-                Selecionar Plano
+                {plan.price === 0 ? "Começar Grátis" : "Selecionar Plano"}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
