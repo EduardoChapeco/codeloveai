@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     // FIX: Use correct column names — "key" and "active" (not "token"/"is_active")
     const { data: license } = await adminClient
       .from("licenses")
-      .select("id, key, plan, plan_type, type, status, expires_at, active, device_id, user_id, tenant_id, daily_messages, hourly_limit, token_valid_until, trial_expires_at, trial_used, messages_used_today")
+      .select("id, key, plan, plan_type, type, status, expires_at, active, device_id, user_id, tenant_id, daily_messages, hourly_limit, token_valid_until, trial_expires_at, trial_used, messages_used_today, plan_id")
       .eq("key", licenseKey)
       .eq("active", true)
       .maybeSingle();
@@ -120,6 +120,23 @@ Deno.serve(async (req) => {
         .eq("id", license.id);
     }
 
+    // Fetch allowed extensions for this license's plan
+    let allowedExtensions: string[] = [];
+    if (license.plan_id) {
+      const { data: peData } = await adminClient
+        .from("plan_extensions")
+        .select("extension_id")
+        .eq("plan_id", license.plan_id);
+      if (peData && peData.length > 0) {
+        const extIds = peData.map((pe: any) => pe.extension_id);
+        const { data: exts } = await adminClient
+          .from("extension_catalog")
+          .select("slug")
+          .in("id", extIds);
+        allowedExtensions = (exts || []).map((e: any) => e.slug);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         valid: true,
@@ -133,6 +150,7 @@ Deno.serve(async (req) => {
         tokenValidUntil: license.token_valid_until,
         trialExpiresAt: license.trial_expires_at,
         tenantId: license.tenant_id,
+        allowedExtensions,
         exp: license.expires_at ? new Date(license.expires_at).getTime() : null,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

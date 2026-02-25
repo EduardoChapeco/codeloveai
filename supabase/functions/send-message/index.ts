@@ -103,18 +103,46 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // ── DAILY USAGE ENFORCEMENT ──
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // Find the active license for this CLF token
+  // Find the active license for this CLF token and check extension access
   const { data: licenseRow } = await adminClient
     .from("licenses")
-    .select("id, daily_messages, plan, user_id")
+    .select("id, daily_messages, plan, user_id, plan_id")
     .eq("key", clfToken)
     .eq("active", true)
     .maybeSingle();
+
+  // Validate extension access via plan_extensions table
+  if (licenseRow?.plan_id) {
+    const { data: peData } = await adminClient
+      .from("plan_extensions")
+      .select("extension_id")
+      .eq("plan_id", licenseRow.plan_id);
+    
+    if (peData) {
+      const extIds = peData.map((pe: any) => pe.extension_id);
+      if (extIds.length > 0) {
+        const { data: exts } = await adminClient
+          .from("extension_catalog")
+          .select("slug")
+          .in("id", extIds);
+        const allowedSlugs = (exts || []).map((e: any) => e.slug);
+        if (!allowedSlugs.includes(extensionId)) {
+          return new Response(
+            JSON.stringify({
+              error: `Seu plano não inclui a extensão "${extensionId}". Faça upgrade em starble.lovable.app.`,
+              plan: auth.plan,
+              allowedExtensions: allowedSlugs,
+            }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
+  }
 
   let usedToday = 0;
   let dailyLimit: number | null = null;

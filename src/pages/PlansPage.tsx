@@ -74,9 +74,10 @@ export default function PlansPage() {
     );
   }
 
-  // Separate WL plan from regular plans
-  const regularPlans = plans.filter(p => p.price < 200);
-  const wlPlan = plans.find(p => p.price >= 200);
+  // Separate: daily plans (Individual/Pro), monthly plans, and WL plan
+  const dailyPlans = plans.filter(p => p.billingCycle === "daily");
+  const monthlyPlans = plans.filter(p => p.billingCycle === "monthly" && p.price < 20000);
+  const wlPlan = plans.find(p => p.price >= 20000);
 
   return (
     <AppLayout>
@@ -89,9 +90,9 @@ export default function PlansPage() {
           </p>
         </div>
 
-        {/* Regular plans grid */}
-        <div className={`grid gap-5 max-w-4xl mx-auto ${regularPlans.length >= 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2"}`}>
-          {regularPlans.map((plan) => (
+        {/* Daily plans grid */}
+        <div className={`grid gap-5 max-w-4xl mx-auto ${dailyPlans.length >= 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2"}`}>
+          {dailyPlans.map((plan) => (
             <div
               key={plan.id}
               className={`rounded-2xl border p-6 flex flex-col justify-between transition-all bg-card ${
@@ -151,6 +152,53 @@ export default function PlansPage() {
             </div>
           ))}
         </div>
+
+        {/* Monthly plans section */}
+        {monthlyPlans.length > 0 && (
+          <div className="max-w-4xl mx-auto mt-10">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold mb-4 text-center">Planos Mensais</p>
+            <div className={`grid gap-5 ${monthlyPlans.length >= 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 max-w-md mx-auto"}`}>
+              {monthlyPlans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={`rounded-2xl border p-6 flex flex-col justify-between transition-all bg-card ${
+                    plan.popular ? "ring-2 ring-primary relative shadow-lg shadow-primary/5" : "border-border"
+                  }`}
+                >
+                  {plan.popular && (
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-full">
+                      Mais Popular
+                    </span>
+                  )}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-semibold mb-3">{plan.name}</p>
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-3xl font-extrabold text-foreground">
+                        R${plan.price.toFixed(2).replace(".", ",")}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{plan.period}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-5 min-h-[2.5rem]">{plan.description}</p>
+                    <ul className="space-y-2.5 mb-6">
+                      {plan.features.map((feature, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <span className="text-muted-foreground text-xs">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/checkout?plan=${plan.id}`)}
+                    className="w-full h-11 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl transition-all bg-primary/10 text-primary hover:bg-primary/20"
+                  >
+                    Selecionar Plano <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* White Label plan - prominent separate section */}
         {wlPlan && (
