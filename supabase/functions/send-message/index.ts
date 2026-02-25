@@ -1,6 +1,6 @@
-// Starble — send-message v2.1.0
+// Starble — send-message v2.2.0
 // REGRA: Nunca apague esta função. SHA de produção: 9810ecd6b501b23b14c5d4ee731d8cda244d003b
-// v2.1.0: Added daily usage enforcement + increment
+// v2.2.0: Added JWT auth for web editor + auto-fetch lovable token from DB
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -23,7 +23,7 @@ function genId(prefix: string): string {
 
 const corsHeaders = {
   "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-clf-token, x-clf-extension",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-clf-token, x-clf-extension, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -41,6 +41,15 @@ interface ValidateResult {
   error?: string;
   plan?: string;
   licenseData?: Record<string, unknown>;
+}
+
+interface AuthResult {
+  ok: boolean;
+  error?: string;
+  plan?: string;
+  userId?: string;
+  licenseId?: string;
+  authMethod: "clf" | "jwt";
 }
 
 async function validateCLFToken(
@@ -65,7 +74,6 @@ async function validateCLFToken(
     const plan: string = (data.plan || data.plan_type || "free").toLowerCase();
     const addons: string[] = data.addons || [];
 
-    // Free/trial plans can use the default "speed" extension (the base one)
     if ((plan === "free" || plan === "trial") && extensionRequested === "speed") {
       return { ok: true, plan, licenseData: data };
     }
@@ -89,13 +97,84 @@ async function validateCLFToken(
   }
 }
 
+async function authenticateRequest(
+  req: Request,
+  adminClient: any,
+  supabaseUrl: string
+): Promise<AuthResult> {
+  const clfToken = req.headers.get("x-clf-token") || "";
+  const extensionId = req.headers.get("x-clf-extension") || "speed";
+
+  // Method 1: CLF1 license token (Chrome extension)
+  if (clfToken.startsWith("CLF1.")) {
+    const auth = await validateCLFToken(clfToken, extensionId);
+    if (!auth.ok) return { ok: false, error: auth.error, plan: auth.plan, authMethod: "clf" };
+
+    const { data: licenseRow } = await adminClient
+      .from("licenses")
+      .select("id, user_id, plan_id")
+      .eq("key", clfToken)
+      .eq("active", true)
+      .maybeSingle();
+
+    return {
+      ok: true,
+      plan: auth.plan,
+      userId: licenseRow?.user_id,
+      licenseId: licenseRow?.id,
+      authMethod: "clf",
+    };
+  }
+
+  // Method 2: JWT auth (web editor)
+  const authHeader = req.headers.get("authorization") || "";
+  if (authHeader.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims?.sub) {
+      return { ok: false, error: "Token JWT inválido.", authMethod: "jwt" };
+    }
+
+    const userId = claimsData.claims.sub as string;
+
+    // Find user's active license
+    const { data: licenseRow } = await adminClient
+      .from("licenses")
+      .select("id, plan, plan_id, daily_messages")
+      .eq("user_id", userId)
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return {
+      ok: true,
+      plan: licenseRow?.plan?.toLowerCase() || "free",
+      userId,
+      licenseId: licenseRow?.id,
+      authMethod: "jwt",
+    };
+  }
+
+  return { ok: false, error: "Autenticação necessária (CLF1 ou JWT).", authMethod: "clf" };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const clfToken     = req.headers.get("x-clf-token")     || "";
-  const extensionId  = req.headers.get("x-clf-extension") || "speed";
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  const auth = await validateCLFToken(clfToken, extensionId);
+  const extensionId = req.headers.get("x-clf-extension") || "speed";
+  const clfToken = req.headers.get("x-clf-token") || "";
+
+  const auth = await authenticateRequest(req, adminClient, supabaseUrl);
   if (!auth.ok) {
     return new Response(JSON.stringify({ error: auth.error, plan: auth.plan }), {
       status: 403,
@@ -103,65 +182,66 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  // Validate extension access via plan_extensions table (CLF auth only)
+  if (auth.authMethod === "clf" && auth.licenseId) {
+    const { data: licRow } = await adminClient
+      .from("licenses")
+      .select("plan_id")
+      .eq("id", auth.licenseId)
+      .maybeSingle();
 
-  // Find the active license for this CLF token and check extension access
-  const { data: licenseRow } = await adminClient
-    .from("licenses")
-    .select("id, daily_messages, plan, user_id, plan_id")
-    .eq("key", clfToken)
-    .eq("active", true)
-    .maybeSingle();
+    if (licRow?.plan_id) {
+      const { data: peData } = await adminClient
+        .from("plan_extensions")
+        .select("extension_id")
+        .eq("plan_id", licRow.plan_id);
 
-  // Validate extension access via plan_extensions table
-  if (licenseRow?.plan_id) {
-    const { data: peData } = await adminClient
-      .from("plan_extensions")
-      .select("extension_id")
-      .eq("plan_id", licenseRow.plan_id);
-    
-    if (peData) {
-      const extIds = peData.map((pe: any) => pe.extension_id);
-      if (extIds.length > 0) {
-        const { data: exts } = await adminClient
-          .from("extension_catalog")
-          .select("slug")
-          .in("id", extIds);
-        const allowedSlugs = (exts || []).map((e: any) => e.slug);
-        if (!allowedSlugs.includes(extensionId)) {
-          return new Response(
-            JSON.stringify({
-              error: `Seu plano não inclui a extensão "${extensionId}". Faça upgrade em starble.lovable.app.`,
-              plan: auth.plan,
-              allowedExtensions: allowedSlugs,
-            }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+      if (peData) {
+        const extIds = peData.map((pe: any) => pe.extension_id);
+        if (extIds.length > 0) {
+          const { data: exts } = await adminClient
+            .from("extension_catalog")
+            .select("slug")
+            .in("id", extIds);
+          const allowedSlugs = (exts || []).map((e: any) => e.slug);
+          if (!allowedSlugs.includes(extensionId)) {
+            return new Response(
+              JSON.stringify({
+                error: `Seu plano não inclui a extensão "${extensionId}". Faça upgrade em starble.lovable.app.`,
+                plan: auth.plan,
+                allowedExtensions: allowedSlugs,
+              }),
+              { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
         }
       }
     }
   }
 
+  // Check daily usage limits
   let usedToday = 0;
   let dailyLimit: number | null = null;
 
-  if (licenseRow) {
-    dailyLimit = licenseRow.daily_messages;
+  if (auth.licenseId) {
+    const { data: licRow } = await adminClient
+      .from("licenses")
+      .select("daily_messages")
+      .eq("id", auth.licenseId)
+      .maybeSingle();
+
+    dailyLimit = licRow?.daily_messages ?? null;
     const today = new Date().toISOString().split("T")[0];
 
-    // Check current usage
     const { data: usageRow } = await adminClient
       .from("daily_usage")
       .select("messages_used")
-      .eq("license_id", licenseRow.id)
+      .eq("license_id", auth.licenseId)
       .eq("date", today)
       .maybeSingle();
 
     usedToday = usageRow?.messages_used || 0;
 
-    // Enforce limit if set
     if (dailyLimit !== null && usedToday >= dailyLimit) {
       return new Response(
         JSON.stringify({
@@ -171,10 +251,7 @@ Deno.serve(async (req: Request) => {
           dailyLimit,
           blocked: true,
         }),
-        {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
   }
@@ -185,18 +262,38 @@ Deno.serve(async (req: Request) => {
 
   const {
     projectId,
-    lovableToken,
     message,
     mode = "fix",
   } = body as {
     projectId: string;
-    lovableToken: string;
     message: string;
     mode?: string;
   };
 
-  if (!projectId || !lovableToken || !message) {
-    return new Response(JSON.stringify({ error: "projectId, lovableToken e message são obrigatórios." }), {
+  let lovableToken = (body as { lovableToken?: string }).lovableToken || "";
+
+  if (!projectId || !message) {
+    return new Response(JSON.stringify({ error: "projectId e message são obrigatórios." }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Auto-fetch lovable token from DB if not provided (web editor flow)
+  if (!lovableToken && auth.userId) {
+    const { data: account } = await adminClient
+      .from("lovable_accounts")
+      .select("token_encrypted, status")
+      .eq("user_id", auth.userId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (account?.token_encrypted) {
+      lovableToken = account.token_encrypted;
+    }
+  }
+
+  if (!lovableToken) {
+    return new Response(JSON.stringify({ error: "lovableToken não encontrado. Conecte sua conta Lovable." }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -282,12 +379,12 @@ Deno.serve(async (req: Request) => {
       ? await lovableRes.json().catch(() => ({}))
       : { error: `Lovable retornou status ${lovableRes.status}` };
 
-    // ── INCREMENT USAGE after successful send ──
-    if (lovableRes.ok && licenseRow) {
+    // INCREMENT USAGE after successful send
+    if (lovableRes.ok && auth.licenseId) {
       try {
         const today = new Date().toISOString().split("T")[0];
         const { data: newCount } = await adminClient.rpc("increment_daily_usage", {
-          p_license_id: licenseRow.id,
+          p_license_id: auth.licenseId,
           p_date: today,
         });
         usedToday = newCount || usedToday + 1;
@@ -295,6 +392,14 @@ Deno.serve(async (req: Request) => {
         console.error("Failed to increment usage:", e);
       }
     }
+
+    // Audit log (fire and forget)
+    adminClient.from("extension_audit_log").insert({
+      license_key_hash: auth.authMethod === "clf" ? clfToken.substring(0, 10) + "..." : "jwt-web",
+      extension_key: extensionId,
+      action: "send_message",
+      metadata: { plan: auth.plan, mode, authMethod: auth.authMethod, projectId: projectId.substring(0, 8) },
+    }).then(() => {}).catch(() => {});
 
     return new Response(
       JSON.stringify({
