@@ -425,10 +425,10 @@ export default function BrainPage() {
     <AppLayout>
       <div className="flex" style={{ height: "calc(100vh - 3rem)" }}>
         {/* Sidebar */}
-        <div className={`border-r border-border/60 flex flex-col shrink-0 transition-all duration-200 ${sidebarOpen ? "w-64" : "w-0 overflow-hidden"}`}>
-          <div className="p-3 border-b border-border/60 flex items-center justify-between">
+        <div className={`clf-glass-sidebar flex flex-col shrink-0 transition-all duration-200 ${sidebarOpen ? "w-64" : "w-0 overflow-hidden"}`}>
+          <div className="p-3 border-b border-white/[0.06] flex items-center justify-between">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Histórico</span>
-            <button onClick={startNewConversation} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors" title="Nova conversa">
+            <button onClick={startNewConversation} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-white/[0.06] transition-colors" title="Nova conversa">
               <Plus className="h-4 w-4" />
             </button>
           </div>
@@ -443,8 +443,8 @@ export default function BrainPage() {
                   <button
                     key={c.id}
                     onClick={() => selectConversation(c)}
-                    className={`w-full text-left px-2 py-1.5 rounded-md text-xs truncate transition-colors ${
-                      currentConvoId === c.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50"
+                    className={`w-full text-left px-2.5 py-2 rounded-xl text-xs truncate transition-all ${
+                      currentConvoId === c.id ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-white/[0.04]"
                     }`}
                   >
                     <MessageSquare className="h-3 w-3 inline mr-1.5 opacity-50" />
@@ -459,11 +459,11 @@ export default function BrainPage() {
         {/* Main chat area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
-          <div className="border-b border-border/60 px-4 py-3 flex items-center gap-3 shrink-0">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors">
+          <div className="border-b border-white/[0.06] px-4 py-3 flex items-center gap-3 shrink-0">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-white/[0.06] transition-colors">
               {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
               <BrainIcon className="h-4 w-4 text-primary" />
             </div>
             <div>

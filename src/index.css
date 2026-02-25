@@ -380,28 +380,34 @@
 
   /* Level 3 — Cards (main) */
   .clf-glass {
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(20px) saturate(160%) brightness(1.01);
-    -webkit-backdrop-filter: blur(20px) saturate(160%) brightness(1.01);
-    border: 0.5px solid rgba(255, 255, 255, 0.82);
-    box-shadow: var(--clf-shadow-glass);
+    background: var(--liquid-glass-bg);
+    backdrop-filter: blur(30px) saturate(200%) brightness(1.02);
+    -webkit-backdrop-filter: blur(30px) saturate(200%) brightness(1.02);
+    border: 0.5px solid var(--liquid-glass-border);
+    box-shadow:
+      0 8px 32px -4px rgba(0, 0, 0, 0.08),
+      0 1px 1px rgba(0, 0, 0, 0.02),
+      var(--light-specular);
   }
   .dark .clf-glass {
-      background: rgba(22, 22, 24, 0.85);
-      border: 0.5px solid rgba(255, 255, 255, 0.05);
+      background: rgba(18, 18, 22, 0.65);
+      border: 0.5px solid rgba(255, 255, 255, 0.08);
+      box-shadow:
+        0 8px 32px -4px rgba(0, 0, 0, 0.4),
+        0 1px 0 rgba(255, 255, 255, 0.05) inset;
   }
 
   /* Level 4 — Chips / Buttons */
   .clf-glass-sm {
     background: rgba(255, 255, 255, 0.68);
-    backdrop-filter: blur(12px) saturate(150%);
-    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
     border: 0.5px solid rgba(255, 255, 255, 0.72);
     box-shadow: var(--clf-shadow-glass);
   }
   .dark .clf-glass-sm {
-      background: rgba(22, 22, 24, 0.72);
-      border: 0.5px solid rgba(255, 255, 255, 0.05);
+      background: rgba(18, 18, 22, 0.55);
+      border: 0.5px solid rgba(255, 255, 255, 0.06);
   }
 
   /* Liquid Glass — Ultra Premium */
@@ -419,13 +425,15 @@
 
   .clf-glass-sidebar {
     background: rgba(255, 255, 255, 0.4);
-    backdrop-filter: blur(25px) saturate(180%);
-    -webkit-backdrop-filter: blur(25px) saturate(180%);
+    backdrop-filter: blur(32px) saturate(200%) brightness(1.02);
+    -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.02);
     border-right: 0.5px solid rgba(0, 0, 0, 0.06);
   }
   .dark .clf-glass-sidebar {
-    background: rgba(10, 10, 12, 0.45);
-    border-right: 0.5px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 8, 12, 0.5);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border-right: 0.5px solid rgba(255, 255, 255, 0.06);
   }
 
   /* ─────────────────────────────────
@@ -501,57 +509,70 @@
 
   .lv-card {
     @apply rounded-[18px] p-5 transition-all duration-300 ease-out relative overflow-hidden;
-    background: rgba(255, 255, 255, 0.8);
-    border: 0.5px solid rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    box-shadow: var(--clf-shadow-glass);
+    background: var(--liquid-glass-bg);
+    border: 0.5px solid var(--liquid-glass-border);
+    backdrop-filter: blur(30px) saturate(200%) brightness(1.02);
+    -webkit-backdrop-filter: blur(30px) saturate(200%) brightness(1.02);
+    box-shadow:
+      0 8px 32px -4px rgba(0, 0, 0, 0.08),
+      0 1px 1px rgba(0, 0, 0, 0.02),
+      var(--light-specular);
   }
   .dark .lv-card {
-      background: rgba(22, 22, 24, 0.85);
-      border: 0.5px solid rgba(255, 255, 255, 0.05);
+      background: rgba(18, 18, 22, 0.65);
+      border: 0.5px solid rgba(255, 255, 255, 0.08);
+      box-shadow:
+        0 8px 32px -4px rgba(0, 0, 0, 0.4),
+        0 1px 0 rgba(255, 255, 255, 0.05) inset;
   }
 
   .lv-card-sm {
     @apply rounded-[14px] p-3.5 transition-all duration-300 ease-out relative;
-    background: rgba(255, 255, 255, 0.75);
-    border: 0.5px solid rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(14px) saturate(150%);
-    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    background: var(--liquid-glass-bg);
+    border: 0.5px solid var(--liquid-glass-border);
+    backdrop-filter: blur(24px) saturate(190%) brightness(1.01);
+    -webkit-backdrop-filter: blur(24px) saturate(190%) brightness(1.01);
     box-shadow:
-      0 1px 4px rgba(0, 0, 0, 0.05),
+      0 4px 16px -2px rgba(0, 0, 0, 0.06),
       0 0.5px 0 rgba(255, 255, 255, 0.9) inset;
   }
   .dark .lv-card-sm {
-      background: rgba(22, 22, 24, 0.78);
-      border: 0.5px solid rgba(255, 255, 255, 0.04);
+      background: rgba(18, 18, 22, 0.6);
+      border: 0.5px solid rgba(255, 255, 255, 0.06);
       box-shadow:
-        0 1px 4px rgba(0, 0, 0, 0.3),
-        0 0.5px 0 rgba(255, 255, 255, 0.03) inset;
+        0 4px 16px -2px rgba(0, 0, 0, 0.35),
+        0 0.5px 0 rgba(255, 255, 255, 0.04) inset;
   }
 
   .lv-card-interactive {
     @apply rounded-[18px] p-5 cursor-pointer transition-all duration-200 ease-out relative overflow-hidden;
-    background: rgba(255, 255, 255, 0.8);
-    border: 0.5px solid rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    box-shadow: var(--clf-shadow-glass);
+    background: var(--liquid-glass-bg);
+    border: 0.5px solid var(--liquid-glass-border);
+    backdrop-filter: blur(30px) saturate(200%) brightness(1.02);
+    -webkit-backdrop-filter: blur(30px) saturate(200%) brightness(1.02);
+    box-shadow:
+      0 8px 32px -4px rgba(0, 0, 0, 0.08),
+      0 1px 1px rgba(0, 0, 0, 0.02),
+      var(--light-specular);
   }
   .lv-card-interactive:hover {
     background: rgba(255, 255, 255, 0.92);
     border-color: rgba(255, 255, 255, 0.9);
     box-shadow:
-      0 6px 28px rgba(0, 0, 0, 0.1),
+      0 12px 40px -4px rgba(0, 0, 0, 0.12),
       0 1px 0 rgba(255, 255, 255, 0.95) inset;
     transform: translateY(-2px);
   }
   .dark .lv-card-interactive {
-      background: rgba(22, 22, 24, 0.85);
-      border: 0.5px solid rgba(255, 255, 255, 0.05);
+      background: rgba(18, 18, 22, 0.65);
+      border: 0.5px solid rgba(255, 255, 255, 0.08);
   }
   .dark .lv-card-interactive:hover {
-      background: rgba(30, 30, 34, 0.95);
+      background: rgba(26, 26, 32, 0.85);
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow:
+        0 12px 40px -4px rgba(0, 0, 0, 0.5),
+        0 1px 0 rgba(255, 255, 255, 0.08) inset;
   }
 
   .lv-card-active {
@@ -627,12 +648,15 @@
     cursor: not-allowed;
   }
   .dark .lv-btn-secondary {
-      background: rgba(30, 30, 34, 0.8);
-      border: 0.5px solid rgba(255, 255, 255, 0.06);
+      background: rgba(24, 24, 30, 0.7);
+      border: 0.5px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   }
   .dark .lv-btn-secondary:hover:not(:disabled) {
-      background: rgba(40, 40, 44, 0.95);
+      background: rgba(34, 34, 42, 0.9);
+      border-color: rgba(255, 255, 255, 0.12);
   }
 
   /* ACCENT / PREMIUM — Indigo gradient */
@@ -720,9 +744,11 @@
   ───────────────────────────────── */
 
   .lv-input {
-    @apply h-11 w-full rounded-[10px] px-4 text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
+    @apply h-11 w-full rounded-[12px] px-4 text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200;
     background: rgba(245, 245, 247, 0.8);
-    border: 1px solid var(--clf-border-dark);
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
   .lv-input:focus {
     background: var(--clf-bg-solid);
@@ -730,19 +756,21 @@
     box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.08);
   }
   .dark .lv-input {
-      background: rgba(18, 18, 20, 0.85);
-      border: 1px solid var(--clf-border-dark);
+      background: rgba(14, 14, 18, 0.7);
+      border: 0.5px solid rgba(255, 255, 255, 0.08);
   }
   .dark .lv-input:focus {
-      background: rgba(26, 26, 30, 0.95);
+      background: rgba(22, 22, 28, 0.9);
       border-color: rgba(10, 132, 255, 0.55);
       box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.1);
   }
 
   .lv-textarea {
-    @apply w-full rounded-[10px] px-4 py-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
+    @apply w-full rounded-[12px] px-4 py-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition-all duration-200 resize-none;
     background: rgba(245, 245, 247, 0.8);
-    border: 1px solid var(--clf-border-dark);
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
   .lv-textarea:focus {
     background: var(--clf-bg-solid);
@@ -750,11 +778,11 @@
     box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.08);
   }
   .dark .lv-textarea {
-      background: rgba(18, 18, 20, 0.85);
-      border: 1px solid var(--clf-border-dark);
+      background: rgba(14, 14, 18, 0.7);
+      border: 0.5px solid rgba(255, 255, 255, 0.08);
   }
   .dark .lv-textarea:focus {
-      background: rgba(26, 26, 30, 0.95);
+      background: rgba(22, 22, 28, 0.9);
       border-color: rgba(10, 132, 255, 0.55);
       box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.1);
   }
