@@ -628,6 +628,45 @@ export type Database = {
           },
         ]
       }
+      code_snapshots: {
+        Row: {
+          created_at: string
+          file_count: number | null
+          files_json: Json | null
+          fingerprint: string | null
+          id: string
+          phase: number | null
+          project_id: string
+          security_issues: Json | null
+          seo_score: number | null
+          task_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_count?: number | null
+          files_json?: Json | null
+          fingerprint?: string | null
+          id?: string
+          phase?: number | null
+          project_id: string
+          security_issues?: Json | null
+          seo_score?: number | null
+          task_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_count?: number | null
+          files_json?: Json | null
+          fingerprint?: string | null
+          id?: string
+          phase?: number | null
+          project_id?: string
+          security_issues?: Json | null
+          seo_score?: number | null
+          task_id?: string | null
+        }
+        Relationships: []
+      }
       codecoin_transactions: {
         Row: {
           amount: number
@@ -1875,6 +1914,210 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orchestration_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          project_id: string
+          role: string | null
+          source: string | null
+          task_id: string | null
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          project_id: string
+          role?: string | null
+          source?: string | null
+          task_id?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          project_id?: string
+          role?: string | null
+          source?: string | null
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orchestration_messages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "orchestrator_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orchestrator_logs: {
+        Row: {
+          created_at: string
+          id: string
+          level: string
+          message: string
+          metadata: Json | null
+          project_id: string
+          task_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: string
+          message?: string
+          metadata?: Json | null
+          project_id: string
+          task_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: string
+          message?: string
+          metadata?: Json | null
+          project_id?: string
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orchestrator_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "orchestrator_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orchestrator_projects: {
+        Row: {
+          audit_required: boolean
+          client_prompt: string
+          created_at: string
+          current_phase: number | null
+          current_task_index: number
+          ghost_created: boolean
+          id: string
+          last_error: string | null
+          lovable_project_id: string | null
+          next_tick_at: string | null
+          prd_json: Json | null
+          quality_score: number | null
+          source_fingerprint: string | null
+          status: string
+          total_tasks: number
+          updated_at: string
+          user_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          audit_required?: boolean
+          client_prompt?: string
+          created_at?: string
+          current_phase?: number | null
+          current_task_index?: number
+          ghost_created?: boolean
+          id?: string
+          last_error?: string | null
+          lovable_project_id?: string | null
+          next_tick_at?: string | null
+          prd_json?: Json | null
+          quality_score?: number | null
+          source_fingerprint?: string | null
+          status?: string
+          total_tasks?: number
+          updated_at?: string
+          user_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          audit_required?: boolean
+          client_prompt?: string
+          created_at?: string
+          current_phase?: number | null
+          current_task_index?: number
+          ghost_created?: boolean
+          id?: string
+          last_error?: string | null
+          lovable_project_id?: string | null
+          next_tick_at?: string | null
+          prd_json?: Json | null
+          quality_score?: number | null
+          source_fingerprint?: string | null
+          status?: string
+          total_tasks?: number
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: []
+      }
+      orchestrator_tasks: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          intent: string
+          lovable_message_id: string | null
+          project_id: string
+          prompt: string
+          prompt_text: string | null
+          required_audit_before: boolean
+          retry_count: number
+          started_at: string | null
+          status: string
+          stop_condition: string | null
+          task_index: number
+          title: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          intent?: string
+          lovable_message_id?: string | null
+          project_id: string
+          prompt?: string
+          prompt_text?: string | null
+          required_audit_before?: boolean
+          retry_count?: number
+          started_at?: string | null
+          status?: string
+          stop_condition?: string | null
+          task_index?: number
+          title?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          intent?: string
+          lovable_message_id?: string | null
+          project_id?: string
+          prompt?: string
+          prompt_text?: string | null
+          required_audit_before?: boolean
+          retry_count?: number
+          started_at?: string | null
+          status?: string
+          stop_condition?: string | null
+          task_index?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orchestrator_tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "orchestrator_projects"
             referencedColumns: ["id"]
           },
         ]
