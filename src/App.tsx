@@ -55,6 +55,7 @@ const Checkout = lazyRetry(() => import("./pages/Checkout"));
 const FreePlan = lazyRetry(() => import("./pages/FreePlan"));
 const PlansPage = lazyRetry(() => import("./pages/PlansPage"));
 const AdminIntegrations = lazyRetry(() => import("./pages/AdminIntegrations"));
+const Automation = lazyRetry(() => import("./pages/Automation"));
 // Lab pages (feature-flag gated)
 const BrainLab = lazyRetry(() => import("./pages/lab/BrainLab"));
 const StarCrawlLab = lazyRetry(() => import("./pages/lab/StarCrawlLab"));
@@ -105,6 +106,7 @@ const App = () => (
                 <Route path="/brain" element={<Brain />} />
                 <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
                 <Route path="/orquestrador/:id" element={<OrchestratorProjectPanel />} />
+                <Route path="/automation" element={<Automation />} />
                 <Route path="/whitelabel/onboarding" element={<WhiteLabelOnboarding />} />
                 <Route path="/wl/setup" element={<WhiteLabelOnboarding />} />
                 <Route path="/faq/whitelabel" element={<WhiteLabelFAQ />} />

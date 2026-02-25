@@ -119,3 +119,6 @@ verify_jwt = false
 
 [functions.api-key-router]
 verify_jwt = false
+
+[functions.lovable-automation]
+verify_jwt = false
