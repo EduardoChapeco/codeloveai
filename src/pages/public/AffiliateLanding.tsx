@@ -10,17 +10,17 @@ const benefits = [
 ];
 
 const tiers = [
-  { name: "Starter", commission: "15%", req: "0 – 5 indicações/mês", color: "from-slate-500 to-slate-600" },
-  { name: "Pro", commission: "22%", req: "6 – 20 indicações/mês", color: "from-violet-500 to-purple-600" },
-  { name: "Elite", commission: "30%", req: "21+ indicações/mês", color: "from-amber-500 to-orange-600" },
+  { name: "Starter", commission: "30%", req: "1+ indicação", color: "from-slate-500 to-slate-600" },
+  { name: "Pro", commission: "30%", req: "6+ indicações/mês", color: "from-violet-500 to-purple-600", extra: "+ 20% desconto próprio" },
+  { name: "Elite", commission: "30%", req: "21+ indicações/mês", color: "from-amber-500 to-orange-600", extra: "+ Bônus CodeCoins 2x" },
 ];
 
 const faqs = [
-  { q: "Quando recebo minhas comissões?", a: "Pagamentos são processados mensalmente, entre os dias 10 e 15 do mês seguinte. Mínimo de saque: R$100." },
+  { q: "Quando recebo minhas comissões?", a: "Pagamentos são processados semanalmente (segundas-feiras) via PIX, para saldos acima de R$50." },
   { q: "Quem pode ser afiliado?", a: "Qualquer pessoa com conta ativa no Starble pode se tornar afiliado. Não é necessário ter indicações ativas para se cadastrar." },
-  { q: "A comissão é sobre qual valor?", a: "Sobre o valor líquido assinado pelo cliente indicado, excluindo reembolsos e chargebacks." },
+  { q: "A comissão é sobre qual valor?", a: "Sobre o valor da venda realizada pelo cliente indicado, excluindo reembolsos e chargebacks." },
   { q: "Há limite de indicações?", a: "Não. Quanto mais você indica, mais você ganha — não há teto de comissão." },
-  { q: "O que acontece se o cliente cancelar?", a: "A comissão para quando o cliente cancela a assinatura. Reativações após 30 dias contam como novo ciclo." },
+  { q: "O que acontece se o cliente cancelar?", a: "A comissão se aplica sobre a venda já realizada. Para planos recorrentes, comissões futuras param quando o cliente cancela." },
 ];
 
 export default function AffiliateLanding() {
@@ -113,6 +113,7 @@ export default function AffiliateLanding() {
                 <div className={`text-xs font-bold tracking-widest uppercase mb-4 bg-gradient-to-r ${t.color} bg-clip-text text-transparent`}>{t.name}</div>
                 <div className="text-5xl font-black mb-2">{t.commission}</div>
                 <p className="text-xs text-white/40">{t.req}</p>
+                {"extra" in t && t.extra && <p className="text-xs text-amber-400 mt-2 font-medium">{t.extra}</p>}
                 {i === 2 && <div className="mt-4 inline-flex items-center gap-1 text-xs text-amber-400 font-semibold"><Star className="h-3 w-3 fill-amber-400" /> Mais popular</div>}
               </div>
             ))}
