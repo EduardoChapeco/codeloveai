@@ -30,20 +30,10 @@ const plans = [
     price: "R$4,90",
     period: "/dia",
     badge: "Mais popular",
-    features: ["Mensagens ilimitadas", "Projetos ilimitados", "Ativa por 24h", "Sem mensalidade fixa"],
+    features: ["Mensagens ilimitadas", "Até 2 projetos", "Ativa por 24h", "Sem mensalidade fixa"],
     cta: "Comprar acesso",
     href: "/checkout",
     highlight: true,
-  },
-  {
-    name: "Agência",
-    price: "R$49,90",
-    period: "/mês",
-    badge: "Melhor custo",
-    features: ["Mensagens ilimitadas", "Até 10 projetos", "Renovação automática", "Suporte prioritário"],
-    cta: "Assinar Agência",
-    href: "/checkout",
-    highlight: false,
   },
 ];
 
@@ -147,7 +137,7 @@ export default function Index() {
       <section className="px-6 pb-24 max-w-5xl mx-auto">
         <p className="lv-overline text-center mb-3">Planos</p>
         <h2 className="lv-heading-lg text-center mb-12">Escolha o melhor para você</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
           {plans.map((plan) => (
             <div key={plan.name} className={`lv-card flex flex-col ${plan.highlight ? 'ring-2 ring-primary/30' : ''}`}>
               {plan.highlight && (
