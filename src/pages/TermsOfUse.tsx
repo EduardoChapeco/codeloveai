@@ -1,130 +1,134 @@
 import { Link } from "react-router-dom";
 import { Scale, AlertTriangle } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
+import { useSEO } from "@/hooks/useSEO";
 
 export default function TermsOfUse() {
+  useSEO({ title: "Termos de Uso" });
+  
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto px-6 py-12">
         <div className="flex items-center gap-3 mb-8">
-          <div className="h-10 w-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
-            <Scale className="h-5 w-5 text-violet-400" />
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Scale className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Termos de Uso</h1>
-            <p className="text-xs text-muted-foreground">Última atualização: 24 de Fevereiro de 2026</p>
+            <h1 className="lv-heading-lg">Termos de Uso</h1>
+            <p className="lv-caption">Última atualização: 24 de Fevereiro de 2026</p>
           </div>
         </div>
 
         {/* LGPD notice */}
-        <div className="mb-8 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <p className="font-semibold text-amber-400 mb-1">Leia com atenção antes de usar</p>
-            <p className="text-muted-foreground leading-relaxed">Ao usar o Starble, você concorda com estes termos. Se não concordar, não utilize a plataforma.</p>
+        <div className="mb-8 lv-card-sm flex gap-3 border-amber-500/20 bg-amber-500/5">
+          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="lv-body-strong text-amber-600 dark:text-amber-400 mb-1">AVISO IMPORTANTE</p>
+            <p className="lv-caption">
+              A utilização da extensão Starble é de sua total responsabilidade. A extensão NÃO é oficial e não possui vínculo com a Lovable.
+              Contas, projetos e dados podem ser bloqueados, suspensos ou excluídos pela Lovable a qualquer momento.
+            </p>
           </div>
         </div>
 
-        <div className="prose prose-sm dark:prose-invert max-w-none space-y-8 leading-relaxed">
-
+        <div className="space-y-8">
           <section>
-            <h2 className="text-lg font-bold mb-3">1. Aceitação dos Termos</h2>
-            <p className="text-muted-foreground">O uso do Starble implica aceitação integral e irrestrita destes Termos de Uso. Estes termos podem ser atualizados periodicamente. Recomendamos revisar periodicamente. O uso continuado após mudanças constitui aceitação das novas condições.</p>
+            <h2 className="lv-heading-sm mb-3">1. Sobre o Serviço</h2>
+            <p className="lv-body leading-relaxed">
+              O Starble ("plataforma") oferece uma extensão de navegador que permite o envio de mensagens para projetos da plataforma Lovable.
+              A extensão utiliza um método não oficial de comunicação e não é endossada, aprovada ou apoiada pela Lovable.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold mb-3">2. Descrição do Serviço</h2>
-            <p className="text-muted-foreground">O Starble é uma plataforma de automação e inteligência que oferece:</p>
-            <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-              <li>Extensão Chrome para integração com ferramentas de criação de projetos</li>
-              <li>Assistentes de IA para desenvolvimento de projetos digitais (Starble Brain)</li>
-              <li>Motor autônomo de criação de projetos (Orchestrator Engine)</li>
-              <li>Inteligência web por crawling (StarCrawl, powered by Firecrawl)</li>
-              <li>Síntese de voz por IA (Voice AI, powered by ElevenLabs)</li>
-              <li>Programa de afiliados e licenças White Label</li>
+            <h2 className="lv-heading-sm mb-3">2. Aceitação dos Termos</h2>
+            <p className="lv-body leading-relaxed">
+              Ao criar uma conta, ativar a extensão ou utilizar qualquer funcionalidade da plataforma, o usuário declara ciência e concordância
+              integral com todos os termos aqui descritos.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="lv-heading-sm mb-3">3. Riscos e Responsabilidades</h2>
+            <ul className="space-y-2">
+              {[
+                "A extensão NÃO é oficial e pode parar de funcionar a qualquer momento.",
+                "O uso pode resultar em bloqueio, suspensão ou exclusão da sua conta Lovable.",
+                "O Starble não se responsabiliza por perdas de dados, projetos ou acesso.",
+                "Nosso método utiliza a própria plataforma para se comunicar, estando sob risco constante.",
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <span className="lv-body">{item}</span>
+                </li>
+              ))}
             </ul>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold mb-3">3. Integrações com Terceiros e Limitações</h2>
-            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 mb-4">
-              <p className="text-sm text-rose-300 font-semibold mb-2">⚠️ Risco Importante — Leia</p>
-              <p className="text-sm text-muted-foreground">O Starble utiliza integrações com plataformas de terceiros. <strong>Mudanças nos termos, APIs ou políticas dessas plataformas estão fora do controle do Starble</strong> e podem afetar funcionalidades sem aviso prévio.</p>
-            </div>
-            <p className="text-muted-foreground">Ao usar o Starble, você reconhece e aceita que:</p>
-            <ul className="list-disc pl-5 space-y-2 text-muted-foreground mt-2">
-              <li>Funcionalidades dependentes de APIs de terceiros podem ser modificadas, limitadas ou descontinuadas sem aviso prévio</li>
-              <li>O Starble não se responsabiliza por dados criados em plataformas de terceiros que possam ser perdidos por ações dessas plataformas</li>
-              <li>Recomendamos fortemente manter backups independentes (GitHub para código, Supabase próprio para dados)</li>
-              <li>Funcionalidades em fase "Lab" são experimentais e não possuem garantia de estabilidade ou continuidade</li>
-            </ul>
+            <h2 className="lv-heading-sm mb-3">4. Política de Reembolso</h2>
+            <p className="lv-body leading-relaxed">
+              Não há reembolso em nenhuma hipótese. O serviço é considerado CONCLUÍDO e ENTREGUE a partir do momento da ativação do token.
+              O cancelamento ou paralisação temporária do serviço não gera direito a indenização de qualquer natureza.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold mb-3">4. Responsabilidades do Usuário</h2>
-            <p className="text-muted-foreground">O usuário é o único responsável por:</p>
-            <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-              <li>Manter backups de seu código e dados em sistemas de sua propriedade</li>
-              <li>Conformidade com leis aplicáveis no uso das ferramentas</li>
-              <li>Uso ético e legal das capacidades de IA (não usar para conteúdo ilegal, spam, fraude ou desinformação)</li>
-              <li>Segurança de suas credenciais de acesso</li>
-              <li>Propriedade intelectual do conteúdo gerado com as ferramentas</li>
-            </ul>
+            <h2 className="lv-heading-sm mb-3">5. Plano Vitalício</h2>
+            <p className="lv-body leading-relaxed">
+              O plano "Vitalício" oferece acesso enquanto a extensão estiver funcional. Caso a extensão pare de funcionar,
+              seja limitada ou descontinuada, NÃO há obrigação de fornecer nova extensão, novo método, créditos ou qualquer tipo de compensação.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold mb-3">5. Planos e Pagamentos</h2>
-            <p className="text-muted-foreground">O plano gratuito oferece 10 mensagens sem cartão de crédito. Planos pagos são processados via Stripe. Os preços podem mudar com aviso de 30 dias para usuários ativos.</p>
+            <h2 className="lv-heading-sm mb-3">6. Créditos Lovable</h2>
+            <p className="lv-body leading-relaxed">
+              Não utilizamos créditos da conta Lovable. Todos os projetos, mensagens e planos criados/enviados através da extensão
+              não descontam créditos da sua conta Lovable.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold mb-3">6. Política de Reembolso</h2>
-            <p className="text-muted-foreground">Reembolsos podem ser solicitados em até <strong>7 dias</strong> após a cobrança, desde que o uso não ultrapasse 20% do plano contratado. Para solicitar, abra um ticket em <Link to="/suporte" className="text-primary hover:underline">/suporte</Link>.</p>
+            <h2 className="lv-heading-sm mb-3">7. Proteção de Dados (LGPD)</h2>
+            <p className="lv-body leading-relaxed">
+              Os dados coletados (email, nome, informações de pagamento) são utilizados exclusivamente para prestação do serviço.
+              A ativação da extensão será registrada com dados do dispositivo, IP e localização para fins de comprovação de entrega do serviço.
+              O usuário pode solicitar a exclusão de seus dados a qualquer momento através do suporte.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold mb-3">7. Privacidade e LGPD</h2>
-            <p className="text-muted-foreground">O Starble é comprometido com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018). Coletamos apenas dados necessários para o funcionamento do serviço. Você tem direito de solicitar acesso, correção e exclusão dos seus dados a qualquer momento via <Link to="/suporte" className="text-primary hover:underline">/suporte</Link>.</p>
+            <h2 className="lv-heading-sm mb-3">8. Programa de Afiliados</h2>
+            <p className="lv-body leading-relaxed">
+              O programa de afiliados oferece comissão de 30% sobre vendas realizadas através de links de indicação.
+              Os pagamentos são processados semanalmente via PIX. O Starble reserva-se o direito de alterar as condições
+              do programa a qualquer momento.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold mb-3">8. Programa de Afiliados</h2>
-            <p className="text-muted-foreground">As regras específicas do programa estão detalhadas em <Link to="/afiliados" className="text-primary hover:underline">/afiliados</Link>. É terminantemente proibida a autoindicação e o uso de práticas fraudulentas. Violações resultam em cancelamento imediato da conta sem direito a reembolso de comissões acumuladas com práticas irregulares.</p>
+            <h2 className="lv-heading-sm mb-3">9. White Label</h2>
+            <p className="lv-body leading-relaxed">
+              O serviço White Label permite que operadores criem plataformas com marca própria.
+              O operador é responsável por seus usuários finais e deve informá-los sobre os riscos envolvidos.
+              O Starble não se responsabiliza pela operação de plataformas White Label.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold mb-3">9. White Label</h2>
-            <p className="text-muted-foreground">Operadores White Label são responsáveis pelo suporte de primeiro nível de seus usuários e pela conformidade com a LGPD no que se refere aos dados coletados em seus tenants. O Starble presta suporte técnico apenas ao operador, não aos usuários finais do tenant.</p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-bold mb-3">10. Limitação de Responsabilidade</h2>
-            <p className="text-muted-foreground">O Starble não se responsabiliza por danos diretos, indiretos ou consequentes decorrentes do uso da plataforma, incluindo, mas não limitado a: perda de dados, lucros cessantes, ou danos de terceiros. Nossa responsabilidade máxima limita-se ao valor pago nos últimos 3 meses de assinatura.</p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-bold mb-3">11. Suspensão e Encerramento</h2>
-            <p className="text-muted-foreground">O Starble reserva-se o direito de suspender ou encerrar contas que violem estes termos, sem aviso prévio em casos de violação grave (fraude, uso ilegal, autoindicação).</p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-bold mb-3">12. Foro e Legislação</h2>
-            <p className="text-muted-foreground">Estes termos são regidos pela lei brasileira. Fica eleito o foro da comarca de São Paulo - SP para resolver quaisquer disputas.</p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-bold mb-3">13. Contato</h2>
-            <p className="text-muted-foreground">Para questões legais, privacidade ou dúvidas sobre estes termos: abra um ticket em <Link to="/suporte" className="text-primary hover:underline">/suporte</Link> com a categoria "Jurídico/LGPD".</p>
+            <h2 className="lv-heading-sm mb-3">10. Modificações</h2>
+            <p className="lv-body leading-relaxed">
+              Estes termos podem ser alterados a qualquer momento. O uso continuado da plataforma após alterações
+              constitui aceite dos novos termos.
+            </p>
           </section>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-border/60 text-center">
-          <p className="text-xs text-muted-foreground">© 2026 Starble. Todos os direitos reservados.</p>
-          <div className="flex justify-center gap-6 mt-3 text-xs">
-            <Link to="/ajuda" className="text-muted-foreground hover:text-foreground transition-colors">Central de Ajuda</Link>
-            <Link to="/faq" className="text-muted-foreground hover:text-foreground transition-colors">FAQ</Link>
-            <Link to="/suporte" className="text-muted-foreground hover:text-foreground transition-colors">Suporte</Link>
-          </div>
+        <div className="mt-12 pt-8 border-t border-border/50">
+          <p className="lv-caption text-center">
+            Dúvidas? <Link to="/suporte" className="text-primary hover:underline">Entre em contato com nosso suporte</Link>
+          </p>
         </div>
       </div>
     </AppLayout>
