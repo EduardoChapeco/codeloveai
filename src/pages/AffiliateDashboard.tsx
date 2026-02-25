@@ -159,7 +159,8 @@ export default function AffiliateDashboard() {
     toast.success("Copiado!");
   };
 
-  const magicLink = affiliateData ? `${window.location.origin}/ref/${affiliateData.affiliate_code}` : "";
+  const siteBase = import.meta.env.VITE_SITE_URL || "https://starble.lovable.app";
+  const magicLink = affiliateData ? `${siteBase}/ref/${affiliateData.affiliate_code}` : "";
 
   const daysRemaining = subscription
     ? Math.max(0, Math.ceil((new Date(subscription.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))

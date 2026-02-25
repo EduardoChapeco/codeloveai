@@ -122,7 +122,8 @@ export default function WlAffiliateDashboard() {
   const totalEarned = referrals.reduce((s, r) => s + (r.setup_commission_cents + r.subscription_commission_cents + r.total_recurring_earned_cents), 0);
   const totalTenants = referrals.length;
   const pendingInvoices = invoices.filter(i => i.status === "open" || i.status === "pending");
-  const refLink = `${window.location.origin}/white-label/ref/${wlAff.code}`;
+  const siteBase = import.meta.env.VITE_SITE_URL || "https://starble.lovable.app";
+  const refLink = `${siteBase}/white-label/ref/${wlAff.code}`;
 
   const formatCents = (c: number) => `R$${(c / 100).toFixed(2).replace(".", ",")}`;
 
