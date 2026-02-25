@@ -181,11 +181,11 @@ export default function LovableConnect() {
   }, [clfToken]);
 
   // handleAutoToken for Lovable connection
-  const handleAutoToken = useCallback(async (token: string) => {
+  const handleAutoToken = useCallback(async (token: string, refreshToken?: string | null) => {
     if (saving || connectionStatus === "active") return;
     setSaving(true);
     try {
-      await saveToken(token);
+      await saveToken(token, refreshToken || null);
       toast.success("Conta conectada automaticamente!");
       setConnectionStatus("active");
       setLastVerified(new Date().toISOString());
@@ -202,15 +202,15 @@ export default function LovableConnect() {
       // Accept messages from same origin and extension (any origin)
       if (event.data?.type === "clf_lovable_token" && event.data.token) {
         console.log("[Starble] clf_lovable_token received");
-        handleAutoToken(event.data.token);
+        handleAutoToken(event.data.token, event.data.refreshToken || null);
         return;
       }
 
       if (event.data?.type === "clf_token_bridge" && event.data.idToken) {
         console.log("[Starble] clf_token_bridge received — responding with CLF1");
         setSsoStatus("waiting");
-        // Save the Lovable token
-        handleAutoToken(event.data.idToken);
+        // Save the Lovable token + refresh token when available
+        handleAutoToken(event.data.idToken, event.data.refreshToken || null);
         // Respond back with CLF1 license
         respondWithClf1();
       }
@@ -222,7 +222,7 @@ export default function LovableConnect() {
       const detail = (e as CustomEvent).detail;
       if (detail?.idToken) {
         console.log("[Starble] clf_token_bridge CustomEvent received");
-        handleAutoToken(detail.idToken);
+        handleAutoToken(detail.idToken, detail.refreshToken || null);
         respondWithClf1();
       }
     };

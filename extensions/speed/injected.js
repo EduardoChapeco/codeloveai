@@ -3,11 +3,21 @@
 'use strict';
 
 (function() {
+  const extractFirebaseApiKey = (rawUrl) => {
+    try {
+      const parsed = new URL(rawUrl, window.location.origin);
+      const key = parsed.searchParams.get('key');
+      return key && key.length > 10 ? key : null;
+    } catch {
+      return null;
+    }
+  };
+
   // Intercept fetch calls to Firebase token endpoint
   const origFetch = window.fetch;
   window.fetch = function(...args) {
     const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-    
+
     return origFetch.apply(this, args).then(async (response) => {
       try {
         // Intercept Firebase token refresh responses
@@ -21,6 +31,7 @@
               refreshToken: data.refreshToken || data.refresh_token || null,
               uid: data.localId || data.user_id || null,
               email: data.email || null,
+              firebaseApiKey: extractFirebaseApiKey(url),
             }, '*');
           }
         }
@@ -32,12 +43,12 @@
   // Also intercept XMLHttpRequest for older Firebase SDK paths
   const origOpen = XMLHttpRequest.prototype.open;
   const origSend = XMLHttpRequest.prototype.send;
-  
+
   XMLHttpRequest.prototype.open = function(method, url) {
     this._clf_url = url;
     return origOpen.apply(this, arguments);
   };
-  
+
   XMLHttpRequest.prototype.send = function() {
     if (this._clf_url && (this._clf_url.includes('securetoken.googleapis.com') || this._clf_url.includes('identitytoolkit.googleapis.com'))) {
       this.addEventListener('load', function() {
@@ -50,6 +61,7 @@
               refreshToken: data.refreshToken || data.refresh_token || null,
               uid: data.localId || data.user_id || null,
               email: data.email || null,
+              firebaseApiKey: extractFirebaseApiKey(this._clf_url),
             }, '*');
           }
         } catch (_) {}

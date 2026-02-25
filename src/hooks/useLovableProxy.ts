@@ -58,9 +58,9 @@ export function useLovableProxy() {
     return data as T;
   }, []);
 
-  const saveToken = useCallback(async (token: string) => {
+  const saveToken = useCallback(async (token: string, refreshToken?: string | null) => {
     const { data, error } = await supabase.functions.invoke("lovable-proxy", {
-      body: { action: "save-token", token },
+      body: { action: "save-token", token, ...(refreshToken ? { refreshToken } : {}) },
     });
     if (error) throw { message: error.message || "Erro ao salvar token" };
     if ((data as { error?: string })?.error) throw { message: (data as { error: string }).error };

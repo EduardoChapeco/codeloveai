@@ -8,6 +8,12 @@ const corsHeaders = {
 
 const LOVABLE_API_BASE = "https://api.lovable.dev";
 
+function getFirebaseApiKey(): string | null {
+  const key = Deno.env.get("LOVABLE_FIREBASE_API_KEY") || Deno.env.get("lovable_firebase_api_key");
+  if (!key || typeof key !== "string") return null;
+  return key.trim() || null;
+}
+
 async function getLovableToken(serviceClient: any, userId: string): Promise<string | null> {
   const { data } = await serviceClient
     .from("lovable_accounts")
@@ -155,7 +161,7 @@ Deno.serve(async (req) => {
           headers: { Authorization: `Bearer ${tokenValue}` },
         });
         tokenValid = verifyRes.ok || verifyRes.status === 403;
-        
+
         if (!tokenValid) {
           const permRes = await fetch(`${LOVABLE_API_BASE}/permissions`, {
             headers: { Authorization: `Bearer ${tokenValue}` },
@@ -175,6 +181,14 @@ Deno.serve(async (req) => {
         });
       }
 
+      const { data: adminRole } = await serviceClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+      const isAdminUser = !!adminRole;
+
       // Calculate token expiration (Firebase ID tokens expire in 1 hour)
       const tokenExpiresAt = new Date(Date.now() + 55 * 60 * 1000).toISOString(); // 55 min (safe margin)
 
@@ -186,6 +200,7 @@ Deno.serve(async (req) => {
         token_expires_at: tokenExpiresAt,
         refresh_failure_count: 0,
         auto_refresh_enabled: true,
+        ...(isAdminUser ? { is_admin_account: true } : {}),
       };
 
       // Store refresh_token if provided
@@ -205,10 +220,35 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Keep admin OAuth secrets synced for Brain/backoffice automation
+      if (isAdminUser && refreshTokenValue && typeof refreshTokenValue === "string" && refreshTokenValue.length > 10) {
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+          for (const [k, v] of [["admin_lovable_token", tokenValue], ["admin_lovable_refresh_token", refreshTokenValue]]) {
+            await fetch(`${supabaseUrl}/rest/v1/admin_secrets?on_conflict=key`, {
+              method: "POST",
+              headers: {
+                "apikey": serviceKey,
+                "Authorization": `Bearer ${serviceKey}`,
+                "Content-Type": "application/json",
+                "Prefer": "resolution=merge-duplicates",
+                "Accept-Profile": "internal",
+                "Content-Profile": "internal",
+              },
+              body: JSON.stringify({ key: k, value: v, updated_at: new Date().toISOString() }),
+            });
+          }
+        } catch (syncErr) {
+          console.error("Failed to sync admin secrets from save-token:", syncErr);
+        }
+      }
+
       const duration = Date.now() - startTime;
       await logApiCall(serviceClient, userId, "save-token", "POST", 200, duration);
 
-      return new Response(JSON.stringify({ success: true, hasRefreshToken: !!refreshTokenValue }), {
+      return new Response(JSON.stringify({ success: true, hasRefreshToken: !!refreshTokenValue, isAdminUser }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -301,7 +341,7 @@ Deno.serve(async (req) => {
 
     // Handle 401 from Lovable — try auto-refresh before marking expired
     if (apiRes.status === 401) {
-      const firebaseApiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
+      const firebaseApiKey = getFirebaseApiKey();
 
       if (
         accountData.auto_refresh_enabled &&
