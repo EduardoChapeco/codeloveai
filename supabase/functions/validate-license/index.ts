@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
 
     const { data: license } = await adminClient
       .from("licenses")
-      .select("id, key, plan, plan_type, type, status, expires_at, active, device_id, user_id, tenant_id, daily_messages, hourly_limit, token_valid_until, trial_expires_at, trial_used, messages_used_today, plan_id")
+      .select("id, key, plan, plan_type, type, status, expires_at, active, device_id, user_id, tenant_id, daily_messages, hourly_limit, token_valid_until, trial_expires_at, trial_used, messages_used_today, plan_id, plans(name, display_name)")
       .eq("key", resolvedKey)
       .eq("active", true)
       .maybeSingle();
@@ -188,6 +188,7 @@ Deno.serve(async (req) => {
         user: userInfo,
         plan: {
           code: (license.plan || "free").toUpperCase(),
+          displayName: (license as any).plans?.display_name || (license as any).plans?.name || license.plan || "Free",
           allowedExtensions,
           billingType,
           dailyMessages: license.daily_messages,
