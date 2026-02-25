@@ -1,5 +1,5 @@
-﻿import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,7 +61,6 @@ export default function ProjectEditor() {
 
   useEffect(() => {
     if (!id || !user) return;
-    // Defer to next tick so refs are assigned
     setTimeout(() => {
       loadProjectRef.current?.();
       loadSandboxUrlRef.current?.();
@@ -89,7 +88,6 @@ export default function ProjectEditor() {
     if (!id) return;
     setLoadingPreview(true);
     try {
-      // Start sandbox first
       try {
         await invoke({ route: `/projects/${id}/sandbox/start`, method: "POST", payload: {} });
       } catch { /* may already be running */ }
@@ -134,12 +132,12 @@ export default function ProjectEditor() {
         payload: {
           id: msgId,
           message: userMsg,
-          intent: "security_fix_v2",
+          intent: null,
           chat_only: false,
           ai_message_id: aiMsgId,
           thread_id: "main",
           view: "code",
-          view_description: "User is editing the project via Starble editor.",
+          view_description: "User is editing the project.",
           model: null,
           files: [],
           optimisticImageUrls: [],
@@ -157,7 +155,6 @@ export default function ProjectEditor() {
         prev.map(m => m.id === tempId ? { ...m, status: "sent" } : m)
       );
 
-      // Save to loveai_conversations
       await supabase.from("loveai_conversations").insert({
         user_id: user!.id,
         target_project_id: id,
@@ -166,7 +163,6 @@ export default function ProjectEditor() {
         status: "processing",
       });
 
-      // Poll for AI response via latest-message
       const aiResponseId = crypto.randomUUID();
       setChatMessages(prev => [...prev, {
         id: aiResponseId,
@@ -177,8 +173,8 @@ export default function ProjectEditor() {
       }]);
 
       let captured = false;
-      const maxPolls = 20; // 20 * 3s = 60s timeout
-      await new Promise(r => setTimeout(r, 5000)); // Initial wait
+      const maxPolls = 20;
+      await new Promise(r => setTimeout(r, 5000));
 
       for (let i = 0; i < maxPolls; i++) {
         try {
@@ -195,7 +191,6 @@ export default function ProjectEditor() {
             );
             captured = true;
 
-            // Update conversation status
             await supabase.from("loveai_conversations")
               .update({ status: "completed", ai_response: latestMsg.content })
               .eq("user_id", user!.id)
@@ -220,7 +215,6 @@ export default function ProjectEditor() {
         );
       }
 
-      // Reload iframe to show changes
       setTimeout(() => iframeRef.current?.contentWindow?.location.reload(), 2000);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Erro ao enviar mensagem";
@@ -282,8 +276,65 @@ export default function ProjectEditor() {
   return (
     <AppLayout>
       <div className="flex" style={{ height: "calc(100vh - 3rem)" }}>
-        {/* Left: iframe preview */}
-        <div className="flex-1 flex flex-col min-w-0 border-r border-border/60">
+        {/* Left: Chat */}
+        <div className="w-[380px] flex flex-col shrink-0 border-r border-border/60">
+          <div className="h-10 border-b border-border/60 px-4 flex items-center justify-between shrink-0">
+            <span className="text-xs font-semibold">Editor</span>
+            <button onClick={() => setShowAiModal(true)} className="h-7 px-2.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1.5 text-xs font-medium transition-colors">
+              <BrainCircuit className="h-3.5 w-3.5" /> Star AI
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+            {chatMessages.length === 0 && (
+              <div className="text-center py-10 text-muted-foreground">
+                <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                <p className="text-xs">Envie instruções para editar o projeto</p>
+              </div>
+            )}
+            {chatMessages.map(msg => (
+              <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[90%] rounded-xl px-3 py-2 text-xs ${
+                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                }`}>
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.status === "sending" && <Loader2 className="h-3 w-3 animate-spin mt-1 opacity-60" />}
+                  {msg.status === "error" && <span className="text-[10px] text-destructive">Erro ao enviar</span>}
+                </div>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+
+          <div className="border-t border-border/60 p-3 shrink-0">
+            <div className="flex items-end gap-2">
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                onKeyDown={handleChatKeyDown}
+                placeholder="Enviar instrução ao projeto..."
+                rows={1}
+                disabled={sending}
+                className="flex-1 min-h-[36px] max-h-[100px] py-2 px-3 resize-none text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                onInput={e => {
+                  const t = e.currentTarget;
+                  t.style.height = "auto";
+                  t.style.height = Math.min(t.scrollHeight, 100) + "px";
+                }}
+              />
+              <button
+                onClick={sendChatMessage}
+                disabled={!message.trim() || sending}
+                className="h-9 w-9 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: iframe preview */}
+        <div className="flex-1 flex flex-col min-w-0">
           <div className="h-10 border-b border-border/60 px-4 flex items-center justify-between shrink-0">
             <span className="text-xs font-medium truncate">{projectName || "Preview"}</span>
             <div className="flex items-center gap-2">
@@ -315,63 +366,6 @@ export default function ProjectEditor() {
                 Não foi possível carregar o preview
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Right: Chat */}
-        <div className="w-[380px] flex flex-col shrink-0">
-          <div className="h-10 border-b border-border/60 px-4 flex items-center justify-between shrink-0">
-            <span className="text-xs font-semibold">Chat do Projeto</span>
-            <button onClick={() => setShowAiModal(true)} className="h-7 px-2.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1.5 text-xs font-medium transition-colors">
-              <BrainCircuit className="h-3.5 w-3.5" /> Star AI
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-            {chatMessages.length === 0 && (
-              <div className="text-center py-10 text-muted-foreground">
-                <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p className="text-xs">Envie mensagens diretas ao projeto via Fix V2</p>
-              </div>
-            )}
-            {chatMessages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[90%] rounded-xl px-3 py-2 text-xs ${
-                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                }`}>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                  {msg.status === "sending" && <Loader2 className="h-3 w-3 animate-spin mt-1 opacity-60" />}
-                  {msg.status === "error" && <span className="text-[10px] text-destructive">Erro ao enviar</span>}
-                </div>
-              </div>
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-
-          <div className="border-t border-border/60 p-3 shrink-0">
-            <div className="flex items-end gap-2">
-              <textarea
-                value={message}
-                onChange={e => setMessage(e.target.value)}
-                onKeyDown={handleChatKeyDown}
-                placeholder="Enviar comando ao projeto..."
-                rows={1}
-                disabled={sending}
-                className="flex-1 min-h-[36px] max-h-[100px] py-2 px-3 resize-none text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                onInput={e => {
-                  const t = e.currentTarget;
-                  t.style.height = "auto";
-                  t.style.height = Math.min(t.scrollHeight, 100) + "px";
-                }}
-              />
-              <button
-                onClick={sendChatMessage}
-                disabled={!message.trim() || sending}
-                className="h-9 w-9 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              </button>
-            </div>
           </div>
         </div>
 
@@ -439,8 +433,8 @@ export default function ProjectEditor() {
                   disabled={!aiPrompt.trim() || aiLoading}
                   className="h-8 px-4 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BrainCircuit className="h-3.5 w-3.5" />}
-                  {aiLoading ? "Processando..." : "Processar com Star AI"}
+                  {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  {aiLoading ? "Gerando..." : "Gerar"}
                 </button>
               </div>
             </div>
