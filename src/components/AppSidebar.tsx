@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth, useIsAdmin } from "@/hooks/useAuth";
+import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useSupportChat } from "@/contexts/SupportChatContext";
 import { useTenant } from "@/contexts/TenantContext";
@@ -8,6 +8,7 @@ import {
   Link2, FolderOpen, Shield, LogOut, User, ChevronDown,
   ArrowLeft, Bell, Send, Upload,
   PanelLeftClose, PanelLeft, Building2, StickyNote, Brain, Users, Unlock, FileText,
+  Zap, CreditCard, BookOpen, LifeBuoy, Workflow, Scale,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -43,6 +44,7 @@ export default function AppSidebar() {
   const brandName = "Starble";
   const brandInitials = "SB";
   const { isAdmin } = useIsAdmin();
+  const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
   const { toggleSupport, isOpen: isSupportOpen, unreadCount } = useSupportChat();
   const location = useLocation();
@@ -150,6 +152,7 @@ export default function AppSidebar() {
     { to: "/brain", label: "LoveAI Brain", icon: Brain },
     { to: "/notes", label: "Notas", icon: StickyNote },
     { to: "/community", label: "Comunidade", icon: MessageCircle },
+    { to: "/automation", label: "Automação", icon: Workflow },
     { to: "/install", label: "Instalar", icon: Download },
   ];
 
@@ -160,6 +163,14 @@ export default function AppSidebar() {
 
   const accountItems = [
     { to: `/profile/${user.id}`, label: "Perfil", icon: User },
+    { to: "/plans", label: "Planos", icon: CreditCard },
+    ...(isAffiliate ? [{ to: "/afiliado/dashboard", label: "Afiliado", icon: Users }] : []),
+  ];
+
+  const helpItems = [
+    { to: "/ajuda", label: "Central de Ajuda", icon: BookOpen },
+    { to: "/suporte", label: "Suporte", icon: LifeBuoy },
+    { to: "/termos", label: "Termos de Uso", icon: Scale },
   ];
 
   const adminItems = [
@@ -167,11 +178,13 @@ export default function AppSidebar() {
     ...(isAdmin ? [
       { to: "/admin", label: "Admin Operacional", icon: Shield },
       { to: "/admin/global", label: "Admin Global", icon: Building2 },
+      { to: "/admin/cloud", label: "Lovable Cloud", icon: Zap },
     ] : []),
   ];
 
   const lovableActive = lovableItems.some(i => isActive(i.to));
   const accountActive = accountItems.some(i => isActive(i.to));
+  const helpActive = helpItems.some(i => isActive(i.to));
 
   const renderNavItem = (item: { to: string; label: string; icon: React.ElementType }) => {
     const active = isActive(item.to);
@@ -254,6 +267,27 @@ export default function AppSidebar() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   {accountItems.map(renderNavItem)}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
+
+        {/* Ajuda */}
+        <Collapsible defaultOpen={helpActive} className="group/collapsible">
+          <SidebarGroup>
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:text-muted-foreground transition-colors">
+                Ajuda
+                {!collapsed && (
+                  <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                )}
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {helpItems.map(renderNavItem)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
