@@ -1174,6 +1174,80 @@ export type Database = {
           },
         ]
       }
+      extension_catalog: {
+        Row: {
+          created_at: string
+          description: string
+          display_order: number
+          download_slug: string | null
+          features: Json
+          hero_color: string
+          icon: string
+          id: string
+          is_active: boolean
+          is_featured: boolean
+          name: string
+          requirements: string[]
+          screenshots: string[]
+          slug: string
+          tagline: string
+          tenant_id: string | null
+          tier: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          display_order?: number
+          download_slug?: string | null
+          features?: Json
+          hero_color?: string
+          icon?: string
+          id?: string
+          is_active?: boolean
+          is_featured?: boolean
+          name: string
+          requirements?: string[]
+          screenshots?: string[]
+          slug: string
+          tagline?: string
+          tenant_id?: string | null
+          tier?: string
+          updated_at?: string
+          version?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          display_order?: number
+          download_slug?: string | null
+          features?: Json
+          hero_color?: string
+          icon?: string
+          id?: string
+          is_active?: boolean
+          is_featured?: boolean
+          name?: string
+          requirements?: string[]
+          screenshots?: string[]
+          slug?: string
+          tagline?: string
+          tenant_id?: string | null
+          tier?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extension_catalog_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       extension_files: {
         Row: {
           created_at: string
@@ -1828,6 +1902,42 @@ export type Database = {
           total_amount?: number
         }
         Relationships: []
+      }
+      plan_extensions: {
+        Row: {
+          created_at: string
+          extension_id: string
+          id: string
+          plan_id: string
+        }
+        Insert: {
+          created_at?: string
+          extension_id: string
+          id?: string
+          plan_id: string
+        }
+        Update: {
+          created_at?: string
+          extension_id?: string
+          id?: string
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_extensions_extension_id_fkey"
+            columns: ["extension_id"]
+            isOneToOne: false
+            referencedRelation: "extension_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_extensions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       plans: {
         Row: {

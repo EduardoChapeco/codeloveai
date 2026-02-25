@@ -9,7 +9,7 @@ import {
   ArrowLeft, Bell, Send, Upload,
   PanelLeftClose, PanelLeft, Building2, StickyNote, Brain, Users, Unlock, FileText,
   Zap, CreditCard, BookOpen, LifeBuoy, Workflow, Scale,
-  Rocket, Globe, Handshake,
+  Rocket, Globe, Handshake, Puzzle,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -150,6 +150,7 @@ export default function AppSidebar() {
   // ─── Default sidebar ───
   const mainItems = [
     { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
+    { to: "/extensoes", label: "Extensões", icon: Puzzle },
     { to: "/brain", label: "Star AI", icon: Brain },
     { to: "/notes", label: "Notas", icon: StickyNote },
     { to: "/community", label: "Comunidade", icon: MessageCircle },
