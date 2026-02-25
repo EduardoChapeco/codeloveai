@@ -1,4 +1,4 @@
-﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isDisposableEmail } from "../_shared/disposable-emails.ts";
 import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
@@ -85,19 +85,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create 365-day free subscription
+    // ── FIXED: Create 24h trial subscription (NOT 365 days) ──
     const startsAt = new Date();
-    const expiresAt = new Date(startsAt.getTime() + 365 * 24 * 60 * 60 * 1000); // 365 days
+    const expiresAt = new Date(startsAt.getTime() + 24 * 60 * 60 * 1000); // 24 hours
 
     const { error: insertError } = await serviceClient
       .from("subscriptions")
       .insert({
         user_id: userId,
-        plan: "1_day",
+        plan: "trial",
         status: "active",
         starts_at: startsAt.toISOString(),
         expires_at: expiresAt.toISOString(),
-        payment_id: `free_${userId.substring(0, 8)}`,
+        payment_id: `trial_${userId.substring(0, 8)}`,
         tenant_id: tenantId,
       });
 
@@ -109,60 +109,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Generate token via webhook
-    let generatedToken: string | null = null;
-    const webhookSecret = Deno.env.get("Starble_WEBHOOK_SECRET");
-    if (webhookSecret) {
-      try {
-        const requestBody = {
-          webhookSecret,
-          email: userEmail || "",
-          name: userEmail?.split("@")[0] || "",
-          plan: "days_365",
-        };
-
-        const webhookResponse = await fetch(
-          "https://Starble-fix-api.eusoueduoficial.workers.dev/webhook/purchase",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody),
-          }
-        );
-
-        const responseText = await webhookResponse.text();
-
-        if (webhookResponse.ok) {
-          try {
-            const webhookData = JSON.parse(responseText);
-            if (webhookData.token) {
-              generatedToken = webhookData.token;
-              await serviceClient
-                .from("tokens")
-                .update({ is_active: false })
-                .eq("user_id", userId);
-              await serviceClient.from("tokens").insert({
-                user_id: userId,
-                token: webhookData.token,
-                is_active: true,
-                tenant_id: tenantId,
-              });
-            }
-          } catch {
-            console.error(`Failed to parse webhook response`);
-          }
-        }
-      } catch (webhookErr) {
-        console.error("Webhook network error:", webhookErr);
-      }
-    }
+    // ── REMOVED: No more external webhook call that generated 365-day tokens ──
 
     return new Response(
       JSON.stringify({
         status: "activated",
-        days: 365,
+        days: 1,
+        plan: "trial",
+        dailyMessages: 10,
         expires_at: expiresAt.toISOString(),
-        has_token: !!generatedToken,
+        has_token: false,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

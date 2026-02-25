@@ -106,8 +106,9 @@ export default function LovableConnect() {
     if (!user || generatingClf) return clfTokenRef.current;
     setGeneratingClf(true);
     try {
+      // Server decides plan & expiry — no client-side overrides
       const { data, error } = await supabase.functions.invoke("generate-clf-token", {
-        body: { plan: "pro", expiresIn: 365 * 24 * 60 * 60 * 1000 },
+        body: {},
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
