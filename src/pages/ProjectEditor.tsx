@@ -123,99 +123,45 @@ export default function ProjectEditor() {
     }]);
 
     try {
-      const msgId = `umsg_${Date.now().toString(36)}${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-      const aiMsgId = `aimsg_${Date.now().toString(36)}${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-
-      await invoke({
-        route: `/projects/${id}/chat`,
-        method: "POST",
-        payload: {
-          id: msgId,
+      // Use send-message edge function (sends as security_fix_v2, auto-fetches lovable token)
+      const { data: smData, error: smError } = await supabase.functions.invoke("send-message", {
+        body: {
+          projectId: id,
           message: userMsg,
-          intent: "security_fix_v2",
-          chat_only: false,
-          ai_message_id: aiMsgId,
-          thread_id: "main",
-          view: "code",
-          view_description: "User is editing the project via Starble editor.",
-          model: null,
-          files: [],
-          optimisticImageUrls: [],
-          selected_elements: [],
-          debug_mode: false,
-          session_replay: "[]",
-          client_logs: [],
-          network_requests: [],
-          runtime_errors: [],
-          integration_metadata: { browser: { preview_viewport_width: 1536, preview_viewport_height: 730 } },
+          mode: "fix",
         },
       });
+
+      if (smError || smData?.error) {
+        throw new Error(smData?.error || smError?.message || "Erro ao enviar mensagem");
+      }
 
       setChatMessages(prev =>
         prev.map(m => m.id === tempId ? { ...m, status: "sent" } : m)
       );
 
-      await supabase.from("loveai_conversations").insert({
-        user_id: user!.id,
-        target_project_id: id,
-        brain_type: "code",
-        user_message: userMsg,
-        status: "processing",
-      });
-
       const aiResponseId = crypto.randomUUID();
       setChatMessages(prev => [...prev, {
         id: aiResponseId,
         role: "ai",
-        content: "Processando...",
+        content: "✅ Mensagem enviada via Security Fix. O Lovable está processando...",
         timestamp: new Date().toISOString(),
-        status: "sending",
+        status: "sent",
       }]);
 
-      let captured = false;
-      const maxPolls = 20;
-      await new Promise(r => setTimeout(r, 5000));
+      // Log to conversations table (fire and forget)
+      try {
+        await supabase.from("loveai_conversations").insert({
+          user_id: user!.id,
+          target_project_id: id,
+          brain_type: "code",
+          user_message: userMsg,
+          status: "completed",
+        });
+      } catch { /* silent */ }
 
-      for (let i = 0; i < maxPolls; i++) {
-        try {
-          const latestMsg = await invoke<{ content?: string; is_streaming?: boolean; role?: string }>({
-            route: `/projects/${id}/latest-message`,
-          });
-
-          if (latestMsg && !latestMsg.is_streaming && latestMsg.content && latestMsg.role === "assistant") {
-            setChatMessages(prev =>
-              prev.map(m => m.id === aiResponseId
-                ? { ...m, content: latestMsg.content!, status: "sent" }
-                : m
-              )
-            );
-            captured = true;
-
-            await supabase.from("loveai_conversations")
-              .update({ status: "completed", ai_response: latestMsg.content })
-              .eq("user_id", user!.id)
-              .eq("target_project_id", id)
-              .order("created_at", { ascending: false })
-              .limit(1);
-
-            break;
-          }
-        } catch {
-          // Network error, continue polling
-        }
-        await new Promise(r => setTimeout(r, 3000));
-      }
-
-      if (!captured) {
-        setChatMessages(prev =>
-          prev.map(m => m.id === aiResponseId
-            ? { ...m, content: "Tempo esgotado — a resposta pode ainda estar processando.", status: "error" }
-            : m
-          )
-        );
-      }
-
-      setTimeout(() => iframeRef.current?.contentWindow?.location.reload(), 2000);
+      // Reload preview after delay
+      setTimeout(() => iframeRef.current?.contentWindow?.location.reload(), 4000);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Erro ao enviar mensagem";
       setChatMessages(prev =>
