@@ -2481,6 +2481,7 @@ export type Database = {
           created_at: string
           daily_message_limit: number | null
           description: string | null
+          display_name: string | null
           display_order: number
           extension_mode: string
           features: Json
@@ -2504,6 +2505,7 @@ export type Database = {
           created_at?: string
           daily_message_limit?: number | null
           description?: string | null
+          display_name?: string | null
           display_order?: number
           extension_mode?: string
           features?: Json
@@ -2527,6 +2529,7 @@ export type Database = {
           created_at?: string
           daily_message_limit?: number | null
           description?: string | null
+          display_name?: string | null
           display_order?: number
           extension_mode?: string
           features?: Json
