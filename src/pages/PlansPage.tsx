@@ -140,7 +140,10 @@ export default function PlansPage() {
           )}
         </div>
 
-        <div className="mt-16 text-center">
+        <div className="mt-8 text-center space-y-2">
+          <p className="text-xs text-muted-foreground/60">
+            * Em breve, o plano Individual terá limite de projetos. Contrate o plano Agência para múltiplos projetos.
+          </p>
           <p className="lv-caption">
             Precisa de um plano personalizado? <Link to="/suporte" className="text-primary hover:underline">Fale conosco</Link>
           </p>
