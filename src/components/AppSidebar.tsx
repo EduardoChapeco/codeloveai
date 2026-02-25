@@ -149,10 +149,9 @@ export default function AppSidebar() {
   // ─── Default sidebar ───
   const mainItems = [
     { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
-    { to: "/brain", label: "LoveAI Brain", icon: Brain },
+    { to: "/brain", label: "Star AI", icon: Brain },
     { to: "/notes", label: "Notas", icon: StickyNote },
     { to: "/community", label: "Comunidade", icon: MessageCircle },
-    { to: "/automation", label: "Automação", icon: Workflow },
     { to: "/install", label: "Instalar", icon: Download },
   ];
 
