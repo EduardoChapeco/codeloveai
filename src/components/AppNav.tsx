@@ -1,11 +1,11 @@
-﻿import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useTenant } from "@/contexts/TenantContext";
 import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import {
   Shield, Users, MessageCircle, LayoutDashboard,
-  Download, Bot, Link2, FolderOpen,
+  Download, Bot, Link2, FolderOpen, CreditCard, Settings2,
 } from "lucide-react";
 
 export default function AppNav() {
@@ -13,7 +13,7 @@ export default function AppNav() {
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
-  const { tenant } = useTenant();
+  const { tenant, isTenantAdmin, isTenantOwner } = useTenant();
   const { hasAccess } = useHasActiveAccess();
   const brandName = tenant?.name || "Starble Ai";
   const location = useLocation();
@@ -29,6 +29,8 @@ export default function AppNav() {
     { to: "/afiliado/dashboard", label: "Afiliado",    icon: Users,           show: isAffiliate },
     { to: "/lovable/connect",   label: "Lovable",     icon: Link2,           show: true },
     { to: "/lovable/projects",  label: "Projetos",    icon: FolderOpen,      show: true },
+    { to: "/plans",             label: "Planos",      icon: CreditCard,      show: true },
+    { to: "/admin/tenant",      label: "Meu WL",      icon: Settings2,       show: isTenantAdmin || isTenantOwner },
     { to: "/admin",             label: "Admin",       icon: Shield,          show: isAdmin },
     { to: "/install",           label: "Instalar",    icon: Download,        show: hasAccess },
   ];
@@ -37,22 +39,12 @@ export default function AppNav() {
 
   return (
     <nav
-      className="sticky top-0 z-30 h-[58px] flex items-center justify-between px-5"
-      style={{
-        background: "rgba(255,255,255,0.88)",
-        backdropFilter: "blur(20px) saturate(180%) brightness(1.01)",
-        WebkitBackdropFilter: "blur(20px) saturate(180%) brightness(1.01)",
-        borderBottom: "0.5px solid rgba(0,0,0,0.08)",
-      }}
+      className="sticky top-0 z-30 h-[58px] flex items-center justify-between px-5 bg-background/88 backdrop-blur-xl border-b border-border/50"
     >
       {/* ── Brand ── */}
       <Link to="/" className="flex items-center gap-2.5 shrink-0 select-none">
         <div
-          className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center text-white text-[12px] font-black shrink-0"
-          style={{
-            background: "#000",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(255,255,255,0.10) inset",
-          }}
+          className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center text-primary-foreground text-[12px] font-black shrink-0 bg-primary shadow-md"
         >
           {brandName.substring(0, 1)}
         </div>
@@ -97,11 +89,7 @@ export default function AppNav() {
         <button
           onClick={signOut}
           title="Sair"
-          className="ml-1 w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0 transition-opacity hover:opacity-80"
-          style={{
-            background: "linear-gradient(135deg, #0071e3, #5e5ce6)",
-            boxShadow: "0 2px 8px rgba(0,113,227,0.25)",
-          }}
+          className="ml-1 w-8 h-8 rounded-full flex items-center justify-center text-primary-foreground text-[11px] font-bold shrink-0 transition-opacity hover:opacity-80 bg-primary shadow-md"
         >
           {initial}
         </button>
