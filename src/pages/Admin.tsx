@@ -819,6 +819,7 @@ export default function Admin() {
                 {t === "extension" && <Upload className="h-3 w-3" />}
                 {t === "notifications" && <Bell className="h-3 w-3" />}
                 {t === "messages" && <MessageSquare className="h-3 w-3" />}
+                {t === "support" && <MessageSquare className="h-3 w-3" />}
                 {
                   { 
                     members: "Membros", 
