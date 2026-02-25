@@ -6,123 +6,108 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --primary:#7c3aed;--primary-l:#a855f7;--primary-glow:rgba(124,58,237,0.28);
-  --bg:#0a0a0f;--fg:#f5f5f7;--fg2:rgba(245,245,247,0.75);--muted:rgba(245,245,247,0.38);
-  --glass:rgba(255,255,255,0.06);--glass-border:rgba(255,255,255,0.11);
-  --ok:#30d158;--err:#ff453a;--warn:#ffd60a;--sep:rgba(255,255,255,0.07);
+  --wl-primary:#7c3aed;--wl-primary-l:#a855f7;--wl-primary-d:#5b21b6;--wl-primary-xl:#c084fc;
+  --primary:var(--wl-primary);--primary-l:var(--wl-primary-l);--primary-d:var(--wl-primary-d);--primary-xl:var(--wl-primary-xl);
+  --primary-bg:rgba(124,58,237,0.13);--primary-border:rgba(124,58,237,0.32);--primary-glow:rgba(124,58,237,0.28);
+  --bg:#0a0a0f;--bg-glass:rgba(10,10,18,0.75);
+  --glass:rgba(255,255,255,0.055);--glass-hover:rgba(255,255,255,0.09);--glass-active:rgba(124,58,237,0.15);
+  --glass-border:rgba(255,255,255,0.10);--glass-border-bright:rgba(255,255,255,0.16);--glass-border-accent:rgba(124,58,237,0.5);
+  --surface:var(--glass);--surface-hover:var(--glass-hover);--border:var(--glass-border);--border-bright:var(--glass-border-bright);
+  --fg:#f5f5f7;--fg2:rgba(245,245,247,0.75);--fg3:rgba(245,245,247,0.45);--muted:rgba(245,245,247,0.24);
+  --ok:#30d158;--ok-glow:rgba(48,209,88,0.20);--ok-border:rgba(48,209,88,0.35);
+  --err:#ff453a;--err-glow:rgba(255,69,58,0.15);--err-border:rgba(255,69,58,0.30);
+  --warn:#ffd60a;--warn-glow:rgba(255,214,10,0.15);
+  --info:#3b82f6;--info-glow:rgba(59,130,246,0.15);
+  --sep:rgba(255,255,255,0.07);
+  --shadow:0 4px 24px rgba(0,0,0,0.60),0 1px 2px rgba(0,0,0,0.40);
+  --shadow-glass:0 8px 32px rgba(0,0,0,0.50),inset 0 1px 0 rgba(255,255,255,0.08);
+  --r:16px;--r-sm:12px;--r-xs:8px;
   --font:-apple-system,"SF Pro Display","SF Pro Text","Helvetica Neue",system-ui,sans-serif;
-  --r:16px;--r-sm:12px;
 }
 html,body{width:360px;background:var(--bg);font-family:var(--font);color:var(--fg);-webkit-font-smoothing:antialiased}
-body::before{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background:radial-gradient(ellipse 70% 50% at 15% 5%,rgba(124,58,237,0.14) 0%,transparent 55%),
-             radial-gradient(ellipse 50% 40% at 85% 85%,rgba(59,130,246,0.09) 0%,transparent 50%);
-}
-.hdr{
-  display:flex;align-items:center;gap:10px;padding:14px 16px 12px;
-  background:rgba(10,10,18,0.72);backdrop-filter:blur(40px) saturate(220%);
-  border-bottom:0.5px solid var(--sep);position:sticky;top:0;z-index:10;
-}
-.hdr-logo{
-  width:36px;height:36px;
-  background:linear-gradient(135deg,rgba(124,58,237,0.3),rgba(168,85,247,0.2));
-  backdrop-filter:blur(12px);border:0.5px solid rgba(124,58,237,0.35);
-  border-radius:12px;display:flex;align-items:center;justify-content:center;
-  box-shadow:0 4px 16px rgba(124,58,237,0.25),inset 0 1px 0 rgba(255,255,255,0.12);
-  overflow:hidden;
-}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 80% 60% at 20% 10%,rgba(124,58,237,0.12) 0%,transparent 60%),radial-gradient(ellipse 60% 50% at 80% 80%,rgba(59,130,246,0.08) 0%,transparent 55%),radial-gradient(ellipse 40% 40% at 50% 50%,rgba(168,85,247,0.05) 0%,transparent 50%)}
+
+/* ── HEADER ── */
+.hdr{display:flex;align-items:center;gap:10px;padding:14px 16px 12px;background:rgba(10,10,18,0.72);backdrop-filter:blur(40px) saturate(220%) brightness(1.05);-webkit-backdrop-filter:blur(40px) saturate(220%);border-bottom:0.5px solid var(--sep);position:sticky;top:0;z-index:10}
+.hdr-logo{width:36px;height:36px;background:linear-gradient(135deg,rgba(124,58,237,0.3),rgba(168,85,247,0.2));backdrop-filter:blur(12px);border:0.5px solid rgba(124,58,237,0.35);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(124,58,237,0.25),inset 0 1px 0 rgba(255,255,255,0.12);overflow:hidden}
 .hdr-logo img{width:28px;height:28px;object-fit:contain}
 .hdr-info{flex:1}
-.hdr-name{font-size:14px;font-weight:800;letter-spacing:-0.02em}
+.hdr-name{font-size:14px;font-weight:800;letter-spacing:-0.02em;background:linear-gradient(135deg,var(--primary-l),var(--primary-xl));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .hdr-ver{font-size:9px;color:var(--muted);margin-top:1px}
-.pill{padding:4px 12px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase}
-.pill.on{background:rgba(48,209,88,0.18);color:var(--ok);box-shadow:0 0 0 0.5px rgba(48,209,88,0.4)}
-.pill.off{background:rgba(255,255,255,0.07);color:var(--muted)}
-.pill.err{background:rgba(255,69,58,0.15);color:var(--err);box-shadow:0 0 0 0.5px rgba(255,69,58,0.35)}
-.body{padding:14px;display:flex;flex-direction:column;gap:11px;position:relative;z-index:1}
-.card{
-  background:rgba(255,255,255,0.055);backdrop-filter:blur(24px);
-  border:0.5px solid var(--glass-border);border-radius:var(--r);
-  box-shadow:0 4px 24px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.07);
-  padding:15px;
-}
-.card-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px}
-.active-card{
-  background:linear-gradient(135deg,rgba(48,209,88,0.12),rgba(48,209,88,0.06));
-  border:0.5px solid rgba(48,209,88,0.28);border-radius:var(--r);padding:15px;display:none;
-  box-shadow:0 4px 24px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.07);
-}
+.pill{padding:3px 9px;border-radius:99px;font-size:8px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;flex-shrink:0;white-space:nowrap}
+.pill.on{background:var(--ok-glow);color:var(--ok);box-shadow:0 0 0 0.5px rgba(50,215,75,0.35)}
+.pill.off{background:rgba(255,255,255,0.05);color:var(--muted);box-shadow:0 0 0 0.5px var(--border)}
+.pill.err{background:var(--err-glow);color:var(--err);box-shadow:0 0 0 0.5px var(--err-border)}
+
+/* ── BODY ── */
+.body{padding:14px;display:flex;flex-direction:column;gap:11px;position:relative;z-index:1;overflow-y:auto;scrollbar-width:none}
+.body::-webkit-scrollbar{width:0}
+
+/* ── CARDS ── */
+.card{background:var(--glass);backdrop-filter:blur(24px) saturate(200%);-webkit-backdrop-filter:blur(24px) saturate(200%);border:0.5px solid var(--border-bright);border-radius:var(--r);box-shadow:var(--shadow-glass);padding:15px}
+.card-title{font-size:9.5px;font-weight:700;color:var(--fg3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px}
+
+/* Active license card */
+.active-card{background:linear-gradient(135deg,rgba(48,209,88,0.12),rgba(48,209,88,0.06));border:0.5px solid rgba(48,209,88,0.28);border-radius:var(--r);padding:15px;display:none;box-shadow:var(--shadow-glass)}
 .lic-tag{font-size:9.5px;font-weight:800;color:var(--ok);text-transform:uppercase;letter-spacing:0.06em;display:flex;align-items:center;gap:5px;margin-bottom:9px}
-.lic-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px rgba(48,209,88,0.5)}
+.lic-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px rgba(48,209,88,0.5);animation:pulse-glow 2s ease-in-out infinite}
+@keyframes pulse-glow{0%,100%{box-shadow:0 0 0 0 rgba(48,209,88,0.4)}50%{box-shadow:0 0 0 4px rgba(48,209,88,0)}}
 .lic-name{font-size:15px;font-weight:700}
-.lic-email{font-size:11.5px;color:var(--muted);margin-top:2px}
+.lic-email{font-size:11.5px;color:var(--fg3);margin-top:2px}
 .lic-plan{font-size:11px;color:var(--ok);margin-top:8px;font-weight:600;display:flex;align-items:center;gap:6px}
 .lic-top{display:flex;justify-content:space-between;align-items:flex-start}
-.plan-blocked{
-  background:linear-gradient(135deg,rgba(255,69,58,0.12),rgba(255,69,58,0.06));
-  border:0.5px solid rgba(255,69,58,0.28);border-radius:var(--r);padding:15px;display:none;
-}
+
+/* Plan blocked */
+.plan-blocked{background:linear-gradient(135deg,rgba(255,69,58,0.12),rgba(255,69,58,0.06));border:0.5px solid rgba(255,69,58,0.28);border-radius:var(--r);padding:15px;display:none}
 .plan-blocked-title{font-size:12px;font-weight:700;color:var(--err);margin-bottom:6px}
 .plan-blocked-msg{font-size:11px;color:var(--fg2);line-height:1.5}
-.btn{
-  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
-  padding:14px 16px;border-radius:var(--r-sm);border:none;cursor:pointer;
-  font-size:13.5px;font-weight:700;font-family:var(--font);
-  transition:all 0.2s cubic-bezier(.34,1.56,.64,1);
-}
-.btn.primary{
-  background:linear-gradient(135deg,var(--primary),var(--primary-l));color:#fff;
-  box-shadow:0 4px 20px var(--primary-glow),inset 0 1px 0 rgba(255,255,255,0.2);
-}
-.btn.primary:hover{filter:brightness(1.1);transform:translateY(-2px)}
-.btn.secondary{
-  background:rgba(255,255,255,0.07);color:var(--fg2);
-  border:0.5px solid var(--glass-border);
-}
+
+/* ── BUTTONS ── */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 16px;border-radius:var(--r-sm);border:none;cursor:pointer;font-size:13.5px;font-weight:700;font-family:var(--font);transition:all 0.2s cubic-bezier(.34,1.56,.64,1)}
+.btn.primary{background:linear-gradient(135deg,var(--primary),var(--primary-l));color:#fff;box-shadow:0 4px 20px var(--primary-glow),inset 0 1px 0 rgba(255,255,255,0.20)}
+.btn.primary:hover{filter:brightness(1.12);transform:translateY(-2px);box-shadow:0 6px 28px var(--primary-glow)}
+.btn.secondary{background:rgba(255,255,255,0.07);color:var(--fg2);backdrop-filter:blur(12px);border:0.5px solid var(--border);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08)}
 .btn.secondary:hover{background:rgba(255,255,255,0.11);transform:translateY(-1px)}
-.btn.danger{background:rgba(255,69,58,0.12);color:var(--err);border:0.5px solid rgba(255,69,58,0.28)}
-.btn:disabled{opacity:.4;cursor:default;transform:none!important}
+.btn.danger{background:var(--err-glow);color:var(--err);border:0.5px solid var(--err-border)}
+.btn.danger:hover{background:rgba(255,69,58,0.22)}
+.btn.sm{padding:8px 14px;font-size:11.5px;border-radius:9px}
+.btn:disabled{opacity:0.35;cursor:default;transform:none!important;filter:none!important}
 a.btn{text-decoration:none}
-.inp{
-  width:100%;padding:12px 14px;border-radius:var(--r-sm);
-  background:rgba(255,255,255,0.06);backdrop-filter:blur(12px);
-  border:0.5px solid var(--glass-border);
-  color:var(--fg);font-size:13px;font-family:var(--font);outline:none;
-  transition:border-color .16s,box-shadow .16s;
-}
-.inp:focus{border-color:rgba(124,58,237,0.55);box-shadow:0 0 0 3px rgba(124,58,237,0.1)}
+.btn svg{width:15px;height:15px}
+
+/* ── INPUTS ── */
+.inp{width:100%;padding:11px 13px;border-radius:var(--r-sm);background:rgba(255,255,255,0.06);backdrop-filter:blur(12px);border:0.5px solid var(--border);color:var(--fg);font-size:13px;font-family:var(--font);outline:none;transition:border-color .16s,box-shadow .16s}
+.inp:focus{border-color:rgba(124,58,237,0.55);box-shadow:0 0 0 3px rgba(124,58,237,0.10),inset 0 1px 0 rgba(255,255,255,0.06)}
 .inp::placeholder{color:var(--muted)}
-.status-row{
-  display:flex;align-items:center;gap:11px;padding:12px 14px;
-  background:rgba(255,255,255,0.045);backdrop-filter:blur(20px);
-  border:0.5px solid var(--glass-border);border-radius:var(--r-sm);
-}
-.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.dot.ok{background:var(--ok);box-shadow:0 0 8px rgba(48,209,88,0.5)}
-.dot.off{background:rgba(255,255,255,0.14)}
+
+/* ── STATUS ROWS ── */
+.status-row{display:grid;grid-template-columns:8px 1fr;align-items:center;gap:10px;padding:11px 13px;background:rgba(255,255,255,0.045);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border:0.5px solid var(--border);border-radius:var(--r-sm);box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:all 0.30s}
+.dot.ok{background:var(--ok);box-shadow:0 0 7px var(--ok-glow)}
+.dot.off{background:var(--muted)}
 .dot.warn{background:var(--warn);box-shadow:0 0 6px rgba(255,214,10,0.4)}
-.s-label{font-size:12.5px;font-weight:600}
-.s-sub{font-size:10.5px;color:var(--muted);margin-top:1px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.qa-card{
-  padding:13px 12px;border-radius:var(--r);cursor:pointer;
-  background:rgba(255,255,255,0.055);backdrop-filter:blur(20px);
-  border:0.5px solid var(--glass-border);
-  box-shadow:0 4px 16px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.07);
-  transition:all 0.22s cubic-bezier(.34,1.56,.64,1);
-}
-.qa-card:hover{background:rgba(255,255,255,0.09);transform:translateY(-3px) scale(1.03)}
+.s-label{font-size:11.5px;font-weight:600;color:var(--fg2)}
+.s-sub{font-size:9.5px;color:var(--fg3);margin-top:1px}
+
+/* ── QA GRID ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.qa-card{padding:12px 11px;border-radius:var(--r);cursor:pointer;background:var(--glass);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border:0.5px solid rgba(255,255,255,0.12);box-shadow:0 4px 20px rgba(0,0,0,0.40),inset 0 1px 0 rgba(255,255,255,0.07);transition:all 0.22s cubic-bezier(.34,1.56,.64,1)}
+.qa-card:hover{background:var(--glass-hover);border-color:rgba(255,255,255,0.20);transform:translateY(-3px) scale(1.02);box-shadow:0 8px 32px rgba(0,0,0,0.50),inset 0 1px 0 rgba(255,255,255,0.10)}
 .qa-card:active{transform:scale(0.97)}
-.qa-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:7px}
-.qa-icon svg{width:16px;height:16px}
-.qa-label{font-size:12px;font-weight:700;color:var(--fg)}
-.qa-sub{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4}
-.alert{padding:10px 13px;border-radius:var(--r-sm);font-size:12px;font-weight:500;display:none}
+.qa-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;margin-bottom:7px}
+.qa-icon svg{width:14px;height:14px;stroke-width:1.8}
+.qa-label{font-size:11.5px;font-weight:700;color:var(--fg)}
+.qa-sub{font-size:9.5px;color:var(--fg3);margin-top:2px;line-height:1.3}
+
+/* ── ALERTS ── */
+.alert{padding:8px 11px;border-radius:var(--r-xs);font-size:11px;font-weight:500;display:none}
 .alert.on{display:block}
-.alert.ok{background:rgba(48,209,88,0.1);color:var(--ok);border:0.5px solid rgba(48,209,88,0.35)}
-.alert.err{background:rgba(255,69,58,0.1);color:var(--err);border:0.5px solid rgba(255,69,58,0.25)}
-.alert.info{background:rgba(124,58,237,0.1);color:#a78bfa;border:0.5px solid rgba(124,58,237,0.25)}
+.alert.ok{background:var(--ok-glow);color:var(--ok);border:0.5px solid var(--ok-border)}
+.alert.err{background:var(--err-glow);color:var(--err);border:0.5px solid var(--err-border)}
+.alert.info{background:var(--primary-bg);color:var(--primary-l);border:0.5px solid var(--primary-border)}
+.alert.warn{background:var(--warn-glow);color:var(--warn);border:0.5px solid rgba(255,214,10,0.25)}
+
+/* ── MISC ── */
 .or-sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px;margin:10px 0}
 .or-sep::before,.or-sep::after{content:'';flex:1;height:0.5px;background:var(--sep)}
 </style>
@@ -137,22 +122,28 @@ a.btn{text-decoration:none}
   <span class="pill off" id="p-pill">Inativo</span>
 </div>
 <div class="body">
+
+  <!-- Plan blocked -->
   <div class="plan-blocked" id="p-plan-blocked">
     <div class="plan-blocked-title">Plano insuficiente</div>
-    <div class="plan-blocked-msg" id="p-plan-blocked-msg">Seu plano atual nao inclui o Starble Speed.</div>
+    <div class="plan-blocked-msg" id="p-plan-blocked-msg">Seu plano atual não inclui o Starble Speed.</div>
     <a href="https://starble.lovable.app" target="_blank" class="btn primary" style="margin-top:12px">Fazer Upgrade</a>
   </div>
+
+  <!-- Active license -->
   <div class="active-card" id="p-active-card">
     <div class="lic-top">
-      <span class="lic-tag">Licenca Ativa</span>
-      <button class="btn danger" id="p-revoke-btn" style="width:auto;padding:6px 14px;font-size:11px;border-radius:9px">Remover</button>
+      <span class="lic-tag">Licença Ativa</span>
+      <button class="btn danger sm" id="p-revoke-btn" style="width:auto">Remover</button>
     </div>
     <div class="lic-name" id="p-lic-name">—</div>
     <div class="lic-email" id="p-lic-email">—</div>
     <div class="lic-plan" id="p-lic-plan">—</div>
   </div>
+
+  <!-- Activation card -->
   <div class="card" id="p-inactive-card">
-    <div class="card-title">Ativar Licenca</div>
+    <div class="card-title">Ativar Licença</div>
     <button class="btn primary" id="p-sso-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="17" height="17"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
       Entrar com Starble
@@ -162,10 +153,12 @@ a.btn{text-decoration:none}
     <button class="btn primary" id="p-activate-btn" style="margin-top:9px">Ativar</button>
     <div class="alert" id="p-activate-alert" style="margin-top:8px"></div>
   </div>
+
+  <!-- Status rows -->
   <div class="status-row">
     <div class="dot off" id="p-token-dot"></div>
     <div>
-      <div class="s-label" id="p-token-label">Token nao capturado</div>
+      <div class="s-label" id="p-token-label">Token não capturado</div>
       <div class="s-sub" id="p-token-sub">Recarregue o Lovable</div>
     </div>
   </div>
@@ -176,6 +169,8 @@ a.btn{text-decoration:none}
       <div class="s-sub" id="p-proj-sub">Abra um projeto no Lovable</div>
     </div>
   </div>
+
+  <!-- Quick actions -->
   <div class="grid2">
     <div class="qa-card" id="p-open-panel">
       <div class="qa-icon" style="background:rgba(124,58,237,0.15);color:#a78bfa">
@@ -186,7 +181,7 @@ a.btn{text-decoration:none}
     </div>
     <div class="qa-card" id="p-capture-btn">
       <div class="qa-icon" style="background:rgba(48,209,88,0.12);color:#30d158">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2H3v16h5v4l4-4h4l5-5V2z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       </div>
       <div class="qa-label">Capturar Token</div>
       <div class="qa-sub">Sincronizar</div>
@@ -199,16 +194,19 @@ a.btn{text-decoration:none}
       <div class="qa-sub">Publicar projeto</div>
     </div>
     <div class="qa-card" id="p-sso-connect">
-      <div class="qa-icon" style="background:rgba(255,214,10,0.1);color:#ffd60a">
+      <div class="qa-icon" style="background:rgba(255,214,10,0.10);color:#ffd60a">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
       </div>
       <div class="qa-label">Conectar SSO</div>
       <div class="qa-sub">Vincular ao Starble</div>
     </div>
   </div>
-  <div class="alert on info" style="font-size:10.5px;line-height:1.5">
-    Atencao: Se o Lovable apresentar planos, pedir confirmacao para alterar tabelas ou criar projetos, responda NAO. Essas acoes podem descontar creditos do seu plano Lovable.
+
+  <!-- Warning -->
+  <div class="alert on warn" style="font-size:10px;line-height:1.5">
+    ⚠️ Se o Lovable apresentar planos ou pedir confirmação para alterar tabelas, responda NÃO. Essas ações podem descontar créditos.
   </div>
+
   <div class="alert" id="p-main-alert"></div>
 </div>
 <script src="popup.js"></script>
