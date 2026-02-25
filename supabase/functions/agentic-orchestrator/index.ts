@@ -799,7 +799,7 @@ Deno.serve(async (req: Request) => {
       const { project_id } = body as { project_id: string };
       if (!project_id) return json({ error: "project_id required" }, 400);
 
-      const newStatus = action === "pause" ? "paused" : "executing";
+      const newStatus = action === "pause" ? "paused" : "paused"; // resume sets to paused; tick will pick it up
       await sc.from("orchestrator_projects").update({ status: newStatus }).eq("id", project_id).eq("user_id", userId);
       await addLog(sc, project_id, `${action === "pause" ? "⏸" : "▶️"} Project ${action}d`, "info");
       return json({ success: true, status: newStatus });
@@ -822,7 +822,7 @@ Deno.serve(async (req: Request) => {
       try {
         const createRes = await extFetch(
           `${EXT_API}/workspaces/${workspace_id}/projects`,
-          { method: "POST", body: JSON.stringify({ name: project_name || "Starble Project", is_public: false }) },
+          { method: "POST", body: JSON.stringify({ name: project_name || "Starble Project", initial_message: "setup", visibility: "private" }) },
           adminTk3
         );
         if (!createRes.ok) {
@@ -831,7 +831,19 @@ Deno.serve(async (req: Request) => {
         }
         const created = await createRes.json() as Record<string, unknown>;
         const lovableProjectId = (created.id || created.project_id) as string;
+        const initialMsgId = (created.message_id || created.initial_message_id) as string | undefined;
         if (!lovableProjectId) return json({ error: "Lovable did not return project ID" }, 502);
+
+        // Ghost pattern: cancel initial message immediately to avoid credit consumption
+        if (initialMsgId) {
+          try {
+            await extFetch(
+              `${EXT_API}/projects/${lovableProjectId}/chat/${initialMsgId}/cancel`,
+              { method: "POST" },
+              adminTk3
+            );
+          } catch { /* non-critical — message may have already completed */ }
+        }
 
         await sc.from("orchestrator_projects").update({
           lovable_project_id: lovableProjectId, ghost_created: true, status: "paused",
@@ -885,9 +897,13 @@ Deno.serve(async (req: Request) => {
       const { project_id, task_id } = body as { project_id: string; task_id?: string };
       if (!project_id) return json({ error: "project_id required" }, 400);
 
-      const { data: orch } = await sc.from("orchestrator_projects")
+      // Support internal calls from orchestrator-tick (no user_id filter)
+      const isInternalAudit = req.headers.get("x-orchestrator-internal") === "true";
+      let auditQuery = sc.from("orchestrator_projects")
         .select("lovable_project_id, current_phase")
-        .eq("id", project_id).eq("user_id", userId).maybeSingle();
+        .eq("id", project_id);
+      if (!isInternalAudit) auditQuery = auditQuery.eq("user_id", userId);
+      const { data: orch } = await auditQuery.maybeSingle();
       if (!orch?.lovable_project_id) return json({ error: "Project not linked" }, 404);
 
       const adminTk5 = await getAdminToken(sc);
