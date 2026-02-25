@@ -29,7 +29,7 @@ function makeUuid(): string {
 }
 
 function makeAiMsgId(): string {
-  const C = '01PbWWqgKDBDorh525uecKaGZD21FGSoCeR';
+  const C = '01PDx4Vtw4YF6XfduRwwS6nKZ6sPAC9nCeR';
   return 'aimsg_' + Array.from({ length: 26 }, () => C[Math.floor(Math.random() * 32)]).join('');
 }
 
