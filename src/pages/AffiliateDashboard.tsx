@@ -2,7 +2,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAffiliate } from "@/hooks/useAuth";
-import { Copy, Link as LinkIcon, LogOut, Coins, Users, Shield, Download, DollarSign, FileText, CreditCard, Save } from "lucide-react";
+import { Copy, Link as LinkIcon, LogOut, Coins, Users, Shield, Download, DollarSign, FileText, CreditCard, Save, Gift, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -50,6 +50,150 @@ interface Invoice {
 }
 
 type AffTab = "overview" | "financeiro" | "indicacoes" | "banco";
+
+interface RedeemablePlan {
+  id: string;
+  name: string;
+  price: number;
+  billing_cycle: string;
+}
+
+function RedeemSection({ affiliateId, userId, confirmedReferrals }: { affiliateId?: string; userId?: string; confirmedReferrals: number }) {
+  const [plans, setPlans] = useState<RedeemablePlan[]>([]);
+  const [redeemableBalance, setRedeemableBalance] = useState<number | null>(null);
+  const [redeeming, setRedeeming] = useState<string | null>(null);
+  const [loadingBalance, setLoadingBalance] = useState(true);
+
+  useEffect(() => {
+    if (!affiliateId || !userId) return;
+
+    // Fetch available plans
+    supabase
+      .from("plans")
+      .select("id, name, price, billing_cycle")
+      .eq("is_active", true)
+      .eq("is_public", true)
+      .gt("price", 0)
+      .order("price", { ascending: true })
+      .then(({ data }) => setPlans((data || []) as RedeemablePlan[]));
+
+    // Fetch redeemable commissions (approved, older than 7 days)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    supabase
+      .from("commissions")
+      .select("amount")
+      .eq("affiliate_id", affiliateId)
+      .eq("status", "approved")
+      .lte("created_at", sevenDaysAgo)
+      .then(({ data }) => {
+        const total = (data || []).reduce((sum, c) => sum + Number(c.amount), 0);
+        setRedeemableBalance(total);
+        setLoadingBalance(false);
+      });
+  }, [affiliateId, userId]);
+
+  const handleRedeem = async (planId: string) => {
+    setRedeeming(planId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        return;
+      }
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/redeem-plan`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ plan_id: planId }),
+        }
+      );
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        toast.success(result.message);
+        // Refresh balance
+        if (result.remainingBalance !== undefined) {
+          setRedeemableBalance(result.remainingBalance);
+        }
+      } else {
+        toast.error(result.error || "Erro ao resgatar plano");
+      }
+    } catch {
+      toast.error("Erro de conexão");
+    } finally {
+      setRedeeming(null);
+    }
+  };
+
+  const billingLabel: Record<string, string> = { daily: "/dia", monthly: "/mês", weekly: "/semana" };
+
+  if (confirmedReferrals === 0) return null;
+
+  return (
+    <div className="lv-card">
+      <div className="flex items-center gap-2 mb-1">
+        <Gift className="h-4 w-4 text-primary" />
+        <p className="lv-overline">Trocar comissões por plano</p>
+      </div>
+      <p className="lv-caption mb-4">
+        Use suas comissões acumuladas (após 7 dias) para ativar planos sem pagar.
+        {loadingBalance ? "" : ` Saldo resgatável: `}
+        {!loadingBalance && (
+          <strong className="text-foreground">R${(redeemableBalance || 0).toFixed(2)}</strong>
+        )}
+      </p>
+
+      {loadingBalance ? (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Carregando saldo...
+        </div>
+      ) : (redeemableBalance || 0) <= 0 ? (
+        <p className="lv-body text-sm">
+          Você ainda não tem comissões resgatáveis. Comissões ficam disponíveis 7 dias após a aprovação.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {plans.map((p) => {
+            const priceBRL = p.price / 100;
+            const canAfford = (redeemableBalance || 0) >= priceBRL;
+            return (
+              <div key={p.id} className={`lv-card-sm flex flex-col justify-between ${!canAfford ? "opacity-50" : ""}`}>
+                <div>
+                  <p className="lv-body-strong text-sm">{p.name}</p>
+                  <p className="lv-caption">
+                    R${priceBRL.toFixed(2).replace(".", ",")}{billingLabel[p.billing_cycle] || ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => canAfford && handleRedeem(p.id)}
+                  disabled={!canAfford || redeeming === p.id}
+                  className={`mt-3 h-9 px-4 text-xs rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                    canAfford
+                      ? "bg-primary text-primary-foreground hover:opacity-90"
+                      : "bg-muted text-muted-foreground cursor-not-allowed"
+                  }`}
+                >
+                  {redeeming === p.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : canAfford ? (
+                    <>
+                      <Gift className="h-3.5 w-3.5" /> Resgatar
+                    </>
+                  ) : (
+                    "Saldo insuficiente"
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const planLabels: Record<string, string> = {
   "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
@@ -496,13 +640,26 @@ export default function AffiliateDashboard() {
           </div>
         )}
 
-        {/* Buy with discount */}
+        {/* Redeem commissions for plans */}
+        <RedeemSection
+          affiliateId={affiliateData?.id}
+          userId={user?.id}
+          confirmedReferrals={referrals.filter(r => r.confirmed).length}
+        />
+
+        {/* Discount info */}
         <div className="lv-card">
-          <p className="lv-overline mb-3">Comprar com desconto</p>
-          <p className="lv-body mb-4">
-            Como afiliado, você tem <strong className="text-foreground">{affiliateData?.discount_percent}% de desconto</strong> em todos os planos.
-          </p>
-          <Link to="/#plans" className="lv-btn-primary h-10 px-5 text-sm inline-flex items-center">Ver planos</Link>
+          <p className="lv-overline mb-3">Desconto de afiliado</p>
+          {referrals.filter(r => r.confirmed).length > 0 ? (
+            <p className="lv-body mb-4">
+              Você tem <strong className="text-foreground">{affiliateData?.discount_percent}% de desconto</strong> em todos os planos porque possui indicações ativas! 🎉
+            </p>
+          ) : (
+            <p className="lv-body mb-4">
+              Indique pelo menos <strong className="text-foreground">1 pessoa que assine um plano pago</strong> para desbloquear seu desconto de <strong className="text-foreground">{affiliateData?.discount_percent}%</strong> em todos os planos.
+            </p>
+          )}
+          <Link to="/planos" className="lv-btn-primary h-10 px-5 text-sm inline-flex items-center">Ver planos</Link>
         </div>
       </div>
     </div>
