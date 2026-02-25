@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import AppLayout from "@/components/AppLayout";
 import LovableCloudTab from "@/components/admin/LovableCloudTab";
+import ModulesManagementTab from "@/components/admin/ModulesManagementTab";
 
 interface TenantRow {
   id: string;
@@ -133,7 +134,7 @@ interface FeatureFlag {
   updated_at: string;
 }
 
-type Tab = "tenants" | "plans" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud";
+type Tab = "tenants" | "plans" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -447,6 +448,7 @@ export default function AdminGlobal() {
             {([
               { id: "tenants", label: "Tenants", icon: Building2 },
               { id: "plans", label: "Planos", icon: DollarSign },
+              { id: "modules", label: "Módulos", icon: Package },
               { id: "feature_flags", label: "Feature Flags", icon: Sliders },
               { id: "lovable_cloud", label: "Lovable Cloud", icon: CloudLightning },
               { id: "wl_plans", label: "Planos WL", icon: Package },
@@ -845,6 +847,9 @@ export default function AdminGlobal() {
               </div>
             </div>
           )}
+
+          {/* ─── MODULES TAB ─── */}
+          {tab === "modules" && <ModulesManagementTab />}
 
           {/* ─── LOVABLE CLOUD TAB ─── */}
           {tab === "lovable_cloud" && <LovableCloudTab />}

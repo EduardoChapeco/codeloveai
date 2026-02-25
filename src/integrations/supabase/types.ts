@@ -1681,6 +1681,48 @@ export type Database = {
           },
         ]
       }
+      module_catalog: {
+        Row: {
+          billing_model: string
+          created_at: string
+          description: string | null
+          display_order: number
+          icon: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          name: string
+          price_per_user_cents: number
+          slug: string
+        }
+        Insert: {
+          billing_model?: string
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name: string
+          price_per_user_cents?: number
+          slug: string
+        }
+        Update: {
+          billing_model?: string
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          price_per_user_cents?: number
+          slug?: string
+        }
+        Relationships: []
+      }
       note_folders: {
         Row: {
           created_at: string
@@ -2468,6 +2510,54 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tenant_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_modules: {
+        Row: {
+          billing_model_override: string | null
+          created_at: string
+          enabled: boolean
+          id: string
+          module_slug: string
+          price_override_cents: number | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          billing_model_override?: string | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          module_slug: string
+          price_override_cents?: number | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          billing_model_override?: string | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          module_slug?: string
+          price_override_cents?: number | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_modules_module_slug_fkey"
+            columns: ["module_slug"]
+            isOneToOne: false
+            referencedRelation: "module_catalog"
+            referencedColumns: ["slug"]
+          },
+          {
+            foreignKeyName: "tenant_modules_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
