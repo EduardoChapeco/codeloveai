@@ -289,7 +289,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* Status — full width */}
-            <div className="clf-liquid-glass md:col-span-2 rounded-[22px] p-6 lg:p-8">
+            <div className="clf-liquid-glass md:col-span-2 p-6 lg:p-8">
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                 <div className="flex-1">
                   <p className="lv-overline mb-3">Status do acesso</p>
