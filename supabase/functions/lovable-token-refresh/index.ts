@@ -53,12 +53,11 @@ async function refreshFirebaseToken(
  * We try to use the stored secret first, fallback to well-known keys.
  */
 function getFirebaseApiKey(): string | null {
-  // Primary: explicit secret set by admin
-  const key = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
-  if (key) return key;
+  // Primary: explicit secret set by admin (supporting both canonical and legacy key names)
+  const key = Deno.env.get("LOVABLE_FIREBASE_API_KEY") || Deno.env.get("lovable_firebase_api_key");
+  if (!key || typeof key !== "string") return null;
 
-  // If not set, return null — admin needs to configure it
-  return null;
+  return key.trim() || null;
 }
 
 Deno.serve(async (req) => {

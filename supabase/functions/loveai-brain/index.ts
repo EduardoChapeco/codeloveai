@@ -74,9 +74,14 @@ async function getAdminLovableToken(sc: any): Promise<string | null> {
   return null;
 }
 
+function getFirebaseApiKey(): string | null {
+  const key = Deno.env.get("LOVABLE_FIREBASE_API_KEY") || Deno.env.get("lovable_firebase_api_key");
+  if (!key || typeof key !== "string") return null;
+  return key.trim() || null;
+}
+
 async function tryRefreshAdminToken(sc: any, refreshToken?: string | null): Promise<string | null> {
-  const apiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY");
-  if (!apiKey) return null;
+  const apiKey = getFirebaseApiKey();
 
   // Get refresh token from param or from secrets table
   let rt = refreshToken;
