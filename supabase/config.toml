@@ -122,3 +122,6 @@ verify_jwt = false
 
 [functions.lovable-automation]
 verify_jwt = false
+
+[functions.validate-plan]
+verify_jwt = false

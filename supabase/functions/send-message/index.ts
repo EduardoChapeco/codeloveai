@@ -1,133 +1,208 @@
-const GIT_SHA     = '9810ecd6b501b23b14c5d4ee731d8cda244d003b';
-const LOVABLE_API = 'https://api.lovable.dev';
+// Starble — send-message v2.0.0
+// REGRA: Nunca apague esta função. SHA de produção: 9810ecd6b501b23b14c5d4ee731d8cda244d003b
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+const GIT_SHA      = "9810ecd6b501b23b14c5d4ee731d8cda244d003b";
+const LOVABLE_API  = "https://api.lovable.dev";
+const WORKER_URL   = "https://codelove-fix-api.eusoueduoficial.workers.dev";
+
+function uuid4(): string {
+  return crypto.randomUUID();
+}
+
+function genId(prefix: string): string {
+  const C = "01PDx4Vtw4YF6XfduRwwS6nKZ6sPAC9nCeR";
+  let ts = Date.now(), tsPart = "";
+  for (let i = 0; i < 10; i++) { tsPart = C[ts % 32] + tsPart; ts = Math.floor(ts / 32); }
+  let rand = "";
+  for (let i = 0; i < 16; i++) rand += C[Math.floor(Math.random() * 32)];
+  return prefix + tsPart + rand;
+}
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-clf-token, x-clf-extension",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function fail(msg: string, status = 400): Response {
-  return new Response(JSON.stringify({ ok: false, error: msg }), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  });
+const PLAN_PERMISSIONS: Record<string, string[]> = {
+  free:    [],
+  speed:   ["speed"],
+  booster: ["speed", "booster"],
+  labs:    ["speed", "booster", "labs"],
+};
+
+async function validateCLFToken(
+  token: string,
+  extensionRequested: string
+): Promise<{ ok: boolean; error?: string; plan?: string; licenseData?: Record<string, unknown> }> {
+  if (!token?.startsWith("CLF1.")) {
+    return { ok: false, error: "Token inválido. Use uma licença CLF1." };
+  }
+  try {
+    const res = await fetch(WORKER_URL + "/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    if (res.status === 401) return { ok: false, error: "Licença expirada ou revogada." };
+    if (!res.ok) return { ok: false, error: "Erro ao validar licença." };
+
+    const data = await res.json();
+    if (!data.valid) return { ok: false, error: "Licença inválida." };
+
+    const plan: string = (data.plan || data.plan_type || "free").toLowerCase();
+    const addons: string[] = data.addons || [];
+
+    const allowedByPlan = PLAN_PERMISSIONS[plan] || [];
+    const allowedByAddon = addons.map((a: string) => a.toLowerCase());
+    const allAllowed = [...allowedByPlan, ...allowedByAddon];
+
+    if (!allAllowed.includes(extensionRequested)) {
+      const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+      return {
+        ok: false,
+        error: `Seu plano ${planLabel} não inclui a extensão "${extensionRequested}". Faça upgrade em starble.lovable.app.`,
+        plan,
+      };
+    }
+
+    return { ok: true, plan, licenseData: data };
+  } catch {
+    return { ok: false, error: "Erro de conexão ao validar licença." };
+  }
 }
 
-function succeed(data: Record<string, unknown>): Response {
-  return new Response(JSON.stringify({ ok: true, ...data }), {
-    status: 200,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  });
-}
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-function makeUuid(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
+  const clfToken     = req.headers.get("x-clf-token")     || "";
+  const extensionId  = req.headers.get("x-clf-extension") || "speed";
 
-function makeAiMsgId(): string {
-  const C = '01PDx4Vtw4YF6XfduRwwS6nKZ6sPAC9nCeR';
-  return 'aimsg_' + Array.from({ length: 26 }, () => C[Math.floor(Math.random() * 32)]).join('');
-}
-
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
-  if (req.method !== 'POST') return fail('Method not allowed', 405);
-
-  let body: any;
-  try { body = await req.json(); }
-  catch { return fail('Body JSON invalido'); }
-
-  const { token, projectId, message, msgId, aiMsgId, licenseKey, files } = body;
-
-  if (!token || typeof token !== 'string' || !token.startsWith('eyJ'))
-    return fail('Token Firebase invalido ou ausente', 401);
-
-  if (!projectId || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(projectId))
-    return fail('projectId invalido');
-
-  if (!message || typeof message !== 'string' || !message.trim())
-    return fail('message obrigatoria');
-
-  if (!licenseKey || typeof licenseKey !== 'string' || !licenseKey.startsWith('CLF1.'))
-    return fail('licenseKey invalida', 401);
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (supabaseUrl && serviceKey) {
-    try {
-      const licRes = await fetch(
-        `${supabaseUrl}/rest/v1/licenses?key=eq.${encodeURIComponent(licenseKey)}&status=eq.active&select=id`,
-        { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
-      );
-      if (licRes.ok) {
-        const lics = await licRes.json();
-        if (!Array.isArray(lics) || lics.length === 0)
-          return fail('Licenca invalida ou expirada', 401);
-      }
-    } catch (e) { console.error('[send-message] Erro ao checar licenca:', e); }
+  const auth = await validateCLFToken(clfToken, extensionId);
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.error, plan: auth.plan }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
-  const payload = {
-    id:               (typeof msgId === 'string' && msgId) ? msgId : makeUuid(),
-    message:          message.trim(),
-    ai_message_id:    (typeof aiMsgId === 'string' && aiMsgId) ? aiMsgId : makeAiMsgId(),
-    intent:           'security_fix_v2',
-    chat_only:        true,
-    view:             'security',
-    view_description: 'The user is viewing the security analysis.',
-    thread_id:        'main',
-    model:            null,
-    files:            Array.isArray(files) ? files : [],
-    optimisticImageUrls: [],
-    selected_elements:   [],
-    debug_mode:          false,
-    session_replay:      '[]',
-    client_logs:         [],
-    network_requests:    [],
-    runtime_errors:      [],
-    integration_metadata: {
-      browser: { preview_viewport_width: 1280, preview_viewport_height: 854 },
+  let body: Record<string, unknown>;
+  try { body = await req.json(); }
+  catch { return new Response(JSON.stringify({ error: "Body inválido." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
+
+  const {
+    projectId,
+    lovableToken,
+    message,
+    mode = "fix",
+  } = body as {
+    projectId: string;
+    lovableToken: string;
+    message: string;
+    mode?: string;
+  };
+
+  if (!projectId || !lovableToken || !message) {
+    return new Response(JSON.stringify({ error: "projectId, lovableToken e message são obrigatórios." }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const aiMsgId = genId("aimsg_");
+  const msgId   = uuid4();
+
+  const modeConfigs: Record<string, Record<string, unknown>> = {
+    fix: {
+      intent: "security_fix_v2",
+      chat_only: false,
+      view: "security",
+      view_description: "The user is currently viewing the security view for their project.",
+    },
+    chat: {
+      intent: "security_fix_v2",
+      chat_only: true,
+      view: null,
+      view_description: null,
+    },
+    build: {
+      intent: null,
+      chat_only: false,
+      view: null,
+      view_description: null,
+    },
+    debug: {
+      intent: "security_fix_v2",
+      chat_only: false,
+      view: "security",
+      view_description: "The user is currently viewing the security view for their project.",
+    },
+    task: {
+      intent: "security_fix_v2",
+      chat_only: false,
+      view: null,
+      view_description: null,
     },
   };
 
-  let lovableRes: Response;
+  const cfg = modeConfigs[mode] || modeConfigs.fix;
+
+  const payload = {
+    id: msgId,
+    message,
+    intent: cfg.intent ?? null,
+    chat_only: cfg.chat_only,
+    ai_message_id: aiMsgId,
+    thread_id: "main",
+    view: cfg.view ?? null,
+    view_description: cfg.view_description ?? null,
+    model: null,
+    session_replay: "[]",
+    client_logs: [],
+    network_requests: [],
+    runtime_errors: (body.runtimeErrors as unknown[]) || [],
+    integration_metadata: {
+      browser: {
+        preview_viewport_width: 1280,
+        preview_viewport_height: 854,
+      },
+    },
+  };
+
   try {
-    lovableRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
-      method: 'POST',
+    const lovableRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
+      method: "POST",
       headers: {
-        'Content-Type':     'application/json',
-        'Authorization':    `Bearer ${token}`,
-        'x-client-git-sha': GIT_SHA,
-        'Origin':           'https://lovable.dev',
-        'Referer':          'https://lovable.dev/',
+        Authorization:        `Bearer ${lovableToken}`,
+        "Content-Type":       "application/json",
+        Origin:               "https://lovable.dev",
+        Referer:              "https://lovable.dev/",
+        "X-Client-Git-SHA":   GIT_SHA,
       },
       body: JSON.stringify(payload),
     });
-  } catch (e: any) {
-    console.error('[send-message] Falha de rede:', e.message);
-    return fail(`Falha de conexao: ${e.message}`, 502);
+
+    const responseData = lovableRes.ok
+      ? await lovableRes.json().catch(() => ({}))
+      : { error: `Lovable retornou status ${lovableRes.status}` };
+
+    return new Response(
+      JSON.stringify({
+        ok: lovableRes.ok,
+        status: lovableRes.status,
+        messageId: msgId,
+        aiMessageId: aiMsgId,
+        data: responseData,
+        plan: auth.plan,
+      }),
+      {
+        status: lovableRes.ok ? 200 : lovableRes.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ ok: false, error: (err as Error).message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
-
-  if (lovableRes.status === 401) return fail('Token expirado - recarregue o Lovable', 401);
-  if (lovableRes.status === 429) return fail('Rate limit - aguarde alguns segundos', 429);
-
-  if (lovableRes.status === 200 || lovableRes.status === 202) {
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (supabaseUrl && anonKey) {
-      fetch(`${supabaseUrl}/functions/v1/increment-usage`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anonKey}` },
-        body:    JSON.stringify({ licenseKey }),
-      }).catch((e) => console.error('[send-message] Erro increment-usage:', e));
-    }
-    return succeed({ msgId: payload.id, aiMsgId: payload.ai_message_id });
-  }
-
-  const errBody = await lovableRes.text().catch(() => '(sem body)');
-  console.error(`[send-message] Lovable ${lovableRes.status}:`, errBody.slice(0, 300));
-  return fail(`Lovable retornou ${lovableRes.status}: ${errBody.slice(0, 80)}`, 502);
 });

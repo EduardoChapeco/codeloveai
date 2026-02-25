@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Starble Speed</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#7c3aed;--primary-l:#a855f7;--primary-glow:rgba(124,58,237,0.28);
+  --bg:#0a0a0f;--fg:#f5f5f7;--fg2:rgba(245,245,247,0.75);--muted:rgba(245,245,247,0.38);
+  --glass:rgba(255,255,255,0.06);--glass-border:rgba(255,255,255,0.11);
+  --ok:#30d158;--err:#ff453a;--warn:#ffd60a;--sep:rgba(255,255,255,0.07);
+  --font:-apple-system,"SF Pro Display","SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+  --r:16px;--r-sm:12px;
+}
+html,body{width:360px;background:var(--bg);font-family:var(--font);color:var(--fg);-webkit-font-smoothing:antialiased}
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 70% 50% at 15% 5%,rgba(124,58,237,0.14) 0%,transparent 55%),
+             radial-gradient(ellipse 50% 40% at 85% 85%,rgba(59,130,246,0.09) 0%,transparent 50%);
+}
+.hdr{
+  display:flex;align-items:center;gap:10px;padding:14px 16px 12px;
+  background:rgba(10,10,18,0.72);backdrop-filter:blur(40px) saturate(220%);
+  border-bottom:0.5px solid var(--sep);position:sticky;top:0;z-index:10;
+}
+.hdr-logo{
+  width:36px;height:36px;
+  background:linear-gradient(135deg,rgba(124,58,237,0.3),rgba(168,85,247,0.2));
+  backdrop-filter:blur(12px);border:0.5px solid rgba(124,58,237,0.35);
+  border-radius:12px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 16px rgba(124,58,237,0.25),inset 0 1px 0 rgba(255,255,255,0.12);
+  overflow:hidden;
+}
+.hdr-logo img{width:28px;height:28px;object-fit:contain}
+.hdr-info{flex:1}
+.hdr-name{font-size:14px;font-weight:800;letter-spacing:-0.02em}
+.hdr-ver{font-size:9px;color:var(--muted);margin-top:1px}
+.pill{padding:4px 12px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase}
+.pill.on{background:rgba(48,209,88,0.18);color:var(--ok);box-shadow:0 0 0 0.5px rgba(48,209,88,0.4)}
+.pill.off{background:rgba(255,255,255,0.07);color:var(--muted)}
+.pill.err{background:rgba(255,69,58,0.15);color:var(--err);box-shadow:0 0 0 0.5px rgba(255,69,58,0.35)}
+.body{padding:14px;display:flex;flex-direction:column;gap:11px;position:relative;z-index:1}
+.card{
+  background:rgba(255,255,255,0.055);backdrop-filter:blur(24px);
+  border:0.5px solid var(--glass-border);border-radius:var(--r);
+  box-shadow:0 4px 24px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.07);
+  padding:15px;
+}
+.card-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px}
+.active-card{
+  background:linear-gradient(135deg,rgba(48,209,88,0.12),rgba(48,209,88,0.06));
+  border:0.5px solid rgba(48,209,88,0.28);border-radius:var(--r);padding:15px;display:none;
+  box-shadow:0 4px 24px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.07);
+}
+.lic-tag{font-size:9.5px;font-weight:800;color:var(--ok);text-transform:uppercase;letter-spacing:0.06em;display:flex;align-items:center;gap:5px;margin-bottom:9px}
+.lic-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px rgba(48,209,88,0.5)}
+.lic-name{font-size:15px;font-weight:700}
+.lic-email{font-size:11.5px;color:var(--muted);margin-top:2px}
+.lic-plan{font-size:11px;color:var(--ok);margin-top:8px;font-weight:600;display:flex;align-items:center;gap:6px}
+.lic-top{display:flex;justify-content:space-between;align-items:flex-start}
+.plan-blocked{
+  background:linear-gradient(135deg,rgba(255,69,58,0.12),rgba(255,69,58,0.06));
+  border:0.5px solid rgba(255,69,58,0.28);border-radius:var(--r);padding:15px;display:none;
+}
+.plan-blocked-title{font-size:12px;font-weight:700;color:var(--err);margin-bottom:6px}
+.plan-blocked-msg{font-size:11px;color:var(--fg2);line-height:1.5}
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  padding:14px 16px;border-radius:var(--r-sm);border:none;cursor:pointer;
+  font-size:13.5px;font-weight:700;font-family:var(--font);
+  transition:all 0.2s cubic-bezier(.34,1.56,.64,1);
+}
+.btn.primary{
+  background:linear-gradient(135deg,var(--primary),var(--primary-l));color:#fff;
+  box-shadow:0 4px 20px var(--primary-glow),inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.btn.primary:hover{filter:brightness(1.1);transform:translateY(-2px)}
+.btn.secondary{
+  background:rgba(255,255,255,0.07);color:var(--fg2);
+  border:0.5px solid var(--glass-border);
+}
+.btn.secondary:hover{background:rgba(255,255,255,0.11);transform:translateY(-1px)}
+.btn.danger{background:rgba(255,69,58,0.12);color:var(--err);border:0.5px solid rgba(255,69,58,0.28)}
+.btn:disabled{opacity:.4;cursor:default;transform:none!important}
+a.btn{text-decoration:none}
+.inp{
+  width:100%;padding:12px 14px;border-radius:var(--r-sm);
+  background:rgba(255,255,255,0.06);backdrop-filter:blur(12px);
+  border:0.5px solid var(--glass-border);
+  color:var(--fg);font-size:13px;font-family:var(--font);outline:none;
+  transition:border-color .16s,box-shadow .16s;
+}
+.inp:focus{border-color:rgba(124,58,237,0.55);box-shadow:0 0 0 3px rgba(124,58,237,0.1)}
+.inp::placeholder{color:var(--muted)}
+.status-row{
+  display:flex;align-items:center;gap:11px;padding:12px 14px;
+  background:rgba(255,255,255,0.045);backdrop-filter:blur(20px);
+  border:0.5px solid var(--glass-border);border-radius:var(--r-sm);
+}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dot.ok{background:var(--ok);box-shadow:0 0 8px rgba(48,209,88,0.5)}
+.dot.off{background:rgba(255,255,255,0.14)}
+.dot.warn{background:var(--warn);box-shadow:0 0 6px rgba(255,214,10,0.4)}
+.s-label{font-size:12.5px;font-weight:600}
+.s-sub{font-size:10.5px;color:var(--muted);margin-top:1px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.qa-card{
+  padding:13px 12px;border-radius:var(--r);cursor:pointer;
+  background:rgba(255,255,255,0.055);backdrop-filter:blur(20px);
+  border:0.5px solid var(--glass-border);
+  box-shadow:0 4px 16px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.07);
+  transition:all 0.22s cubic-bezier(.34,1.56,.64,1);
+}
+.qa-card:hover{background:rgba(255,255,255,0.09);transform:translateY(-3px) scale(1.03)}
+.qa-card:active{transform:scale(0.97)}
+.qa-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:7px}
+.qa-icon svg{width:16px;height:16px}
+.qa-label{font-size:12px;font-weight:700;color:var(--fg)}
+.qa-sub{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4}
+.alert{padding:10px 13px;border-radius:var(--r-sm);font-size:12px;font-weight:500;display:none}
+.alert.on{display:block}
+.alert.ok{background:rgba(48,209,88,0.1);color:var(--ok);border:0.5px solid rgba(48,209,88,0.35)}
+.alert.err{background:rgba(255,69,58,0.1);color:var(--err);border:0.5px solid rgba(255,69,58,0.25)}
+.alert.info{background:rgba(124,58,237,0.1);color:#a78bfa;border:0.5px solid rgba(124,58,237,0.25)}
+.or-sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px;margin:10px 0}
+.or-sep::before,.or-sep::after{content:'';flex:1;height:0.5px;background:var(--sep)}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-logo"><img id="popup-logo" src="" alt="S"></div>
+  <div class="hdr-info">
+    <div class="hdr-name" id="popup-app-name">Starble Speed</div>
+    <div class="hdr-ver">v1.0.0</div>
+  </div>
+  <span class="pill off" id="p-pill">Inativo</span>
+</div>
+<div class="body">
+  <div class="plan-blocked" id="p-plan-blocked">
+    <div class="plan-blocked-title">Plano insuficiente</div>
+    <div class="plan-blocked-msg" id="p-plan-blocked-msg">Seu plano atual nao inclui o Starble Speed.</div>
+    <a href="https://starble.lovable.app" target="_blank" class="btn primary" style="margin-top:12px">Fazer Upgrade</a>
+  </div>
+  <div class="active-card" id="p-active-card">
+    <div class="lic-top">
+      <span class="lic-tag">Licenca Ativa</span>
+      <button class="btn danger" id="p-revoke-btn" style="width:auto;padding:6px 14px;font-size:11px;border-radius:9px">Remover</button>
+    </div>
+    <div class="lic-name" id="p-lic-name">—</div>
+    <div class="lic-email" id="p-lic-email">—</div>
+    <div class="lic-plan" id="p-lic-plan">—</div>
+  </div>
+  <div class="card" id="p-inactive-card">
+    <div class="card-title">Ativar Licenca</div>
+    <button class="btn primary" id="p-sso-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="17" height="17"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      Entrar com Starble
+    </button>
+    <div class="or-sep">ou insira a chave manualmente</div>
+    <input class="inp" id="p-token-inp" type="text" placeholder="CLF1.eyJ..." autocomplete="off">
+    <button class="btn primary" id="p-activate-btn" style="margin-top:9px">Ativar</button>
+    <div class="alert" id="p-activate-alert" style="margin-top:8px"></div>
+  </div>
+  <div class="status-row">
+    <div class="dot off" id="p-token-dot"></div>
+    <div>
+      <div class="s-label" id="p-token-label">Token nao capturado</div>
+      <div class="s-sub" id="p-token-sub">Recarregue o Lovable</div>
+    </div>
+  </div>
+  <div class="status-row">
+    <div class="dot off" id="p-proj-dot"></div>
+    <div>
+      <div class="s-label" id="p-proj-name">Nenhum projeto</div>
+      <div class="s-sub" id="p-proj-sub">Abra um projeto no Lovable</div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="qa-card" id="p-open-panel">
+      <div class="qa-icon" style="background:rgba(124,58,237,0.15);color:#a78bfa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+      </div>
+      <div class="qa-label">Abrir Painel</div>
+      <div class="qa-sub">Painel lateral</div>
+    </div>
+    <div class="qa-card" id="p-capture-btn">
+      <div class="qa-icon" style="background:rgba(48,209,88,0.12);color:#30d158">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2H3v16h5v4l4-4h4l5-5V2z"/></svg>
+      </div>
+      <div class="qa-label">Capturar Token</div>
+      <div class="qa-sub">Sincronizar</div>
+    </div>
+    <div class="qa-card" id="p-deploy-btn">
+      <div class="qa-icon" style="background:rgba(94,92,230,0.14);color:#a78bfa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+      </div>
+      <div class="qa-label">Deploy</div>
+      <div class="qa-sub">Publicar projeto</div>
+    </div>
+    <div class="qa-card" id="p-sso-connect">
+      <div class="qa-icon" style="background:rgba(255,214,10,0.1);color:#ffd60a">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </div>
+      <div class="qa-label">Conectar SSO</div>
+      <div class="qa-sub">Vincular ao Starble</div>
+    </div>
+  </div>
+  <div class="alert on info" style="font-size:10.5px;line-height:1.5">
+    Atencao: Se o Lovable apresentar planos, pedir confirmacao para alterar tabelas ou criar projetos, responda NAO. Essas acoes podem descontar creditos do seu plano Lovable.
+  </div>
+  <div class="alert" id="p-main-alert"></div>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>
