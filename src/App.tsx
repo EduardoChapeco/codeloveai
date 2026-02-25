@@ -77,6 +77,8 @@ const HelpCenter = lazyRetry(() => import("./pages/HelpCenter"));
 const HelpArticle = lazyRetry(() => import("./pages/HelpArticle"));
 const TermsOfUse = lazyRetry(() => import("./pages/TermsOfUse"));
 const SupportPage = lazyRetry(() => import("./pages/SupportPage"));
+const ExtensionStore = lazyRetry(() => import("./pages/ExtensionStore"));
+const ExtensionDetail = lazyRetry(() => import("./pages/ExtensionDetail"));
 
 const queryClient = new QueryClient();
 
@@ -144,6 +146,8 @@ const App = () => (
                 <Route path="/ajuda/:slug" element={<HelpArticle />} />
                 <Route path="/termos" element={<TermsOfUse />} />
                 <Route path="/suporte" element={<SupportPage />} />
+                <Route path="/extensoes" element={<ExtensionStore />} />
+                <Route path="/extensoes/:slug" element={<ExtensionDetail />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

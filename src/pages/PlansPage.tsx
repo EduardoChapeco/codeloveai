@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Check, Loader2, ArrowRight, Crown, Building2 } from "lucide-react";
+import { Check, Loader2, ArrowRight, Crown, Building2, Puzzle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
@@ -117,8 +117,13 @@ export default function PlansPage() {
                   <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-primary/5 border border-primary/10">
                     <Crown className="h-3.5 w-3.5 text-primary" />
                     <span className="text-xs font-semibold text-primary">Até {plan.maxProjects} projetos</span>
-                  </div>
+                    </div>
                 )}
+
+                {/* Extension badges - dynamically loaded */}
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  {/* Will be populated when plan_extensions data is fetched */}
+                </div>
 
                 <ul className="space-y-2.5 mb-6">
                   {plan.features.map((feature, i) => (
