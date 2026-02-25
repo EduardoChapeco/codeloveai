@@ -196,25 +196,25 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const loadTenant = async () => {
       try {
         const tenantId = await resolveTenantId(user?.id ?? null);
+        if (!mountedRef.current) return;
 
-        const { data: tenantData } = await supabase
+        // Parallel fetch: tenant data + membership
+        const tenantPromise = supabase
           .from("tenants").select("*")
           .eq("id", tenantId).maybeSingle();
 
+        const memberPromise = user?.id
+          ? supabase.from("tenant_users").select("tenant_id, role, is_primary")
+              .eq("user_id", user.id).eq("tenant_id", tenantId).maybeSingle()
+          : Promise.resolve({ data: null });
+
+        const [tenantResult, memberResult] = await Promise.all([tenantPromise, memberPromise]);
         if (!mountedRef.current) return;
 
-        if (tenantData) {
-          const t = tenantData as Tenant;
-          setTenant(t);
+        if (tenantResult.data) {
+          setTenant(tenantResult.data as Tenant);
         }
-
-        if (user?.id) {
-          const { data: memberData } = await supabase
-            .from("tenant_users").select("tenant_id, role, is_primary")
-            .eq("user_id", user.id).eq("tenant_id", tenantId).maybeSingle();
-          if (!mountedRef.current) return;
-          setMembership(memberData as TenantMembership | null);
-        }
+        setMembership(memberResult.data as TenantMembership | null);
       } catch (err) {
         console.error("Failed to load tenant:", err);
       } finally {
