@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Building2, Globe, Users, Shield, Palette, BarChart2, ChevronDown, Lock, CheckCircle2, Star } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import AppLayout from "@/components/AppLayout";
 import { useState } from "react";
 
 const features = [
@@ -26,8 +28,9 @@ const faqs = [
 
 export default function WhiteLabelLanding() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const { user, loading: authLoading } = useAuth();
 
-  return (
+  const content = (
     <div className="min-h-screen bg-[#09090b] text-white font-sans">
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/5 bg-[#09090b]/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
@@ -182,4 +185,9 @@ export default function WhiteLabelLanding() {
       </footer>
     </div>
   );
+
+  if (!authLoading && user) {
+    return <AppLayout>{content}</AppLayout>;
+  }
+  return content;
 }

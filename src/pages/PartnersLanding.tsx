@@ -3,6 +3,8 @@ import { Check, Users, Building2, Zap, Shield, MessageSquare, Clock, ChevronDown
 import { useState } from "react";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
+import { useAuth } from "@/hooks/useAuth";
+import AppLayout from "@/components/AppLayout";
 import MeshBackground from "@/components/MeshBackground";
 
 const affiliateFeatures = [
@@ -44,10 +46,11 @@ const faqs = [
 export default function PartnersLanding() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { tenant } = useTenant();
+  const { user, loading: authLoading } = useAuth();
   const brandName = tenant?.name || "Starble";
   useSEO({ title: `Parceiros — ${brandName}`, description: "Programa de afiliados e White Label. Ganhe comissões ou revenda com sua própria marca." });
 
-  return (
+  const content = (
     <div className="min-h-screen relative">
       <MeshBackground />
 
@@ -166,4 +169,9 @@ export default function PartnersLanding() {
       </footer>
     </div>
   );
+
+  if (!authLoading && user) {
+    return <AppLayout>{content}</AppLayout>;
+  }
+  return content;
 }

@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, TrendingUp, DollarSign, Users, Zap, CheckCircle2, Star, ChevronDown, Lock } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import AppLayout from "@/components/AppLayout";
 import { useState } from "react";
 
 const benefits = [
@@ -25,8 +27,9 @@ const faqs = [
 
 export default function AffiliateLanding() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const { user, loading: authLoading } = useAuth();
 
-  return (
+  const content = (
     <div className="min-h-screen bg-[#09090b] text-white font-sans">
       {/* Nav */}
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/5 bg-[#09090b]/80 backdrop-blur-xl">
@@ -192,4 +195,9 @@ export default function AffiliateLanding() {
       </footer>
     </div>
   );
+
+  if (!authLoading && user) {
+    return <AppLayout>{content}</AppLayout>;
+  }
+  return content;
 }
