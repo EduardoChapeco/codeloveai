@@ -28,11 +28,20 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const sc = createClient(supabaseUrl, serviceKey);
+  const anonKey     = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-  // Validate JWT (anon key bearer from extension)
+  // Validate JWT properly
   const authHeader = req.headers.get("Authorization") || "";
   if (!authHeader.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+
+  const anonSc = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const { data: { user }, error: authError } = await anonSc.auth.getUser();
+  if (authError || !user) return json({ error: "Unauthorized" }, 401);
+
+  const sc = createClient(supabaseUrl, serviceKey);
 
   try {
     const { project_id, content, task_id, metadata, role = "assistant" } = await req.json() as {
@@ -45,6 +54,11 @@ Deno.serve(async (req) => {
 
     if (!content || content.length < 3) return json({ ok: true }); // skip empty/noise
     if (!project_id) return json({ error: "project_id required" }, 400);
+
+    // Verify user owns this orchestrator project
+    const { data: proj } = await sc.from("orchestrator_projects")
+      .select("id").eq("id", project_id).eq("user_id", user.id).maybeSingle();
+    if (!proj) return json({ error: "Project not found" }, 404);
 
     await sc.from("orchestration_messages").insert({
       project_id,

@@ -14,7 +14,7 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 //  6. Auto-rollback on 3 consecutive task failures
 // ══════════════════════════════════════════════════════════════
 
-import { obfuscate } from "../_shared/crypto.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -799,8 +799,10 @@ Deno.serve(async (req: Request) => {
       const { project_id } = body as { project_id: string };
       if (!project_id) return json({ error: "project_id required" }, 400);
 
-      const newStatus = action === "pause" ? "paused" : "paused"; // resume sets to paused; tick will pick it up
-      await sc.from("orchestrator_projects").update({ status: newStatus }).eq("id", project_id).eq("user_id", userId);
+      const newStatus = "paused"; // Both pause & resume set to paused; tick picks it up
+      const updatePayload: Record<string, unknown> = { status: newStatus };
+      if (action === "resume") updatePayload.next_tick_at = null; // Clear so tick picks up immediately
+      await sc.from("orchestrator_projects").update(updatePayload).eq("id", project_id).eq("user_id", userId);
       await addLog(sc, project_id, `${action === "pause" ? "⏸" : "▶️"} Project ${action}d`, "info");
       return json({ success: true, status: newStatus });
     }
