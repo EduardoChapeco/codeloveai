@@ -155,7 +155,11 @@ export default function LovablePreview() {
               <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
                 <ExternalLink className="h-3.5 w-3.5" /> Nova aba
               </a>
-              <button onClick={() => { navigator.clipboard.writeText(previewUrl); toast.success("Link copiado!"); }} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+              <button onClick={() => {
+                const editorUrl = `${window.location.origin}/projeto/${projectId}/editar`;
+                navigator.clipboard.writeText(editorUrl);
+                toast.success("Link copiado!");
+              }} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
                 <Copy className="h-3.5 w-3.5" /> Copiar
               </button>
               <button onClick={loadPreview} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
