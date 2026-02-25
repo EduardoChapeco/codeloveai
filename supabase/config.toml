@@ -125,3 +125,15 @@ verify_jwt = false
 
 [functions.validate-plan]
 verify_jwt = false
+
+[functions.agentic-orchestrator]
+verify_jwt = false
+
+[functions.orchestrator-tick]
+verify_jwt = false
+
+[functions.orchestrator-prd]
+verify_jwt = false
+
+[functions.relay-response]
+verify_jwt = false
