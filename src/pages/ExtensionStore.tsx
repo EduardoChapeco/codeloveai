@@ -118,7 +118,7 @@ export default function ExtensionStore() {
               return (
                 <div
                   key={ext.id}
-                  className="group rounded-2xl border border-border bg-card hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 flex flex-col overflow-hidden cursor-pointer"
+                  className="group clf-liquid-glass hover:ring-1 hover:ring-primary/20 transition-all duration-300 flex flex-col overflow-hidden cursor-pointer"
                   onClick={() => navigate(`/extensoes/${ext.slug}`)}
                 >
                   {/* Header with color accent */}
@@ -188,7 +188,7 @@ export default function ExtensionStore() {
         )}
 
         {/* CTA Section */}
-        <div className="mt-16 rounded-2xl border border-border bg-card p-8 md:p-12 text-center">
+        <div className="mt-16 clf-liquid-glass p-8 md:p-12 text-center">
           <h2 className="text-xl font-bold text-foreground mb-3">
             Desbloqueie todas as extensões
           </h2>

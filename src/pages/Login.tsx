@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -55,7 +55,7 @@ export default function Login() {
           )}
         </Link>
 
-        <div className="lv-card p-8">
+        <div className="clf-liquid-glass p-8">
           <h1 className="lv-heading-md text-center mb-6">Entrar na sua conta</h1>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
