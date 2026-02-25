@@ -1,45 +1,49 @@
 
-## Plano: Correção do Sistema de Licenciamento e Limites
+## Plano: Propagação Global do Design + Correções Críticas
 
 ### Problemas Identificados
 
-1. **`generate-clf-token`** (linha 84-85): Aceita cegamente `plan: "pro"` e `expiresIn: 365 dias` do frontend — qualquer usuário autenticado gera token premium infinito
-2. **`auto-onboard`** (linha 88-90): Cria assinaturas de 365 dias para qualquer novo usuário
-3. **`LovableConnect.tsx`** (linha 110): Frontend envia `plan: "pro", expiresIn: 365*24*60*60*1000` — hardcoded
-4. **`send-message`**: Não chama `increment-usage` nem verifica limite diário — limite de 10 msg/dia nunca é enforçado
-5. **Extensão**: Nunca recebe informação de uso diário para exibir ao usuário
+1. **Fonte errada**: Sistema usa SF Pro/system-ui, mas usuário quer **Inter** (estilo Threads/Meta)
+2. **"LoveAI Brain" no sidebar** (AppSidebar.tsx linha 152): Deveria ser **"Star AI"**
+3. **Automação visível**: Aparece no sidebar para todos — deveria estar oculta
+4. **Star AI (Brain page) quebrada**: O fluxo inicial (verificação de status via `loveai-brain` edge function) pode falhar silenciosamente, deixando a página em loading infinito. O `brainActive` fica `null` e nunca sai do spinner
+5. **Cantos retos em alguns cards**: Cards usando classes legadas (`Card` shadcn) ou `rounded-lg` em vez de `rounded-[18px]`/`rounded-2xl`
+6. **Ícones**: Migrar para estilo mais limpo (Threads/Meta) — usar variantes `strokeWidth={1.5}` nos ícones Lucide
+
+---
 
 ### Correções
 
-**Fase 1 — `generate-clf-token` (servidor decide o plano)**
-- Ignorar `plan` e `expiresIn` vindos do body
-- Consultar `subscriptions` e `licenses` do usuário para determinar plano real
-- Sem assinatura paga ativa → `plan: "free"`, expiry 24h, `daily_messages: 10`, `type: "trial"`
-- Com assinatura paga → usar plano e duração correspondente
-- Setar `daily_messages` e `type` na license criada
+#### Fase 1 — Fonte Inter
+- Adicionar `<link>` do Google Fonts para **Inter** no `index.html`
+- Atualizar `src/index.css` body font-family para `"Inter", -apple-system, ...`
 
-**Fase 2 — `auto-onboard` → trial de 24h (não 365 dias)**
-- Mudar de 365 dias para 1 dia (24h)
-- Plan label: `"trial"` em vez de `"1_day"`
-- Remover chamada ao webhook externo que gera tokens de 365 dias
+#### Fase 2 — Sidebar: Renomear + Ocultar Automação
+- `AppSidebar.tsx` linha 152: `"LoveAI Brain"` → `"Star AI"`
+- `AppSidebar.tsx` linha 155: Remover `{ to: "/automation", label: "Automação", icon: Workflow }` do `mainItems`
 
-**Fase 3 — `LovableConnect.tsx` → remover hardcodes**
-- Remover `plan: "pro"` e `expiresIn: 365*...` do body
-- Enviar body vazio, servidor decide tudo
-- Exibir tipo de plano real retornado pelo servidor
+#### Fase 3 — Star AI (Brain) — Corrigir fluxo inicial
+- `Brain.tsx` linha 73: O hook `useFeatureFlag` está bypassado com hardcode `{ enabled: true, loading: false }` — restaurar para usar o hook real
+- Adicionar fallback de erro no `checkBrainStatus` para que, se a função falhar, mostre o botão "Ativar Star AI" em vez de loading infinito
+- Renomear todas as referências visuais de "LoveAI Brain" → "Star AI" na página
 
-**Fase 4 — `send-message` → enforçar limite diário**
-- Antes de enviar: consultar `daily_usage` para a license
-- Se `messages_used >= daily_messages` → bloquear com erro 429
-- Após envio bem-sucedido: chamar `increment_daily_usage` RPC
-- Retornar `usedToday` e `dailyLimit` na resposta para a extensão exibir
+#### Fase 4 — Cantos arredondados globais
+- `src/components/ui/card.tsx`: `rounded-[18px]` já existe ✅
+- Auditar páginas que usam `rounded-lg` ou `rounded-md` em cards/containers e trocar por `rounded-2xl` ou `rounded-[18px]`
+- Páginas a verificar: `Checkout.tsx`, `Install.tsx`, `LovableProjects.tsx`, `Admin.tsx`, `Automation.tsx`
 
-**Fase 5 — Task file**
-- Criar `.lovable/tasks/1772010000000-task.md` com status done
+#### Fase 5 — Ícones estilo Threads
+- Adicionar classe global `.lv-icon` com `strokeWidth: 1.5` no CSS
+- Aplicar nos componentes principais (sidebar, dashboard, header)
+
+---
 
 ### Arquivos Afetados
-- `supabase/functions/generate-clf-token/index.ts`
-- `supabase/functions/auto-onboard/index.ts`  
-- `supabase/functions/send-message/index.ts`
-- `src/pages/LovableConnect.tsx`
-- `.lovable/tasks/1772010000000-task.md`
+- `index.html` (fonte Inter)
+- `src/index.css` (font-family, ícones)
+- `src/components/AppSidebar.tsx` (rename + hide automation)
+- `src/pages/Brain.tsx` (fix flow + rename)
+- `src/pages/Checkout.tsx` (cantos)
+- `src/pages/Install.tsx` (cantos)
+- `src/pages/LovableProjects.tsx` (cantos)
+- `.lovable/tasks/1772010000000-task.md` (task file)
