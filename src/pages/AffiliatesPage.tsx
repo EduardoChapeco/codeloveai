@@ -162,7 +162,7 @@ export default function AffiliatesPage() {
               {[
                 { plan: "Individual (1 dia)", price: 4.90 },
                 { plan: "Agência (mensal)", price: 49.90 },
-                { plan: "White Label (mensal)", price: 299.00 },
+                { plan: "White Label (mensal/usuário)", price: 29.90 },
               ].map((row) => (
                 <tr key={row.plan} className="border-b border-border/40 last:border-0">
                   <td className="p-5 lv-body-strong">{row.plan}</td>

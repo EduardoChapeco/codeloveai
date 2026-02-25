@@ -36,7 +36,7 @@ const faqs = [
   { q: "Quanto custa para ser afiliado?", a: "É gratuito! Basta se cadastrar na plataforma e solicitar inscrição como afiliado. Você recebe um link único e começa a ganhar comissões imediatamente." },
   { q: "Qual a comissão dos afiliados?", a: "A comissão varia conforme configuração do administrador. Afiliados também recebem desconto automático nas próprias compras." },
   { q: "Como funciona o White Label?", a: "Você adquire um plano White Label e recebe seu próprio tenant com marca personalizada. Pode configurar logo, cores, domínio e termos. Seus clientes compram através do seu site." },
-  { q: "Quanto custa o White Label?", a: "Existem planos mensais e anuais. O custo depende do plano escolhido. Há também uma taxa de setup opcional conforme o plano." },
+  { q: "Quanto custa o White Label?", a: "A partir de R$3,90 por usuário ativo por dia, ou R$29,90 por usuário por mês. Sem taxa de setup. A margem é toda sua." },
   { q: "Preciso ter conhecimento técnico?", a: "Não. Tudo é gerenciado pelo painel administrativo. Upload de extensão, gestão de tokens, financeiro — tudo via interface visual." },
   { q: "Como recebo meus ganhos?", a: "Afiliados recebem via PIX semanalmente. Tenants White Label têm carteira virtual com saque disponível." },
 ];

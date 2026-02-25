@@ -21,7 +21,7 @@ const faqs: FaqItem[] = [
     icon: CreditCard,
     question: "Quanto custa?",
     answer:
-      "Setup único de R$299. Depois, você paga apenas por usuário ativo (conforme seu plano). Não há mensalidade fixa.",
+      "O modelo é por usuário ativo: R$3,90/dia ou R$29,90/mês (mínimo). Você define os preços para seus clientes — a margem é sua. Sem taxa de setup.",
   },
   {
     icon: Palette,

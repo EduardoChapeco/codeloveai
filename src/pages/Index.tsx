@@ -195,7 +195,7 @@ export default function Index() {
               </span>
             ))}
           </div>
-          <p className="lv-caption mb-6">A partir de <strong className="text-foreground">R$299/mês</strong> + 30% por usuário ativo</p>
+          <p className="lv-caption mb-6">A partir de <strong className="text-foreground">R$3,90/usuário/dia</strong> ou <strong className="text-foreground">R$29,90/usuário/mês</strong></p>
           <Link to="/whitelabel" className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
             Saiba mais sobre White Label <ArrowRight className="h-4 w-4" />
           </Link>

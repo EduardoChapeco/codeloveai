@@ -12,15 +12,15 @@ const features = [
 ];
 
 const plans = [
-  { name: "Agency", price: "Sob consulta", desc: "Até 50 usuários ativos", cta: "Falar com Vendas", features: ["Marca personalizada", "Domínio próprio", "5 planos customizáveis", "Suporte dedicado"] },
-  { name: "Enterprise", price: "Sob consulta", desc: "Usuários ilimitados", cta: "Falar com Vendas", features: ["Tudo do Agency", "SLA 99.9%", "Integrações customizadas", "Manager de sucesso exclusivo", "White-label completo"], featured: true },
+  { name: "Diário", price: "R$3,90", period: "/usuário/dia", desc: "Pague apenas quando o usuário estiver ativo", cta: "Começar agora", features: ["Marca personalizada", "Domínio próprio", "5 planos customizáveis", "Suporte dedicado"] },
+  { name: "Mensal", price: "R$29,90", period: "/usuário/mês", desc: "Economia de até 74% vs diário", cta: "Começar agora", features: ["Tudo do Diário", "Desconto recorrente", "Relatórios avançados", "Suporte prioritário", "SLA 99.9%"], featured: true },
 ];
 
 const faqs = [
   { q: "Posso criar meu próprio programa de afiliados?", a: "Sim. Operadores White Label têm acesso a um sistema de afiliados próprio dentro do seu tenant, com splits de comissão configuráveis." },
   { q: "Meus clientes sabem que é Starble?", a: "Não, se você configurar um domínio personalizado e sua própria marca. A experiência é completamente sua." },
   { q: "Quanto tempo leva para configurar?", a: "A configuração básica (marca + domínio + primeiros usuários) pode ser feita em menos de 2 horas. Nosso onboarding guiado te leva passo a passo." },
-  { q: "Posso oferecer preços diferentes dos planos Starble?", a: "Sim. Você define os preços para seus clientes. A Starble cobra apenas o valor da licença White Label — a margem é sua." },
+  { q: "Posso oferecer preços diferentes dos planos Starble?", a: "Sim. Você define os preços para seus clientes. A Starble cobra R$3,90/usuário/dia ou R$29,90/usuário/mês (mínimo) — a margem é toda sua." },
   { q: "E se eu precisar de funcionalidades customizadas?", a: "Projetos Enterprise podem incluir desenvolvimento personalizado. Fale com nosso time comercial para avaliar a viabilidade." },
 ];
 
@@ -74,10 +74,10 @@ export default function WhiteLabelLanding() {
       <section className="py-12 border-y border-white/5">
         <div className="max-w-4xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           {[
-            { value: "2h", label: "para configurar e lançar" },
+            { value: "R$3,90", label: "mínimo por usuário/dia" },
             { value: "100%", label: "da margem é sua" },
             { value: "∞", label: "usuários por tenant" },
-            { value: "0", label: "conhecimento técnico necessário" },
+            { value: "0", label: "taxa de setup" },
           ].map((s, i) => (
             <div key={i}>
               <div className="text-3xl font-black text-indigo-400">{s.value}</div>
@@ -113,7 +113,7 @@ export default function WhiteLabelLanding() {
               <div key={i} className={`p-8 rounded-2xl border ${p.featured ? "border-indigo-500/40 ring-2 ring-indigo-500/20" : "border-white/8"}`}>
                 {p.featured && <div className="text-xs text-indigo-400 font-bold uppercase tracking-widest mb-3">Mais escolhido</div>}
                 <h3 className="text-xl font-bold mb-1">{p.name}</h3>
-                <p className="text-2xl font-black text-indigo-400 mb-1">{p.price}</p>
+                <p className="text-2xl font-black text-indigo-400 mb-0">{p.price}<span className="text-sm font-normal text-white/40">{p.period}</span></p>
                 <p className="text-xs text-white/40 mb-6">{p.desc}</p>
                 <ul className="space-y-2 mb-8">
                   {p.features.map((feat, j) => (
@@ -122,7 +122,7 @@ export default function WhiteLabelLanding() {
                     </li>
                   ))}
                 </ul>
-                <Link to="/suporte" className={`block text-center py-3 rounded-xl font-semibold text-sm transition-colors ${p.featured ? "bg-indigo-500 hover:bg-indigo-400 text-white" : "bg-white/5 hover:bg-white/10 text-white"}`}>
+                <Link to="/whitelabel/onboarding" className={`block text-center py-3 rounded-xl font-semibold text-sm transition-colors ${p.featured ? "bg-indigo-500 hover:bg-indigo-400 text-white" : "bg-white/5 hover:bg-white/10 text-white"}`}>
                   {p.cta}
                 </Link>
               </div>
