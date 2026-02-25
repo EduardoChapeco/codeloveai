@@ -177,6 +177,9 @@ export default function TenantAdmin() {
         border_radius: toRadiusNumber(t.border_radius),
         modules: typeof t.modules === "object" && t.modules !== null
           ? { ...DEFAULT_MODULES, ...t.modules } : { ...DEFAULT_MODULES },
+        extension_mode: t.extension_mode || "security_fix_v2",
+        custom_mode_prompt: t.custom_mode_prompt || "",
+        trial_minutes: t.trial_minutes ?? 30,
       });
       setHasChanges(false);
       fetchAllRef.current?.();
