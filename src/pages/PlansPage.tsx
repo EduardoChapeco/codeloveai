@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Check, Loader2, ArrowRight } from "lucide-react";
+import { Check, Loader2, ArrowRight, FolderOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
@@ -14,6 +14,7 @@ interface Plan {
   description: string;
   features: string[];
   popular?: boolean;
+  max_projects?: number | null;
 }
 
 const billingCycleLabels: Record<string, string> = {
@@ -33,7 +34,7 @@ export default function PlansPage() {
       try {
         const { data } = await supabase
           .from("plans")
-          .select("id, name, type, price, billing_cycle, description, features, highlight_label, display_order, is_public, is_active")
+          .select("id, name, type, price, billing_cycle, description, features, highlight_label, display_order, is_public, is_active, max_projects")
           .eq("is_public", true)
           .eq("is_active", true)
           .order("display_order", { ascending: true });
@@ -47,6 +48,7 @@ export default function PlansPage() {
             description: p.description || "",
             features: Array.isArray(p.features) ? p.features : [],
             popular: p.highlight_label?.toLowerCase() === "popular",
+            max_projects: p.max_projects,
           })));
         }
       } catch (err) {
@@ -98,7 +100,15 @@ export default function PlansPage() {
                   <span className="text-3xl font-bold text-foreground">R${plan.price.toFixed(2).replace(".", ",")}</span>
                   <span className="lv-caption">{plan.period}</span>
                 </div>
-                <p className="lv-body mb-6 min-h-[3rem]">{plan.description}</p>
+                <p className="lv-body mb-4 min-h-[3rem]">{plan.description}</p>
+                
+                {/* Max Projects badge */}
+                {plan.max_projects != null && (
+                  <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-primary/5 border border-primary/10">
+                    <FolderOpen className="h-4 w-4 text-primary shrink-0" />
+                    <span className="text-sm font-semibold text-primary">Até {plan.max_projects} projeto{plan.max_projects > 1 ? "s" : ""}</span>
+                  </div>
+                )}
                 
                 <ul className="space-y-3 mb-8">
                   {plan.features.map((feature, i) => (
@@ -133,7 +143,7 @@ export default function PlansPage() {
 
         <div className="mt-16 text-center">
           <p className="lv-caption">
-            Precisa de um plano personalizado? <Link to="/support" className="text-primary hover:underline">Fale conosco</Link>
+            Precisa de um plano personalizado? <Link to="/suporte" className="text-primary hover:underline">Fale conosco</Link>
           </p>
         </div>
       </div>

@@ -1801,6 +1801,7 @@ export type Database = {
           id: string
           is_active: boolean
           is_public: boolean
+          max_projects: number | null
           modules: Json | null
           monthly_limit: number | null
           name: string
@@ -1823,6 +1824,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_public?: boolean
+          max_projects?: number | null
           modules?: Json | null
           monthly_limit?: number | null
           name: string
@@ -1845,6 +1847,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_public?: boolean
+          max_projects?: number | null
           modules?: Json | null
           monthly_limit?: number | null
           name?: string
@@ -2630,8 +2633,10 @@ export type Database = {
           branding: Json
           commission_percent: number
           created_at: string
+          custom_mode_prompt: string | null
           domain: string | null
           domain_custom: string | null
+          extension_mode: string | null
           favicon_url: string | null
           font_family: string
           global_split_percent: number | null
@@ -2641,6 +2646,7 @@ export type Database = {
           logo_url: string | null
           meta_description: string | null
           meta_title: string | null
+          modules: Json | null
           mp_access_token: string | null
           name: string
           owner_user_id: string | null
@@ -2655,6 +2661,7 @@ export type Database = {
           terms_template: string | null
           theme_preset: string
           token_cost: number
+          trial_minutes: number | null
           updated_at: string
           white_label_plan_id: string | null
         }
@@ -2666,8 +2673,10 @@ export type Database = {
           branding?: Json
           commission_percent?: number
           created_at?: string
+          custom_mode_prompt?: string | null
           domain?: string | null
           domain_custom?: string | null
+          extension_mode?: string | null
           favicon_url?: string | null
           font_family?: string
           global_split_percent?: number | null
@@ -2677,6 +2686,7 @@ export type Database = {
           logo_url?: string | null
           meta_description?: string | null
           meta_title?: string | null
+          modules?: Json | null
           mp_access_token?: string | null
           name: string
           owner_user_id?: string | null
@@ -2691,6 +2701,7 @@ export type Database = {
           terms_template?: string | null
           theme_preset?: string
           token_cost?: number
+          trial_minutes?: number | null
           updated_at?: string
           white_label_plan_id?: string | null
         }
@@ -2702,8 +2713,10 @@ export type Database = {
           branding?: Json
           commission_percent?: number
           created_at?: string
+          custom_mode_prompt?: string | null
           domain?: string | null
           domain_custom?: string | null
+          extension_mode?: string | null
           favicon_url?: string | null
           font_family?: string
           global_split_percent?: number | null
@@ -2713,6 +2726,7 @@ export type Database = {
           logo_url?: string | null
           meta_description?: string | null
           meta_title?: string | null
+          modules?: Json | null
           mp_access_token?: string | null
           name?: string
           owner_user_id?: string | null
@@ -2727,6 +2741,7 @@ export type Database = {
           terms_template?: string | null
           theme_preset?: string
           token_cost?: number
+          trial_minutes?: number | null
           updated_at?: string
           white_label_plan_id?: string | null
         }

@@ -1,4 +1,6 @@
-// Starble — validate-plan v1.0.0
+// Starble — validate-plan v1.1.0 (with max_projects support)
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const WORKER_URL = "https://codelove-fix-api.eusoueduoficial.workers.dev";
 
@@ -42,12 +44,27 @@ Deno.serve(async (req: Request) => {
     const addons: string[] = (data.addons || []).map((a: string) => a.toLowerCase());
     const allowedExtensions = [...(PLAN_PERMISSIONS[plan] || []), ...addons];
 
+    // Fetch max_projects from plans table if plan_id available
+    let maxProjects: number | null = null;
+    if (data.plan_id) {
+      try {
+        const sbUrl = Deno.env.get("SUPABASE_URL") || "";
+        const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        if (sbUrl && sbKey) {
+          const sb = createClient(sbUrl, sbKey);
+          const { data: planRow } = await sb.from("plans").select("max_projects").eq("id", data.plan_id).maybeSingle();
+          if (planRow) maxProjects = planRow.max_projects;
+        }
+      } catch { /* non-critical */ }
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
         plan,
         addons,
         allowedExtensions,
+        maxProjects,
         name: data.name || data.n || null,
         email: data.email || data.e || null,
         exp: data.exp || null,

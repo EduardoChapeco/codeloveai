@@ -26,7 +26,7 @@ export default function AppNav() {
   const navItems = [
     { to: "/dashboard",         label: "Painel",      icon: LayoutDashboard, show: true },
     { to: "/community",         label: "Comunidade",  icon: MessageCircle,   show: true },
-    { to: "/affiliate",         label: "Afiliado",    icon: Users,           show: isAffiliate },
+    { to: "/afiliado/dashboard", label: "Afiliado",    icon: Users,           show: isAffiliate },
     { to: "/lovable/connect",   label: "Lovable",     icon: Link2,           show: true },
     { to: "/lovable/projects",  label: "Projetos",    icon: FolderOpen,      show: true },
     { to: "/admin",             label: "Admin",       icon: Shield,          show: isAdmin },
