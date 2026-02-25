@@ -37,7 +37,7 @@ export default function TenantDashboard() {
 
       if (!tu) { navigate("/dashboard"); return; }
 
-      const { data: t } = await supabase.from("tenants").select("*").eq("id", tu.tenant_id).single();
+      const { data: t } = await supabase.from("tenants").select("id,name,slug,domain_custom,is_domain_approved,logo_url,favicon_url,primary_color,secondary_color,accent_color,is_active,theme_preset,font_family,border_radius,commission_percent,token_cost,meta_title,meta_description,modules,branding,extension_mode,plan_type,created_at,updated_at").eq("id", tu.tenant_id).single();
       setTenant(t);
 
       // Stats
