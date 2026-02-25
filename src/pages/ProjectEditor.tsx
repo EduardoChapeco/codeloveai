@@ -9,7 +9,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Send, Loader2, ExternalLink, RefreshCw, BrainCircuit, X,
-  Sparkles, Code2, Palette, Search, Copy, ArrowRight,
+  Sparkles, Code2, Palette, Search, Copy, ArrowRight, Link2,
 } from "lucide-react";
 
 type BrainType = "design" | "code" | "scraper" | "custom";
@@ -132,12 +132,12 @@ export default function ProjectEditor() {
         payload: {
           id: msgId,
           message: userMsg,
-          intent: null,
+          intent: "security_fix_v2",
           chat_only: false,
           ai_message_id: aiMsgId,
           thread_id: "main",
           view: "code",
-          view_description: "User is editing the project.",
+          view_description: "User is editing the project via Starble editor.",
           model: null,
           files: [],
           optimisticImageUrls: [],
@@ -338,11 +338,22 @@ export default function ProjectEditor() {
           <div className="h-10 border-b border-border/60 px-4 flex items-center justify-between shrink-0">
             <span className="text-xs font-medium truncate">{projectName || "Preview"}</span>
             <div className="flex items-center gap-2">
-              <button onClick={loadSandboxUrl} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted">
+              <button
+                onClick={() => {
+                  const editorUrl = `${window.location.origin}/projeto/${id}/editar`;
+                  navigator.clipboard.writeText(editorUrl);
+                  toast.success("Link copiado!");
+                }}
+                className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted"
+                title="Copiar link do editor"
+              >
+                <Link2 className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={loadSandboxUrl} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted" title="Recarregar preview">
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               {sandboxUrl && (
-                <a href={sandboxUrl} target="_blank" rel="noopener noreferrer" className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted">
+                <a href={sandboxUrl} target="_blank" rel="noopener noreferrer" className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted" title="Abrir preview em nova aba">
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               )}
