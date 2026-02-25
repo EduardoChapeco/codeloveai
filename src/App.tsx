@@ -56,6 +56,14 @@ const FreePlan = lazyRetry(() => import("./pages/FreePlan"));
 const PlansPage = lazyRetry(() => import("./pages/PlansPage"));
 const AdminIntegrations = lazyRetry(() => import("./pages/AdminIntegrations"));
 const Automation = lazyRetry(() => import("./pages/Automation"));
+// Orphan pages — now registered
+const AffiliateDashboard = lazyRetry(() => import("./pages/AffiliateDashboard"));
+const AffiliatesPage = lazyRetry(() => import("./pages/AffiliatesPage"));
+const AffiliateRefPage = lazyRetry(() => import("./pages/AffiliateRefPage"));
+const WlAffiliateDashboard = lazyRetry(() => import("./pages/WlAffiliateDashboard"));
+const WhiteLabelRefPage = lazyRetry(() => import("./pages/WhiteLabelRefPage"));
+const PartnersLanding = lazyRetry(() => import("./pages/PartnersLanding"));
+const LovableCloudAdmin = lazyRetry(() => import("./pages/LovableCloudAdmin"));
 // Lab pages (feature-flag gated)
 const BrainLab = lazyRetry(() => import("./pages/lab/BrainLab"));
 const StarCrawlLab = lazyRetry(() => import("./pages/lab/StarCrawlLab"));
@@ -107,6 +115,14 @@ const App = () => (
                 <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
                 <Route path="/orquestrador/:id" element={<OrchestratorProjectPanel />} />
                 <Route path="/automation" element={<Automation />} />
+                {/* Orphan pages — now accessible */}
+                <Route path="/afiliado/dashboard" element={<AffiliateDashboard />} />
+                <Route path="/afiliados/painel" element={<AffiliatesPage />} />
+                <Route path="/ref/:code" element={<AffiliateRefPage />} />
+                <Route path="/wl/afiliados" element={<WlAffiliateDashboard />} />
+                <Route path="/wl/ref/:code" element={<WhiteLabelRefPage />} />
+                <Route path="/parceiros" element={<PartnersLanding />} />
+                <Route path="/admin/cloud" element={<LovableCloudAdmin />} />
                 <Route path="/whitelabel/onboarding" element={<WhiteLabelOnboarding />} />
                 <Route path="/wl/setup" element={<WhiteLabelOnboarding />} />
                 <Route path="/faq/whitelabel" element={<WhiteLabelFAQ />} />
