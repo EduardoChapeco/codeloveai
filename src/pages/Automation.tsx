@@ -3,17 +3,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Play, Trash2, Loader2, Clock, Zap, Globe,
   Shield, Search, RefreshCw, FileText, CheckCircle, XCircle,
+  ChevronDown, Power,
 } from "lucide-react";
 
 interface AutomationRule {
@@ -51,6 +44,13 @@ const TRIGGER_LABELS: Record<string, string> = {
   webhook: "Webhook",
 };
 
+const ACTION_ICONS: Record<string, typeof Shield> = {
+  security_fix: Shield,
+  seo_fix: Globe,
+  send_message: FileText,
+  publish: Zap,
+};
+
 export default function Automation() {
   const { user } = useAuth();
   const [rules, setRules] = useState<AutomationRule[]>([]);
@@ -58,6 +58,7 @@ export default function Automation() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [activeTab, setActiveTab] = useState<"rules" | "logs">("rules");
 
   // Create form
   const [newName, setNewName] = useState("");
@@ -97,7 +98,6 @@ export default function Automation() {
   useEffect(() => {
     if (!user) return;
     fetchAll();
-    // Load projects
     supabase
       .from("lovable_projects")
       .select("lovable_project_id, display_name, name")
@@ -167,212 +167,291 @@ export default function Automation() {
 
   return (
     <AppLayout>
-      <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Automações</h1>
-            <p className="text-muted-foreground text-sm">
-              Configure ações automáticas para seus projetos Lovable
-            </p>
+            <p className="lv-overline mb-1">Ferramentas</p>
+            <h1 className="lv-heading-lg">Automações</h1>
+            <p className="lv-body mt-1">Configure ações automáticas para seus projetos</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading}>
-              <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+            <button onClick={fetchAll} disabled={loading} className="lv-btn-secondary h-9 px-4 text-xs">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
               Atualizar
-            </Button>
-            <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
-              <Plus className="w-4 h-4 mr-1" />
+            </button>
+            <button onClick={() => setShowCreate(!showCreate)} className="lv-btn-primary h-9 px-4 text-xs">
+              <Plus className="h-3.5 w-3.5" />
               Nova Automação
-            </Button>
+            </button>
           </div>
         </div>
 
         {/* Create Form */}
         {showCreate && (
-          <Card className="border-primary/30">
-            <CardHeader>
-              <CardTitle className="text-lg">Nova Automação</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Input
-                placeholder="Nome da automação"
+          <div className="lv-card space-y-4 border-l-3 border-l-primary/30">
+            <p className="lv-heading-sm">Nova Automação</p>
+
+            <div>
+              <label className="lv-caption block mb-1.5">Nome da automação</label>
+              <input
+                placeholder="Ex: Fix de segurança diário"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
+                className="lv-input"
               />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Select value={newActionType} onValueChange={setNewActionType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="security_fix">Fix de Segurança</SelectItem>
-                    <SelectItem value="seo_fix">Fix de SEO</SelectItem>
-                    <SelectItem value="send_message">Enviar Mensagem</SelectItem>
-                    <SelectItem value="publish">Publicar</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={newTriggerType} onValueChange={setNewTriggerType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="schedule">Agendado</SelectItem>
-                    <SelectItem value="webhook">Webhook</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={newProjectId} onValueChange={setNewProjectId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione projeto" /></SelectTrigger>
-                  <SelectContent>
-                    {projects.map((p) => (
-                      <SelectItem key={p.lovable_project_id} value={p.lovable_project_id}>
-                        {p.display_name || p.name || p.lovable_project_id.slice(0, 8)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="lv-caption block mb-1.5">Ação</label>
+                <div className="relative">
+                  <select
+                    value={newActionType}
+                    onChange={(e) => setNewActionType(e.target.value)}
+                    className="lv-input appearance-none pr-8 cursor-pointer"
+                  >
+                    <option value="security_fix">Fix de Segurança</option>
+                    <option value="seo_fix">Fix de SEO</option>
+                    <option value="send_message">Enviar Mensagem</option>
+                    <option value="publish">Publicar</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                </div>
               </div>
-              {newTriggerType === "schedule" && (
-                <Input
-                  placeholder="Cron expression (ex: 0 */6 * * *)"
+
+              <div>
+                <label className="lv-caption block mb-1.5">Gatilho</label>
+                <div className="relative">
+                  <select
+                    value={newTriggerType}
+                    onChange={(e) => setNewTriggerType(e.target.value)}
+                    className="lv-input appearance-none pr-8 cursor-pointer"
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="schedule">Agendado</option>
+                    <option value="webhook">Webhook</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="lv-caption block mb-1.5">Projeto</label>
+                <div className="relative">
+                  <select
+                    value={newProjectId}
+                    onChange={(e) => setNewProjectId(e.target.value)}
+                    className="lv-input appearance-none pr-8 cursor-pointer"
+                  >
+                    <option value="">Selecione projeto</option>
+                    {projects.map((p) => (
+                      <option key={p.lovable_project_id} value={p.lovable_project_id}>
+                        {p.display_name || p.name || p.lovable_project_id.slice(0, 8)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            {newTriggerType === "schedule" && (
+              <div>
+                <label className="lv-caption block mb-1.5">Expressão Cron</label>
+                <input
+                  placeholder="Ex: 0 */6 * * *"
                   value={newCron}
                   onChange={(e) => setNewCron(e.target.value)}
+                  className="lv-input font-mono"
                 />
-              )}
-              {(newActionType === "send_message" || newActionType === "security_fix" || newActionType === "seo_fix") && (
-                <Textarea
-                  placeholder="Template da mensagem a enviar ao projeto..."
+              </div>
+            )}
+
+            {(newActionType === "send_message" || newActionType === "security_fix" || newActionType === "seo_fix") && (
+              <div>
+                <label className="lv-caption block mb-1.5">Template da mensagem</label>
+                <textarea
+                  placeholder="Mensagem a enviar ao projeto..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   rows={3}
+                  className="lv-textarea"
                 />
-              )}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-                <Button onClick={handleCreate} disabled={creating}>
-                  {creating ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
-                  Criar
-                </Button>
               </div>
-            </CardContent>
-          </Card>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowCreate(false)} className="lv-btn-secondary h-9 px-4 text-xs">
+                Cancelar
+              </button>
+              <button onClick={handleCreate} disabled={creating} className="lv-btn-primary h-9 px-4 text-xs">
+                {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                Criar
+              </button>
+            </div>
+          </div>
         )}
 
-        <Tabs defaultValue="rules">
-          <TabsList>
-            <TabsTrigger value="rules">
-              <Zap className="w-4 h-4 mr-1" />
-              Regras ({rules.length})
-            </TabsTrigger>
-            <TabsTrigger value="logs">
-              <FileText className="w-4 h-4 mr-1" />
-              Logs ({runs.length})
-            </TabsTrigger>
-          </TabsList>
+        {/* Tabs */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab("rules")}
+            className={`h-9 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+              activeTab === "rules"
+                ? "lv-btn-primary"
+                : "lv-btn-secondary"
+            }`}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            Regras ({rules.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("logs")}
+            className={`h-9 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+              activeTab === "logs"
+                ? "lv-btn-primary"
+                : "lv-btn-secondary"
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Logs ({runs.length})
+          </button>
+        </div>
 
-          <TabsContent value="rules" className="space-y-3 mt-4">
+        {/* Rules Tab */}
+        {activeTab === "rules" && (
+          <div className="space-y-3">
             {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <div className="flex justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : rules.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <Zap className="w-10 h-10 mb-3 opacity-30" />
-                  <p>Nenhuma automação configurada</p>
-                  <p className="text-xs">Clique em "Nova Automação" para começar</p>
-                </CardContent>
-              </Card>
+              <div className="lv-card text-center py-16">
+                <Zap className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="lv-body-strong">Nenhuma automação configurada</p>
+                <p className="lv-caption mt-1">Clique em "Nova Automação" para começar</p>
+              </div>
             ) : (
-              rules.map((rule) => (
-                <Card key={rule.id} className={!rule.is_active ? "opacity-60" : ""}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium truncate">{rule.name}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {ACTION_LABELS[rule.action_type] || rule.action_type}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {TRIGGER_LABELS[rule.trigger_type] || rule.trigger_type}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>Projeto: {rule.project_id.slice(0, 8)}...</span>
-                        <span>Execuções: {rule.run_count}</span>
-                        {rule.last_run_at && (
-                          <span>Última: {new Date(rule.last_run_at).toLocaleString("pt-BR")}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 ml-4">
-                      <Switch
-                        checked={rule.is_active}
-                        onCheckedChange={() => handleToggle(rule.id, rule.is_active)}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleRun(rule.id)}
-                        disabled={running === rule.id || !rule.is_active}
-                      >
-                        {running === rule.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Play className="w-4 h-4" />
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive"
-                        onClick={() => handleDelete(rule.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
-
-          <TabsContent value="logs" className="mt-4">
-            {runs.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <FileText className="w-10 h-10 mb-3 opacity-30" />
-                  <p>Nenhuma execução registrada</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-2">
-                {runs.map((run) => (
-                  <Card key={run.id}>
-                    <CardContent className="flex items-center justify-between p-3">
-                      <div className="flex items-center gap-3">
-                        {run.status === "success" ? (
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-destructive" />
-                        )}
-                        <div>
-                          <p className="text-sm font-medium">
-                            {run.status === "success" ? "Sucesso" : "Erro"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(run.created_at).toLocaleString("pt-BR")}
-                          </p>
+              rules.map((rule) => {
+                const ActionIcon = ACTION_ICONS[rule.action_type] || Zap;
+                return (
+                  <div key={rule.id} className={`clf-liquid-glass rounded-[18px] p-5 transition-opacity ${!rule.is_active ? "opacity-50" : ""}`}>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          rule.is_active ? "bg-primary/10" : "bg-muted"
+                        }`}>
+                          <ActionIcon className={`h-5 w-5 ${rule.is_active ? "text-primary" : "text-muted-foreground"}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="lv-body-strong truncate">{rule.name}</span>
+                            <span className="lv-badge lv-badge-primary">
+                              {ACTION_LABELS[rule.action_type] || rule.action_type}
+                            </span>
+                            <span className="lv-badge lv-badge-muted">
+                              {TRIGGER_LABELS[rule.trigger_type] || rule.trigger_type}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 lv-caption">
+                            <span>Projeto: {rule.project_id.slice(0, 8)}…</span>
+                            <span>Execuções: {rule.run_count}</span>
+                            {rule.last_run_at && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {new Date(rule.last_run_at).toLocaleString("pt-BR")}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      {run.result && (
-                        <span className="text-xs text-muted-foreground max-w-[200px] truncate">
-                          {run.result}
-                        </span>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Toggle */}
+                        <button
+                          onClick={() => handleToggle(rule.id, rule.is_active)}
+                          className={`h-8 w-8 rounded-lg flex items-center justify-center transition-all ${
+                            rule.is_active
+                              ? "bg-green-500/10 text-green-600 hover:bg-green-500/20"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          }`}
+                          title={rule.is_active ? "Desativar" : "Ativar"}
+                        >
+                          <Power className="h-4 w-4" />
+                        </button>
+
+                        {/* Run */}
+                        <button
+                          onClick={() => handleRun(rule.id)}
+                          disabled={running === rule.id || !rule.is_active}
+                          className="lv-btn-secondary h-8 w-8 !p-0"
+                          title="Executar"
+                        >
+                          {running === rule.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          onClick={() => handleDelete(rule.id)}
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all"
+                          title="Remover"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
+
+        {/* Logs Tab */}
+        {activeTab === "logs" && (
+          <div className="space-y-2">
+            {runs.length === 0 ? (
+              <div className="lv-card text-center py-16">
+                <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="lv-body-strong">Nenhuma execução registrada</p>
+              </div>
+            ) : (
+              runs.map((run) => (
+                <div key={run.id} className="lv-card-sm flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {run.status === "success" ? (
+                      <div className="h-8 w-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      </div>
+                    ) : (
+                      <div className="h-8 w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
+                        <XCircle className="h-4 w-4 text-destructive" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="lv-body-strong text-sm">
+                        {run.status === "success" ? "Sucesso" : "Erro"}
+                      </p>
+                      <p className="lv-caption">
+                        {new Date(run.created_at).toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                  </div>
+                  {run.result && (
+                    <span className="lv-caption max-w-[200px] truncate">
+                      {run.result}
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </AppLayout>
   );
