@@ -1046,7 +1046,7 @@ export default function AdminGlobal() {
                         <code className="text-xs bg-muted px-2 py-0.5 rounded">{a.code}</code>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/white-label/ref/${a.code}`);
+                            navigator.clipboard.writeText(`${import.meta.env.VITE_SITE_URL || "https://starble.lovable.app"}/white-label/ref/${a.code}`);
                             toast.success("Link copiado!");
                           }}
                           className="lv-btn-icon h-6 w-6"
