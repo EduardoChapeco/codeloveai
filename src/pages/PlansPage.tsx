@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Check, Loader2, ArrowRight } from "lucide-react";
+import { Check, Loader2, ArrowRight, Crown, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
@@ -14,11 +14,13 @@ interface Plan {
   description: string;
   features: string[];
   popular?: boolean;
-  dailyLimit?: number | null;
+  highlight?: string | null;
+  maxProjects?: number | null;
+  billingCycle: string;
 }
 
 const billingCycleLabels: Record<string, string> = {
-  daily: "por dia", weekly: "por semana", monthly: "por mês",
+  daily: "/dia", weekly: "/semana", monthly: "/mês",
 };
 
 export default function PlansPage() {
@@ -48,7 +50,9 @@ export default function PlansPage() {
             description: p.description || "",
             features: Array.isArray(p.features) ? p.features : [],
             popular: p.highlight_label?.toLowerCase() === "popular",
-            dailyLimit: p.daily_message_limit,
+            highlight: p.highlight_label,
+            maxProjects: p.max_projects,
+            billingCycle: p.billing_cycle,
           })));
         }
       } catch (err) {
@@ -70,50 +74,57 @@ export default function PlansPage() {
     );
   }
 
+  // Separate WL plan from regular plans
+  const regularPlans = plans.filter(p => p.price < 200);
+  const wlPlan = plans.find(p => p.price >= 200);
+
   return (
     <AppLayout>
-      <div className="max-w-5xl mx-auto px-6 py-12">
+      <div className="max-w-6xl mx-auto px-6 py-12">
         <div className="text-center mb-12">
-          <p className="lv-overline mb-2">Preços Transparentes</p>
-          <h1 className="lv-heading-lg mb-4">Escolha o seu Plano</h1>
-          <p className="lv-body text-muted-foreground max-w-2xl mx-auto">
-            Planos flexíveis para todas as necessidades. Comece agora e potencialize seus resultados.
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-semibold mb-2">Preços Transparentes</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-3">Escolha o seu Plano</h1>
+          <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
+            Planos flexíveis para todas as necessidades. Comece grátis e escale conforme cresce.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-          {plans.map((plan) => (
+        {/* Regular plans grid */}
+        <div className={`grid gap-5 max-w-4xl mx-auto ${regularPlans.length >= 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2"}`}>
+          {regularPlans.map((plan) => (
             <div
               key={plan.id}
-              className={`lv-card h-full flex flex-col justify-between ${
-                plan.popular ? "ring-2 ring-primary relative" : ""
+              className={`rounded-2xl border p-6 flex flex-col justify-between transition-all bg-card ${
+                plan.popular ? "ring-2 ring-primary relative shadow-lg shadow-primary/5" : "border-border"
               }`}
             >
               {plan.popular && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 lv-badge lv-badge-primary px-3 py-1">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-full">
                   Mais Popular
                 </span>
               )}
               <div>
-                <p className="lv-overline mb-2">{plan.name}</p>
-                <div className="flex items-baseline gap-1 mb-2">
-                  <span className="text-3xl font-bold text-foreground">R${plan.price.toFixed(2).replace(".", ",")}</span>
-                  <span className="lv-caption">{plan.period}</span>
+                <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-semibold mb-3">{plan.name}</p>
+                <div className="flex items-baseline gap-1 mb-1">
+                  <span className="text-3xl font-extrabold text-foreground">
+                    R${plan.price.toFixed(2).replace(".", ",")}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{plan.period}</span>
                 </div>
-                <p className="lv-body mb-4 min-h-[3rem]">{plan.description}</p>
-                
-                {/* Daily limit info */}
-                {plan.dailyLimit != null && (
+                <p className="text-xs text-muted-foreground mb-5 min-h-[2.5rem]">{plan.description}</p>
+
+                {plan.maxProjects && (
                   <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-primary/5 border border-primary/10">
-                    <span className="text-sm font-semibold text-primary">{plan.dailyLimit} mensagens/dia</span>
+                    <Crown className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-xs font-semibold text-primary">Até {plan.maxProjects} projetos</span>
                   </div>
                 )}
-                
-                <ul className="space-y-3 mb-8">
+
+                <ul className="space-y-2.5 mb-6">
                   {plan.features.map((feature, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
                       <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                      <span className="text-muted-foreground">{feature}</span>
+                      <span className="text-muted-foreground text-xs">{feature}</span>
                     </li>
                   ))}
                 </ul>
@@ -121,9 +132,11 @@ export default function PlansPage() {
 
               <button
                 onClick={() => plan.price === 0 ? navigate("/free") : navigate(`/checkout?plan=${plan.id}`)}
-                className={`w-full h-11 flex items-center justify-center gap-2 text-sm font-medium rounded-xl transition-all ${
-                  plan.price > 0
+                className={`w-full h-11 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl transition-all ${
+                  plan.popular
                     ? "bg-primary text-primary-foreground hover:opacity-90" 
+                    : plan.price > 0
+                    ? "bg-primary/10 text-primary hover:bg-primary/20"
                     : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                 }`}
               >
@@ -132,19 +145,51 @@ export default function PlansPage() {
               </button>
             </div>
           ))}
-          
-          {plans.length === 0 && (
-            <div className="col-span-full text-center py-12 lv-card">
-              <p className="lv-body text-muted-foreground">Nenhum plano disponível no momento.</p>
-            </div>
-          )}
         </div>
 
+        {/* White Label plan - prominent separate section */}
+        {wlPlan && (
+          <div className="max-w-4xl mx-auto mt-10">
+            <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-6 md:p-8">
+              <div className="flex flex-col md:flex-row md:items-center gap-6">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 className="h-5 w-5 text-primary" />
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-primary font-bold">{wlPlan.highlight || "Empresas"}</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-foreground mb-2">{wlPlan.name}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{wlPlan.description}</p>
+                  <div className="flex flex-wrap gap-3">
+                    {wlPlan.features.map((f, i) => (
+                      <span key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Check className="h-3.5 w-3.5 text-primary" /> {f}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="text-center md:text-right shrink-0">
+                  <div className="flex items-baseline gap-1 justify-center md:justify-end mb-1">
+                    <span className="text-3xl font-extrabold text-foreground">R${wlPlan.price.toFixed(2).replace(".", ",")}</span>
+                    <span className="text-xs text-muted-foreground">{wlPlan.period}</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mb-4">+ 30% comissão por usuário ativo</p>
+                  <button
+                    onClick={() => navigate("/whitelabel")}
+                    className="bg-primary text-primary-foreground h-11 px-8 rounded-xl text-sm font-semibold hover:opacity-90 transition-all flex items-center gap-2 mx-auto md:ml-auto md:mr-0"
+                  >
+                    Saiba Mais <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mt-8 text-center space-y-2">
-          <p className="text-xs text-muted-foreground/60">
+          <p className="text-[10px] text-muted-foreground/60">
             * Em breve, o plano Individual terá limite de projetos. Contrate o plano Agência para múltiplos projetos.
           </p>
-          <p className="lv-caption">
+          <p className="text-xs text-muted-foreground">
             Precisa de um plano personalizado? <Link to="/suporte" className="text-primary hover:underline">Fale conosco</Link>
           </p>
         </div>

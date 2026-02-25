@@ -116,13 +116,15 @@ export default function Checkout() {
           .select("id, name, type, price, billing_cycle, description, features, highlight_label, display_order, is_public, is_active")
           .eq("is_public", true)
           .eq("is_active", true)
-          .neq("type", "trial")  // Free trial plan handled separately via /free route
+          .neq("type", "trial")
           .order("display_order", { ascending: true });
         if (data && data.length > 0) {
-          setDbPlans(data.map((p: Record<string, unknown>) => ({
+          // Filter out White Label plan — not purchasable via checkout
+          const filtered = data.filter((p: any) => (p.price as number) < 20000);
+          setDbPlans(filtered.map((p: Record<string, unknown>) => ({
             id: p.id as string,
             name: p.name as string,
-            price: (p.price as number) / 100, // price is stored in centavos
+            price: (p.price as number) / 100,
             originalPrice: "",
             period: billingCycleLabels[(p.billing_cycle as string)] || (p.billing_cycle as string),
             description: (p.description as string) || "",
