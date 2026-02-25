@@ -64,18 +64,18 @@ serve(async (req) => {
       .eq("date", today)
       .maybeSingle();
 
-    // ── 4. Fetch tenant branding ──────────────────────────────────
+    // ── 4. Fetch tenant (includes branding) ─────────────────────
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("name, slug, primary_color, secondary_color, accent_color, logo_url, favicon_url, extension_mode, custom_mode_prompt, modules, font_family, border_radius, theme_preset")
+      .eq("id", tenantId)
+      .maybeSingle();
+
+    // ── 5. Fetch legacy tenant_branding (fallback) ────────────────
     const { data: branding } = await supabase
       .from("tenant_branding")
       .select("*")
       .eq("tenant_id", tenantId)
-      .maybeSingle();
-
-    // ── 5. Fetch tenant meta ──────────────────────────────────────
-    const { data: tenant } = await supabase
-      .from("tenants")
-      .select("name, slug")
-      .eq("id", tenantId)
       .maybeSingle();
 
     // ── 6. Calculate effective modules ────────────────────────────
@@ -83,7 +83,7 @@ serve(async (req) => {
       chat: false, deploy: true, preview: true, notes: true,
       split: true, auto: true, wl: true, affiliate: true, community: true,
     };
-    const tenantModules = branding?.modules || defaultModules;
+    const tenantModules = tenant?.modules || branding?.modules || defaultModules;
     const planModules = planData?.modules || null;
 
     // Effective = intersection of tenant AND plan modules
@@ -95,8 +95,8 @@ serve(async (req) => {
     }
 
     // ── 7. Determine extension mode ───────────────────────────────
-    const extensionMode = planData?.extension_mode || branding?.extension_mode || "security_fix_v2";
-    const customModePrompt = extensionMode === "custom" ? branding?.custom_mode_prompt || null : null;
+    const extensionMode = planData?.extension_mode || tenant?.extension_mode || branding?.extension_mode || "security_fix_v2";
+    const customModePrompt = extensionMode === "custom" ? (tenant?.custom_mode_prompt || branding?.custom_mode_prompt || null) : null;
 
     // ── 8. Build response ─────────────────────────────────────────
     const baseUrl = tenant?.slug
@@ -106,11 +106,11 @@ serve(async (req) => {
     const response = {
       valid: true,
       branding: {
-        appName: branding?.app_name || "Starble Booster",
-        logoUrl: branding?.logo_url || null,
-        primaryColor: branding?.primary_color || "7c3aed",
-        secondaryColor: branding?.secondary_color || "a855f7",
-        accentColor: branding?.accent_color || null,
+        appName: branding?.app_name || tenant?.name || "Starble Booster",
+        logoUrl: tenant?.logo_url || branding?.logo_url || null,
+        primaryColor: (tenant?.primary_color || branding?.primary_color || "#7c3aed").replace("#", ""),
+        secondaryColor: (tenant?.secondary_color || branding?.secondary_color || "#a855f7").replace("#", ""),
+        accentColor: (tenant?.accent_color || branding?.accent_color || null)?.replace("#", "") || null,
         extensionMode,
         customModePrompt,
         modules: effectiveModules,
@@ -119,6 +119,9 @@ serve(async (req) => {
         tenantId,
         tenantName: tenant?.name || "Starble",
         tenantSlug: tenant?.slug || "starble",
+        fontFamily: tenant?.font_family || "system",
+        borderRadius: tenant?.border_radius || "1rem",
+        themePreset: tenant?.theme_preset || "apple-glass",
       },
       plan: {
         planName: planData?.name || license.plan || "Grátis",
