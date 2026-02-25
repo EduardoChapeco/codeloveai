@@ -11,6 +11,7 @@ import {
   Globe, Palette, FileText, Eye, EyeOff, RefreshCw, Shield, BookOpen, LogIn,
   Package, UserPlus, Copy, Link as LinkIcon, CloudLightning, Key, Activity,
   ShieldAlert, Unlink, ExternalLink, Webhook, ToggleLeft, ToggleRight, Sliders,
+  Puzzle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -18,6 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import AppLayout from "@/components/AppLayout";
 import LovableCloudTab from "@/components/admin/LovableCloudTab";
 import ModulesManagementTab from "@/components/admin/ModulesManagementTab";
+import ExtensionsManagementTab from "@/components/admin/ExtensionsManagementTab";
 
 interface TenantRow {
   id: string;
@@ -134,7 +136,7 @@ interface FeatureFlag {
   updated_at: string;
 }
 
-type Tab = "tenants" | "plans" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules";
+type Tab = "tenants" | "plans" | "extensions" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -166,11 +168,11 @@ export default function AdminGlobal() {
   const [planForm, setPlanForm] = useState<{
     name: string; price: string; billing_cycle: string; description: string;
     highlight_label: string; daily_limit: string; display_order: string;
-    is_public: boolean; is_active: boolean;
+    is_public: boolean; is_active: boolean; features: string; max_projects: string;
   }>({
     name: "", price: "0", billing_cycle: "monthly", description: "",
     highlight_label: "", daily_limit: "-1", display_order: "0",
-    is_public: true, is_active: true,
+    is_public: true, is_active: true, features: "[]", max_projects: "",
   });
   const [planSaving, setPlanSaving] = useState(false);
 
@@ -236,6 +238,8 @@ export default function AdminGlobal() {
       display_order: String(p.display_order),
       is_public: p.is_public,
       is_active: p.is_active,
+      features: JSON.stringify(p.features || [], null, 2),
+      max_projects: String((p as any).max_projects ?? ""),
     });
     setPlanSheetOpen(true);
   };
@@ -244,6 +248,9 @@ export default function AdminGlobal() {
     if (!editingPlan) return;
     setPlanSaving(true);
     try {
+      let parsedFeatures: any[];
+      try { parsedFeatures = JSON.parse(planForm.features); } catch { parsedFeatures = []; }
+      const maxProj = planForm.max_projects ? parseInt(planForm.max_projects, 10) : null;
       const { error } = await supabase.from("plans").update({
         name: planForm.name,
         price: parseInt(planForm.price, 10),
@@ -254,6 +261,8 @@ export default function AdminGlobal() {
         display_order: parseInt(planForm.display_order, 10),
         is_public: planForm.is_public,
         is_active: planForm.is_active,
+        features: parsedFeatures,
+        max_projects: maxProj,
       } as any).eq("id", editingPlan.id);
       if (error) throw error;
       toast.success("Plano atualizado!");
@@ -449,6 +458,7 @@ export default function AdminGlobal() {
               { id: "tenants", label: "Tenants", icon: Building2 },
               { id: "plans", label: "Planos", icon: DollarSign },
               { id: "modules", label: "Módulos", icon: Package },
+              { id: "extensions", label: "Extensões", icon: Puzzle },
               { id: "feature_flags", label: "Feature Flags", icon: Sliders },
               { id: "lovable_cloud", label: "Lovable Cloud", icon: CloudLightning },
               { id: "wl_plans", label: "Planos WL", icon: Package },
@@ -850,6 +860,9 @@ export default function AdminGlobal() {
 
           {/* ─── MODULES TAB ─── */}
           {tab === "modules" && <ModulesManagementTab />}
+
+          {/* ─── EXTENSIONS TAB ─── */}
+          {tab === "extensions" && <ExtensionsManagementTab />}
 
           {/* ─── LOVABLE CLOUD TAB ─── */}
           {tab === "lovable_cloud" && <LovableCloudTab />}
@@ -1328,6 +1341,14 @@ export default function AdminGlobal() {
                 <input type="checkbox" checked={planForm.is_active} onChange={e => setPlanForm({ ...planForm, is_active: e.target.checked })} className="h-4 w-4 rounded" />
                 <span className="lv-body">Ativo (disponível para compra)</span>
               </div>
+            </div>
+            <div>
+              <label className="lv-caption block mb-1">Max Projetos (vazio = ilimitado)</label>
+              <input type="number" className="lv-input w-full" value={planForm.max_projects} onChange={e => setPlanForm({ ...planForm, max_projects: e.target.value })} min={0} placeholder="Sem limite" />
+            </div>
+            <div>
+              <label className="lv-caption block mb-1">Features (JSON array de strings)</label>
+              <textarea className="lv-input w-full font-mono text-xs" rows={4} value={planForm.features} onChange={e => setPlanForm({ ...planForm, features: e.target.value })} placeholder='["Feature 1", "Feature 2"]' />
             </div>
             <button onClick={savePlan} disabled={planSaving} className="lv-btn-primary w-full h-10 text-sm flex items-center justify-center gap-2">
               {planSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
