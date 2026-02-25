@@ -122,10 +122,10 @@ Deno.serve(async (req) => {
     let finalPrice = planData.price;
     let discountApplied = 0;
 
-    // 1. Auto-detect: check if user IS an affiliate and apply their own discount
+    // 1. Auto-detect: check if user IS an affiliate — only apply discount if they have ≥1 confirmed paying referral
     const { data: ownAffiliate } = await serviceClient
       .from("affiliates")
-      .select("affiliate_code, discount_percent")
+      .select("id, affiliate_code, discount_percent")
       .eq("user_id", userId)
       .eq("tenant_id", tenantId)
       .maybeSingle();
@@ -133,8 +133,19 @@ Deno.serve(async (req) => {
     let validAffiliateCode: string | null = null;
 
     if (ownAffiliate) {
-      discountApplied = ownAffiliate.discount_percent;
-      finalPrice = Math.round(planData.price * (1 - discountApplied / 100) * 100) / 100;
+      // Check if this affiliate has at least 1 confirmed referral (someone who actually paid)
+      const { data: confirmedReferrals } = await serviceClient
+        .from("affiliate_referrals")
+        .select("id")
+        .eq("affiliate_id", ownAffiliate.id)
+        .eq("confirmed", true)
+        .limit(1);
+
+      if (confirmedReferrals && confirmedReferrals.length > 0) {
+        // Affiliate has at least 1 paying referral — apply discount
+        discountApplied = ownAffiliate.discount_percent;
+        finalPrice = Math.round(planData.price * (1 - discountApplied / 100) * 100) / 100;
+      }
       validAffiliateCode = ownAffiliate.affiliate_code;
     }
 
