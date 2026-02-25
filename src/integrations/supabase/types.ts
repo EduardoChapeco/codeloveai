@@ -1119,7 +1119,7 @@ export type Database = {
           active: boolean
           affiliate_id: string | null
           created_at: string
-          daily_messages: number
+          daily_messages: number | null
           device_id: string | null
           expires_at: string
           hourly_limit: number | null
@@ -1147,7 +1147,7 @@ export type Database = {
           active?: boolean
           affiliate_id?: string | null
           created_at?: string
-          daily_messages?: number
+          daily_messages?: number | null
           device_id?: string | null
           expires_at: string
           hourly_limit?: number | null
@@ -1175,7 +1175,7 @@ export type Database = {
           active?: boolean
           affiliate_id?: string | null
           created_at?: string
-          daily_messages?: number
+          daily_messages?: number | null
           device_id?: string | null
           expires_at?: string
           hourly_limit?: number | null
@@ -1235,6 +1235,7 @@ export type Database = {
           auto_refresh_enabled: boolean
           created_at: string
           id: string
+          is_admin_account: boolean | null
           last_verified_at: string | null
           refresh_failure_count: number
           refresh_token_encrypted: string | null
@@ -1249,6 +1250,7 @@ export type Database = {
           auto_refresh_enabled?: boolean
           created_at?: string
           id?: string
+          is_admin_account?: boolean | null
           last_verified_at?: string | null
           refresh_failure_count?: number
           refresh_token_encrypted?: string | null
@@ -1263,6 +1265,7 @@ export type Database = {
           auto_refresh_enabled?: boolean
           created_at?: string
           id?: string
+          is_admin_account?: boolean | null
           last_verified_at?: string | null
           refresh_failure_count?: number
           refresh_token_encrypted?: string | null
@@ -2692,6 +2695,7 @@ export type Database = {
       }
       user_brain_projects: {
         Row: {
+          brain_owner: string
           created_at: string
           id: string
           last_message_at: string | null
@@ -2702,6 +2706,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          brain_owner?: string
           created_at?: string
           id?: string
           last_message_at?: string | null
@@ -2712,6 +2717,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          brain_owner?: string
           created_at?: string
           id?: string
           last_message_at?: string | null

@@ -15,7 +15,7 @@ export default function AppNav() {
   const { toggleChat, isChatOpen } = useChatContext();
   const { tenant } = useTenant();
   const { hasAccess } = useHasActiveAccess();
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "Starble Ai";
   const location = useLocation();
 
   if (authLoading || !user) return null;
