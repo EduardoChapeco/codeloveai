@@ -451,6 +451,42 @@ export type Database = {
           },
         ]
       }
+      api_key_vault: {
+        Row: {
+          api_key_encrypted: string
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          last_used_at: string | null
+          provider: string
+          requests_count: number
+          updated_at: string
+        }
+        Insert: {
+          api_key_encrypted: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          last_used_at?: string | null
+          provider: string
+          requests_count?: number
+          updated_at?: string
+        }
+        Update: {
+          api_key_encrypted?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          last_used_at?: string | null
+          provider?: string
+          requests_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       automation_rules: {
         Row: {
           action_type: string
