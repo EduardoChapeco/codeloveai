@@ -56,59 +56,50 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) return;
 
-    supabase.from("profiles").select("name, email").eq("user_id", user.id).single()
-      .then(({ data }) => setProfile(data));
+    // Fire ALL dashboard queries in parallel for fast load
+    const loadAll = async () => {
+      const [profileRes, licenseRes, tokensRes, extRes, lovableRes] = await Promise.all([
+        supabase.from("profiles").select("name, email").eq("user_id", user.id).single(),
+        supabase.from("licenses")
+          .select("id, key, active, plan, plan_type, status, expires_at, daily_messages, messages_used_today")
+          .eq("user_id", user.id).eq("active", true)
+          .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("tokens").select("*").eq("user_id", user.id),
+        supabase.from("extension_files").select("file_url, version, instructions").eq("is_latest", true).maybeSingle(),
+        supabase.from("lovable_accounts").select("status").eq("user_id", user.id).maybeSingle(),
+      ]);
 
-    // Fetch modern license (v2)
-    supabase.from("licenses")
-      .select("id, key, active, plan, plan_type, status, expires_at, daily_messages, messages_used_today")
-      .eq("user_id", user.id)
-      .eq("active", true)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setLicense(data as unknown as MemberLicense);
-      });
+      setProfile(profileRes.data);
+      if (licenseRes.data) setLicense(licenseRes.data as unknown as MemberLicense);
 
-    // Fetch legacy tokens (v1)
-    supabase.from("tokens").select("*").eq("user_id", user.id)
-      .then(({ data }) => {
-        const tokenList = data || [];
-        setTokens(tokenList);
-        setTokensLoaded(true);
-        
-        const activeToken = tokenList.find((t: Token) => t.is_active);
-        if (activeToken) {
-          const email = user.email || "";
-          const name = user.user_metadata?.name || email.split("@")[0] || "";
-          supabase.auth.getSession().then(({ data: sessionData }) => {
-            const jwt = sessionData?.session?.access_token;
-            if (jwt) {
-              localStorage.setItem('clf_token', jwt);
-              localStorage.setItem('clf_email', email);
-              localStorage.setItem('clf_name', name);
-              window.postMessage({
-                type: 'clf_sso_token',
-                token: jwt,
-                email,
-                name,
-              }, window.location.origin);
-            }
-          });
-        }
-      });
+      const tokenList = tokensRes.data || [];
+      setTokens(tokenList);
+      setTokensLoaded(true);
 
-    supabase.from("extension_files").select("file_url, version, instructions")
-      .eq("is_latest", true).maybeSingle()
-      .then(({ data }) => setLatestExt(data));
+      // SSO bridge for active legacy token
+      const activeToken = tokenList.find((t: Token) => t.is_active);
+      if (activeToken) {
+        const email = user.email || "";
+        const name = user.user_metadata?.name || email.split("@")[0] || "";
+        supabase.auth.getSession().then(({ data: sessionData }) => {
+          const jwt = sessionData?.session?.access_token;
+          if (jwt) {
+            localStorage.setItem('clf_token', jwt);
+            localStorage.setItem('clf_email', email);
+            localStorage.setItem('clf_name', name);
+            window.postMessage({ type: 'clf_sso_token', token: jwt, email, name }, window.location.origin);
+          }
+        });
+      }
 
-    supabase.from("lovable_accounts").select("status").eq("user_id", user.id).maybeSingle()
-      .then(({ data }) => {
-        if (data?.status === "active") setLovableStatus("active");
-        else if (data?.status === "expired" || data?.status === "error") setLovableStatus("expired");
-        else setLovableStatus("none");
-      });
+      setLatestExt(extRes.data);
+
+      if (lovableRes.data?.status === "active") setLovableStatus("active");
+      else if (lovableRes.data?.status === "expired" || lovableRes.data?.status === "error") setLovableStatus("expired");
+      else setLovableStatus("none");
+    };
+
+    loadAll();
   }, [user]);
 
   // Auto-provision license for new users (v2)
