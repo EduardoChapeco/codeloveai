@@ -29,6 +29,16 @@ async function hmacSign(payload: string, secret: string): Promise<string> {
   return base64url(new Uint8Array(sig));
 }
 
+// Plan config — server-side only, never trust client
+const PLAN_DEFAULTS: Record<string, { expiresMs: number; dailyMessages: number | null; type: string }> = {
+  free:    { expiresMs: 24 * 60 * 60 * 1000,       dailyMessages: 10,   type: "trial" },
+  trial:   { expiresMs: 24 * 60 * 60 * 1000,       dailyMessages: 10,   type: "trial" },
+  speed:   { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: 50,   type: "monthly" },
+  booster: { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: 100,  type: "monthly" },
+  labs:    { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: null,  type: "monthly" },
+  pro:     { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: null,  type: "monthly" },
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -79,13 +89,60 @@ Deno.serve(async (req) => {
     const userId = claimsData.claims.sub as string;
     const userEmail = claimsData.claims.email as string;
 
-    // Parse request body
-    const body = await req.json();
-    const plan = body.plan || "trial";
-    const expiresIn = body.expiresIn || 365 * 24 * 60 * 60 * 1000; // 365 days default
-
     // Use service role client for DB operations
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // ── SERVER-SIDE PLAN RESOLUTION ──
+    // NEVER trust client-provided plan or expiresIn
+    let resolvedPlan = "free";
+
+    // 1. Check if user has an active paid subscription
+    const { data: activeSub } = await adminClient
+      .from("subscriptions")
+      .select("plan, status, expires_at")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (activeSub && activeSub.plan) {
+      const subPlan = (activeSub.plan as string).toLowerCase();
+      // Only accept known paid plans
+      if (["speed", "booster", "labs", "pro"].includes(subPlan)) {
+        resolvedPlan = subPlan;
+      }
+    }
+
+    // 2. Check if user has an active plan from the plans table via licenses
+    if (resolvedPlan === "free") {
+      const { data: existingLicense } = await adminClient
+        .from("licenses")
+        .select("plan, plan_id, type, daily_messages")
+        .eq("user_id", userId)
+        .eq("active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingLicense && existingLicense.plan_id) {
+        const { data: planData } = await adminClient
+          .from("plans")
+          .select("name, daily_message_limit")
+          .eq("id", existingLicense.plan_id)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (planData) {
+          const planName = (planData.name as string).toLowerCase();
+          if (["speed", "booster", "labs", "pro"].includes(planName)) {
+            resolvedPlan = planName;
+          }
+        }
+      }
+    }
+
+    const planConfig = PLAN_DEFAULTS[resolvedPlan] || PLAN_DEFAULTS.free;
 
     // Verify user exists in profiles
     const { data: profile, error: profileError } = await adminClient
@@ -101,27 +158,21 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Deactivate existing active licenses — try both column name conventions
-    // New schema: "active" column | Legacy schema: "is_active" column
+    // Deactivate existing active licenses
     await adminClient
       .from("licenses")
-      .update({ active: false })
+      .update({ active: false, status: "expired" })
       .eq("user_id", userId)
       .eq("active", true);
-    // Also try legacy column name
-    await adminClient
-      .from("licenses")
-      .update({ is_active: false })
-      .eq("user_id", userId)
-      .eq("is_active", true);
 
     // Build CLF1 token
     const now = Date.now();
-    const exp = now + expiresIn;
+    const exp = now + planConfig.expiresMs;
     const payload = JSON.stringify({
       uid: userId,
       email: userEmail || profile.email,
-      plan,
+      plan: resolvedPlan,
+      dailyMessages: planConfig.dailyMessages,
       exp,
       iat: now,
       v: 1,
@@ -133,32 +184,18 @@ Deno.serve(async (req) => {
 
     const expiresAt = new Date(exp).toISOString();
 
-    // Save to licenses table — try new column names first, fallback to legacy
-    let insertError: unknown = null;
-
-    // Attempt 1: new columns (key, active)
-    const { error: err1 } = await adminClient.from("licenses").insert({
+    // Save to licenses table
+    const { error: insertError } = await adminClient.from("licenses").insert({
       key: clfToken,
       user_id: userId,
-      plan: plan,
+      plan: resolvedPlan,
       plan_type: "messages",
+      type: planConfig.type,
+      daily_messages: planConfig.dailyMessages,
       expires_at: expiresAt,
       active: true,
+      status: "active",
     });
-
-    if (err1) {
-      console.warn("Insert with 'key'/'active' failed, trying 'token'/'is_active':", err1.message);
-      // Attempt 2: legacy columns (token, is_active)
-      const { error: err2 } = await adminClient.from("licenses").insert({
-        token: clfToken,
-        user_id: userId,
-        plan: plan,
-        plan_type: "messages",
-        expires_at: expiresAt,
-        is_active: true,
-      });
-      insertError = err2;
-    }
 
     if (insertError) {
       console.error("Insert license error:", insertError);
@@ -173,7 +210,9 @@ Deno.serve(async (req) => {
         success: true,
         token: clfToken,
         expires_at: expiresAt,
-        plan,
+        plan: resolvedPlan,
+        dailyMessages: planConfig.dailyMessages,
+        type: planConfig.type,
         email: userEmail || profile.email,
         name: profile.name,
       }),

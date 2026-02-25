@@ -1,5 +1,8 @@
-// Starble — send-message v2.0.0
+// Starble — send-message v2.1.0
 // REGRA: Nunca apague esta função. SHA de produção: 9810ecd6b501b23b14c5d4ee731d8cda244d003b
+// v2.1.0: Added daily usage enforcement + increment
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const GIT_SHA      = "9810ecd6b501b23b14c5d4ee731d8cda244d003b";
 const LOVABLE_API  = "https://api.lovable.dev";
@@ -26,15 +29,24 @@ const corsHeaders = {
 
 const PLAN_PERMISSIONS: Record<string, string[]> = {
   free:    [],
+  trial:   [],
   speed:   ["speed"],
   booster: ["speed", "booster"],
   labs:    ["speed", "booster", "labs"],
+  pro:     ["speed", "booster", "labs"],
 };
+
+interface ValidateResult {
+  ok: boolean;
+  error?: string;
+  plan?: string;
+  licenseData?: Record<string, unknown>;
+}
 
 async function validateCLFToken(
   token: string,
   extensionRequested: string
-): Promise<{ ok: boolean; error?: string; plan?: string; licenseData?: Record<string, unknown> }> {
+): Promise<ValidateResult> {
   if (!token?.startsWith("CLF1.")) {
     return { ok: false, error: "Token inválido. Use uma licença CLF1." };
   }
@@ -52,6 +64,11 @@ async function validateCLFToken(
 
     const plan: string = (data.plan || data.plan_type || "free").toLowerCase();
     const addons: string[] = data.addons || [];
+
+    // Free/trial plans can use the default "speed" extension (the base one)
+    if ((plan === "free" || plan === "trial") && extensionRequested === "speed") {
+      return { ok: true, plan, licenseData: data };
+    }
 
     const allowedByPlan = PLAN_PERMISSIONS[plan] || [];
     const allowedByAddon = addons.map((a: string) => a.toLowerCase());
@@ -84,6 +101,54 @@ Deno.serve(async (req: Request) => {
       status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  // ── DAILY USAGE ENFORCEMENT ──
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  // Find the active license for this CLF token
+  const { data: licenseRow } = await adminClient
+    .from("licenses")
+    .select("id, daily_messages, plan, user_id")
+    .eq("key", clfToken)
+    .eq("active", true)
+    .maybeSingle();
+
+  let usedToday = 0;
+  let dailyLimit: number | null = null;
+
+  if (licenseRow) {
+    dailyLimit = licenseRow.daily_messages;
+    const today = new Date().toISOString().split("T")[0];
+
+    // Check current usage
+    const { data: usageRow } = await adminClient
+      .from("daily_usage")
+      .select("messages_used")
+      .eq("license_id", licenseRow.id)
+      .eq("date", today)
+      .maybeSingle();
+
+    usedToday = usageRow?.messages_used || 0;
+
+    // Enforce limit if set
+    if (dailyLimit !== null && usedToday >= dailyLimit) {
+      return new Response(
+        JSON.stringify({
+          error: `Limite diário atingido (${dailyLimit} mensagens). Faça upgrade para continuar.`,
+          plan: auth.plan,
+          usedToday,
+          dailyLimit,
+          blocked: true,
+        }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
   }
 
   let body: Record<string, unknown>;
@@ -189,6 +254,20 @@ Deno.serve(async (req: Request) => {
       ? await lovableRes.json().catch(() => ({}))
       : { error: `Lovable retornou status ${lovableRes.status}` };
 
+    // ── INCREMENT USAGE after successful send ──
+    if (lovableRes.ok && licenseRow) {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const { data: newCount } = await adminClient.rpc("increment_daily_usage", {
+          p_license_id: licenseRow.id,
+          p_date: today,
+        });
+        usedToday = newCount || usedToday + 1;
+      } catch (e) {
+        console.error("Failed to increment usage:", e);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         ok: lovableRes.ok,
@@ -197,6 +276,8 @@ Deno.serve(async (req: Request) => {
         aiMessageId: aiMsgId,
         data: responseData,
         plan: auth.plan,
+        usedToday,
+        dailyLimit,
       }),
       {
         status: lovableRes.ok ? 200 : lovableRes.status,
