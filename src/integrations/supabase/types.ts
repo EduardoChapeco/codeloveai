@@ -2310,6 +2310,48 @@ export type Database = {
           },
         ]
       }
+      support_tickets: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          id: string
+          priority: string
+          status: string
+          tenant_id: string | null
+          ticket_num: number
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          priority?: string
+          status?: string
+          tenant_id?: string | null
+          ticket_num?: number
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          priority?: string
+          status?: string
+          tenant_id?: string | null
+          ticket_num?: number
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tenant_branding: {
         Row: {
           accent_color: string | null
@@ -2848,6 +2890,41 @@ export type Database = {
             columns: ["white_label_plan_id"]
             isOneToOne: false
             referencedRelation: "white_label_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_replies: {
+        Row: {
+          created_at: string
+          id: string
+          is_admin: boolean
+          message: string
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_admin?: boolean
+          message: string
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_admin?: boolean
+          message?: string
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_replies_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
             referencedColumns: ["id"]
           },
         ]

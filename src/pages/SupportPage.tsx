@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -57,7 +57,7 @@ export default function SupportPage() {
   const [form, setForm] = useState({ title: "", body: "", category: "general" });
 
   // Load tickets on mount
-  useState(() => {
+  useEffect(() => {
     if (!user) { setLoading(false); return; }
     (supabase as any)
       .from("support_tickets")
@@ -68,7 +68,7 @@ export default function SupportPage() {
         setTickets((data as Ticket[]) || []);
         setLoading(false);
       });
-  });
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

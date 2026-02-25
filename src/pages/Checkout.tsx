@@ -24,16 +24,16 @@ interface Plan {
 // Prices must match the `plans` table: daily=490 cents, monthly=9700 cents
 const fallbackPlans: Plan[] = [
   {
-    id: "daily", name: "Diário", price: 4.90, originalPrice: "", period: "por dia",
-    description: "Mensagens ilimitadas por 24 horas. Ative quando precisar.",
+    id: "individual", name: "Individual", price: 4.90, originalPrice: "", period: "por dia",
+    description: "Ideal para uso pessoal. Ative quando precisar.",
     popular: true,
-    features: ["Mensagens ilimitadas por 24h", "Projetos ilimitados", "Ativação imediata", "Sem mensalidade fixa"],
+    features: ["Mensagens ilimitadas por 24h", "Até 2 projetos", "Ativação imediata", "Sem mensalidade fixa"],
   },
   {
-    id: "monthly", name: "Mensal", price: 97.00, originalPrice: "", period: "por mês",
-    description: "O melhor custo-benefício para quem usa todos os dias.",
+    id: "agency", name: "Agência", price: 49.90, originalPrice: "", period: "por mês",
+    description: "Para equipes e agências que gerenciam múltiplos projetos.",
     highlight: false,
-    features: ["Mensagens ilimitadas", "Projetos ilimitados", "Renovação automática", "Suporte prioritário"],
+    features: ["Mensagens ilimitadas", "Até 10 projetos", "Renovação automática", "Suporte prioritário"],
   },
 ];
 
