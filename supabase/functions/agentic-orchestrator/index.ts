@@ -240,6 +240,66 @@ async function evaluateStopCondition(
   return { met: true, reason: `Unknown condition type "${type}" — skipping` };
 }
 
+// ─── Mode Config (per guide) ──────────────────────────────────
+// Maps intent to proper Lovable API parameters.
+// Rule: everything except "build" (null intent) is free.
+interface ModeConfig {
+  intent: string;
+  chat_only: boolean;
+  view: string | null;
+  view_description: string | null;
+}
+
+function getModeConfig(taskIntent: string): ModeConfig {
+  switch (taskIntent) {
+    case "chat":
+      return {
+        intent: "security_fix_v2",
+        chat_only: true,
+        view: null,
+        view_description: null,
+      };
+    case "security_fix_v2":
+    case "security":
+      return {
+        intent: "security_fix_v2",
+        chat_only: false,
+        view: "security",
+        view_description: "The user is currently viewing the security view for their project.",
+      };
+    case "seo_fix":
+      return {
+        intent: "seo_fix",
+        chat_only: false,
+        view: "code",
+        view_description: "User editing via Starble Orchestrator.",
+      };
+    case "error_fix":
+      return {
+        intent: "security_fix_v2",
+        chat_only: false,
+        view: "code",
+        view_description: "User editing via Starble Orchestrator.",
+      };
+    case "build":
+      // Only mode that costs credits — use sparingly
+      return {
+        intent: "",  // null intent = normal chat = costs credits
+        chat_only: false,
+        view: "code",
+        view_description: "User editing via Starble Orchestrator.",
+      };
+    default:
+      // Default: use security_fix_v2 (free) with code view
+      return {
+        intent: "security_fix_v2",
+        chat_only: false,
+        view: "code",
+        view_description: "User editing via Starble Orchestrator.",
+      };
+  }
+}
+
 // ─── Execute Task ─────────────────────────────────────────────
 async function executeTask(
   sc: SupabaseClient,
@@ -253,22 +313,47 @@ async function executeTask(
     started_at: new Date().toISOString(),
   }).eq("id", task.id);
 
-  await addLog(sc, projectId, `▶ Task #${task.task_index} — sending to Lovable`, "info", undefined, task.id);
+  const mode = getModeConfig(task.intent);
+  await addLog(sc, projectId, `▶ Task #${task.task_index} — intent: ${task.intent} → mode: ${mode.intent || "chat(paid)"}, chat_only: ${mode.chat_only}`, "info", undefined, task.id);
 
   // Inject anti-question prefix
   const enhancedPrompt = AQ_PREFIX + task.prompt;
 
+  // Capture fingerprint BEFORE dispatching (for completion detection layer 2)
+  let fingerprintBefore: string | null = null;
   try {
+    const fpRes = await extFetch(
+      `${EXT_API}/projects/${lovableProjectId}/source-code`,
+      { method: "GET" },
+      lovableToken
+    );
+    if (fpRes.ok) {
+      const fpData = await fpRes.json() as Record<string, unknown>;
+      const files = (fpData.files || []) as Array<{ path: string; size?: number }>;
+      fingerprintBefore = files.map(f => `${f.path}:${f.size ?? 0}`).sort().join("|");
+    }
+  } catch { /* non-critical */ }
+
+  try {
+    const msgId = `umsg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    const aiMsgId = `aimsg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+
+    const payload: Record<string, unknown> = {
+      id: msgId,
+      message: enhancedPrompt,
+      intent: mode.intent || undefined,
+      chat_only: mode.chat_only,
+      ai_message_id: aiMsgId,
+      thread_id: "main",
+      files: [],
+      optimisticImageUrls: [],
+    };
+    if (mode.view) payload.view = mode.view;
+    if (mode.view_description) payload.view_description = mode.view_description;
+
     const res = await extFetch(
       `${EXT_API}/projects/${lovableProjectId}/chat`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          message: enhancedPrompt,
-          intent: task.intent,
-          chat_only: false,
-        }),
-      },
+      { method: "POST", body: JSON.stringify(payload) },
       lovableToken
     );
 
@@ -285,15 +370,21 @@ async function executeTask(
       lovable_message_id: messageId || null,
     }).eq("id", task.id);
 
-    await addLog(sc, projectId, `Task #${task.task_index} sent, messageId: ${messageId}. Waiting for relay...`, "info", undefined, task.id);
+    await addLog(sc, projectId, `Task #${task.task_index} sent (msgId: ${messageId}). Awaiting completion…`, "info", undefined, task.id);
 
-    // ── Relay polling: wait up to 3 min for relay-response to arrive ──
+    // ── 3-Layer Completion Detection ──
+    // Layer 1: Relay response from extension WS bridge
+    // Layer 2: Source-code fingerprint change
+    // Layer 3: latest-message polling (streaming complete)
     const relayMaxMs = 180_000;
     const relayStart = Date.now();
     let relayReceived = false;
 
+    // Initial delay before polling (Lovable needs time to start processing)
+    await new Promise(r => setTimeout(r, 8000));
+
     while (Date.now() - relayStart < relayMaxMs) {
-      await new Promise(r => setTimeout(r, 8000));
+      // Layer 1: Check relay messages
       const { data: relayRows } = await sc
         .from("orchestration_messages")
         .select("id, created_at")
@@ -308,24 +399,51 @@ async function executeTask(
         break;
       }
 
-      // Also poll Lovable's own latest-message for streaming completion
-      const pollRes = await extFetch(
-        `${EXT_API}/projects/${lovableProjectId}/latest-message`,
-        { method: "GET" },
-        lovableToken
-      );
-      if (pollRes.ok) {
-        const pollData = await pollRes.json() as Record<string, unknown>;
-        if (pollData && !pollData.is_streaming && pollData.content) {
-          await addLog(sc, projectId, `✅ Task #${task.task_index} Lovable streaming complete (no relay — direct poll)`, "info", undefined, task.id);
-          relayReceived = true; // Accept direct poll as confirmation
-          break;
-        }
+      // Layer 2: Fingerprint change detection (if we have a baseline)
+      if (fingerprintBefore && !mode.chat_only) {
+        try {
+          const fpRes2 = await extFetch(
+            `${EXT_API}/projects/${lovableProjectId}/source-code`,
+            { method: "GET" },
+            lovableToken
+          );
+          if (fpRes2.ok) {
+            const fpData2 = await fpRes2.json() as Record<string, unknown>;
+            const files2 = (fpData2.files || []) as Array<{ path: string; size?: number }>;
+            const fingerprintAfter = files2.map(f => `${f.path}:${f.size ?? 0}`).sort().join("|");
+            if (fingerprintAfter !== fingerprintBefore) {
+              relayReceived = true;
+              await addLog(sc, projectId, `✅ Task #${task.task_index} source-code changed (fingerprint diff)`, "info", undefined, task.id);
+              // Update project fingerprint
+              await sc.from("orchestrator_projects").update({ source_fingerprint: fingerprintAfter }).eq("id", projectId);
+              break;
+            }
+          }
+        } catch { /* non-critical */ }
       }
+
+      // Layer 3: Poll Lovable's latest-message for streaming completion
+      try {
+        const pollRes = await extFetch(
+          `${EXT_API}/projects/${lovableProjectId}/latest-message`,
+          { method: "GET" },
+          lovableToken
+        );
+        if (pollRes.ok) {
+          const pollData = await pollRes.json() as Record<string, unknown>;
+          if (pollData && !pollData.is_streaming && pollData.content) {
+            await addLog(sc, projectId, `✅ Task #${task.task_index} Lovable streaming complete (direct poll)`, "info", undefined, task.id);
+            relayReceived = true;
+            break;
+          }
+        }
+      } catch { /* non-critical */ }
+
+      await new Promise(r => setTimeout(r, 8000));
     }
 
     if (!relayReceived) {
-      await addLog(sc, projectId, `⚠️ Task #${task.task_index} relay timeout (180s) — assuming partial completion`, "warn", undefined, task.id);
+      await addLog(sc, projectId, `⚠️ Task #${task.task_index} completion timeout (180s) — assuming partial completion`, "warn", undefined, task.id);
     }
 
     return { success: true, messageId, relayReceived };
