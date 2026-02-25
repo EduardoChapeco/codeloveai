@@ -1389,6 +1389,39 @@ export type Database = {
           },
         ]
       }
+      extension_audit_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          extension_key: string | null
+          id: string
+          ip_address: string | null
+          license_key_hash: string | null
+          metadata: Json | null
+          project_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          extension_key?: string | null
+          id?: string
+          ip_address?: string | null
+          license_key_hash?: string | null
+          metadata?: Json | null
+          project_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          extension_key?: string | null
+          id?: string
+          ip_address?: string | null
+          license_key_hash?: string | null
+          metadata?: Json | null
+          project_id?: string | null
+        }
+        Relationships: []
+      }
       extension_catalog: {
         Row: {
           created_at: string
@@ -4304,6 +4337,63 @@ export type Database = {
           },
           {
             foreignKeyName: "white_label_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whitelabel_config: {
+        Row: {
+          app_name: string | null
+          colors: Json | null
+          created_at: string | null
+          extension_key: string
+          id: string
+          links: Json | null
+          logo_url: string | null
+          modules: Json | null
+          tenant_id: string | null
+          theme: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          app_name?: string | null
+          colors?: Json | null
+          created_at?: string | null
+          extension_key?: string
+          id?: string
+          links?: Json | null
+          logo_url?: string | null
+          modules?: Json | null
+          tenant_id?: string | null
+          theme?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          app_name?: string | null
+          colors?: Json | null
+          created_at?: string | null
+          extension_key?: string
+          id?: string
+          links?: Json | null
+          logo_url?: string | null
+          modules?: Json | null
+          tenant_id?: string | null
+          theme?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whitelabel_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whitelabel_config_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants_safe"
