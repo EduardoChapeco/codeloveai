@@ -45,10 +45,10 @@ async function getUserId(req: Request, anonSc: SupabaseClient): Promise<string |
 async function getLovableToken(sc: SupabaseClient, userId: string): Promise<string | null> {
   const { data } = await sc
     .from("lovable_accounts")
-    .select("access_token, token_expires_at, refresh_token")
+    .select("token_encrypted, token_expires_at, refresh_token_encrypted, status")
     .eq("user_id", userId)
     .maybeSingle();
-  if (!data?.access_token) return null;
+  if (!data || data.status !== "active" || !data.token_encrypted) return null;
 
   // Token expiry check — Phase 9
   if (data.token_expires_at) {
@@ -57,15 +57,15 @@ async function getLovableToken(sc: SupabaseClient, userId: string): Promise<stri
     const bufferMs = 5 * 60 * 1000; // 5 min buffer
     if (nowMs + bufferMs >= expiresAt) {
       // Try to refresh
-      if (data.refresh_token) {
-        const refreshed = await refreshLovableToken(sc, userId, data.refresh_token as string);
+      if (data.refresh_token_encrypted) {
+        const refreshed = await refreshLovableToken(sc, userId, data.refresh_token_encrypted as string);
         if (refreshed) return refreshed;
       }
       return null; // expired and can't refresh
     }
   }
 
-  return data.access_token as string;
+  return data.token_encrypted as string;
 }
 
 async function refreshLovableToken(sc: SupabaseClient, userId: string, refreshToken: string): Promise<string | null> {
@@ -84,7 +84,7 @@ async function refreshLovableToken(sc: SupabaseClient, userId: string, refreshTo
       : null;
 
     await sc.from("lovable_accounts").update({
-      access_token: data.access_token,
+      token_encrypted: data.access_token,
       token_expires_at: expiresAt,
     }).eq("user_id", userId);
 
@@ -94,11 +94,13 @@ async function refreshLovableToken(sc: SupabaseClient, userId: string, refreshTo
 
 async function getAdminToken(sc: SupabaseClient): Promise<string | null> {
   const { data } = await sc
-    .from("admin_lovable_account")
-    .select("access_token")
+    .from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("is_admin_account", true)
+    .eq("status", "active")
     .limit(1)
     .maybeSingle();
-  return (data?.access_token as string) || null;
+  return (data?.token_encrypted as string) || null;
 }
 
 // ─── Lovable API helper ───────────────────────────────────────
