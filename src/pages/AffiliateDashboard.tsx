@@ -53,6 +53,8 @@ type AffTab = "overview" | "financeiro" | "indicacoes" | "banco";
 
 const planLabels: Record<string, string> = {
   "1_day": "1 Dia", "7_days": "7 Dias", "1_month": "1 Mês", "12_months": "12 Meses",
+  "individual": "Individual", "agency": "Agência", "whitelabel": "White Label",
+  "free": "Grátis", "daily": "Diário", "monthly": "Mensal",
 };
 
 const invoiceStatusLabel: Record<string, string> = {
