@@ -54,14 +54,13 @@ async function markTokenExpired(serviceClient: any, userId: string) {
 
 async function getUserIdFromJwt(authHeader: string, supabaseUrl: string, anonKey: string): Promise<string | null> {
   try {
-    // Use getClaims for proper JWT verification instead of manual decode
-    const token = authHeader.replace("Bearer ", "");
     const client = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data, error } = await client.auth.getClaims(token);
-    if (error || !data?.claims) return null;
-    return (data.claims.sub as string) || null;
+    // Use getUser for proper JWT verification (compatible with all supabase-js v2)
+    const { data: { user }, error } = await client.auth.getUser();
+    if (error || !user) return null;
+    return user.id;
   } catch {
     return null;
   }
