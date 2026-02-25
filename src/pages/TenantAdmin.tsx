@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useSEO } from "@/hooks/useSEO";
+import { THEME_PRESETS as TENANT_THEME_PRESETS } from "@/lib/tenant-themes";
 import {
   Building2, Users, Key, Wallet, Palette, Globe, FileText,
   Loader2, Save, Pencil, Trash2, Plus, Eye, EyeOff,
@@ -29,25 +30,46 @@ interface WalletTransaction { id: string; amount: number; type: string; descript
 
 type Tab = "editor" | "users" | "licenses" | "finances";
 
-const THEME_PRESETS = [
-  { id: "default", label: "Default", primary: "#0A84FF", secondary: "#5E5CE6", bg: "#FFFFFF" },
-  { id: "midnight", label: "Midnight", primary: "#6366F1", secondary: "#8B5CF6", bg: "#0F172A" },
-  { id: "neon-cyber", label: "Neon Cyber", primary: "#06B6D4", secondary: "#22D3EE", bg: "#0C0A09" },
-  { id: "forest", label: "Forest", primary: "#22C55E", secondary: "#16A34A", bg: "#FAFAF9" },
-  { id: "sunset", label: "Sunset", primary: "#F97316", secondary: "#EF4444", bg: "#FFFBEB" },
-  { id: "royal", label: "Royal", primary: "#7C3AED", secondary: "#A855F7", bg: "#FAF5FF" },
-  { id: "ocean", label: "Ocean", primary: "#0EA5E9", secondary: "#38BDF8", bg: "#F0F9FF" },
-  { id: "rose", label: "Rosé", primary: "#F43F5E", secondary: "#FB7185", bg: "#FFF1F2" },
-];
+const THEME_PRESETS = TENANT_THEME_PRESETS.map((preset) => ({
+  id: preset.id,
+  label: preset.name,
+  primary: preset.preview.primary,
+  secondary: preset.preview.accent,
+  bg: preset.preview.bg,
+}));
+
+const DEFAULT_THEME_PRESET_ID = THEME_PRESETS[0]?.id ?? "apple-glass";
+const DEFAULT_PRIMARY_COLOR = THEME_PRESETS[0]?.primary ?? "#0A84FF";
+const DEFAULT_SECONDARY_COLOR = THEME_PRESETS[0]?.secondary ?? "#5E5CE6";
 
 const FONT_OPTIONS = [
   { id: "system", label: "System Default" },
   { id: "inter", label: "Inter" },
   { id: "poppins", label: "Poppins" },
-  { id: "dm-sans", label: "DM Sans" },
-  { id: "space-grotesk", label: "Space Grotesk" },
+  { id: "dm_sans", label: "DM Sans" },
+  { id: "space_grotesk", label: "Space Grotesk" },
   { id: "nunito", label: "Nunito" },
 ];
+
+const normalizeFontFamily = (value: string | null | undefined) => {
+  if (!value) return "system";
+  if (value === "dm-sans") return "dm_sans";
+  if (value === "space-grotesk") return "space_grotesk";
+  return value;
+};
+
+const toRadiusNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(24, value));
+  }
+  if (typeof value === "string") {
+    const n = Number.parseFloat(value);
+    if (Number.isFinite(n)) {
+      return Math.max(0, Math.min(24, n));
+    }
+  }
+  return 12;
+};
 
 const EXTENSION_MODES = [
   { id: "security_fix_v2", label: "Security Fix (Padrão)" },
@@ -114,9 +136,9 @@ export default function TenantAdmin() {
   // ── Unified Editor Form ──
   const [form, setForm] = useState({
     name: "", logo_url: "", favicon_url: "",
-    primary_color: "#0A84FF", secondary_color: "#5E5CE6", accent_color: "#5E5CE6",
+    primary_color: DEFAULT_PRIMARY_COLOR, secondary_color: DEFAULT_SECONDARY_COLOR, accent_color: DEFAULT_SECONDARY_COLOR,
     meta_title: "", meta_description: "", terms_template: "", domain_custom: "",
-    theme_preset: "default", font_family: "system", border_radius: 12,
+    theme_preset: DEFAULT_THEME_PRESET_ID, font_family: "system", border_radius: 12,
     extension_mode: "security_fix_v2", custom_mode_prompt: "", trial_minutes: 30,
     modules: { ...DEFAULT_MODULES } as Record<string, boolean>,
   });
@@ -146,13 +168,13 @@ export default function TenantAdmin() {
       const t = tenant as any;
       setForm({
         name: tenant.name, logo_url: tenant.logo_url || "", favicon_url: tenant.favicon_url || "",
-        primary_color: tenant.primary_color, secondary_color: tenant.secondary_color,
-        accent_color: tenant.accent_color || "#5E5CE6",
+        primary_color: tenant.primary_color || DEFAULT_PRIMARY_COLOR, secondary_color: tenant.secondary_color || DEFAULT_SECONDARY_COLOR,
+        accent_color: tenant.accent_color || tenant.secondary_color || DEFAULT_SECONDARY_COLOR,
         meta_title: tenant.meta_title || "", meta_description: tenant.meta_description || "",
         terms_template: tenant.terms_template || "", domain_custom: tenant.domain_custom || "",
-        theme_preset: t.theme_preset || "default", font_family: t.font_family || "system",
-        border_radius: t.border_radius ?? 12, extension_mode: t.extension_mode || "security_fix_v2",
-        custom_mode_prompt: t.custom_mode_prompt || "", trial_minutes: t.trial_minutes ?? 30,
+        theme_preset: t.theme_preset || DEFAULT_THEME_PRESET_ID,
+        font_family: normalizeFontFamily(t.font_family),
+        border_radius: toRadiusNumber(t.border_radius),
         modules: typeof t.modules === "object" && t.modules !== null
           ? { ...DEFAULT_MODULES, ...t.modules } : { ...DEFAULT_MODULES },
       });
@@ -218,8 +240,10 @@ export default function TenantAdmin() {
         accent_color: form.accent_color,
         meta_title: form.meta_title || null, meta_description: form.meta_description || null,
         terms_template: form.terms_template || null, domain_custom: form.domain_custom || null,
-        theme_preset: form.theme_preset, font_family: form.font_family,
-        border_radius: form.border_radius, extension_mode: form.extension_mode,
+        theme_preset: form.theme_preset,
+        font_family: normalizeFontFamily(form.font_family),
+        border_radius: `${Math.max(0, Math.min(24, form.border_radius))}px`,
+        extension_mode: form.extension_mode,
         custom_mode_prompt: form.custom_mode_prompt || null, trial_minutes: form.trial_minutes,
         modules: form.modules,
       } as any).eq("id", tenant.id);
@@ -323,10 +347,10 @@ export default function TenantAdmin() {
   // ── Live Preview Component ──
   const fontFamilyMap: Record<string, string> = {
     system: "system-ui, sans-serif", inter: "'Inter', sans-serif", poppins: "'Poppins', sans-serif",
-    "dm-sans": "'DM Sans', sans-serif", "space-grotesk": "'Space Grotesk', sans-serif", nunito: "'Nunito', sans-serif",
+    dm_sans: "'DM Sans', sans-serif", space_grotesk: "'Space Grotesk', sans-serif", nunito: "'Nunito', sans-serif",
   };
-  const previewFont = fontFamilyMap[form.font_family] || fontFamilyMap.system;
-  const previewRadius = `${form.border_radius}px`;
+  const previewFont = fontFamilyMap[normalizeFontFamily(form.font_family)] || fontFamilyMap.system;
+  const previewRadius = `${Math.max(0, Math.min(24, form.border_radius))}px`;
   const isDarkPreset = form.theme_preset === "midnight" || form.theme_preset === "neon-cyber";
   const previewBg = isDarkPreset ? "#0F172A" : "#FFFFFF";
   const previewText = isDarkPreset ? "#E2E8F0" : "#1E293B";
