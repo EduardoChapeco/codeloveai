@@ -1,26 +1,19 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, x-clf-token, x-clf-extension',
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
 
-  let body: any
-  try { body = await req.json() } catch {
-    return new Response(JSON.stringify({ ok: false }), {
-      status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
-
-  const { licenseKey } = body
-  if (!licenseKey) {
-    return new Response(JSON.stringify({ ok: false }), {
-      status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
+  // SECURITY: Require CLF1 license token
+  const clfToken = req.headers.get('x-clf-token') || ''
+  if (!clfToken.startsWith('CLF1.')) {
+    return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
+      status: 401, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   }
 
@@ -29,16 +22,17 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
+  // Validate the license token matches a real active license
   const { data: license } = await supabase
     .from('licenses')
     .select('id')
-    .eq('key', licenseKey)
+    .eq('key', clfToken)
     .eq('active', true)
-    .single()
+    .maybeSingle()
 
   if (!license) {
-    return new Response(JSON.stringify({ ok: false, error: 'License not found' }), {
-      status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ ok: false, error: 'Invalid license' }), {
+      status: 403, headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   }
 
