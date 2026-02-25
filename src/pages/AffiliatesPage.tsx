@@ -161,7 +161,6 @@ export default function AffiliatesPage() {
             <tbody>
               {[
                 { plan: "Individual (1 dia)", price: 4.90 },
-                { plan: "Agência (mensal)", price: 49.90 },
                 { plan: "White Label (mensal/usuário)", price: 29.90 },
               ].map((row) => (
                 <tr key={row.plan} className="border-b border-border/40 last:border-0">
