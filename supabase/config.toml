@@ -113,3 +113,9 @@ verify_jwt = false
 
 [functions.auth-bridge]
 verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.api-key-router]
+verify_jwt = false
