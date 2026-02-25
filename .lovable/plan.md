@@ -1,82 +1,102 @@
 
+## Auditoria Completa do Sistema Starble — Plano de Correções e Melhorias
 
-# Starble v2.0 -- Full Implementation Audit
+### 1. Páginas Criadas mas NÃO Registradas no Router (App.tsx)
 
-## Status: FULLY IMPLEMENTED
+As seguintes páginas existem em `src/pages/` mas **não têm rota** no `App.tsx`, ou seja, estão **inacessíveis**:
 
-After auditing every layer of the system, all 14 sections of the Starble Prompt Mestre v2.0 are implemented and deployed.
+| Página | Rota sugerida | Status |
+|--------|---------------|--------|
+| `AffiliateDashboard.tsx` | `/afiliado/dashboard` | ❌ Sem rota |
+| `AffiliatesPage.tsx` | `/afiliados/painel` | ❌ Sem rota |
+| `AffiliateRefPage.tsx` | `/ref/:code` | ❌ Sem rota |
+| `WlAffiliateDashboard.tsx` | `/wl/afiliados` | ❌ Sem rota |
+| `WhiteLabelRefPage.tsx` | `/wl/ref/:code` | ❌ Sem rota |
+| `PartnersLanding.tsx` | `/parceiros` | ❌ Sem rota |
+| `LovableCloudAdmin.tsx` | `/admin/cloud` | ❌ Sem rota |
 
----
+**Correção:** Registrar todas as rotas no `App.tsx` com `lazyRetry`.
 
-## Database Tables (all exist with correct columns)
+### 2. Navegação Quebrada
 
-| Table | Status | Notes |
-|---|---|---|
-| `licenses` | Complete | Has `key`, `device_id`, `plan_id`, `status`, `type`, trial fields, usage counters |
-| `plans` | Complete | `type`, `billing_cycle`, `extension_mode`, `modules`, `features`, `trial_minutes` |
-| `tenants` | Complete | `owner_user_id`, `affiliate_id`, `platform_fee_per_user`, `setup_paid_at` |
-| `tenant_branding` | Complete | `extension_mode`, `custom_mode_prompt`, `modules`, `community_*`, `trial_minutes` |
-| `affiliates` | Complete | `type` (simple/whitelabel), `commission_rate`, `pix_key`, `bank_info` |
-| `commissions` | Complete | `type` (setup/monthly/daily), `status`, `payout_batch_id` |
-| `payout_batches` | Complete | `processed_at`, `total_amount`, `status` |
-| `community_channels` | Complete | `tenant_id`, `is_private`, `is_readonly` |
-| `community_messages` | Complete | No `tenant_id` (by design -- no tenant leakage) |
-| `community_profiles` | Complete | No `tenant_id` (by design -- anonymous origin) |
-| `daily_usage` | Complete | `license_id`, `messages_used`, `date` |
+O `AppNav.tsx` tem link `/affiliate` que **não existe** em nenhuma rota. Deve apontar para `/afiliado/dashboard`.
 
-## RLS Policies (all in place)
+### 3. Duplicação TenantDashboard vs TenantAdmin
 
-- `community_channels`: Users see global channels OR own tenant's channels via `is_tenant_member()`
-- `community_messages`: Filtered by accessible channels; `is_deleted` hidden; readonly enforced on INSERT
-- `community_profiles`: No tenant_id exposed; users manage own profile
-- `plans`: Public active plans visible to all; tenant admins manage own
-- `licenses`: Users see/update own; admins manage all
-- `commissions`: Affiliates view own; admins manage all
-- `payout_batches`: Admins only
+- `TenantDashboard.tsx` (`/tenant/dashboard`) — versão simplificada com overview
+- `TenantAdmin.tsx` (`/admin/tenant`) — versão completa com Brand/Users/Licenses/Finances
 
-## Edge Functions (all deployed with `verify_jwt = false`)
+**Decisão:** Manter `TenantAdmin` como painel principal. Redirecionar `/tenant/dashboard` para `/admin/tenant` ou eliminar a duplicação fazendo TenantDashboard redirecionar.
 
-| Function | Status | Logic |
-|---|---|---|
-| `validate-license` | Complete | Rate limiting, device_id binding, trial/token expiration checks |
-| `validate-hwid` | Complete | Uses `device_id` column; fallback for legacy `token` column |
-| `get-user-context` | Complete | License -> Plan -> Tenant -> Branding -> Effective modules (intersection) |
-| `consume-token` | Complete | Daily reset, limit check, increment counters + `daily_usage` table |
-| `renew-token` | Complete | Sets `token_valid_until = now + 24h`, resets daily counters |
-| `start-trial` | Complete | One-time per user_id, configurable minutes from `tenant_branding` |
+### 4. Sistema de Personalização de Tenants (MELHORIA SOLICITADA)
 
-## Seeded Data
+O `TenantAdmin.tsx` aba "Brand" tem apenas campos básicos (cores, URLs, SEO, termos). Falta:
 
-- Starble Master tenant (`a0000000-...0001`) with branding (chat: false, all others: true)
-- 3 plans: Trial (free/30min), Diario (R$5/day), Mensal (R$99/month)
+**Adicionar ao TenantAdmin:**
+- **Tema preset** (selector visual: default, midnight, neon-cyber, etc.)
+- **Font family** (dropdown: system, Inter, Poppins, DM Sans, Space Grotesk, Nunito)
+- **Border radius** (slider: 0px a 24px)
+- **Preview em tempo real** do tema aplicado
+- **Upload de logo/favicon** direto para o bucket `tenant-assets` (em vez de URLs manuais)
+- **Módulos configuráveis** (toggle para cada módulo: chat, deploy, preview, notas, etc.)
+- **Extension mode** (security_fix_v2, seo_fix, error_fix, custom)
+- **Custom mode prompt** (textarea para modo custom)
+- **Trial minutes** configurável
+- **Limite de projetos** por plano
 
-## Database Functions
+### 5. Novos Planos com Limite de Projetos (SOLICITADO)
 
-- `increment_daily_usage(p_license_id, p_date)` -- atomic counter
-- `is_admin()`, `is_tenant_admin()`, `is_tenant_member()`, `get_user_primary_tenant()` -- security helpers
-- Validation triggers for license status/type, plan type, commission type, extension_mode
+Criar/atualizar planos na tabela `plans`:
 
-## Frontend Pages (all exist)
+| Plano | Preço | Ciclo | Limite Projetos | Público-alvo |
+|-------|-------|-------|-----------------|--------------|
+| Individual | R$4,90/dia | Diário | 2 projetos | Freelancer |
+| Agência | R$49,90/mês | Mensal | 10 projetos | Agências |
 
-- Admin panels: `Admin.tsx`, `AdminGlobal.tsx`
-- Tenant panels: `TenantAdmin.tsx`, `TenantDashboard.tsx`
-- WL onboarding: `WhiteLabelOnboarding.tsx`
-- Community: `Community.tsx`
-- Affiliates: `AffiliateDashboard.tsx`, `AffiliatesPage.tsx`, `WlAffiliateDashboard.tsx`
-- FAQ: `WhiteLabelFAQ.tsx`
-- User: `Dashboard.tsx`, `Profile.tsx`, `Checkout.tsx`
+**Requer:**
+- Adicionar coluna `max_projects` na tabela `plans` (migration)
+- Atualizar `validate-plan` e `send-message` para verificar limite de projetos
+- Atualizar UI de PlansPage para mostrar novo atributo
 
-## Inviolable Rules Compliance
+### 6. Tasks (.md) — Verificação de Conclusão
 
-- `device_id` used everywhere (not `hwid`)
-- Chat module disabled by default in tenant_branding
-- `community_profiles` and `community_messages` have no `tenant_id`
-- RLS enforced on all community tables
-- Plans are fully dynamic (no hardcoded structure)
-- Trial is once per `user_id` (checked globally across all licenses)
-- Extension modes are server-side only (never exposed to end user)
+| Task | Status no arquivo | Real |
+|------|-------------------|------|
+| `1771892474348` (Starble v2.0) | ✅ done | Confirmado |
+| `1771892641405` (Plano de implementação) | ✅ done | Confirmado |
+| `1771981961756` (Prompt Master v1.0) | ✅ done | Confirmado |
 
-## Conclusion
+Todas as tasks anteriores foram concluídas.
 
-No gaps found. All 14 sections of the Starble v2.0 spec are implemented across database, edge functions, RLS, and frontend. The system is ready for end-to-end testing.
+### 7. Runtime Errors Pendentes
 
+Não há erros de runtime capturados nos logs do console. O sistema está estável.
+
+### 8. Plano de Execução
+
+**Fase 1 — Rotas e Navegação:**
+1. Registrar todas as 7 páginas órfãs no `App.tsx`
+2. Corrigir link `/affiliate` no `AppNav.tsx`
+3. Redirect `/tenant/dashboard` → `/admin/tenant`
+
+**Fase 2 — Personalização Avançada do Tenant:**
+1. Expandir aba "Brand" do `TenantAdmin.tsx` com:
+   - Theme preset selector
+   - Font family dropdown
+   - Border radius slider
+   - Upload de logo/favicon para storage
+   - Módulos toggle
+   - Extension mode + custom prompt
+   - Trial minutes
+2. Adicionar aba "Planos" no TenantAdmin para gerenciamento de planos do tenant
+3. Preview em tempo real das mudanças de tema
+
+**Fase 3 — Limite de Projetos:**
+1. Migration: `ALTER TABLE plans ADD COLUMN max_projects integer DEFAULT NULL`
+2. Inserir/atualizar planos (Individual R$4,90 e Agência R$49,90)
+3. Atualizar Edge Functions para validar limite
+4. Atualizar UI do PlansPage
+
+**Fase 4 — Task e Documentação:**
+1. Criar nova task `.md` consolidando todas as melhorias
+2. Marcar como done ao concluir
