@@ -88,10 +88,24 @@ export default function ProjectEditor() {
   const loadSandboxUrl = useCallback(async () => {
     if (!id) return;
     setLoadingPreview(true);
-    // Use the standard preview URL pattern directly — no need for sandbox API
-    setSandboxUrl(`https://id-preview--${id}.lovable.app`);
-    setLoadingPreview(false);
-  }, [id]);
+    try {
+      // Start sandbox first
+      try {
+        await invoke({ route: `/projects/${id}/sandbox/start`, method: "POST", payload: {} });
+      } catch { /* may already be running */ }
+
+      const data = await invoke<{ url: string }>({ route: `/projects/${id}/sandbox/url` });
+      if (data?.url) {
+        setSandboxUrl(data.url);
+      } else {
+        setSandboxUrl(`https://id-preview--${id}.lovable.app`);
+      }
+    } catch {
+      setSandboxUrl(`https://id-preview--${id}.lovable.app`);
+    } finally {
+      setLoadingPreview(false);
+    }
+  }, [id, invoke]);
   loadSandboxUrlRef.current = loadSandboxUrl;
 
   const sendChatMessage = async () => {
@@ -293,7 +307,7 @@ export default function ProjectEditor() {
                 ref={iframeRef}
                 src={sandboxUrl}
                 className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
                 title="Project Preview"
               />
             ) : (
