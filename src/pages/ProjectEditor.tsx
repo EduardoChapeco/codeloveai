@@ -88,25 +88,10 @@ export default function ProjectEditor() {
   const loadSandboxUrl = useCallback(async () => {
     if (!id) return;
     setLoadingPreview(true);
-    try {
-      // Start sandbox first
-      try {
-        await invoke({ route: `/projects/${id}/sandbox/start`, method: "POST", payload: {} });
-      } catch { /* may already be running */ }
-
-      const data = await invoke<{ url: string }>({ route: `/projects/${id}/sandbox/url` });
-      if (data?.url) {
-        setSandboxUrl(data.url);
-      } else {
-        // Fallback to preview URL pattern
-        setSandboxUrl(`https://id-preview--${id}.lovable.app`);
-      }
-    } catch {
-      setSandboxUrl(`https://id-preview--${id}.lovable.app`);
-    } finally {
-      setLoadingPreview(false);
-    }
-  }, [id, invoke]);
+    // Use the standard preview URL pattern directly — no need for sandbox API
+    setSandboxUrl(`https://id-preview--${id}.lovable.app`);
+    setLoadingPreview(false);
+  }, [id]);
   loadSandboxUrlRef.current = loadSandboxUrl;
 
   const sendChatMessage = async () => {
