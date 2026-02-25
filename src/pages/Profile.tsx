@@ -296,13 +296,13 @@ export default function Profile() {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center">
+    return <div className="min-h-screen flex items-center justify-center">
       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
     </div>;
   }
 
   if (!profile) {
-    return <div className="min-h-screen bg-background flex items-center justify-center">
+    return <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
         <p className="lv-heading-lg mb-4">Perfil não encontrado</p>
         <Link to="/community" className="lv-btn-primary">Voltar</Link>
@@ -324,15 +324,15 @@ export default function Profile() {
   ) : null;
 
   const content = (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       {guestNav}
 
       {/* Cover */}
-      <div className="relative h-48 md:h-64 bg-muted overflow-hidden">
+      <div className="relative h-48 md:h-64 overflow-hidden rounded-b-[24px]">
         {profile.cover_url ? (
           <img src={profile.cover_url} alt="" className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-muted to-muted-foreground/10" />
+          <div className="w-full h-full bg-gradient-to-br from-primary/20 via-primary/10 to-accent/10" />
         )}
         {isOwner && (
           <label className="absolute bottom-4 right-4 lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1 cursor-pointer">

@@ -308,7 +308,7 @@ export default function Notes() {
     <AppLayout>
       <div className="min-h-full flex flex-col">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-border/50">
+        <div className="px-6 py-5 border-b border-white/[0.06]">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
             <div>
               <p className="lv-overline mb-1">Produtividade</p>
@@ -337,7 +337,7 @@ export default function Notes() {
         <div className="flex flex-1 min-h-0 max-w-7xl mx-auto w-full">
 
           {/* ── Left panel: Folders + Note list ── */}
-          <div className="w-80 border-r border-border/50 flex flex-col shrink-0">
+          <div className="w-80 border-r border-white/[0.06] flex flex-col shrink-0">
             {/* Search */}
             <div className="p-3">
               <div className="relative">
