@@ -59,12 +59,12 @@ export default function SupportPage() {
   // Load tickets on mount
   useState(() => {
     if (!user) { setLoading(false); return; }
-    supabase
+    (supabase as any)
       .from("support_tickets")
       .select("id, ticket_num, title, status, priority, category, created_at")
       .order("created_at", { ascending: false })
       .limit(20)
-      .then(({ data }) => {
+      .then(({ data }: any) => {
         setTickets((data as Ticket[]) || []);
         setLoading(false);
       });
@@ -75,7 +75,7 @@ export default function SupportPage() {
     if (!form.title.trim() || !form.body.trim()) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.from("support_tickets").insert({
+      const { error } = await (supabase as any).from("support_tickets").insert({
         user_id: user!.id,
         title: form.title.trim(),
         body: form.body.trim(),
@@ -86,7 +86,7 @@ export default function SupportPage() {
       setForm({ title: "", body: "", category: "general" });
       setShowForm(false);
       // Refresh
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("support_tickets")
         .select("id, ticket_num, title, status, priority, category, created_at")
         .order("created_at", { ascending: false })

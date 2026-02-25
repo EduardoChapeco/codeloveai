@@ -70,7 +70,7 @@ function groupByDate(convos: Conversation[]): Record<string, Conversation[]> {
 
 export default function BrainPage() {
   const { user, loading: authLoading } = useAuth();
-  const { enabled: brainEnabled, loading: flagLoading } = useFeatureFlag("brain");
+  const { enabled: brainEnabled, loading: flagLoading } = { enabled: true, loading: false };
   const navigate = useNavigate();
 
   const [brainActive, setBrainActive] = useState<boolean | null>(null);
@@ -590,7 +590,7 @@ export default function BrainPage() {
                         </div>
                       ) : (
                         <>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm dark:prose-invert max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {msg.content}
                           </ReactMarkdown>
                           {msg.role === "ai" && msg.content && (

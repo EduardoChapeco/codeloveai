@@ -162,7 +162,7 @@ export default function OrchestratorDashboard() {
   // Fetch projects list
   const fetchProjects = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from("orchestrator_projects")
       .select("*")
       .eq("user_id", user.id)
@@ -176,8 +176,8 @@ export default function OrchestratorDashboard() {
   const fetchDetails = async (id: string) => {
     setLoadingDetails(true);
     const [{ data: t }, { data: l }] = await Promise.all([
-      supabase.from("orchestrator_tasks").select("*").eq("project_id", id).order("task_index"),
-      supabase.from("orchestrator_logs").select("*").eq("project_id", id).order("created_at", { ascending: true }).limit(100),
+      (supabase as any).from("orchestrator_tasks").select("*").eq("project_id", id).order("task_index"),
+      (supabase as any).from("orchestrator_logs").select("*").eq("project_id", id).order("created_at", { ascending: true }).limit(100),
     ]);
     setTasks((t as OrchestratorTask[]) || []);
     setLogs((l as OrchestratorLog[]) || []);

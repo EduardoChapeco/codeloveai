@@ -81,9 +81,10 @@ interface TenantExtension {
   version: string;
   instructions: string;
   is_latest: boolean;
-  is_enabled: boolean;
-  activation_cost: number;
+  is_enabled?: boolean;
+  activation_cost?: number;
   created_at: string;
+  uploaded_by?: string;
 }
 
 interface SupportTicket {
@@ -135,6 +136,7 @@ interface WorkerResult {
   email?: string;
   plan?: string;
   error?: string;
+  expires?: number;
 }
 
 type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "worker-tokens" | "support";
@@ -220,7 +222,7 @@ export default function Admin() {
   }, [user, isAdmin, authLoading, adminLoading, navigate]);
 
   const fetchTickets = useCallback(async () => {
-    const { data: tks, error } = await supabase
+    const { data: tks, error } = await (supabase as any)
       .from("support_tickets")
       .select(`
         *,
@@ -242,19 +244,19 @@ export default function Admin() {
   }, []);
 
   const fetchTicketReplies = async (ticketId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("ticket_replies")
       .select("*")
       .eq("ticket_id", ticketId)
       .order("created_at", { ascending: true });
     
-    if (!error) setTicketReplies(data || []);
+    if (!error) setTicketReplies((data as TicketReply[]) || []);
   };
 
   const sendTicketReply = async () => {
     if (!selectedTicket || !replyMessage.trim()) return;
     setReplyLoading(true);
-    const { error } = await supabase.from("ticket_replies").insert({
+    const { error } = await (supabase as any).from("ticket_replies").insert({
       ticket_id: selectedTicket.id,
       user_id: user!.id,
       message: replyMessage,
@@ -273,7 +275,7 @@ export default function Admin() {
 
   const updateTicketStatus = async (ticketId: string, status: SupportTicket["status"]) => {
     setStatusLoading(true);
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("support_tickets")
       .update({ status, updated_at: new Date().toISOString() })
       .eq("id", ticketId);
@@ -380,7 +382,7 @@ export default function Admin() {
 
   const fetchExtensions = useCallback(async () => {
     const { data } = await supabase.from("extension_files").select("*").order("created_at", { ascending: false });
-    setExtensions(data || []);
+    setExtensions((data as TenantExtension[]) || []);
   }, []);
 
   const fetchNotifications = useCallback(async () => {
@@ -494,10 +496,11 @@ export default function Admin() {
     if (!key) return toast.error("Insira uma chave de licença.");
     // Desativar licenças anteriores
     await supabase.from("licenses").update({ active: false, status: "expired" }).eq("user_id", userId).eq("active", true);
-    const { error } = await supabase.from("licenses").insert({
+    const { error } = await supabase.from("licenses").insert([{
       user_id: userId, key, active: true, status: "active",
-      plan: "days_30", plan_type: "daily_token", type: "daily_token",
-    });
+      plan: "days_30", plan_type: "messages", type: "daily_token",
+      expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+    }]);
     if (error) return toast.error(error.message);
     toast.success("Licença atribuída!");
     setTokenInput((prev) => ({ ...prev, [userId]: "" }));

@@ -117,6 +117,7 @@ interface Plan {
   features: string[] | null;
   highlight_label: string | null;
   daily_limit: number;
+  daily_message_limit?: number | null;
   display_order: number;
   is_public: boolean;
   is_active: boolean;
@@ -216,8 +217,8 @@ export default function AdminGlobal() {
     setWlPlans((wlPlansRes.data as WlPlan[]) || []);
     setWlAffiliates((wlAffRes.data as WlAffiliate[]) || []);
     setWlSubs((wlSubsRes.data as WlSubscription[]) || []);
-    setPlans((plansRes.data as Plan[]) || []);
-    const { data: flagsData } = await supabase.from("feature_flags").select("*").order("feature", { ascending: true });
+    setPlans((plansRes.data as unknown as Plan[]) || []);
+    const { data: flagsData } = await (supabase as any).from("feature_flags").select("*").order("feature", { ascending: true });
     setFeatureFlags((flagsData as FeatureFlag[]) || []);
     setLoading(false);
   };
@@ -248,11 +249,11 @@ export default function AdminGlobal() {
         billing_cycle: planForm.billing_cycle,
         description: planForm.description || null,
         highlight_label: planForm.highlight_label || null,
-        daily_limit: parseInt(planForm.daily_limit, 10),
+        daily_message_limit: parseInt(planForm.daily_limit, 10),
         display_order: parseInt(planForm.display_order, 10),
         is_public: planForm.is_public,
         is_active: planForm.is_active,
-      }).eq("id", editingPlan.id);
+      } as any).eq("id", editingPlan.id);
       if (error) throw error;
       toast.success("Plano atualizado!");
       setPlanSheetOpen(false);
@@ -273,7 +274,7 @@ export default function AdminGlobal() {
   // ── Feature Flag helpers ─────────────────────────────────────────────────
   const toggleFlagScope = async (flag: FeatureFlag) => {
     const newVal = flag.enabled_for === "all" ? "admin" : "all";
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("feature_flags")
       .update({ enabled_for: newVal, updated_at: new Date().toISOString() })
       .eq("id", flag.id);
@@ -285,7 +286,7 @@ export default function AdminGlobal() {
   const saveFlagEdit = async (id: string) => {
     if (!flagEditValue.trim()) return;
     setFlagSaving(true);
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("feature_flags")
       .update({ enabled_for: flagEditValue.trim(), updated_at: new Date().toISOString() })
       .eq("id", id);

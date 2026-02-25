@@ -36,7 +36,7 @@ export default function OrchestratorLab() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await supabase.from("lab_waitlist").insert({ email: email.trim(), feature: "orchestrator" });
+      await (supabase as any).from("lab_waitlist").insert({ email: email.trim(), feature: "orchestrator" });
       setJoined(true);
       toast.success("🤖 Você está na lista do Orchestrator!");
     } catch {

@@ -34,7 +34,7 @@ export function useFeatureFlag(feature: string): FeatureFlagResult {
     (async () => {
       try {
         // Call the DB function — admin returns true automatically
-        const { data, error } = await supabase.rpc("check_feature_access", {
+        const { data, error } = await (supabase as any).rpc("check_feature_access", {
           p_feature: feature,
         });
         if (cancelled) return;

@@ -37,7 +37,7 @@ export default function StarCrawlLab() {
     if (!email.trim()) return;
     setSubmitting(true);
     try {
-      await supabase.from("lab_waitlist").insert({ email: email.trim(), feature: "starcrawl" });
+      await (supabase as any).from("lab_waitlist").insert({ email: email.trim(), feature: "starcrawl" });
       setJoined(true);
       toast.success("🎉 Você está na lista!");
     } catch {
