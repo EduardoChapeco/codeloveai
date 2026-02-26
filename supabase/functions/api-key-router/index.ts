@@ -3,12 +3,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 /**
  * api-key-router — unified key management + routing
- * Uses table: api_key_vault (not api_keys)
+ * Uses table: api_key_vault
+ * Admin actions require admin role; "get" requires authentication.
  */
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function json(data: unknown, status = 200) {
@@ -22,7 +24,21 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  // ── Auth check ──
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return json({ error: "Não autenticado" }, 401);
+  }
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error: authErr } = await userClient.auth.getUser();
+  if (authErr || !user) return json({ error: "Token inválido" }, 401);
+
   const sc = createClient(supabaseUrl, serviceKey);
 
   let body: Record<string, unknown> = {};
@@ -30,7 +46,22 @@ Deno.serve(async (req) => {
 
   const action = (body.action as string) || "get";
 
+  // Admin-only actions
+  const ADMIN_ACTIONS = new Set(["list_all", "add", "toggle", "delete", "update_usage"]);
+
   try {
+    if (ADMIN_ACTIONS.has(action)) {
+      // Verify admin role
+      const { data: roleData } = await sc
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (!roleData) return json({ error: "Acesso negado — apenas admins" }, 403);
+    }
+
     // ── Admin CRUD ─────────────────────────────────────────────
     if (action === "list_all") {
       const { data, error } = await sc
@@ -43,7 +74,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "add") {
-      const { provider, label, key_encrypted, extra_config, daily_limit, monthly_limit, notes } = body;
+      const { provider, label, key_encrypted } = body;
       if (!provider || !label || !key_encrypted) return json({ error: "provider, label and key_encrypted are required" }, 400);
       const { data, error } = await sc
         .from("api_key_vault")
@@ -61,12 +92,14 @@ Deno.serve(async (req) => {
 
     if (action === "toggle") {
       const { id, is_active } = body;
+      if (!id) return json({ error: "id required" }, 400);
       const { error } = await sc.from("api_key_vault").update({ is_active }).eq("id", id as string);
       if (error) throw error;
       return json({ ok: true });
     }
 
     if (action === "delete") {
+      if (!body.id) return json({ error: "id required" }, 400);
       const { error } = await sc.from("api_key_vault").delete().eq("id", body.id as string);
       if (error) throw error;
       return json({ ok: true });
@@ -74,6 +107,7 @@ Deno.serve(async (req) => {
 
     if (action === "update_usage") {
       const { id } = body as { id: string };
+      if (!id) return json({ error: "id required" }, 400);
       const { data: k } = await sc.from("api_key_vault")
         .select("requests_count")
         .eq("id", id)
@@ -114,7 +148,6 @@ Deno.serve(async (req) => {
     return json({
       id: chosen.id,
       key: chosen.api_key_encrypted,
-      extra_config: {},
     });
 
   } catch (e) {
