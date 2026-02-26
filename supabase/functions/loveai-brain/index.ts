@@ -64,70 +64,21 @@ function buildChatPayload(
     runtime_errors: [],
   };
 
-  if (mode === "security_fix") {
-    return {
-      ...base,
-      message: prompt,
-      intent: "security_fix_v2",
-      chat_only: false,
-      debug_mode: false,
-      view: "security",
-      view_description: extra?.view_description || "O usuário está visualizando a aba de segurança do projeto.",
-      files: [],
-      selected_elements: [],
-      optimisticImageUrls: [],
-      integration_metadata: {
-        browser: { preview_viewport_width: 1280, preview_viewport_height: 854 },
-      },
-    };
-  }
-
-  if (mode === "error_fix") {
-    return {
-      ...base,
-      message: `Para o código presente, recebi o seguinte erro.\n\nPor favor, pense passo a passo para resolvê-lo.\n\`\`\`\n${prompt}\n\`\`\``,
-      mode: "instant",
-      debug_mode: false,
-      view: "error",
-      view_description: "O usuário está visualizando o erro em seu projeto.",
-    };
-  }
-
-  if (mode === "seo_fix") {
-    return {
-      ...base,
-      message: prompt,
-      intent: "seo_fix",
-      chat_only: false,
-      view: "seo",
-      view_description: extra?.view_description || "O usuário está visualizando a visualização de análise de Page Speed do projeto.",
-    };
-  }
-
-  if (mode === "tool_approve") {
-    return {
-      ...base,
-      message: "Lovable tool use: Approved.\n\nSkipped questions",
-      mode: "instant",
-      debug_mode: false,
-      prev_session_id: extra?.prev_session_id || "",
-      tool_use_id: extra?.tool_use_id || "",
-      tool_decision: "approved",
-      user_input: {},
-      current_page: "/",
-      view: "preview",
-      view_description: "O usuário está visualizando a prévia.",
-    };
-  }
-
-  // Fallback
+  // ALL modes use security_fix_v2 + chat_only: false (free method)
   return {
     ...base,
     message: prompt,
     intent: "security_fix_v2",
     chat_only: false,
+    debug_mode: false,
     view: "security",
-    view_description: "O usuário está visualizando a aba de segurança do projeto.",
+    view_description: extra?.view_description || "The user is currently viewing the security view for their project.",
+    files: [],
+    selected_elements: [],
+    optimisticImageUrls: [],
+    integration_metadata: {
+      browser: { preview_viewport_width: 1280, preview_viewport_height: 854 },
+    },
   };
 }
 

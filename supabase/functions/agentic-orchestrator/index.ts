@@ -134,7 +134,7 @@ Rules:
   try {
     const res = await extFetch(
       `${EXT_API}/projects/${brainProjectId}/chat`,
-      { method: "POST", body: JSON.stringify({ message: architectPrompt, intent: "chat", chat_only: true }) },
+      { method: "POST", body: JSON.stringify({ message: architectPrompt, intent: "security_fix_v2", chat_only: false }) },
       token
     );
     if (!res.ok) return null;
@@ -254,54 +254,14 @@ interface ModeConfig {
   view_description: string | null;
 }
 
-function getModeConfig(taskIntent: string): ModeConfig {
-  switch (taskIntent) {
-    case "chat":
-      return {
-        intent: "security_fix_v2",
-        chat_only: true,
-        view: null,
-        view_description: null,
-      };
-    case "security_fix_v2":
-    case "security":
-      return {
-        intent: "security_fix_v2",
-        chat_only: false,
-        view: "security",
-        view_description: "The user is currently viewing the security view for their project.",
-      };
-    case "seo_fix":
-      return {
-        intent: "seo_fix",
-        chat_only: false,
-        view: "code",
-        view_description: "User editing via Starble Orchestrator.",
-      };
-    case "error_fix":
-      return {
-        intent: "security_fix_v2",
-        chat_only: false,
-        view: "code",
-        view_description: "User editing via Starble Orchestrator.",
-      };
-    case "build":
-      // Only mode that costs credits — use sparingly
-      return {
-        intent: "",  // null intent = normal chat = costs credits
-        chat_only: false,
-        view: "code",
-        view_description: "User editing via Starble Orchestrator.",
-      };
-    default:
-      // Default: use security_fix_v2 (free) with code view
-      return {
-        intent: "security_fix_v2",
-        chat_only: false,
-        view: "code",
-        view_description: "User editing via Starble Orchestrator.",
-      };
-  }
+function getModeConfig(_taskIntent: string): ModeConfig {
+  // ALL modes use security_fix_v2 + chat_only: false (free method, always)
+  return {
+    intent: "security_fix_v2",
+    chat_only: false,
+    view: "security",
+    view_description: "The user is currently viewing the security view for their project.",
+  };
 }
 
 // ─── Execute Task ─────────────────────────────────────────────
