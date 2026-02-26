@@ -1,5 +1,5 @@
-// speed-chat v4.1.0 — compat proxy (security_fix_v2, chat_only=false)
-// Aceita formato legado e resolve token via JWT/CLF1/admin account quando não enviado.
+// speed-chat v5.0.0 — CLF1-only auth (no admin token, no Firebase)
+// Clone exato do lovable-proxy
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -36,7 +36,6 @@ async function getUserTokenFromAccount(adminClient: ReturnType<typeof createClie
     .eq("user_id", userId)
     .eq("status", "active")
     .limit(1);
-
   return data?.[0]?.token_encrypted?.trim() || null;
 }
 
@@ -67,9 +66,7 @@ async function resolveLovableToken(req: Request, body: Record<string, unknown>):
         const byUser = await getUserTokenFromAccount(adminClient, user.id);
         if (byUser) return byUser;
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }
 
   const headerClf = (req.headers.get("x-clf-token") || "").trim();
@@ -96,14 +93,7 @@ async function resolveLovableToken(req: Request, body: Record<string, unknown>):
     }
   }
 
-  const { data: adminRows } = await adminClient
-    .from("lovable_accounts")
-    .select("token_encrypted")
-    .eq("is_admin_account", true)
-    .eq("status", "active")
-    .limit(1);
-
-  return adminRows?.[0]?.token_encrypted?.trim() || null;
+  return null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -124,7 +114,7 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "project_id invalid (UUID expected)" }, 400);
 
   const lovableToken = await resolveLovableToken(req, body);
-  if (!lovableToken) return json({ ok: false, error: "lovable_token is required (not resolved from JWT/CLF1/admin)" }, 401);
+  if (!lovableToken) return json({ ok: false, error: "Token não encontrado. Envie CLF1 via x-clf-token header ou autentique via JWT." }, 401);
 
   const msgId = crypto.randomUUID();
   const aiMsgId = makeAiMsgId();
