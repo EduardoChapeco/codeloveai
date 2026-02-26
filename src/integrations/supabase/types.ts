@@ -3919,6 +3919,7 @@ export type Database = {
       user_brain_projects: {
         Row: {
           brain_owner: string
+          brain_skill: string
           created_at: string
           id: string
           last_message_at: string | null
@@ -3930,6 +3931,7 @@ export type Database = {
         }
         Insert: {
           brain_owner?: string
+          brain_skill?: string
           created_at?: string
           id?: string
           last_message_at?: string | null
@@ -3941,6 +3943,7 @@ export type Database = {
         }
         Update: {
           brain_owner?: string
+          brain_skill?: string
           created_at?: string
           id?: string
           last_message_at?: string | null
