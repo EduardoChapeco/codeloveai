@@ -266,7 +266,7 @@ function getModeConfig(_taskIntent: string): ModeConfig {
   };
 }
 
-// ─── Execute Task ─────────────────────────────────────────────
+// ─── Execute Task (via venus-chat chaining) ──────────────────
 async function executeTask(
   sc: SupabaseClient,
   task: { id: string; prompt: string; intent: string; task_index: number; stop_condition?: string },
@@ -279,13 +279,12 @@ async function executeTask(
     started_at: new Date().toISOString(),
   }).eq("id", task.id);
 
-  const mode = getModeConfig(task.intent);
-  await addLog(sc, projectId, `▶ Task #${task.task_index} — intent: ${task.intent} → mode: ${mode.intent || "chat(paid)"}, chat_only: ${mode.chat_only}`, "info", undefined, task.id);
+  await addLog(sc, projectId, `▶ Task #${task.task_index} — sending via venus-chat (task mode, FREE)`, "info", undefined, task.id);
 
   // Inject anti-question prefix
   const enhancedPrompt = AQ_PREFIX + task.prompt;
 
-  // Capture fingerprint BEFORE dispatching (for completion detection layer 2)
+  // Capture fingerprint BEFORE dispatching
   let fingerprintBefore: string | null = null;
   try {
     const fpRes = await extFetch(
@@ -301,79 +300,50 @@ async function executeTask(
   } catch { /* non-critical */ }
 
   try {
-      const msgId = crypto.randomUUID();
-      const aiMsgId = generateTypeId("aimsg");
+    // Send via venus-chat (task mode) — FREE chaining
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-      const payload: Record<string, unknown> = {
-        id: msgId,
-        message: enhancedPrompt,
-        intent: mode.intent || undefined,
-        chat_only: mode.chat_only,
-        ai_message_id: aiMsgId,
-        thread_id: "main",
-        files: [],
-        optimisticImageUrls: [],
-        session_replay: "[]",
-        client_logs: [],
-        network_requests: [],
-        runtime_errors: [],
-        selected_elements: [],
-        debug_mode: false,
-        integration_metadata: { browser: { preview_viewport_width: 1280, preview_viewport_height: 854 } },
-      };
-    if (mode.view) payload.view = mode.view;
-    if (mode.view_description) payload.view_description = mode.view_description;
+    const venusRes = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({
+        task: enhancedPrompt,
+        project_id: lovableProjectId,
+        mode: "task",
+        lovable_token: lovableToken,
+      }),
+    });
 
-    const res = await extFetch(
-      `${EXT_API}/projects/${lovableProjectId}/chat`,
-      { method: "POST", body: JSON.stringify(payload) },
-      lovableToken
-    );
+    const venusData = await venusRes.json().catch(() => ({})) as Record<string, unknown>;
 
-    if (!res.ok) {
-      const errText = await res.text();
-      await addLog(sc, projectId, `Task #${task.task_index} Lovable API error: ${res.status}`, "error", { errText }, task.id);
-      return { success: false, error: `Lovable API ${res.status}: ${errText.slice(0, 200)}` };
+    if (!venusRes.ok || !venusData?.ok) {
+      const errMsg = (venusData?.error as string) || `HTTP ${venusRes.status}`;
+      await addLog(sc, projectId, `Task #${task.task_index} venus-chat error: ${errMsg}`, "error", venusData, task.id);
+      return { success: false, error: errMsg };
     }
 
-    const data = await res.json() as Record<string, unknown>;
-    const messageId = (data.id || data.message_id) as string | undefined;
+    const messageId = (venusData.msgId as string) || undefined;
 
     await sc.from("orchestrator_tasks").update({
       lovable_message_id: messageId || null,
     }).eq("id", task.id);
 
-    await addLog(sc, projectId, `Task #${task.task_index} sent (msgId: ${messageId}). Awaiting completion…`, "info", undefined, task.id);
+    await addLog(sc, projectId, `Task #${task.task_index} sent via venus (msgId: ${messageId}). Awaiting completion…`, "info", undefined, task.id);
 
-    // ── 3-Layer Completion Detection ──
-    // Layer 1: Relay response from extension WS bridge
-    // Layer 2: Source-code fingerprint change
-    // Layer 3: latest-message polling (streaming complete)
-    const relayMaxMs = 180_000;
-    const relayStart = Date.now();
+    // ── Completion Detection (fingerprint + latest-message polling) ──
+    const maxMs = 180_000;
+    const start = Date.now();
     let relayReceived = false;
 
-    // Initial delay before polling (Lovable needs time to start processing)
-    await new Promise(r => setTimeout(r, 8000));
+    await new Promise(r => setTimeout(r, 10000));
 
-    while (Date.now() - relayStart < relayMaxMs) {
-      // Layer 1: Check relay messages
-      const { data: relayRows } = await sc
-        .from("orchestration_messages")
-        .select("id, created_at")
-        .eq("project_id", projectId)
-        .gte("created_at", new Date(relayStart - 1000).toISOString())
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (relayRows && relayRows.length > 0) {
-        relayReceived = true;
-        await addLog(sc, projectId, `✅ Task #${task.task_index} relay response confirmed`, "info", undefined, task.id);
-        break;
-      }
-
-      // Layer 2: Fingerprint change detection (if we have a baseline)
-      if (fingerprintBefore && !mode.chat_only) {
+    while (Date.now() - start < maxMs) {
+      // Fingerprint change detection
+      if (fingerprintBefore) {
         try {
           const fpRes2 = await extFetch(
             `${EXT_API}/projects/${lovableProjectId}/source-code`,
@@ -386,8 +356,7 @@ async function executeTask(
             const fingerprintAfter = files2.map(f => `${f.path}:${f.size ?? 0}`).sort().join("|");
             if (fingerprintAfter !== fingerprintBefore) {
               relayReceived = true;
-              await addLog(sc, projectId, `✅ Task #${task.task_index} source-code changed (fingerprint diff)`, "info", undefined, task.id);
-              // Update project fingerprint
+              await addLog(sc, projectId, `✅ Task #${task.task_index} source changed (fingerprint diff)`, "info", undefined, task.id);
               await sc.from("orchestrator_projects").update({ source_fingerprint: fingerprintAfter }).eq("id", projectId);
               break;
             }
@@ -395,7 +364,7 @@ async function executeTask(
         } catch { /* non-critical */ }
       }
 
-      // Layer 3: Poll Lovable's latest-message for streaming completion
+      // Latest-message streaming complete
       try {
         const pollRes = await extFetch(
           `${EXT_API}/projects/${lovableProjectId}/latest-message`,
@@ -405,7 +374,7 @@ async function executeTask(
         if (pollRes.ok) {
           const pollData = await pollRes.json() as Record<string, unknown>;
           if (pollData && !pollData.is_streaming && pollData.content) {
-            await addLog(sc, projectId, `✅ Task #${task.task_index} Lovable streaming complete (direct poll)`, "info", undefined, task.id);
+            await addLog(sc, projectId, `✅ Task #${task.task_index} Lovable streaming complete`, "info", undefined, task.id);
             relayReceived = true;
             break;
           }
@@ -416,7 +385,7 @@ async function executeTask(
     }
 
     if (!relayReceived) {
-      await addLog(sc, projectId, `⚠️ Task #${task.task_index} completion timeout (180s) — assuming partial completion`, "warn", undefined, task.id);
+      await addLog(sc, projectId, `⚠️ Task #${task.task_index} timeout (180s) — assuming partial`, "warn", undefined, task.id);
     }
 
     return { success: true, messageId, relayReceived };
