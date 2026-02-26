@@ -23,18 +23,12 @@ function genId(prefix: string): string {
 
 const corsHeaders = {
   "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-clf-token, x-clf-extension, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-clf-token, x-clf-extension, x-clf-hwid, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PLAN_PERMISSIONS: Record<string, string[]> = {
-  free:    [],
-  trial:   [],
-  speed:   ["speed"],
-  booster: ["speed", "booster"],
-  labs:    ["speed", "booster", "labs"],
-  pro:     ["speed", "booster", "labs"],
-};
+// Extension permissions are now resolved from DB (plan_extensions table).
+// Hardcoded fallback removed to prevent bypasses.
 
 interface ValidateResult {
   ok: boolean;
@@ -72,25 +66,9 @@ async function validateCLFToken(
     if (!data.valid) return { ok: false, error: "Licença inválida." };
 
     const plan: string = (data.plan || data.plan_type || "free").toLowerCase();
-    const addons: string[] = data.addons || [];
 
-    if ((plan === "free" || plan === "trial") && extensionRequested === "speed") {
-      return { ok: true, plan, licenseData: data };
-    }
-
-    const allowedByPlan = PLAN_PERMISSIONS[plan] || [];
-    const allowedByAddon = addons.map((a: string) => a.toLowerCase());
-    const allAllowed = [...allowedByPlan, ...allowedByAddon];
-
-    if (!allAllowed.includes(extensionRequested)) {
-      const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
-      return {
-        ok: false,
-        error: `Seu plano ${planLabel} não inclui a extensão "${extensionRequested}". Faça upgrade em starble.lovable.app.`,
-        plan,
-      };
-    }
-
+    // Extension access is validated later against DB (plan_extensions).
+    // CLF token validation only checks license validity here.
     return { ok: true, plan, licenseData: data };
   } catch {
     return { ok: false, error: "Erro de conexão ao validar licença." };
@@ -182,13 +160,26 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Validate extension access via plan_extensions table (CLF auth only)
-  if (auth.authMethod === "clf" && auth.licenseId) {
+  // Validate extension access via plan_extensions table (ALL auth methods)
+  if (auth.licenseId) {
     const { data: licRow } = await adminClient
       .from("licenses")
-      .select("plan_id")
+      .select("plan_id, device_id, user_id")
       .eq("id", auth.licenseId)
       .maybeSingle();
+
+    // ── Device binding check ──
+    const hwid = req.headers.get("x-clf-hwid") || "";
+    if (hwid && licRow) {
+      if (!licRow.device_id) {
+        await adminClient.from("licenses").update({ device_id: hwid }).eq("id", auth.licenseId);
+      } else if (licRow.device_id !== hwid) {
+        return new Response(
+          JSON.stringify({ error: "Dispositivo não autorizado. Esta licença está vinculada a outro computador.", blocked: true }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     if (licRow?.plan_id) {
       const { data: peData } = await adminClient
@@ -198,23 +189,55 @@ Deno.serve(async (req: Request) => {
 
       if (peData) {
         const extIds = peData.map((pe: any) => pe.extension_id);
+        let allowedSlugs: string[] = [];
         if (extIds.length > 0) {
           const { data: exts } = await adminClient
             .from("extension_catalog")
             .select("slug")
             .in("id", extIds);
-          const allowedSlugs = (exts || []).map((e: any) => e.slug);
-          if (!allowedSlugs.includes(extensionId)) {
+          allowedSlugs = (exts || []).map((e: any) => e.slug);
+        }
+
+        // ── Labs restriction: only tenant_owners ──
+        if (allowedSlugs.includes("labs") && extensionId === "labs") {
+          const { data: tenantUser } = await adminClient
+            .from("tenant_users")
+            .select("role")
+            .eq("user_id", licRow.user_id || auth.userId)
+            .eq("role", "tenant_owner")
+            .maybeSingle();
+          if (!tenantUser) {
             return new Response(
               JSON.stringify({
-                error: `Seu plano não inclui a extensão "${extensionId}". Faça upgrade em starble.lovable.app.`,
+                error: "Starble Labs é exclusivo para proprietários de White Label.",
                 plan: auth.plan,
-                allowedExtensions: allowedSlugs,
               }),
               { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
         }
+
+        if (!allowedSlugs.includes(extensionId)) {
+          return new Response(
+            JSON.stringify({
+              error: `Seu plano não inclui a extensão "${extensionId}". Faça upgrade em starble.lovable.app.`,
+              plan: auth.plan,
+              allowedExtensions: allowedSlugs,
+            }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    } else {
+      // No plan_id linked = no extension access (except speed for free/trial via plan_extensions)
+      if (extensionId !== "speed") {
+        return new Response(
+          JSON.stringify({
+            error: `Seu plano não inclui a extensão "${extensionId}". Faça upgrade em starble.lovable.app.`,
+            plan: auth.plan,
+          }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
   }

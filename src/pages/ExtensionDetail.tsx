@@ -38,7 +38,7 @@ interface LinkedPlan {
   billing_cycle: string;
 }
 
-const tierLabels: Record<string, string> = { free: "Grátis", pro: "Pro", enterprise: "Enterprise" };
+const tierLabels: Record<string, string> = { free: "Grátis", pro: "Pro", enterprise: "Enterprise", white_label_only: "White Label" };
 
 export default function ExtensionDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -114,6 +114,13 @@ export default function ExtensionDetail() {
       return;
     }
     if (!ext) return;
+
+    // Labs is restricted to White Label owners only
+    if (ext.tier === "white_label_only") {
+      toast.error("Starble Labs é exclusivo para proprietários de White Label.");
+      return;
+    }
+
     if (!userHasAccess) {
       toast.error("Faça upgrade do seu plano para acessar esta extensão.");
       navigate("/checkout");

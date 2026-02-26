@@ -138,23 +138,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fallback plan-based permissions if no plan_extensions
-    if (allowedExtensions.length === 0) {
-      const planLower = (license.plan || "free").toLowerCase();
-      const PLAN_MAP: Record<string, string[]> = {
-        free: [],
-        trial: [],
-        speed: ["speed"],
-        individual: ["speed"],
-        individual_mensal: ["speed"],
-        pro: ["speed", "boost"],
-        pro_mensal: ["speed", "boost"],
-        booster: ["speed", "boost"],
-        enterprise: ["speed", "boost", "labs"],
-        labs: ["speed", "boost", "labs"],
-      };
-      allowedExtensions = PLAN_MAP[planLower] || [];
+    // ── Labs restriction: ONLY tenant_owners can access ──
+    if (allowedExtensions.includes("labs")) {
+      const { data: tenantUser } = await adminClient
+        .from("tenant_users")
+        .select("role")
+        .eq("user_id", license.user_id)
+        .eq("role", "tenant_owner")
+        .maybeSingle();
+      if (!tenantUser) {
+        allowedExtensions = allowedExtensions.filter(e => e !== "labs");
+      }
     }
+
+    // No hardcoded fallback — all access is DB-driven via plan_extensions
 
     // Determine billingType
     const billingType = license.plan_type === "hourly" ? "time" : "messages";
