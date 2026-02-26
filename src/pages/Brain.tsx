@@ -7,31 +7,47 @@ import AppLayout from "@/components/AppLayout";
 import {
   Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
   Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon, ExternalLink,
-  MessageSquare, ChevronLeft, RotateCcw,
+  MessageSquare, ChevronLeft, RotateCcw, Trash2, Shield, Server, BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-type BrainType = "general" | "design" | "code" | "scraper" | "migration";
+type BrainSkill = "general" | "design" | "code" | "scraper" | "migration" | "data" | "devops" | "security";
 type ConvoStatus = "pending" | "processing" | "completed" | "timeout" | "failed";
+
+interface BrainEntry {
+  id: string;
+  name: string;
+  project_id: string;
+  project_url: string | null;
+  status: string;
+  skill: string;
+  skills: string[];
+  workspace_id: string;
+  last_message_at: string | null;
+  created_at: string;
+}
 
 interface Conversation {
   id: string;
   user_message: string;
   ai_response: string | null;
-  brain_type: BrainType;
+  brain_type: BrainSkill;
   status: ConvoStatus;
   created_at: string;
   target_project_id: string | null;
 }
 
-const brainTypes: { id: BrainType; label: string; icon: typeof BrainIcon; desc: string }[] = [
-  { id: "general", label: "Geral", icon: Sparkles, desc: "Perguntas e respostas gerais" },
-  { id: "design", label: "Design", icon: Palette, desc: "Prompts de design detalhados" },
-  { id: "code", label: "Code", icon: Code2, desc: "Geração de código" },
-  { id: "scraper", label: "Scraper", icon: Search, desc: "Scripts de scraping" },
-  { id: "migration", label: "Migration", icon: Database, desc: "Scripts de migração SQL" },
+const ALL_SKILLS: { id: BrainSkill; label: string; icon: typeof BrainIcon; desc: string; color: string }[] = [
+  { id: "general", label: "Geral", icon: Sparkles, desc: "Assistente técnico completo", color: "bg-blue-500/15 text-blue-500" },
+  { id: "design", label: "Design", icon: Palette, desc: "UX/UI, Design Systems, Branding", color: "bg-pink-500/15 text-pink-500" },
+  { id: "code", label: "Code", icon: Code2, desc: "TypeScript, React, Node, Deno", color: "bg-emerald-500/15 text-emerald-500" },
+  { id: "scraper", label: "Scraper", icon: Search, desc: "Web Scraping, Crawlers, NLP", color: "bg-amber-500/15 text-amber-500" },
+  { id: "migration", label: "Migration", icon: Database, desc: "PostgreSQL, SQL, Modelagem", color: "bg-violet-500/15 text-violet-500" },
+  { id: "data", label: "Data", icon: BarChart3, desc: "ML, Estatística, ETL, Analytics", color: "bg-cyan-500/15 text-cyan-500" },
+  { id: "devops", label: "DevOps", icon: Server, desc: "CI/CD, Kubernetes, Infra", color: "bg-orange-500/15 text-orange-500" },
+  { id: "security", label: "Security", icon: Shield, desc: "AppSec, Pentesting, RLS, OAuth", color: "bg-red-500/15 text-red-500" },
 ];
 
 const PROCESSING_PHASES = [
@@ -46,18 +62,15 @@ const PROCESSING_PHASES = [
 
 function ProcessingIndicator({ startTime }: { startTime: number }) {
   const [elapsed, setElapsed] = useState(0);
-
   useEffect(() => {
     const interval = setInterval(() => setElapsed(Date.now() - startTime), 500);
     return () => clearInterval(interval);
   }, [startTime]);
-
   let phase = PROCESSING_PHASES[0];
   for (let i = PROCESSING_PHASES.length - 1; i >= 0; i--) {
     if (elapsed >= PROCESSING_PHASES[i].duration) { phase = PROCESSING_PHASES[i]; break; }
   }
   const progress = Math.min((elapsed / 90000) * 100, 95);
-
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 text-primary">
@@ -65,180 +78,229 @@ function ProcessingIndicator({ startTime }: { startTime: number }) {
         <span className="text-sm font-medium">{phase.icon} {phase.text}</span>
       </div>
       <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-        <div
-          className="h-full bg-primary/60 rounded-full transition-all duration-1000 ease-out"
-          style={{ width: `${progress}%` }}
-        />
+        <div className="h-full bg-primary/60 rounded-full transition-all duration-1000 ease-out" style={{ width: `${progress}%` }} />
       </div>
       <span className="text-[10px] text-muted-foreground">{Math.floor(elapsed / 1000)}s</span>
     </div>
   );
 }
 
-function groupByDate(convos: Conversation[]): Record<string, Conversation[]> {
-  const groups: Record<string, Conversation[]> = {};
-  const now = new Date();
-  const today = now.toDateString();
-  const yesterday = new Date(now.getTime() - 86400000).toDateString();
-  convos.forEach(c => {
-    const d = new Date(c.created_at);
-    const ds = d.toDateString();
-    let label: string;
-    if (ds === today) label = "Hoje";
-    else if (ds === yesterday) label = "Ontem";
-    else {
-      const diff = Math.floor((now.getTime() - d.getTime()) / 86400000);
-      if (diff < 7) label = "Últimos 7 dias";
-      else if (diff < 30) label = "Últimos 30 dias";
-      else label = d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+// ── Onboarding Step ──
+function BrainOnboarding({ onCreated, creating }: { onCreated: () => void; creating: boolean }) {
+  const [selectedSkills, setSelectedSkills] = useState<BrainSkill[]>(["general"]);
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const toggleSkill = (skill: BrainSkill) => {
+    setSelectedSkills(prev =>
+      prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
+    );
+  };
+
+  const handleCreate = async () => {
+    if (selectedSkills.length === 0) { toast.error("Selecione ao menos uma skill."); return; }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("brain", {
+        body: {
+          action: "setup",
+          skills: selectedSkills,
+          name: name.trim() || undefined,
+        },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Erro ao criar Brain");
+      toast.success("Brain criado com sucesso! 🧠");
+      onCreated();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setLoading(false);
     }
-    if (!groups[label]) groups[label] = [];
-    groups[label].push(c);
-  });
-  return groups;
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-16">
+      <div className="text-center mb-8">
+        <div className="h-16 w-16 rounded-3xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+          <BrainIcon className="h-8 w-8 text-primary" />
+        </div>
+        <h1 className="text-2xl font-bold mb-2">Criar novo Star AI Brain</h1>
+        <p className="text-muted-foreground text-sm">Selecione as especialidades. Cada skill injeta um perfil PhD/Sênior dedicado.</p>
+      </div>
+
+      {/* Name */}
+      <div className="mb-6">
+        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Nome do Brain (opcional)</label>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Ex: Meu Brain Full-Stack"
+          className="w-full h-10 px-4 rounded-xl bg-muted/50 border border-border/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          maxLength={60}
+        />
+      </div>
+
+      {/* Skills grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        {ALL_SKILLS.map(s => {
+          const active = selectedSkills.includes(s.id);
+          return (
+            <button
+              key={s.id}
+              onClick={() => toggleSkill(s.id)}
+              className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all text-center ${
+                active
+                  ? "border-primary bg-primary/5 shadow-sm"
+                  : "border-border/30 hover:border-border/60 bg-muted/20"
+              }`}
+            >
+              {active && (
+                <div className="absolute top-2 right-2">
+                  <CheckCircle className="h-4 w-4 text-primary" />
+                </div>
+              )}
+              <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${s.color}`}>
+                <s.icon className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-medium">{s.label}</span>
+              <span className="text-[10px] text-muted-foreground leading-tight">{s.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedSkills.length > 1 && (
+        <p className="text-xs text-muted-foreground text-center mb-4">
+          {selectedSkills.length} skills selecionadas — cada uma será injetada como prompt de sistema no projeto.
+        </p>
+      )}
+
+      <button
+        onClick={handleCreate}
+        disabled={loading || creating || selectedSkills.length === 0}
+        className="w-full h-12 rounded-2xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+      >
+        {loading || creating ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando Brain...</> : <><Plus className="h-4 w-4" /> Criar Brain</>}
+      </button>
+    </div>
+  );
 }
 
+// ── Brain Card ──
+function BrainCard({ brain, active, onSelect, onDelete }: { brain: BrainEntry; active: boolean; onSelect: () => void; onDelete: () => void }) {
+  const skills = brain.skills || [brain.skill];
+  return (
+    <div
+      onClick={onSelect}
+      className={`group cursor-pointer p-3 rounded-2xl border-2 transition-all ${
+        active ? "border-primary bg-primary/5" : "border-border/20 hover:border-border/50 bg-muted/10"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <BrainIcon className="h-4 w-4 text-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold truncate">{brain.name}</p>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {skills.map(s => {
+              const meta = ALL_SKILLS.find(sk => sk.id === s);
+              return (
+                <span key={s} className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${meta?.color || "bg-muted text-muted-foreground"}`}>
+                  {meta?.label || s}
+                </span>
+              );
+            })}
+          </div>
+          {brain.last_message_at && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Último uso: {new Date(brain.last_message_at).toLocaleDateString("pt-BR")}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(); }}
+          className="opacity-0 group-hover:opacity-100 h-7 w-7 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all shrink-0"
+          title="Remover Brain"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ──
 export default function BrainPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   useSEO({ title: "Star AI" });
 
-  const [brainActive, setBrainActive] = useState<boolean | null>(null);
-  const [brainProjectUrl, setBrainProjectUrl] = useState<string | null>(null);
-  const [brainWorkspaceId, setBrainWorkspaceId] = useState<string | null>(null);
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
-  const [projectMissing, setProjectMissing] = useState(false);
+  const [brains, setBrains] = useState<BrainEntry[]>([]);
+  const [activeBrainId, setActiveBrainId] = useState<string | null>(null);
   const [lovableConnected, setLovableConnected] = useState<boolean | null>(null);
-  const [settingUp, setSettingUp] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [allConversations, setAllConversations] = useState<Conversation[]>([]);
-  const [currentConvoId, setCurrentConvoId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [brainType, setBrainType] = useState<BrainType>("general");
+  const [brainType, setBrainType] = useState<BrainSkill>("general");
   const [sending, setSending] = useState(false);
   const [sendStartTime, setSendStartTime] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const historyConvos = useMemo(() => {
-    return allConversations.filter(c => c.status === "completed" || c.status === "timeout" || c.status === "failed");
-  }, [allConversations]);
-
-  const groupedHistory = useMemo(() => groupByDate(historyConvos), [historyConvos]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (!user) return;
-    checkBrainStatus();
-    loadHistory();
+    if (user) { loadStatus(); loadHistory(); }
   }, [user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [allConversations]);
 
-  const checkBrainStatus = useCallback(async () => {
+  const loadStatus = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("brain", {
-        body: { action: "status" },
-      });
-      if (!error && data) {
-        const payload = data as any;
-        setBrainActive(payload?.active);
-        setLovableConnected(payload?.connected !== false);
-        setBrainProjectUrl(payload?.project_url || null);
-        setBrainWorkspaceId(payload?.stored_workspace_id || payload?.brain?.lovable_workspace_id || null);
-        setCurrentWorkspaceId(payload?.current_workspace_id || null);
-        setProjectMissing(Boolean(payload?.project_missing));
-
-        const persistedSkill = payload?.skill;
-        if (persistedSkill && brainTypes.some(bt => bt.id === persistedSkill)) {
-          setBrainType(persistedSkill as BrainType);
-        }
-      } else {
-        setBrainActive(false);
-        setLovableConnected(false);
-        setProjectMissing(false);
+      const { data, error } = await supabase.functions.invoke("brain", { body: { action: "status" } });
+      if (error || !data) { setLovableConnected(false); return; }
+      setLovableConnected(data.connected !== false);
+      setCreating(!!data.creating);
+      const brainList = (data.brains || []) as BrainEntry[];
+      setBrains(brainList);
+      if (brainList.length > 0 && !activeBrainId) {
+        setActiveBrainId(brainList[0].id);
+        const primarySkill = brainList[0].skill as BrainSkill;
+        if (ALL_SKILLS.some(s => s.id === primarySkill)) setBrainType(primarySkill);
       }
-    } catch {
-      setBrainActive(false);
-      setProjectMissing(false);
-    }
-  }, []);
+      setShowOnboarding(brainList.length === 0 && !data.creating);
+    } catch { setLovableConnected(false); }
+  }, [activeBrainId]);
 
   const loadHistory = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("brain", {
-        body: { action: "history", limit: 100 },
+      const { data } = await supabase.functions.invoke("brain", {
+        body: { action: "history", limit: 100, brain_id: activeBrainId || undefined },
       });
-      if (!error && data?.conversations) {
-        setAllConversations(data.conversations.reverse());
-      }
-    } catch { /* silent */ }
-  }, []);
+      if (data?.conversations) setAllConversations(data.conversations.reverse());
+    } catch {}
+  }, [activeBrainId]);
 
-  const setupBrain = async () => {
-    setSettingUp(true);
+  useEffect(() => { if (activeBrainId) loadHistory(); }, [activeBrainId]);
+
+  const deleteBrain = async (brainId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("brain", {
-        body: { action: "setup", skill: brainType },
-      });
-
-      const payload = data as any;
-      if (error || payload?.error) {
-        const code = payload?.code;
-
-        if (code === "project_not_found_in_workspace") {
-          setBrainActive(true);
-          setProjectMissing(true);
-          setBrainProjectUrl(payload?.project_url || null);
-          setBrainWorkspaceId(payload?.stored_workspace_id || null);
-          setCurrentWorkspaceId(payload?.current_workspace_id || null);
-          toast.error(`Projeto não encontrado no workspace atual. Workspace salvo: ${payload?.stored_workspace_id || "desconhecido"}`);
-          return;
-        }
-
-        if (code === "brain_creating") {
-          toast.error("Star AI ainda está sendo criado. Aguarde alguns segundos.");
-          return;
-        }
-
-        throw new Error(payload?.error || error?.message || "Erro ao ativar Star AI");
-      }
-
-      setBrainActive(true);
-      setProjectMissing(false);
-      setBrainProjectUrl(payload?.project_url || null);
-      setBrainWorkspaceId(payload?.stored_workspace_id || null);
-      setCurrentWorkspaceId(payload?.current_workspace_id || null);
-      toast.success("Star AI ativado com sucesso! 🧠");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao ativar Star AI");
-    } finally {
-      setSettingUp(false);
-    }
+      const { data, error } = await supabase.functions.invoke("brain", { body: { action: "delete", brain_id: brainId } });
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+      toast.success("Brain removido.");
+      if (activeBrainId === brainId) setActiveBrainId(null);
+      loadStatus();
+    } catch (e: any) { toast.error(e.message); }
   };
 
-  const resetBrain = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke("brain", {
-        body: { action: "reset" },
-      });
-      if (error) throw new Error((data as any)?.error || error.message);
-      if ((data as any)?.error) throw new Error((data as any).error);
-      setBrainActive(false);
-      setAllConversations([]);
-      setCurrentConvoId(null);
-      toast.success("Star AI resetado! Clique em Ativar para recriar.");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao resetar Star AI");
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!message.trim() || sending) return;
+  const sendMsg = async () => {
+    if (!message.trim() || sending || !activeBrainId) return;
     const userMsg = message.trim();
     setMessage("");
     setSending(true);
@@ -251,71 +313,27 @@ export default function BrainPage() {
       created_at: new Date().toISOString(), target_project_id: null,
     };
     setAllConversations(prev => [...prev, tempConvo]);
-    setCurrentConvoId(tempId);
 
     try {
       const { data, error } = await supabase.functions.invoke("brain", {
-        body: { action: "send", message: userMsg, brain_type: brainType },
+        body: { action: "send", message: userMsg, brain_type: brainType, brain_id: activeBrainId },
       });
-      if (error) {
-        const payload = data as any;
-        const code = payload?.code;
-        if (code === "no_token") { setLovableConnected(false); setBrainActive(false); }
-        if (code === "brain_inactive") { setBrainActive(false); }
-        if (code === "project_not_found_in_workspace") {
-          setBrainActive(true);
-          setProjectMissing(true);
-          setBrainProjectUrl(payload?.project_url || null);
-          setBrainWorkspaceId(payload?.stored_workspace_id || null);
-          setCurrentWorkspaceId(payload?.current_workspace_id || null);
-        }
-        throw new Error(payload?.error || error.message);
+      if (error || data?.error) {
+        if (data?.code === "no_token") setLovableConnected(false);
+        if (data?.code === "brain_inactive") setShowOnboarding(true);
+        throw new Error(data?.error || error?.message);
       }
-      if (data?.error) {
-        const payload = data as any;
-        const code = payload?.code;
-        if (code === "no_token") { setLovableConnected(false); setBrainActive(false); }
-        if (code === "brain_inactive") { setBrainActive(false); }
-        if (code === "project_not_found_in_workspace") {
-          setBrainActive(true);
-          setProjectMissing(true);
-          setBrainProjectUrl(payload?.project_url || null);
-          setBrainWorkspaceId(payload?.stored_workspace_id || null);
-          setCurrentWorkspaceId(payload?.current_workspace_id || null);
-        }
-        throw new Error(payload.error);
-      }
-
-      const conversationId = data.conversation_id || tempId;
-      const responseText = data.response || null;
       const finalStatus = data.status === "completed" ? "completed" : data.status === "timeout" ? "timeout" : "failed";
-
       setAllConversations(prev =>
-        prev.map(c => c.id === tempId ? { ...c, id: conversationId, ai_response: responseText, status: finalStatus as ConvoStatus } : c)
+        prev.map(c => c.id === tempId ? { ...c, id: data.conversation_id || tempId, ai_response: data.response, status: finalStatus as ConvoStatus } : c)
       );
-      setCurrentConvoId(conversationId);
-      if (finalStatus === "timeout") toast.error("Tempo esgotado. Tente novamente com uma pergunta mais curta.");
-    } catch (err: any) {
-      setAllConversations(prev => prev.map(c => c.id === tempId ? { ...c, status: "failed", ai_response: err.message || "Erro desconhecido" } : c));
-      toast.error(err.message || "Erro ao processar");
+    } catch (e: any) {
+      setAllConversations(prev => prev.map(c => c.id === tempId ? { ...c, status: "failed", ai_response: e.message } : c));
+      toast.error(e.message);
     } finally {
       setSending(false);
       setSendStartTime(null);
     }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  };
-
-  const copyResponse = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success("Copiado!");
-  };
-
-  const retryMessage = (convo: Conversation) => {
-    setMessage(convo.user_message);
-    setBrainType(convo.brain_type);
   };
 
   if (authLoading || !user) {
@@ -339,30 +357,23 @@ export default function BrainPage() {
     );
   }
 
-  if (brainActive === false) {
+  if (showOnboarding || (brains.length === 0 && !creating)) {
     return (
       <AppLayout>
-        <div className="max-w-lg mx-auto px-6 py-20 text-center">
-          <div className="h-20 w-20 rounded-3xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
-            <BrainIcon className="h-10 w-10 text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold mb-3">Star AI</h1>
-          <p className="text-muted-foreground mb-8">Sua IA pessoal alimentada pelo Lovable — sem gastar créditos.</p>
-          <button onClick={setupBrain} disabled={settingUp} className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
-            {settingUp ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando...</> : <><Power className="h-4 w-4" /> Ativar Star AI</>}
-          </button>
-        </div>
+        <BrainOnboarding
+          creating={creating}
+          onCreated={() => { setShowOnboarding(false); loadStatus(); }}
+        />
       </AppLayout>
     );
   }
 
-  if (brainActive === null) {
+  if (lovableConnected === null) {
     return <AppLayout><div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
 
-  const displayConvos = currentConvoId
-    ? allConversations.filter(c => c.id === currentConvoId)
-    : allConversations.filter(c => c.status === "processing" || allConversations.length <= 5);
+  const activeBrain = brains.find(b => b.id === activeBrainId);
+  const activeSkills = activeBrain?.skills || [brainType];
 
   return (
     <AppLayout>
@@ -373,39 +384,49 @@ export default function BrainPage() {
         {/* Sidebar */}
         <div className={`
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden"}
-          absolute lg:relative z-30 lg:z-auto w-72 lg:w-64 h-full
+          absolute lg:relative z-30 lg:z-auto w-72 lg:w-72 h-full
           bg-background border-r border-border/30 flex flex-col shrink-0 transition-all duration-200
         `}>
-          <div className="p-3 border-b border-border/20 flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Histórico</span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => { setCurrentConvoId(null); setMessage(""); }} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-accent transition-colors" title="Nova conversa">
-                <Plus className="h-4 w-4" />
-              </button>
-              <button onClick={() => setSidebarOpen(false)} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-accent transition-colors lg:hidden">
-                <ChevronLeft className="h-4 w-4" />
-              </button>
+          <div className="p-3 border-b border-border/20">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Brains</span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setShowOnboarding(true)} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-accent transition-colors" title="Novo Brain">
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button onClick={() => setSidebarOpen(false)} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-accent transition-colors lg:hidden">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {brains.map(b => (
+                <BrainCard
+                  key={b.id}
+                  brain={b}
+                  active={activeBrainId === b.id}
+                  onSelect={() => { setActiveBrainId(b.id); setSidebarOpen(false); }}
+                  onDelete={() => deleteBrain(b.id)}
+                />
+              ))}
+              {brains.length === 0 && creating && (
+                <div className="flex items-center gap-2 text-muted-foreground text-xs p-3">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Criando Brain...
+                </div>
+              )}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-3">
-            {Object.keys(groupedHistory).length === 0 && (
+
+          {/* Conversation history */}
+          <div className="flex-1 overflow-y-auto p-2">
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-2 mb-2">Histórico</p>
+            {allConversations.filter(c => c.status !== "processing").length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-4">Nenhuma conversa ainda</p>
             )}
-            {Object.entries(groupedHistory).map(([label, convos]) => (
-              <div key={label}>
-                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-2 mb-1">{label}</p>
-                {convos.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => { setCurrentConvoId(c.id); setBrainType(c.brain_type); setSidebarOpen(false); }}
-                    className={`w-full text-left px-2.5 py-2 rounded-xl text-xs truncate transition-all ${
-                      currentConvoId === c.id ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-accent"
-                    }`}
-                  >
-                    <MessageSquare className="h-3 w-3 inline mr-1.5 opacity-50" />
-                    {c.user_message.slice(0, 40)}{c.user_message.length > 40 ? "..." : ""}
-                  </button>
-                ))}
+            {allConversations.filter(c => c.status !== "processing").map(c => (
+              <div key={c.id} className="px-2.5 py-2 rounded-xl text-xs text-muted-foreground truncate">
+                <MessageSquare className="h-3 w-3 inline mr-1.5 opacity-50" />
+                {c.user_message.slice(0, 40)}{c.user_message.length > 40 ? "..." : ""}
               </div>
             ))}
           </div>
@@ -422,110 +443,72 @@ export default function BrainPage() {
               <BrainIcon className="h-4 w-4 text-primary" />
             </div>
             <div className="min-w-0 mr-auto">
-              <p className="text-sm font-semibold leading-tight">Star AI</p>
-              <p className="text-[11px] text-muted-foreground leading-tight">
-                {projectMissing ? "🟠 Projeto não encontrado no workspace atual" : "🟢 Ativo"}
-              </p>
-              {brainWorkspaceId && (
-                <p className="text-[10px] text-muted-foreground leading-tight truncate">
-                  Workspace salvo: <span className="font-mono">{brainWorkspaceId}</span>
-                  {currentWorkspaceId && currentWorkspaceId !== brainWorkspaceId ? (
-                    <>
-                      {" "}· atual: <span className="font-mono">{currentWorkspaceId}</span>
-                    </>
-                  ) : null}
-                </p>
-              )}
+              <p className="text-sm font-semibold leading-tight">{activeBrain?.name || "Star AI"}</p>
+              <div className="flex items-center gap-1 mt-0.5">
+                {activeSkills.map(s => {
+                  const meta = ALL_SKILLS.find(sk => sk.id === s);
+                  return meta ? (
+                    <span key={s} className={`text-[9px] px-1.5 py-0.5 rounded-md font-medium ${meta.color}`}>{meta.label}</span>
+                  ) : null;
+                })}
+              </div>
             </div>
 
-            {brainProjectUrl && (
-              <a
-                href={brainProjectUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-accent text-foreground text-[11px] font-medium hover:bg-accent/80 transition-colors shrink-0"
-                title="Acessar projeto Brain no Lovable"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Acessar Projeto
+            {activeBrain?.project_url && (
+              <a href={activeBrain.project_url} target="_blank" rel="noopener noreferrer"
+                className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-accent text-foreground text-[11px] font-medium hover:bg-accent/80 transition-colors shrink-0">
+                <ExternalLink className="h-3.5 w-3.5" /> Projeto
               </a>
             )}
 
-            <button onClick={resetBrain} title="Resetar Star AI" className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0">
-              <RotateCcw className="h-4 w-4" />
-            </button>
-
-            {/* Brain type chips */}
+            {/* Skill selector for sending */}
             <div className="hidden sm:flex items-center gap-1">
-              {brainTypes.map(bt => (
-                <button
-                  key={bt.id}
-                  onClick={() => setBrainType(bt.id)}
-                  title={bt.desc}
-                  className={`h-7 px-2.5 rounded-full text-[11px] font-medium flex items-center gap-1 transition-all ${
-                    brainType === bt.id
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  <bt.icon className="h-3 w-3" />
-                  {bt.label}
-                </button>
-              ))}
+              {activeSkills.map(s => {
+                const meta = ALL_SKILLS.find(sk => sk.id === s);
+                if (!meta) return null;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setBrainType(s as BrainSkill)}
+                    className={`h-7 px-2.5 rounded-full text-[11px] font-medium flex items-center gap-1 transition-all ${
+                      brainType === s ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <meta.icon className="h-3 w-3" /> {meta.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Mobile brain type selector */}
+          {/* Mobile skill selector */}
           <div className="sm:hidden flex items-center gap-1 px-3 py-1.5 border-b border-border/20 overflow-x-auto">
-            {brainTypes.map(bt => (
-              <button
-                key={bt.id}
-                onClick={() => setBrainType(bt.id)}
-                className={`h-7 px-2.5 rounded-full text-[11px] font-medium flex items-center gap-1 shrink-0 transition-all ${
-                  brainType === bt.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                <bt.icon className="h-3 w-3" />
-                {bt.label}
-              </button>
-            ))}
+            {activeSkills.map(s => {
+              const meta = ALL_SKILLS.find(sk => sk.id === s);
+              if (!meta) return null;
+              return (
+                <button key={s} onClick={() => setBrainType(s as BrainSkill)}
+                  className={`h-7 px-2.5 rounded-full text-[11px] font-medium flex items-center gap-1 shrink-0 transition-all ${
+                    brainType === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  <meta.icon className="h-3 w-3" /> {meta.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-4">
-            {projectMissing && (
-              <div className="max-w-3xl mx-auto rounded-2xl border border-border bg-accent/40 px-4 py-3 text-xs">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-                  <div className="space-y-1">
-                    <p className="font-medium">Projeto Brain não encontrado no workspace atual.</p>
-                    <p className="text-muted-foreground">
-                      Workspace salvo: <span className="font-mono">{brainWorkspaceId || "desconhecido"}</span>
-                      {currentWorkspaceId ? (
-                        <>
-                          {" "}· atual: <span className="font-mono">{currentWorkspaceId}</span>
-                        </>
-                      ) : null}
-                    </p>
-                    {brainProjectUrl && (
-                      <a
-                        href={brainProjectUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Abrir projeto salvo
-                      </a>
-                    )}
-                  </div>
-                </div>
+            {!activeBrainId && (
+              <div className="text-center py-12 sm:py-20">
+                <BrainIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/20" />
+                <p className="font-medium mb-1">Selecione um Brain</p>
+                <p className="text-sm text-muted-foreground">Clique em um Brain na barra lateral ou crie um novo.</p>
               </div>
             )}
 
-            {displayConvos.length === 0 && !currentConvoId && (
+            {activeBrainId && allConversations.length === 0 && (
               <div className="text-center py-12 sm:py-20">
                 <BrainIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/20" />
                 <p className="font-medium mb-1">Inicie uma conversa</p>
@@ -533,47 +516,28 @@ export default function BrainPage() {
               </div>
             )}
 
-            {(currentConvoId ? [allConversations.find(c => c.id === currentConvoId)].filter(Boolean) as Conversation[] : displayConvos).map((convo) => (
+            {allConversations.map(convo => (
               <div key={convo.id} className="space-y-3 max-w-3xl mx-auto">
-                {/* User message */}
                 <div className="flex justify-end">
                   <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-4 py-3">
                     <p className="text-sm whitespace-pre-wrap break-words">{convo.user_message}</p>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[10px] opacity-60">{brainTypes.find(b => b.id === convo.brain_type)?.label}</span>
+                      <span className="text-[10px] opacity-60">{ALL_SKILLS.find(b => b.id === convo.brain_type)?.label}</span>
                       <span className="text-[10px] opacity-40">{new Date(convo.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
                   </div>
                 </div>
-                {/* AI response */}
                 <div className="flex justify-start">
                   <div className="max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-bl-sm bg-muted/50 border border-border/30 px-4 py-3">
-                    {convo.status === "processing" && sendStartTime && (
-                      <ProcessingIndicator startTime={sendStartTime} />
-                    )}
+                    {convo.status === "processing" && sendStartTime && <ProcessingIndicator startTime={sendStartTime} />}
                     {convo.status === "processing" && !sendStartTime && (
-                      <div className="flex items-center gap-3 text-primary">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm">Processando...</span>
-                      </div>
+                      <div className="flex items-center gap-3 text-primary"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">Processando...</span></div>
                     )}
                     {convo.status === "timeout" && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-amber-500">
-                          <AlertTriangle className="h-4 w-4 shrink-0" />
-                          <span className="text-sm">Tempo esgotado — a IA não respondeu a tempo.</span>
-                        </div>
-                        <button onClick={() => retryMessage(convo)} className="text-xs text-primary hover:underline">↩ Tentar novamente</button>
-                      </div>
+                      <div className="flex items-center gap-2 text-amber-500"><AlertTriangle className="h-4 w-4" /><span className="text-sm">Tempo esgotado.</span></div>
                     )}
                     {convo.status === "failed" && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-destructive">
-                          <XCircle className="h-4 w-4 shrink-0" />
-                          <span className="text-sm">{convo.ai_response || "Falha ao processar"}</span>
-                        </div>
-                        <button onClick={() => retryMessage(convo)} className="text-xs text-primary hover:underline">↩ Tentar novamente</button>
-                      </div>
+                      <div className="flex items-center gap-2 text-destructive"><XCircle className="h-4 w-4" /><span className="text-sm">{convo.ai_response || "Falha"}</span></div>
                     )}
                     {convo.status === "completed" && convo.ai_response && (
                       <>
@@ -581,7 +545,7 @@ export default function BrainPage() {
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{convo.ai_response}</ReactMarkdown>
                         </div>
                         <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/30">
-                          <button onClick={() => copyResponse(convo.ai_response!)} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">📋 Copiar</button>
+                          <button onClick={() => { navigator.clipboard.writeText(convo.ai_response!); toast.success("Copiado!"); }} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">📋 Copiar</button>
                           <CheckCircle className="h-3 w-3 text-green-500" />
                         </div>
                       </>
@@ -594,32 +558,30 @@ export default function BrainPage() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-border/40 px-3 sm:px-6 py-3 shrink-0">
-            <div className="max-w-3xl mx-auto flex items-end gap-2">
-              <textarea
-                value={message}
-                onChange={e => setMessage(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={`Pergunte ao Star AI (${brainTypes.find(b => b.id === brainType)?.label})...`}
-                rows={1}
-                disabled={sending}
-                className="flex-1 min-h-[44px] max-h-[160px] py-3 px-4 resize-none text-sm rounded-2xl bg-muted/50 border border-border/30 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 transition-all disabled:opacity-50"
-                style={{ height: "auto", overflow: "hidden" }}
-                onInput={(e) => {
-                  const t = e.currentTarget;
-                  t.style.height = "auto";
-                  t.style.height = Math.min(t.scrollHeight, 160) + "px";
-                }}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={!message.trim() || sending}
-                className="h-11 w-11 flex items-center justify-center shrink-0 rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </button>
+          {activeBrainId && (
+            <div className="border-t border-border/40 px-3 sm:px-6 py-3 shrink-0">
+              <div className="max-w-3xl mx-auto flex items-end gap-2">
+                <textarea
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
+                  placeholder={`Pergunte ao Star AI (${ALL_SKILLS.find(b => b.id === brainType)?.label})...`}
+                  rows={1}
+                  disabled={sending}
+                  className="flex-1 min-h-[44px] max-h-[160px] py-3 px-4 resize-none text-sm rounded-2xl bg-muted/50 border border-border/30 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-50"
+                  style={{ height: "auto", overflow: "hidden" }}
+                  onInput={e => { const t = e.currentTarget; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }}
+                />
+                <button
+                  onClick={sendMsg}
+                  disabled={!message.trim() || sending}
+                  className="h-11 w-11 flex items-center justify-center shrink-0 rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </AppLayout>

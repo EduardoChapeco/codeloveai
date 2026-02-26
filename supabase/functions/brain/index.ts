@@ -14,7 +14,7 @@ const CORS = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const VALID_ACTIONS = new Set(["status", "history", "reset", "setup", "send", "capture"]);
+const VALID_ACTIONS = new Set(["status", "history", "reset", "setup", "send", "capture", "list", "delete"]);
 const VALID_SKILLS = new Set<string>(["general", "design", "code", "scraper", "migration", "data", "devops", "security"]);
 
 function json(data: unknown, status = 200) {
@@ -115,21 +115,36 @@ async function getWorkspaceId(token: string): Promise<string | null> {
   return list?.[0]?.id || null;
 }
 
-async function getBrainRaw(sc: SupabaseClient, userId: string) {
+async function getBrainRaw(sc: SupabaseClient, userId: string, brainId?: string) {
+  if (brainId) {
+    const { data } = await sc.from("user_brain_projects")
+      .select("id, lovable_project_id, lovable_workspace_id, status, created_at, brain_skill, brain_skills, name")
+      .eq("id", brainId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    return data;
+  }
   const { data } = await sc.from("user_brain_projects")
-    .select("lovable_project_id, lovable_workspace_id, status, created_at, brain_skill")
+    .select("id, lovable_project_id, lovable_workspace_id, status, created_at, brain_skill, brain_skills, name")
     .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   return data;
 }
 
-async function getBrain(sc: SupabaseClient, userId: string) {
-  const { data } = await sc.from("user_brain_projects")
-    .select("lovable_project_id, lovable_workspace_id, status, brain_skill")
-    .eq("user_id", userId)
-    .maybeSingle();
+async function getBrain(sc: SupabaseClient, userId: string, brainId?: string) {
+  const data = await getBrainRaw(sc, userId, brainId);
   if (!data || data.status !== "active") return null;
   return data;
+}
+
+async function listBrains(sc: SupabaseClient, userId: string) {
+  const { data } = await sc.from("user_brain_projects")
+    .select("id, lovable_project_id, lovable_workspace_id, status, created_at, brain_skill, brain_skills, name, last_message_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  return data || [];
 }
 
 type ProjectVerificationState = "accessible" | "not_found" | "unknown";
@@ -154,29 +169,36 @@ async function verifyProjectState(
   }
 }
 
-async function acquireBrainLock(sc: SupabaseClient, userId: string, skill: BrainSkill): Promise<boolean> {
-  const existing = await getBrainRaw(sc, userId);
-
-  if (existing?.status === "creating") {
-    const ageMs = existing.created_at ? Date.now() - new Date(existing.created_at).getTime() : 0;
-    if (ageMs > 120_000) {
-      await sc.from("user_brain_projects").delete().eq("user_id", userId);
-    } else {
-      return false;
+async function acquireBrainLock(sc: SupabaseClient, userId: string, skills: string[], name: string): Promise<string | null> {
+  // Clean up stale "creating" entries older than 2 min
+  const { data: stale } = await sc.from("user_brain_projects")
+    .select("id, created_at")
+    .eq("user_id", userId)
+    .eq("status", "creating");
+  if (stale) {
+    for (const s of stale) {
+      const ageMs = s.created_at ? Date.now() - new Date(s.created_at).getTime() : 0;
+      if (ageMs > 120_000) {
+        await sc.from("user_brain_projects").delete().eq("id", s.id);
+      } else {
+        return null; // another creation in progress
+      }
     }
   }
 
-  await sc.from("user_brain_projects").delete().eq("user_id", userId);
-
-  const { error } = await sc.from("user_brain_projects").insert({
+  const primarySkill = skills[0] || "general";
+  const { data: row, error } = await sc.from("user_brain_projects").insert({
     user_id: userId,
     lovable_project_id: "creating",
     lovable_workspace_id: "pending",
     status: "creating",
     brain_owner: "user",
-    brain_skill: skill,
-  });
-  return !error;
+    brain_skill: primarySkill,
+    brain_skills: skills,
+    name,
+  }).select("id").single();
+
+  return error ? null : row?.id || null;
 }
 
 // ── Expert skill profiles ──────────────────────────────────────
@@ -450,27 +472,27 @@ async function createFreshBrain(
   sc: SupabaseClient,
   userId: string,
   token: string,
-  skill: BrainSkill,
-): Promise<{ projectId: string; workspaceId: string } | { error: string }> {
-  const locked = await acquireBrainLock(sc, userId, skill);
-  if (!locked) {
-    await new Promise((r) => setTimeout(r, 2_000));
-    const existing = await getBrain(sc, userId);
-    if (existing) return { projectId: existing.lovable_project_id, workspaceId: existing.lovable_workspace_id };
+  skills: BrainSkill[],
+  name: string,
+): Promise<{ projectId: string; workspaceId: string; brainId: string } | { error: string }> {
+  const lockId = await acquireBrainLock(sc, userId, skills, name);
+  if (!lockId) {
     return { error: "Brain está sendo criado. Tente novamente em alguns segundos." };
   }
+
+  const primarySkill = skills[0] || "general";
 
   try {
     const workspaceId = await getWorkspaceId(token);
     if (!workspaceId) {
-      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      await sc.from("user_brain_projects").delete().eq("id", lockId);
       return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
     }
 
-    const skillLabel = SKILL_PROFILES[skill].title.replace(/Star AI — /, "").toLowerCase().replace(/\s+/g, "-");
+    const skillLabel = SKILL_PROFILES[primarySkill].title.replace(/Star AI — /, "").toLowerCase().replace(/\s+/g, "-");
     const projectName = `star-${skillLabel}-${Date.now()}`;
 
-    console.log(`[Brain] Creating project=${projectName} skill=${skill} workspace=${workspaceId}`);
+    console.log(`[Brain] Creating project=${projectName} skills=${skills.join(",")} workspace=${workspaceId}`);
     const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
       method: "POST",
       body: JSON.stringify({
@@ -482,21 +504,19 @@ async function createFreshBrain(
 
     const createBody = await createRes.text().catch(() => "");
     if (!createRes.ok) {
-      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      await sc.from("user_brain_projects").delete().eq("id", lockId);
       return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
     }
 
     let created: any;
-    try {
-      created = JSON.parse(createBody);
-    } catch {
-      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+    try { created = JSON.parse(createBody); } catch {
+      await sc.from("user_brain_projects").delete().eq("id", lockId);
       return { error: "Resposta inválida da API ao criar projeto" };
     }
 
     const projectId = created?.id;
     if (!projectId) {
-      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      await sc.from("user_brain_projects").delete().eq("id", lockId);
       return { error: "ID do projeto não retornado pela API" };
     }
 
@@ -505,19 +525,27 @@ async function createFreshBrain(
         lovable_project_id: projectId,
         lovable_workspace_id: workspaceId,
         status: "active",
-        brain_skill: skill,
+        brain_skill: primarySkill,
+        brain_skills: skills,
+        name,
       })
-      .eq("user_id", userId);
+      .eq("id", lockId);
 
+    // Ghost cancel to prevent credit usage
     const cancelResult = await cancelInitialCreation(projectId, token, created);
-    const injected = await sendSkillInjection(projectId, token, skill);
 
-    console.log(`[Brain] Setup pipeline project=${projectId} cancel=${cancelResult.cancelled} injected=${injected}`);
+    // Inject all skills sequentially
+    for (const skill of skills) {
+      const injected = await sendSkillInjection(projectId, token, skill);
+      console.log(`[Brain] Skill injection skill=${skill} ok=${injected} project=${projectId}`);
+      if (skills.length > 1) await new Promise((r) => setTimeout(r, 2_000));
+    }
 
-    return { projectId, workspaceId };
+    console.log(`[Brain] Setup pipeline project=${projectId} cancel=${cancelResult.cancelled} skills=${skills.join(",")}`);
+    return { projectId, workspaceId, brainId: lockId };
   } catch (err) {
     console.error("[Brain] createFreshBrain error:", err);
-    await sc.from("user_brain_projects").delete().eq("user_id", userId);
+    await sc.from("user_brain_projects").delete().eq("id", lockId);
     return { error: "Erro inesperado ao criar Brain" };
   }
 }
@@ -560,51 +588,90 @@ Deno.serve(async (req) => {
       const token = await getUserToken(sc, userId);
       if (!token) return json({ active: false, connected: false, reason: "no_token" });
 
-      const brain = await getBrain(sc, userId);
-      const raw = await getBrainRaw(sc, userId);
-      const projectId = brain?.lovable_project_id || (raw?.status === "active" ? raw?.lovable_project_id : null);
-      const safeProjectId = projectId && projectId !== "creating" ? projectId : null;
-      const projectUrl = safeProjectId ? `https://lovable.dev/projects/${safeProjectId}` : null;
+      const brains = await listBrains(sc, userId);
+      const activeBrains = brains.filter(b => b.status === "active" && b.lovable_project_id !== "creating");
       const currentWorkspaceId = await getWorkspaceId(token);
-      const verification = safeProjectId
-        ? await verifyProjectState(safeProjectId, token)
-        : { state: "unknown" as ProjectVerificationState, status: null as number | null };
-      const projectMissing = verification.state === "not_found";
 
       return json({
-        active: raw?.status === "active" && !!safeProjectId,
+        active: activeBrains.length > 0,
         connected: true,
-        brain: brain || null,
-        creating: raw?.status === "creating",
-        project_url: projectUrl,
-        project_id: safeProjectId,
-        skill: brain?.brain_skill || raw?.brain_skill || "general",
-        stored_workspace_id: raw?.lovable_workspace_id || null,
+        brains: activeBrains.map(b => ({
+          id: b.id,
+          name: b.name,
+          project_id: b.lovable_project_id,
+          project_url: `https://lovable.dev/projects/${b.lovable_project_id}`,
+          skill: b.brain_skill,
+          skills: b.brain_skills || [b.brain_skill],
+          workspace_id: b.lovable_workspace_id,
+          last_message_at: b.last_message_at,
+        })),
+        creating: brains.some(b => b.status === "creating"),
         current_workspace_id: currentWorkspaceId || null,
-        workspace_match: !!raw?.lovable_workspace_id && !!currentWorkspaceId && raw.lovable_workspace_id === currentWorkspaceId,
-        project_missing: projectMissing,
-        verification_state: verification.state,
-        verification_status: verification.status,
+      });
+    }
+
+    // ── LIST ──
+    if (action === "list") {
+      const brains = await listBrains(sc, userId);
+      return json({
+        brains: brains.map(b => ({
+          id: b.id,
+          name: b.name,
+          project_id: b.lovable_project_id,
+          project_url: b.lovable_project_id !== "creating" ? `https://lovable.dev/projects/${b.lovable_project_id}` : null,
+          status: b.status,
+          skill: b.brain_skill,
+          skills: b.brain_skills || [b.brain_skill],
+          workspace_id: b.lovable_workspace_id,
+          last_message_at: b.last_message_at,
+          created_at: b.created_at,
+        })),
       });
     }
 
     // ── HISTORY ──
     if (action === "history") {
       const limit = Math.max(1, Math.min(typeof body?.limit === "number" ? body.limit : 50, 100));
-      const { data } = await supabase
+      const brainId = typeof body?.brain_id === "string" ? body.brain_id : null;
+      
+      let query = supabase
         .from("loveai_conversations")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(limit);
+
+      if (brainId) {
+        const brain = await getBrain(sc, userId, brainId);
+        if (brain) query = query.eq("target_project_id", brain.lovable_project_id);
+      }
+
+      const { data } = await query;
       return json({ conversations: data || [] });
     }
 
     // ── RESET ──
     if (action === "reset") {
-      await sc.from("user_brain_projects").delete().eq("user_id", userId);
-      await sc.from("loveai_conversations").delete().eq("user_id", userId);
-      return json({ success: true, message: "Star AI resetado completamente." });
+      const brainId = typeof body?.brain_id === "string" ? body.brain_id : null;
+      if (brainId) {
+        await sc.from("user_brain_projects").delete().eq("id", brainId).eq("user_id", userId);
+      } else {
+        await sc.from("user_brain_projects").delete().eq("user_id", userId);
+        await sc.from("loveai_conversations").delete().eq("user_id", userId);
+      }
+      return json({ success: true, message: brainId ? "Brain removido." : "Todos os Brains resetados." });
+    }
+
+    // ── DELETE ──
+    if (action === "delete") {
+      const brainId = typeof body?.brain_id === "string" ? body.brain_id : "";
+      if (!brainId) return json({ error: "brain_id obrigatório" }, 400);
+      
+      const brain = await getBrainRaw(sc, userId, brainId);
+      if (!brain) return json({ error: "Brain não encontrado" }, 404);
+      
+      await sc.from("user_brain_projects").delete().eq("id", brainId).eq("user_id", userId);
+      return json({ success: true, message: "Brain removido com sucesso." });
     }
 
     const lovableToken = await getValidToken(sc, userId);
@@ -614,65 +681,22 @@ Deno.serve(async (req) => {
 
     // ── SETUP ──
     if (action === "setup") {
-      const rawSkill = typeof body?.skill === "string" ? body.skill : "general";
-      const skill: BrainSkill = (VALID_SKILLS.has(rawSkill) ? rawSkill : "general") as BrainSkill;
-      const existingRaw = await getBrainRaw(sc, userId);
+      const rawSkills = Array.isArray(body?.skills) ? body.skills.filter((s: string) => VALID_SKILLS.has(s)) : [];
+      const rawSkill = typeof body?.skill === "string" && VALID_SKILLS.has(body.skill) ? body.skill : null;
+      const skills: BrainSkill[] = rawSkills.length > 0
+        ? rawSkills as BrainSkill[]
+        : [((rawSkill || "general") as BrainSkill)];
+      const name = typeof body?.name === "string" && body.name.trim() ? body.name.trim().slice(0, 60) : `Star AI — ${skills.join(", ")}`;
 
-      if (existingRaw?.status === "creating") {
-        const ageMs = existingRaw.created_at ? Date.now() - new Date(existingRaw.created_at).getTime() : 0;
-        if (ageMs <= 120_000) {
-          return json({
-            error: "Brain ainda está sendo criado. Aguarde alguns segundos.",
-            code: "brain_creating",
-            creating: true,
-            skill: existingRaw.brain_skill || skill,
-          }, 409);
-        }
-        await sc.from("user_brain_projects").delete().eq("user_id", userId).eq("status", "creating");
-      }
-
-      if (existingRaw?.status === "active" && existingRaw.lovable_project_id && existingRaw.lovable_project_id !== "creating") {
-        const projectId = existingRaw.lovable_project_id;
-        const projectUrl = `https://lovable.dev/projects/${projectId}`;
-        const currentWorkspaceId = await getWorkspaceId(lovableToken);
-        const verification = await verifyProjectState(projectId, lovableToken);
-
-        if (verification.state === "accessible" || verification.state === "unknown") {
-          return json({
-            success: true,
-            project_id: projectId,
-            project_url: projectUrl,
-            skill: existingRaw.brain_skill || "general",
-            stored_workspace_id: existingRaw.lovable_workspace_id || null,
-            current_workspace_id: currentWorkspaceId || null,
-            workspace_match: !!existingRaw.lovable_workspace_id && !!currentWorkspaceId && existingRaw.lovable_workspace_id === currentWorkspaceId,
-            already_exists: true,
-            verification_state: verification.state,
-            warning: verification.state === "unknown"
-              ? "Não foi possível validar o projeto agora, mas ele permanece vinculado e será reutilizado."
-              : null,
-          });
-        }
-
-        return json({
-          error: "Projeto Brain não encontrado no workspace atual. Histórico preservado — não criaremos um novo automaticamente.",
-          code: "project_not_found_in_workspace",
-          project_id: projectId,
-          project_url: projectUrl,
-          skill: existingRaw.brain_skill || "general",
-          stored_workspace_id: existingRaw.lovable_workspace_id || null,
-          current_workspace_id: currentWorkspaceId || null,
-          workspace_match: false,
-        }, 409);
-      }
-
-      const result = await createFreshBrain(sc, userId, lovableToken, skill);
+      const result = await createFreshBrain(sc, userId, lovableToken, skills, name);
       if ("error" in result) return json({ error: result.error }, 502);
       return json({
         success: true,
+        brain_id: result.brainId,
         project_id: result.projectId,
         project_url: `https://lovable.dev/projects/${result.projectId}`,
-        skill,
+        skills,
+        name,
         stored_workspace_id: result.workspaceId,
       });
     }
@@ -681,43 +705,37 @@ Deno.serve(async (req) => {
     if (action === "send") {
       const message = typeof body?.message === "string" ? body.message.trim() : "";
       const rawSkill = typeof body?.brain_type === "string" ? body.brain_type : "";
+      const brainId = typeof body?.brain_id === "string" ? body.brain_id : undefined;
 
       if (!message || message.length < 1 || message.length > 10_000) {
         return json({ error: "Mensagem inválida (1-10000 chars)" }, 400);
       }
 
-      let brain = await getBrain(sc, userId);
+      let brain = await getBrain(sc, userId, brainId);
       if (!brain) {
-        const raw = await getBrainRaw(sc, userId);
-        if (raw?.status === "creating") {
-          await new Promise((r) => setTimeout(r, 5_000));
-          brain = await getBrain(sc, userId);
-        }
+        // fallback: try any active brain
+        brain = await getBrain(sc, userId);
       }
-
       if (!brain) {
-        return json({ error: "Star AI não está ativo. Ative primeiro.", code: "brain_inactive" }, 400);
+        return json({ error: "Star AI não está ativo. Crie um Brain primeiro.", code: "brain_inactive" }, 400);
       }
 
       const access = await verifyProjectState(brain.lovable_project_id, lovableToken);
       if (access.state === "not_found") {
         const currentWorkspaceId = await getWorkspaceId(lovableToken);
         return json({
-          error: "Projeto Brain não foi encontrado no workspace atual. Histórico preservado para evitar criação infinita.",
+          error: "Projeto Brain não encontrado no workspace atual.",
           code: "project_not_found_in_workspace",
           project_id: brain.lovable_project_id,
-          project_url: `https://lovable.dev/projects/${brain.lovable_project_id}`,
           stored_workspace_id: brain.lovable_workspace_id || null,
           current_workspace_id: currentWorkspaceId || null,
-          workspace_match: !!brain.lovable_workspace_id && !!currentWorkspaceId && brain.lovable_workspace_id === currentWorkspaceId,
         }, 409);
       }
 
       if (access.state === "unknown") {
-        console.warn(`[Brain] Access check unknown for ${brain.lovable_project_id} (status=${access.status}) - proceeding without deleting link.`);
+        console.warn(`[Brain] Access check unknown for ${brain.lovable_project_id} (status=${access.status}) - proceeding.`);
       }
 
-      // Use the brain's stored skill, or override if provided
       const skill: BrainSkill = (VALID_SKILLS.has(rawSkill) ? rawSkill : (brain.brain_skill || "general")) as BrainSkill;
       const prompt = buildBrainPrompt(skill, message);
       const payload = buildPayload(prompt);
@@ -756,20 +774,9 @@ Deno.serve(async (req) => {
 
       if (!chatRes.ok) {
         if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
-
         if (chatRes.status === 403 || chatRes.status === 404) {
-          const currentWorkspaceId = await getWorkspaceId(chatToken);
-          return json({
-            error: "Projeto Brain não encontrado durante envio. Histórico preservado para evitar recriações automáticas.",
-            code: "project_not_found_in_workspace",
-            project_id: brain.lovable_project_id,
-            project_url: `https://lovable.dev/projects/${brain.lovable_project_id}`,
-            stored_workspace_id: brain.lovable_workspace_id || null,
-            current_workspace_id: currentWorkspaceId || null,
-            workspace_match: !!brain.lovable_workspace_id && !!currentWorkspaceId && brain.lovable_workspace_id === currentWorkspaceId,
-          }, 409);
+          return json({ error: "Projeto Brain não encontrado.", code: "project_not_found_in_workspace" }, 409);
         }
-
         return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
       }
 
@@ -785,14 +792,14 @@ Deno.serve(async (req) => {
 
       await sc.from("user_brain_projects")
         .update({ last_message_at: new Date().toISOString() })
-        .eq("user_id", userId)
-        .eq("status", "active");
+        .eq("id", brain.id);
 
       return json({
         conversation_id: convoId,
         response: capture.response,
         status: capture.status,
         skill,
+        brain_id: brain.id,
       });
     }
 

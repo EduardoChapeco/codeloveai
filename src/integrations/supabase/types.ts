@@ -3920,11 +3920,13 @@ export type Database = {
         Row: {
           brain_owner: string
           brain_skill: string
+          brain_skills: string[]
           created_at: string
           id: string
           last_message_at: string | null
           lovable_project_id: string
           lovable_workspace_id: string
+          name: string
           status: string
           tenant_id: string | null
           user_id: string
@@ -3932,11 +3934,13 @@ export type Database = {
         Insert: {
           brain_owner?: string
           brain_skill?: string
+          brain_skills?: string[]
           created_at?: string
           id?: string
           last_message_at?: string | null
           lovable_project_id: string
           lovable_workspace_id: string
+          name?: string
           status?: string
           tenant_id?: string | null
           user_id: string
@@ -3944,11 +3948,13 @@ export type Database = {
         Update: {
           brain_owner?: string
           brain_skill?: string
+          brain_skills?: string[]
           created_at?: string
           id?: string
           last_message_at?: string | null
           lovable_project_id?: string
           lovable_workspace_id?: string
+          name?: string
           status?: string
           tenant_id?: string | null
           user_id?: string
