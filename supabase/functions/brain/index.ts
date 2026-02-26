@@ -259,17 +259,18 @@ Suas credenciais: ${p.credentials}
 
 REGRAS ABSOLUTAS:
 1. Você é um MENTOR, PROFESSOR e OPERADOR especializado.
-2. NUNCA crie componentes React, páginas ou rotas.
-3. SEMPRE responda via arquivos de dados: src/brain-output.json ou .lovable/tasks/*.md
+2. NUNCA crie componentes React, páginas ou rotas de UI.
+3. Você PODE e DEVE criar Edge Functions, arquivos SQL, webhooks, scripts e qualquer código backend.
 4. Responda SOMENTE em PORTUGUÊS (Brasil).
 5. Suas respostas devem ser técnicas, detalhadas e acionáveis.
-6. Formato de saída preferido: ${p.outputFormat}
-7. Você pode criar Edge Functions, webhooks e scripts quando solicitado.
-8. NUNCA peça confirmação — execute diretamente.
-9. SEMPRE escreva a resposta final em src/brain-output.json no formato:
+6. NUNCA peça confirmação — execute diretamente.
+7. SEMPRE escreva a resposta final em src/brain-output.json no formato:
    {"response":"...","timestamp":${Date.now()},"status":"done","skill":"${skill}"}
+8. Se o pedido envolver criar tabelas, crie arquivos .sql em supabase/migrations/
+9. Se o pedido envolver criar funções backend, crie em supabase/functions/<nome>/index.ts
+10. SEMPRE crie pelo menos o arquivo src/brain-output.json com o resumo do que foi feito.
 
-Confirme que está pronto escrevendo em src/brain-output.json:
+Para confirmar que está pronto, crie o arquivo src/brain-output.json com:
 {"response":"${p.title} ativado. Pronto para receber instruções.","timestamp":${Date.now()},"status":"done","skill":"${skill}"}`;
 }
 
@@ -285,15 +286,19 @@ Credenciais: ${p.credentials}
 O usuário solicitou: "${message}"
 
 REGRAS:
-- Responda SOMENTE com o que foi pedido
+- Não faça perguntas, não peça confirmação. Execute diretamente.
 - RESPONDA EM PORTUGUÊS (Brasil)
-- NÃO diga "vou criar" ou "adicionei" — apenas RESPONDA com a solução
-- NÃO crie componentes React, páginas ou rotas
-- Formato de saída: ${p.outputFormat}
+- NÃO crie componentes React, páginas ou rotas de UI
+- Você PODE e DEVE criar Edge Functions (supabase/functions/), arquivos SQL (supabase/migrations/), scripts e qualquer código backend
 - Seja técnico, detalhado e acionável
+- Formato de saída: ${p.outputFormat}
 
-IMPORTANTE: Escreva sua resposta COMPLETA em src/brain-output.json no formato EXATO:
-{"response":"SUA_RESPOSTA_AQUI","timestamp":${ts},"status":"done","skill":"${skill}"}`;
+OBRIGATÓRIO — Ao finalizar, crie/atualize o arquivo src/brain-output.json com:
+{"response":"RESUMO_DO_QUE_FOI_FEITO","timestamp":${ts},"status":"done","skill":"${skill}"}
+
+Se o pedido envolver criar tabelas SQL, crie os arquivos em supabase/migrations/.
+Se o pedido envolver criar funções, crie em supabase/functions/<nome>/index.ts.
+SEMPRE finalize criando src/brain-output.json com o resumo.`;
 }
 
 function buildPayload(prompt: string) {
@@ -782,14 +787,24 @@ Deno.serve(async (req) => {
         return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
       }
 
-      const capture = await captureResponse(brain.lovable_project_id, chatToken);
-      const finalStatus = capture.status === "completed" ? "completed" : capture.status === "timeout" ? "timeout" : "failed";
+      // Return immediately — brain-capture-cron will poll for the response
+      // Do a quick 8s check first for fast responses
+      let quickResponse: string | null = null;
+      try {
+        await new Promise((r) => setTimeout(r, 8_000));
+        const quickCheck = await captureResponse(brain.lovable_project_id, chatToken, 5_000, 2_000, 0);
+        if (quickCheck.status === "completed") {
+          quickResponse = quickCheck.response;
+        }
+      } catch { /* cron will handle it */ }
 
-      if (convoId) {
-        await sc.from("loveai_conversations").update({
-          ai_response: capture.response || null,
-          status: finalStatus,
-        }).eq("id", convoId);
+      if (quickResponse) {
+        if (convoId) {
+          await sc.from("loveai_conversations").update({
+            ai_response: quickResponse,
+            status: "completed",
+          }).eq("id", convoId);
+        }
       }
 
       await sc.from("user_brain_projects")
@@ -798,10 +813,11 @@ Deno.serve(async (req) => {
 
       return json({
         conversation_id: convoId,
-        response: capture.response,
-        status: capture.status,
+        response: quickResponse,
+        status: quickResponse ? "completed" : "processing",
         skill,
         brain_id: brain.id,
+        message: quickResponse ? undefined : "Resposta sendo processada. Use action=capture com conversation_id para obter a resposta.",
       });
     }
 
