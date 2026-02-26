@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateTypeId } from "../_shared/crypto.ts";
+import { logExtensionUsage, hashLicenseKey } from "../_shared/usage-logger.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +54,7 @@ async function validateLicense(licenseKey: string): Promise<boolean> {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
+  const startTime = Date.now();
   try {
     const body = await req.json().catch(() => ({}));
 
@@ -133,6 +135,21 @@ serve(async (req) => {
         ok: false, lovable_status: lovableRes.status, details: lovableData
       }), { status: 502, headers: { ...CORS, "Content-Type": "application/json" } });
     }
+
+    // Resolve userId from license
+    const clfPayload = decodeCLF1(licenseKey);
+    const resolvedUserId = (clfPayload?.sub as string) || (clfPayload?.user_id as string) || "unknown";
+
+    logExtensionUsage({
+      userId: resolvedUserId,
+      functionName: "lovable-proxy",
+      projectId: projectId,
+      licenseKeyHash: hashLicenseKey(licenseKey),
+      ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "",
+      userAgent: req.headers.get("user-agent") || "",
+      responseStatus: lovableRes.ok ? 200 : lovableRes.status,
+      durationMs: Date.now() - startTime,
+    });
 
     return new Response(JSON.stringify({
       ok: true, status: lovableRes.status, aiMsgId, msgId, lovable: lovableData

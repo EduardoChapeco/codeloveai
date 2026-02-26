@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateTypeId } from "../_shared/crypto.ts";
+import { logExtensionUsage, hashLicenseKey } from "../_shared/usage-logger.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -64,6 +65,7 @@ async function validateLicense(licenseKey: string): Promise<boolean> {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
+  const startTime = Date.now();
   try {
     const body = await req.json().catch(() => ({}));
     const {
@@ -160,6 +162,20 @@ serve(async (req) => {
         details: lovableData,
       }), { status: 502, headers: { ...CORS, "Content-Type": "application/json" } });
     }
+
+    // Log usage
+    const clfPayload = decodeCLF1(licKey);
+    const resolvedUserId = (clfPayload?.sub as string) || (clfPayload?.user_id as string) || "unknown";
+    logExtensionUsage({
+      userId: resolvedUserId,
+      functionName: "send-message",
+      projectId: projectId,
+      licenseKeyHash: hashLicenseKey(licKey),
+      ipAddress: req.headers.get("x-forwarded-for") || "",
+      userAgent: req.headers.get("user-agent") || "",
+      responseStatus: lovableRes.status,
+      durationMs: Date.now() - startTime,
+    });
 
     return new Response(JSON.stringify({
       ok:      true,
