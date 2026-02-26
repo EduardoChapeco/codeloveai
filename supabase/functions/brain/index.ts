@@ -449,7 +449,17 @@ Deno.serve(async (req) => {
 
       const brain = await getBrain(sc, userId);
       const raw = await getBrainRaw(sc, userId);
-      return json({ active: !!brain, connected: true, brain: brain || null, creating: raw?.status === "creating" });
+      const projectUrl = brain?.lovable_project_id
+        ? `https://lovable.dev/projects/${brain.lovable_project_id}`
+        : null;
+      return json({
+        active: !!brain,
+        connected: true,
+        brain: brain || null,
+        creating: raw?.status === "creating",
+        project_url: projectUrl,
+        project_id: brain?.lovable_project_id || null,
+      });
     }
 
     if (action === "history") {
@@ -489,7 +499,11 @@ Deno.serve(async (req) => {
 
       const result = await createFreshBrain(sc, userId, lovableToken);
       if ("error" in result) return json({ error: result.error }, 502);
-      return json({ success: true, project_id: result.projectId });
+      return json({
+        success: true,
+        project_id: result.projectId,
+        project_url: `https://lovable.dev/projects/${result.projectId}`,
+      });
     }
 
     if (action === "send") {
