@@ -37,9 +37,9 @@ export default function MobileBottomNav() {
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 md:hidden border-t border-border/40 safe-area-bottom">
+    <nav className="fixed bottom-0 inset-x-0 z-50 md:hidden border-t border-border/40 bg-background/60 backdrop-blur-xl safe-area-bottom">
       <div className="overflow-x-auto scrollbar-hide">
-        <div className="flex items-center gap-1 px-2 py-2 min-w-max">
+        <div className="flex items-center gap-3 px-3 py-3" style={{ width: "max-content" }}>
           {allItems.map(item => {
             const Icon = item.icon;
             const active = isActive(item.to);
@@ -47,27 +47,26 @@ export default function MobileBottomNav() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 transition-all ${
+                className={`flex items-center justify-center h-14 w-14 rounded-2xl shrink-0 transition-all ${
                   active
-                    ? "bg-primary/10 text-primary shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    ? "bg-primary/15 text-primary shadow-md scale-105"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                 }`}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-6 w-6" />
               </NavLink>
             );
           })}
 
-          {/* Profile */}
           <NavLink
             to={`/profile/${user.id}`}
-            className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 transition-all ${
+            className={`flex items-center justify-center h-14 w-14 rounded-2xl shrink-0 transition-all ${
               isActive(`/profile/${user.id}`)
-                ? "bg-primary/10 text-primary shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                ? "bg-primary/15 text-primary shadow-md scale-105"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
             }`}
           >
-            <User className="h-5 w-5" />
+            <User className="h-6 w-6" />
           </NavLink>
         </div>
       </div>
