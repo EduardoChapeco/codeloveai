@@ -11,11 +11,46 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function generateLicenseKey(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let key = "CLF1.";
-  for (let i = 0; i < 32; i++) key += chars[Math.floor(Math.random() * chars.length)];
-  return key;
+function base64url(data: Uint8Array): string {
+  return btoa(String.fromCharCode(...data))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function base64urlEncode(str: string): string {
+  return base64url(new TextEncoder().encode(str));
+}
+
+async function hmacSign(payload: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return base64url(new Uint8Array(sig));
+}
+
+async function generateSignedLicenseKey(userId: string, userEmail: string, planName: string, dailyMessages: number | null, expiresAt: Date): Promise<string> {
+  const clfSecret = Deno.env.get("CLF_TOKEN_SECRET");
+  if (!clfSecret) throw new Error("CLF_TOKEN_SECRET not configured");
+
+  const payload = JSON.stringify({
+    uid: userId,
+    email: userEmail,
+    plan: planName,
+    dailyMessages,
+    exp: expiresAt.getTime(),
+    iat: Date.now(),
+    v: 1,
+  });
+
+  const encodedPayload = base64urlEncode(payload);
+  const signature = await hmacSign(encodedPayload, clfSecret);
+  return `CLF1.${encodedPayload}.${signature}`;
 }
 
 Deno.serve(async (req) => {
@@ -140,7 +175,8 @@ Deno.serve(async (req) => {
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-    const licenseKey = generateLicenseKey();
+    const userEmail = user.email || "";
+    const licenseKey = await generateSignedLicenseKey(userId, userEmail, plan.name, plan.daily_message_limit, expiresAt);
 
     // 6. Deactivate existing licenses
     await serviceClient

@@ -10,10 +10,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 async function verifyMercadoPagoSignature(req: Request, rawBody: string): Promise<boolean> {
   const secret = Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET");
   if (!secret) {
-    // Se a variável não está configurada, logamos aviso mas não bloqueamos
-    // (permite deploy seguro antes de configurar o secret no painel do MP)
-    console.warn("[mp-webhook] ⚠️  MERCADO_PAGO_WEBHOOK_SECRET não configurado — pulando validação HMAC");
-    return true;
+    // SECURITY: HMAC validation is MANDATORY. Block all requests if secret is missing.
+    console.error("[mp-webhook] ❌ MERCADO_PAGO_WEBHOOK_SECRET não configurado — BLOQUEANDO requisição");
+    return false;
   }
 
   const xSignature  = req.headers.get("x-signature");
@@ -333,7 +332,7 @@ async function handleWhiteLabelPurchase(
   const expectedTotalCents = setupPriceCents + subscriptionPriceCents;
   const paidAmount = (payment.transaction_amount as number) * 100;
   let wlMaxDiscountPercent = 0;
-  const affiliateWlCode = refData.affiliate_wl_code as string | null;
+  // affiliateWlCode already declared above at line 297
   if (affiliateWlCode) {
     const { data: wlAffDiscount } = await supabaseAdmin
       .from("white_label_affiliates")
