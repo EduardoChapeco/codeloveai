@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, Component, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,17 +12,63 @@ import ChatPanel from "@/components/chat/ChatPanel";
 import SupportChatPanel from "@/components/chat/SupportChatPanel";
 import Index from "./pages/Index";
 
+// Error boundary to catch chunk load failures and auto-reload
+class ChunkErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(error: Error) {
+    if (error.message?.includes("dynamically imported module") || error.message?.includes("Failed to fetch")) {
+      return { hasError: true };
+    }
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error) {
+    if (error.message?.includes("dynamically imported module") || error.message?.includes("Failed to fetch")) {
+      const key = "clf_chunk_retry";
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.location.reload();
+        return;
+      }
+      sessionStorage.removeItem(key);
+    }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="text-sm text-muted-foreground">Erro ao carregar a página.</p>
+            <button
+              onClick={() => { sessionStorage.removeItem("clf_chunk_retry"); window.location.reload(); }}
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+            >
+              Recarregar
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Retry dynamic imports once on failure (stale chunk after deploy)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function lazyRetry(importFn: () => Promise<any>) {
   return lazy(() =>
-    importFn().catch(() => {
-      const key = 'clf_chunk_retry';
+    importFn().catch((err) => {
+      const key = "clf_chunk_retry";
       if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1');
+        sessionStorage.setItem(key, "1");
         window.location.reload();
+        // Return a never-resolving promise so React doesn't try to render while reloading
+        return new Promise(() => {});
       }
       sessionStorage.removeItem(key);
+      // Second attempt after reload
       return importFn();
     })
   );
@@ -92,6 +138,7 @@ const App = () => (
           <TenantProvider>
           <ChatProvider>
           <SupportChatProvider>
+            <ChunkErrorBoundary>
             <Suspense fallback={<div className="min-h-screen bg-background" />}>
               <Routes>
                 <Route path="/" element={<Index />} />
@@ -151,6 +198,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
+            </ChunkErrorBoundary>
             <ChatPanel />
             <SupportChatPanel />
           </SupportChatProvider>
