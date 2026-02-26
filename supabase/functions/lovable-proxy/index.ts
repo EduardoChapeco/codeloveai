@@ -1,6 +1,7 @@
-// lovable-proxy v4.0.0 — Proxy direto para Lovable API (security_fix_v2)
-// Aceita lovable_token do cliente, project_id e task.
-// HARDCODED: intent=security_fix_v2, chat_only=false — NUNCA MUDAR.
+// lovable-proxy v4.1.0 — Proxy direto para Lovable API (security_fix_v2)
+// Aceita lovable_token explícito OU resolve internamente por JWT/CLF1/admin account.
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const LOVABLE_API = "https://api.lovable.dev";
 const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
@@ -11,7 +12,7 @@ const ANTI_QUESTION_PREFIX =
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-clf-token, x-clf-extension, x-speed-client",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -32,13 +33,91 @@ function json(body: Record<string, unknown>, status = 200) {
   });
 }
 
+async function getUserTokenFromAccount(adminClient: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
+  const { data } = await adminClient
+    .from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .limit(1);
+
+  return data?.[0]?.token_encrypted?.trim() || null;
+}
+
+async function resolveLovableToken(req: Request, body: Record<string, unknown>): Promise<string | null> {
+  const explicit = (
+    (body.lovable_token as string) ||
+    (body.lovableToken as string) ||
+    (body.token as string) ||
+    ""
+  ).trim();
+  if (explicit.length >= 10) return explicit;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) return null;
+
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  // 1) Try logged user JWT
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || "";
+  if (authHeader.startsWith("Bearer ")) {
+    try {
+      const jwt = authHeader.replace("Bearer ", "");
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(jwt);
+      if (!claimsError && claimsData?.claims?.sub) {
+        const userId = String(claimsData.claims.sub);
+        const byUser = await getUserTokenFromAccount(adminClient, userId);
+        if (byUser) return byUser;
+      }
+    } catch {
+      // ignore and continue fallback chain
+    }
+  }
+
+  // 2) Try CLF1 token -> license user -> lovable_accounts
+  const headerClf = (req.headers.get("x-clf-token") || "").trim();
+  const bodyClf = (
+    (body.licenseKey as string) ||
+    (body.clf_license as string) ||
+    (body.clfToken as string) ||
+    ""
+  ).trim();
+  const clf = headerClf.startsWith("CLF1.") ? headerClf : bodyClf.startsWith("CLF1.") ? bodyClf : "";
+
+  if (clf) {
+    const { data: licenseRows } = await adminClient
+      .from("licenses")
+      .select("user_id")
+      .eq("key", clf)
+      .eq("active", true)
+      .limit(1);
+
+    const licenseUserId = licenseRows?.[0]?.user_id;
+    if (licenseUserId) {
+      const byLicenseUser = await getUserTokenFromAccount(adminClient, String(licenseUserId));
+      if (byLicenseUser) return byLicenseUser;
+    }
+  }
+
+  // 3) Fallback admin account
+  const { data: adminRows } = await adminClient
+    .from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("is_admin_account", true)
+    .eq("status", "active")
+    .limit(1);
+
+  return adminRows?.[0]?.token_encrypted?.trim() || null;
+}
+
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-  if (req.method !== "POST") {
-    return json({ ok: false, error: "Method not allowed" }, 405);
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
 
   let body: Record<string, unknown>;
   try {
@@ -47,36 +126,33 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Body JSON inválido" }, 400);
   }
 
-  const task = body.task as string | undefined;
-  const lovableToken = body.lovable_token as string | undefined;
-  const projectId = body.project_id as string | undefined;
+  const task = ((body.task as string) || (body.message as string) || "").trim();
+  const projectId = ((body.project_id as string) || (body.projectId as string) || "").trim();
   const runtimeErrors = Array.isArray(body.runtime_errors) ? body.runtime_errors : [];
   const view = body.view ?? null;
   const viewDescription = body.view_description ?? null;
 
-  // Validação
-  if (!task || typeof task !== "string" || !task.trim()) {
-    return json({ ok: false, error: "task é obrigatório" }, 400);
-  }
-  if (!lovableToken || typeof lovableToken !== "string" || lovableToken.length < 10) {
-    return json({ ok: false, error: "lovable_token é obrigatório" }, 400);
-  }
+  if (!task) return json({ ok: false, error: "task é obrigatório" }, 400);
   if (!projectId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId)) {
     return json({ ok: false, error: "project_id inválido (UUID esperado)" }, 400);
   }
 
-  // Montar payload
+  const lovableToken = await resolveLovableToken(req, body);
+  if (!lovableToken) {
+    return json({ ok: false, error: "Nenhum token Lovable vinculado (JWT/CLF1/admin)." }, 401);
+  }
+
   const msgId = crypto.randomUUID();
   const aiMsgId = makeAiMsgId();
 
   const payload = {
     id: msgId,
-    message: ANTI_QUESTION_PREFIX + task.trim(),
-    intent: "security_fix_v2",   // HARDCODED — NUNCA MUDAR
-    chat_only: false,             // HARDCODED — NUNCA true (true = cobra créditos)
+    message: ANTI_QUESTION_PREFIX + task,
+    intent: "security_fix_v2",
+    chat_only: false,
     ai_message_id: aiMsgId,
     thread_id: "main",
-    view: view,
+    view,
     view_description: viewDescription,
     model: null,
     session_replay: "[]",
@@ -91,7 +167,6 @@ Deno.serve(async (req: Request) => {
     },
   };
 
-  // Chamar Lovable API
   let lovableRes: Response;
   try {
     lovableRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
@@ -110,7 +185,6 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Falha de conexão com Lovable API" }, 502);
   }
 
-  // Ler resposta
   const lovableBody = await lovableRes.text().catch(() => "");
   let lovableJson: unknown = null;
   try {
@@ -136,6 +210,6 @@ Deno.serve(async (req: Request) => {
       lovable_status: lovableRes.status,
       details: lovableJson,
     },
-    lovableRes.status >= 500 ? 502 : lovableRes.status
+    lovableRes.status >= 500 ? 502 : lovableRes.status,
   );
 });
