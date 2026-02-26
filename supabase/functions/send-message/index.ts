@@ -151,10 +151,6 @@ async function resolveInternalLovableToken(
     if (adminAccount?.token_encrypted) return adminAccount.token_encrypted;
   }
 
-  // 3. Final fallback: LOVABLE_SERVICE_TOKEN env var
-  const serviceToken = Deno.env.get("LOVABLE_SERVICE_TOKEN");
-  if (serviceToken) return serviceToken;
-
   return null;
 }
 
