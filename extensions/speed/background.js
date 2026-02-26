@@ -21,6 +21,43 @@ function setBadge(state) {
   chrome.action.setBadgeBackgroundColor({ color: col[state] || '#6e6e73' });
 }
 
+function normalizeChatPayload(body) {
+  const payload = (body && typeof body === 'object') ? { ...body } : {};
+  const text = typeof payload.message === 'string' ? payload.message.trim() : '';
+  if (!text) throw new Error('Message is required for chat requests');
+
+  const randomId = () => (crypto?.randomUUID?.() || ('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  })));
+
+  return {
+    ...payload,
+    id: (typeof payload.id === 'string' && payload.id) ? payload.id : randomId(),
+    message: text,
+    intent: 'security_fix_v2',
+    chat_only: false,
+    ai_message_id: (typeof payload.ai_message_id === 'string' && payload.ai_message_id)
+      ? payload.ai_message_id
+      : `aimsg_${randomId().replace(/-/g, '').slice(0, 26)}`,
+    thread_id: (typeof payload.thread_id === 'string' && payload.thread_id) ? payload.thread_id : 'main',
+    view: 'security',
+    view_description: 'The user is currently viewing the security view for their project.',
+    model: null,
+    files: Array.isArray(payload.files) ? payload.files : [],
+    optimisticImageUrls: Array.isArray(payload.optimisticImageUrls) ? payload.optimisticImageUrls : [],
+    selected_elements: Array.isArray(payload.selected_elements) ? payload.selected_elements : [],
+    debug_mode: false,
+    session_replay: typeof payload.session_replay === 'string' ? payload.session_replay : '[]',
+    client_logs: Array.isArray(payload.client_logs) ? payload.client_logs : [],
+    network_requests: Array.isArray(payload.network_requests) ? payload.network_requests : [],
+    runtime_errors: Array.isArray(payload.runtime_errors) ? payload.runtime_errors : [],
+    integration_metadata: payload.integration_metadata || {
+      browser: { preview_viewport_width: 1280, preview_viewport_height: 854 }
+    }
+  };
+}
+
 async function validateSpeed(token) {
   if (!token?.startsWith('CLF1.')) return null;
   const did = getDeviceId();
@@ -128,8 +165,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       if (!token) { sendResponse({ ok: false, error: 'No token' }); return; }
       try {
-        const res = await fetch('https://api.lovable.dev' + msg.path, {
-          method: msg.method || 'GET',
+        const path = typeof msg.path === 'string' ? msg.path : '';
+        const isChatRoute = /^\/projects\/[a-f0-9-]{36}\/chat(?:$|\?)/i.test(path);
+        const safeBody = isChatRoute ? normalizeChatPayload(msg.body) : msg.body;
+        const res = await fetch('https://api.lovable.dev' + path, {
+          method: isChatRoute ? 'POST' : (msg.method || 'GET'),
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -137,7 +177,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             'Referer': 'https://lovable.dev/',
             'x-client-git-sha': '9810ecd6b501b23b14c5d4ee731d8cda244d003b'
           },
-          body: msg.body ? JSON.stringify(msg.body) : undefined
+          body: safeBody ? JSON.stringify(safeBody) : undefined
         });
         const data = res.ok ? await res.json().catch(() => ({})) : null;
         sendResponse({ ok: res.ok, status: res.status, data });
