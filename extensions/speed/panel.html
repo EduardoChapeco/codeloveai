@@ -513,10 +513,12 @@ async function sendChat() {
 
   try {
     const { clf_license } = await cget(['clf_license']);
-    const res = await fetch(SUPABASE + '/functions/v1/lovable-proxy', {
+    const res = await fetch(SUPABASE + '/functions/v1/send-message', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-clf-token': clf_license,
+        'x-clf-extension': 'speed',
       },
       body: JSON.stringify({
         task: text,

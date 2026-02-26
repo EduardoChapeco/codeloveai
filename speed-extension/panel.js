@@ -2,7 +2,7 @@
 // Handles UI logic, chat communication, and tab switching
 
 const SB = 'https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1';
-const SPEED_EDGE = `${SB}/lovable-proxy`;
+const SPEED_EDGE = `${SB}/speed-chat`;
 const LOVABLE_API = 'https://api.lovable.dev';
 const GIT_SHA = '9810ecd6b501b23b14c5d4ee731d8cda244d003b';
 
