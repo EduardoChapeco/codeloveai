@@ -26,22 +26,13 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    let userId: string;
-    try {
-      const token = authHeader.replace("Bearer ", "");
-      const { data, error } = await supabase.auth.getClaims(token);
-      if (error || !data?.claims) throw new Error("Invalid");
-      userId = data.claims.sub;
-    } catch {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) {
-        return new Response(JSON.stringify({ error: "Não autenticado" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      userId = user.id;
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+    const userId = user.id;
 
     // Check admin
     const serviceClient = createClient(
