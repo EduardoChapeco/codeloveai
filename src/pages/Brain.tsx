@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import {
   Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
   Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon,
-  MessageSquare, ChevronLeft, ChevronRight,
+  MessageSquare, ChevronLeft, ChevronRight, RotateCcw, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
@@ -130,11 +130,31 @@ export default function BrainPage() {
       if (error) throw new Error((data as any)?.error || error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
       setBrainActive(true);
-      toast.success((data as any)?.already_exists ? "Star AI já estava ativo!" : "Star AI ativado com sucesso! 🧠");
+      if ((data as any)?.recreated) {
+        toast.success("Star AI recriado com sucesso! Conta Lovable pode ter mudado. 🔄");
+      } else {
+        toast.success((data as any)?.already_exists ? "Star AI já estava ativo!" : "Star AI ativado com sucesso! 🧠");
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao ativar Star AI");
     } finally {
       setSettingUp(false);
+    }
+  };
+
+  const resetBrain = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+        body: { action: "reset" },
+      });
+      if (error) throw new Error((data as any)?.error || error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setBrainActive(false);
+      setAllConversations([]);
+      setCurrentConvoId(null);
+      toast.success("Star AI resetado! Clique em Ativar para recriar.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao resetar Star AI");
     }
   };
 
@@ -305,6 +325,14 @@ export default function BrainPage() {
               <p className="text-sm font-semibold">Star AI</p>
               <p className="text-[11px] text-muted-foreground">🟢 Ativo</p>
             </div>
+
+            <button
+              onClick={resetBrain}
+              title="Resetar Star AI (recriar projeto)"
+              className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
 
             {/* Brain type selector */}
             <div className="flex items-center gap-1 ml-auto flex-wrap justify-end">

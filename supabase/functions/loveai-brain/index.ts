@@ -363,17 +363,43 @@ Deno.serve(async (req) => {
       return json({ error: "Token Lovable não encontrado. Reconecte via /lovable/connect.", code: "no_token" }, 503);
     }
 
+    // ── RESET ──
+    if (action === "reset") {
+      // Delete all brain projects for this user
+      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      console.log(`[Brain] 🗑️ Reset brain for ${obfuscate(userId)}`);
+      return json({ success: true, message: "Brain resetado. Clique em Ativar para recriar." });
+    }
+
     // ── SETUP ──
     if (action === "setup") {
       const existing = await getBrain(sc, userId);
-      if (existing) return json({ success: true, already_exists: true });
+      if (existing) {
+        // Verify project is still accessible with current token
+        try {
+          const verifyRes = await lovFetch(
+            `${API}/projects/${existing.lovable_project_id}`,
+            lovableToken,
+            { method: "GET" }
+          );
+          if (verifyRes.status === 403 || verifyRes.status === 404) {
+            // Account changed or project inaccessible — auto-reset and recreate
+            console.warn(`[Brain] ⚠️ Project ${existing.lovable_project_id} inaccessible (${verifyRes.status}), account may have changed. Recreating...`);
+            await sc.from("user_brain_projects").delete().eq("user_id", userId);
+          } else {
+            return json({ success: true, already_exists: true });
+          }
+        } catch {
+          return json({ success: true, already_exists: true });
+        }
+      }
 
       // Clean up any errored brain
       await sc.from("user_brain_projects").delete().eq("user_id", userId).eq("status", "error");
 
       const result = await createBrainProject(sc, userId, lovableToken);
       if ("error" in result) return json({ error: result.error }, 502);
-      return json({ success: true, already_exists: false });
+      return json({ success: true, already_exists: false, recreated: true });
     }
 
     // ── SEND ──
