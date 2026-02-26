@@ -151,14 +151,70 @@ Gere script SQL completo: schemas, tabelas, RLS, triggers, functions, seed data.
 }
 
 // ─── Create brain project ───
+async function refreshLovableToken(
+  sc: ReturnType<typeof createClient>,
+  userId: string
+): Promise<string | null> {
+  try {
+    const { data: acct } = await sc.from("lovable_accounts")
+      .select("refresh_token_encrypted")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!acct?.refresh_token_encrypted) return null;
+
+    const FIREBASE_API_KEY = Deno.env.get("FIREBASE_API_KEY");
+    if (!FIREBASE_API_KEY) return null;
+
+    const res = await fetch(
+      `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(acct.refresh_token_encrypted)}`,
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const newToken = data.id_token || data.access_token;
+    if (!newToken) return null;
+
+    await sc.from("lovable_accounts").update({
+      token_encrypted: newToken,
+      ...(data.refresh_token ? { refresh_token_encrypted: data.refresh_token } : {}),
+    }).eq("user_id", userId).eq("status", "active");
+
+    console.log(`[Brain] 🔄 Token refreshed for ${obfuscate(userId)}`);
+    return newToken;
+  } catch (e) {
+    console.error(`[Brain] Token refresh failed:`, e);
+    return null;
+  }
+}
+
 async function createBrainProject(
   sc: ReturnType<typeof createClient>,
   userId: string,
   token: string
 ): Promise<{ projectId: string; workspaceId: string } | { error: string }> {
-  // Get workspace
-  const wsRes = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
-  if (!wsRes.ok) return { error: "Falha ao obter workspaces" };
+  // Get workspace — try with current token first
+  let wsRes = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
+
+  // If unauthorized, try refreshing the token
+  if (wsRes.status === 401 || wsRes.status === 403) {
+    console.warn(`[Brain] Workspace fetch got ${wsRes.status}, attempting token refresh...`);
+    const newToken = await refreshLovableToken(sc, userId);
+    if (newToken) {
+      token = newToken;
+      wsRes = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
+    }
+  }
+
+  if (!wsRes.ok) {
+    const errBody = await wsRes.text().catch(() => "");
+    console.error(`[Brain] Workspace fetch failed: ${wsRes.status} ${errBody.substring(0, 200)}`);
+    return { error: `Falha ao obter workspaces (HTTP ${wsRes.status}). Reconecte seu token em /lovable/connect.` };
+  }
   const wsBody = await wsRes.json();
   let wsList: any[] = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || []);
   if (wsList.length === 0 && wsBody?.id) wsList = [wsBody];
@@ -420,23 +476,37 @@ Deno.serve(async (req) => {
 
       console.log(`[Brain] Sending type=${brain_type}, project=${brainProjectId}`);
 
-      let chatRes = await lovFetch(`${API}/projects/${brainProjectId}/chat`, lovableToken, {
+      let activeToken = lovableToken;
+
+      let chatRes = await lovFetch(`${API}/projects/${brainProjectId}/chat`, activeToken, {
         method: "POST",
         body: JSON.stringify(payload),
       });
+
+      // Auto-refresh token on 401
+      if (chatRes.status === 401) {
+        console.warn(`[Brain] 401 on chat, attempting token refresh...`);
+        const newToken = await refreshLovableToken(sc, userId);
+        if (newToken) {
+          activeToken = newToken;
+          chatRes = await lovFetch(`${API}/projects/${brainProjectId}/chat`, activeToken, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+        }
+      }
 
       // Auto-recreate on 403
       if (chatRes.status === 403) {
         console.warn(`[Brain] 403 on ${brainProjectId}, auto-recreating...`);
         await sc.from("user_brain_projects").delete().eq("user_id", userId).eq("lovable_project_id", brainProjectId);
 
-        const result = await createBrainProject(sc, userId, lovableToken);
+        const result = await createBrainProject(sc, userId, activeToken);
         if ("error" in result) return json({ error: result.error }, 502);
 
         brainProjectId = result.projectId;
 
-        // Retry
-        chatRes = await lovFetch(`${API}/projects/${brainProjectId}/chat`, lovableToken, {
+        chatRes = await lovFetch(`${API}/projects/${brainProjectId}/chat`, activeToken, {
           method: "POST",
           body: JSON.stringify(buildPayload(prompt, msgId, aiMsgId)),
         });
