@@ -137,7 +137,7 @@ export default function BrainPage() {
 
   const checkBrainStatus = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+      const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "status" },
       });
       if (!error && data) {
@@ -154,7 +154,7 @@ export default function BrainPage() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+      const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "history", limit: 100 },
       });
       if (!error && data?.conversations) {
@@ -166,7 +166,7 @@ export default function BrainPage() {
   const setupBrain = async () => {
     setSettingUp(true);
     try {
-      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+      const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "setup" },
       });
       if (error) throw new Error((data as any)?.error || error.message);
@@ -182,7 +182,7 @@ export default function BrainPage() {
 
   const resetBrain = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+      const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "reset" },
       });
       if (error) throw new Error((data as any)?.error || error.message);
@@ -213,7 +213,7 @@ export default function BrainPage() {
     setCurrentConvoId(tempId);
 
     try {
-      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+      const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "send", message: userMsg, brain_type: brainType },
       });
       if (error) {

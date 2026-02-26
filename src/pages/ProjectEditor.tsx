@@ -179,13 +179,13 @@ export default function ProjectEditor() {
 
     try {
       const brainType = aiMode === "custom" ? "general" : aiMode;
-      const { data, error } = await supabase.functions.invoke("loveai-brain", {
+      const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "send", message: aiPrompt, brain_type: brainType },
       });
 
       if (error || data?.error) throw { message: data?.error || error?.message };
 
-      const { data: captureData } = await supabase.functions.invoke("loveai-brain", {
+      const { data: captureData } = await supabase.functions.invoke("brain", {
         body: { action: "capture", conversation_id: data.conversation_id },
       });
 

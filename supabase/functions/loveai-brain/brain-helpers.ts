@@ -100,7 +100,7 @@ export async function createFreshBrain(
 
     // ── STEP 1: Create project via Ghost Create ──
     // Try multiple payload formats to find what the API accepts
-    const msgId = crypto.randomUUID();
+    const setupMsgId = crypto.randomUUID();
     const aiMsgId = generateTypeId("aimsg");
     const projectName = `project-${Date.now()}`;
 
@@ -113,7 +113,7 @@ export async function createFreshBrain(
         visibility: "private",
         env_vars: {},
         initial_message: {
-          id: msgId,
+          id: setupMsgId,
           message: "setup",
           files: [],
           optimisticImageUrls: [],
