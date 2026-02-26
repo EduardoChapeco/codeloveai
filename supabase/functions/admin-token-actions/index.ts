@@ -62,17 +62,22 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Check tenant wallet for token cost
+      // Check tenant wallet for token cost — tenants ALWAYS pay
+      const DEFAULT_TOKEN_COST = 2.90;
       const { data: tenantConfig } = await serviceClient
         .from("tenants").select("token_cost").eq("id", tenantId).maybeSingle();
-      if (tenantConfig && tenantConfig.token_cost > 0) {
-        const { data: wallet } = await serviceClient
-          .from("tenant_wallets").select("balance").eq("tenant_id", tenantId).maybeSingle();
-        if (!wallet || wallet.balance < tenantConfig.token_cost) {
-          return new Response(JSON.stringify({ error: "Saldo insuficiente para gerar tokens" }), {
-            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+      const effectiveCost = (tenantConfig?.token_cost && tenantConfig.token_cost > 0)
+        ? tenantConfig.token_cost
+        : DEFAULT_TOKEN_COST;
+
+      const { data: wallet } = await serviceClient
+        .from("tenant_wallets").select("balance").eq("tenant_id", tenantId).maybeSingle();
+      if (!wallet || wallet.balance < effectiveCost) {
+        return new Response(JSON.stringify({
+          error: `Saldo insuficiente para gerar tokens. Custo: R$${effectiveCost.toFixed(2)}. Saldo: R$${(wallet?.balance ?? 0).toFixed(2)}`
+        }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 
@@ -231,24 +236,20 @@ Deno.serve(async (req) => {
                 tenant_id: tenantId,
               });
 
-              // Debit tenant wallet
+              // Debit tenant wallet — always charge tenants
               if (!isGlobalAdmin) {
-                const { data: tc } = await serviceClient
-                  .from("tenants").select("token_cost").eq("id", tenantId).maybeSingle();
-                if (tc && tc.token_cost > 0) {
-                  const { data: tw } = await serviceClient
-                    .from("tenant_wallets").select("balance, total_debited").eq("tenant_id", tenantId).maybeSingle();
-                  if (tw) {
-                    await serviceClient.from("tenant_wallets").update({
-                      balance: tw.balance - tc.token_cost,
-                      total_debited: tw.total_debited + tc.token_cost,
-                    }).eq("tenant_id", tenantId);
+                const { data: tw } = await serviceClient
+                  .from("tenant_wallets").select("balance, total_debited").eq("tenant_id", tenantId).maybeSingle();
+                if (tw) {
+                  await serviceClient.from("tenant_wallets").update({
+                    balance: tw.balance - effectiveCost,
+                    total_debited: tw.total_debited + effectiveCost,
+                  }).eq("tenant_id", tenantId);
 
-                    await serviceClient.from("tenant_wallet_transactions").insert({
-                      tenant_id: tenantId, amount: -tc.token_cost, type: "token_cost",
-                      description: `Licença gerada para ${sanitizedEmail}`,
-                    });
-                  }
+                  await serviceClient.from("tenant_wallet_transactions").insert({
+                    tenant_id: tenantId, amount: -effectiveCost, type: "token_cost",
+                    description: `Licença gerada para ${sanitizedEmail} (R$${effectiveCost.toFixed(2)})`,
+                  });
                 }
               }
             }
