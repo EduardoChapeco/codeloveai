@@ -1,7 +1,6 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { obfuscate } from "../_shared/crypto.ts";
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = any;
 
 const API = "https://api.lovable.dev";
 const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";

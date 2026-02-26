@@ -1,8 +1,7 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateTypeId, obfuscate } from "../_shared/crypto.ts";
 import { lovFetch, getWorkspaceId } from "./token-helpers.ts";
 
-type SupabaseClient = ReturnType<typeof createClient>;
+type SupabaseClient = any;
 
 const API = "https://api.lovable.dev";
 
