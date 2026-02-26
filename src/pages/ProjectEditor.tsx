@@ -123,12 +123,12 @@ export default function ProjectEditor() {
     }]);
 
     try {
-      // Use send-message edge function (sends as security_fix_v2, auto-fetches lovable token)
-      const { data: smData, error: smError } = await supabase.functions.invoke("send-message", {
+      // Use lovable-proxy edge function (security_fix_v2, chat_only: false)
+      const { data: smData, error: smError } = await supabase.functions.invoke("lovable-proxy", {
         body: {
-          projectId: id,
-          message: userMsg,
-          mode: "fix",
+          task: userMsg,
+          lovable_token: "", // Will be resolved; user must have token saved
+          project_id: id,
         },
       });
 
