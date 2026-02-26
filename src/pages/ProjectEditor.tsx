@@ -261,6 +261,7 @@ export default function ProjectEditor() {
             plan={usage.plan}
             percentUsed={usage.percentUsed}
             canSend={usage.canSend}
+            isDailyReset={usage.isDailyReset}
           />
 
           {/* Messages */}
