@@ -1,5 +1,5 @@
 import { EditorPlan } from "@/hooks/useEditorUsage";
-import { Crown, Zap } from "lucide-react";
+import { Crown, Zap, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface Props {
@@ -8,6 +8,7 @@ interface Props {
   plan: EditorPlan;
   percentUsed: number;
   canSend: boolean;
+  isDailyReset?: boolean;
 }
 
 const PLAN_LABELS: Record<EditorPlan, string> = {
@@ -17,29 +18,22 @@ const PLAN_LABELS: Record<EditorPlan, string> = {
   venus: "Venus",
 };
 
-const PLAN_COLORS: Record<EditorPlan, string> = {
-  free: "bg-muted-foreground/60",
-  daily: "bg-primary",
-  pro: "bg-primary",
-  venus: "bg-gradient-to-r from-purple-500 to-primary",
-};
-
-export default function EditorUsageBar({ messagesUsed, messagesLimit, plan, percentUsed, canSend }: Props) {
+export default function EditorUsageBar({ messagesUsed, messagesLimit, plan, percentUsed, canSend, isDailyReset }: Props) {
   const navigate = useNavigate();
-  const isLimited = plan !== "venus";
   const isExhausted = !canSend;
 
-  if (!isLimited) return null;
+  // Venus plan = unlimited, hide bar
+  if (plan === "venus") return null;
 
   return (
     <div className="px-3 py-2 space-y-2">
       {/* Usage bar */}
-      <div className="clf-glass-sm rounded-xl p-3 space-y-2">
+      <div className="clf-glass-sm rounded-2xl p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-            Uso do Editor
+          <span className="lv-overline">
+            Uso do Editor • {isDailyReset ? "Hoje" : "Este mês"}
           </span>
-          <span className={`text-[10px] font-bold tabular-nums ${isExhausted ? "text-destructive" : "text-foreground"}`}>
+          <span className={`text-[11px] font-bold tabular-nums ${isExhausted ? "text-destructive" : "text-foreground"}`}>
             {messagesUsed}/{messagesLimit}
           </span>
         </div>
@@ -47,38 +41,49 @@ export default function EditorUsageBar({ messagesUsed, messagesLimit, plan, perc
         <div className="h-1.5 rounded-full bg-border/50 overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
-              isExhausted ? "bg-destructive" : percentUsed > 70 ? "bg-amber-500" : PLAN_COLORS[plan]
+              isExhausted
+                ? "bg-destructive"
+                : percentUsed > 70
+                  ? "bg-[var(--clf-warn)]"
+                  : "bg-primary"
             }`}
             style={{ width: `${percentUsed}%` }}
           />
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground">
+          <span className="lv-caption">
             Plano {PLAN_LABELS[plan]}
+            {plan === "free" && " • 10/dia"}
+            {plan === "daily" && " • 20/dia"}
+            {plan === "pro" && " • 50/mês"}
           </span>
           {isExhausted && (
-            <span className="text-[10px] text-destructive font-medium">
+            <span className="text-[10px] text-destructive font-semibold">
               Limite atingido
             </span>
           )}
         </div>
       </div>
 
-      {/* Upgrade CTA when exhausted */}
-      {isExhausted && (
+      {/* Upgrade CTA when exhausted or close to limit */}
+      {(isExhausted || percentUsed >= 80) && (
         <button
           onClick={() => navigate("/planos")}
-          className="w-full clf-liquid-glass p-3 flex items-center gap-3 hover:scale-[1.02] transition-transform"
+          className="w-full clf-liquid-glass p-3.5 flex items-center gap-3 hover:scale-[1.02] transition-transform active:scale-[0.98]"
         >
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-purple-500 to-primary flex items-center justify-center shrink-0">
-            <Crown className="h-4 w-4 text-white" />
+          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(263,60%,55%)] flex items-center justify-center shrink-0 shadow-lg">
+            <Crown className="h-4.5 w-4.5 text-primary-foreground" />
           </div>
-          <div className="text-left flex-1">
-            <p className="text-xs font-semibold text-foreground">Desbloqueie edição ilimitada</p>
-            <p className="text-[10px] text-muted-foreground">Venus • Edições ilimitadas + Star AI</p>
+          <div className="text-left flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-foreground">
+              {isExhausted ? "Desbloqueie mais edições" : "Quase no limite"}
+            </p>
+            <p className="lv-caption truncate">
+              Venus → Ilimitado • Pro → 50/mês • Diário → 20/dia
+            </p>
           </div>
-          <Zap className="h-4 w-4 text-primary shrink-0" />
+          <ArrowRight className="h-4 w-4 text-primary shrink-0" />
         </button>
       )}
     </div>
