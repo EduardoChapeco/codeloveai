@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { generateTypeId } from "../_shared/crypto.ts";
 
 // ══════════════════════════════════════════════════════════════
 // Agentic Orchestrator — Engine v2 (Phase 9)
@@ -68,6 +69,7 @@ async function extFetch(url: string, opts: RequestInit, token: string) {
       "Authorization": `Bearer ${token}`,
       "Origin": "https://lovable.dev",
       "Referer": "https://lovable.dev/",
+      "X-Client-Git-SHA": "3d7a3673c6f02b606137a12ddc0ab88f6b775113",
       ...(opts.headers || {}),
     },
   });
@@ -299,19 +301,26 @@ async function executeTask(
   } catch { /* non-critical */ }
 
   try {
-    const msgId = `umsg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-    const aiMsgId = `aimsg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      const msgId = crypto.randomUUID();
+      const aiMsgId = generateTypeId("aimsg");
 
-    const payload: Record<string, unknown> = {
-      id: msgId,
-      message: enhancedPrompt,
-      intent: mode.intent || undefined,
-      chat_only: mode.chat_only,
-      ai_message_id: aiMsgId,
-      thread_id: "main",
-      files: [],
-      optimisticImageUrls: [],
-    };
+      const payload: Record<string, unknown> = {
+        id: msgId,
+        message: enhancedPrompt,
+        intent: mode.intent || undefined,
+        chat_only: mode.chat_only,
+        ai_message_id: aiMsgId,
+        thread_id: "main",
+        files: [],
+        optimisticImageUrls: [],
+        session_replay: "[]",
+        client_logs: [],
+        network_requests: [],
+        runtime_errors: [],
+        selected_elements: [],
+        debug_mode: false,
+        integration_metadata: { browser: { preview_viewport_width: 1280, preview_viewport_height: 854 } },
+      };
     if (mode.view) payload.view = mode.view;
     if (mode.view_description) payload.view_description = mode.view_description;
 
@@ -527,7 +536,74 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Token Lovable não encontrado. Reconecte via /lovable/connect." }, 503);
       }
 
-      if (!project.lovable_project_id) return json({ error: "No Lovable project linked." }, 400);
+      // Auto ghost-create if no Lovable project linked yet
+      if (!project.lovable_project_id) {
+        await addLog(sc, project_id, "👻 Auto ghost-creating Lovable project…", "info");
+        
+        // Get workspace
+        const wsRes = await extFetch(`${EXT_API}/user/workspaces`, { method: "GET" }, adminTk);
+        let workspaceId: string | null = null;
+        if (wsRes.ok) {
+          let wsBody: any;
+          try { wsBody = await wsRes.json(); } catch { wsBody = null; }
+          const wsList = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || []);
+          workspaceId = wsList?.[0]?.id || (wsBody?.id ? wsBody.id : null);
+        }
+        
+        if (!workspaceId) {
+          await addLog(sc, project_id, "❌ Workspace não encontrado", "error");
+          return json({ error: "Workspace não encontrado. Reconecte via /lovable/connect." }, 503);
+        }
+        
+        const projectName = `starble-orch-${Date.now()}`;
+        const createRes = await extFetch(
+          `${EXT_API}/workspaces/${workspaceId}/projects`,
+          { method: "POST", body: JSON.stringify({ name: projectName, initial_message: "setup", visibility: "private" }) },
+          adminTk
+        );
+        
+        if (!createRes.ok) {
+          const errText = await createRes.text();
+          await addLog(sc, project_id, `❌ Ghost create failed: ${createRes.status}`, "error", { errText: errText.slice(0, 200) });
+          return json({ error: `Falha ao criar projeto (HTTP ${createRes.status})` }, 502);
+        }
+        
+        const created = await createRes.json() as Record<string, unknown>;
+        const lovableProjectId = (created.id || created.project_id) as string;
+        if (!lovableProjectId) {
+          return json({ error: "Lovable não retornou ID do projeto" }, 502);
+        }
+        
+        // Ghost cancel
+        const initMsgId = (created.message_id || created.initial_message_id) as string | undefined;
+        if (initMsgId) {
+          try {
+            await extFetch(`${EXT_API}/projects/${lovableProjectId}/chat/${initMsgId}/cancel`, { method: "POST" }, adminTk);
+          } catch { /* ok */ }
+        } else {
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            const latestRes = await extFetch(`${EXT_API}/projects/${lovableProjectId}/latest-message`, { method: "GET" }, adminTk);
+            if (latestRes.ok) {
+              const latest = await latestRes.json() as Record<string, unknown>;
+              const latestId = (latest?.id || latest?.message_id) as string | undefined;
+              if (latestId) {
+                await extFetch(`${EXT_API}/projects/${lovableProjectId}/chat/${latestId}/cancel`, { method: "POST" }, adminTk);
+              }
+            }
+          } catch { /* ok */ }
+        }
+        
+        await sc.from("orchestrator_projects").update({
+          lovable_project_id: lovableProjectId, ghost_created: true,
+        }).eq("id", project_id);
+        
+        project.lovable_project_id = lovableProjectId;
+        await addLog(sc, project_id, `👻 Ghost created: ${lovableProjectId}`, "info");
+        
+        // Wait for project to stabilize
+        await new Promise(r => setTimeout(r, 3000));
+      }
 
       const { data: task } = await sc.from("orchestrator_tasks")
         .select("*").eq("project_id", project_id).eq("status", "pending")

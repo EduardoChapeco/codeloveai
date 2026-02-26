@@ -101,13 +101,40 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Token expiry pre-check
+        // Token expiry pre-check — attempt refresh if expired
         if (account.token_expires_at) {
           const expiresAt = new Date(account.token_expires_at as string).getTime();
-          if (Date.now() + 2 * 60 * 1000 >= expiresAt) {
-            tickLog.push(`  ⏰ Token expiring soon for user ${project.user_id} — skipping, orchestrator will refresh`);
-            skipped++;
-            continue;
+          if (Date.now() >= expiresAt) {
+            tickLog.push(`  ⏰ Token expired for user ${project.user_id} — triggering refresh`);
+            // Trigger token refresh via the dedicated function
+            try {
+              await fetch(`${supabaseUrl}/functions/v1/lovable-token-refresh`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+                },
+                body: JSON.stringify({ force_user_id: project.user_id }),
+              });
+            } catch { /* non-critical */ }
+            // Re-fetch token after refresh attempt
+            const { data: refreshedAcct } = await sc
+              .from("lovable_accounts")
+              .select("token_encrypted, token_expires_at, status")
+              .eq("user_id", project.user_id)
+              .eq("status", "active")
+              .limit(1)
+              .maybeSingle();
+            if (!refreshedAcct?.token_encrypted) {
+              tickLog.push(`  ❌ Token refresh failed — skipping`);
+              skipped++;
+              await sc.from("orchestrator_projects").update({
+                next_tick_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+              }).eq("id", project.id);
+              continue;
+            }
+            // Use the refreshed token
+            Object.assign(account, refreshedAcct);
           }
         }
 
