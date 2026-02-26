@@ -103,31 +103,101 @@ function GlassTabButton({
   return (
     <button
       onClick={onClick}
-      className={`group w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
+      className={`group w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all duration-200 text-left ${
         isActive
-          ? "bg-primary/10 border-primary/20 text-primary shadow-sm"
-          : "border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-white/[0.12] hover:bg-white/[0.03]"
+          ? "bg-primary/10 border-primary/20 text-primary shadow-sm shadow-primary/5"
+          : "border-[var(--liquid-glass-border)] text-muted-foreground hover:text-foreground hover:border-foreground/10 hover:shadow-sm"
       }`}
       style={
         !isActive
           ? {
-              background: "rgba(255,255,255,0.035)",
+              background: "var(--liquid-glass-bg)",
               backdropFilter: "blur(20px) saturate(180%)",
               WebkitBackdropFilter: "blur(20px) saturate(180%)",
             }
-          : undefined
+          : {
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            }
       }
     >
-      <Icon
-        className={`h-4 w-4 flex-shrink-0 ${
-          isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-        }`}
-      />
-      <div className="min-w-0">
-        <p className="text-xs font-semibold truncate">{tab.label}</p>
-        <p className="text-[10px] opacity-60 truncate">{tab.desc}</p>
+      <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+        isActive ? "bg-primary/15" : "bg-foreground/[0.04]"
+      }`}>
+        <Icon
+          className={`h-4 w-4 ${
+            isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+          }`}
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`text-xs font-semibold truncate ${isActive ? "text-primary" : ""}`}>{tab.label}</p>
+        <p className="text-[10px] opacity-50 truncate">{tab.desc}</p>
       </div>
     </button>
+  );
+}
+
+// ── Liquid Glass Nav Link Button ──
+function GlassNavButton({
+  item,
+  isActive,
+  collapsed,
+}: {
+  item: { to: string; label: string; icon: React.ElementType; desc?: string };
+  isActive: boolean;
+  collapsed: boolean;
+}) {
+  const Icon = item.icon;
+
+  if (collapsed) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+          <NavLink to={item.to}>
+            <Icon className="h-4 w-4" />
+            <span>{item.label}</span>
+          </NavLink>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
+
+  return (
+    <NavLink
+      to={item.to}
+      className={`group w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all duration-200 text-left no-underline ${
+        isActive
+          ? "bg-primary/10 border-primary/20 text-primary shadow-sm shadow-primary/5"
+          : "border-[var(--liquid-glass-border)] text-muted-foreground hover:text-foreground hover:border-foreground/10 hover:shadow-sm"
+      }`}
+      style={
+        !isActive
+          ? {
+              background: "var(--liquid-glass-bg)",
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            }
+          : {
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            }
+      }
+    >
+      <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+        isActive ? "bg-primary/15" : "bg-foreground/[0.04]"
+      }`}>
+        <Icon
+          className={`h-4 w-4 ${
+            isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+          }`}
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`text-xs font-semibold truncate ${isActive ? "text-primary" : ""}`}>{item.label}</p>
+        {item.desc && <p className="text-[10px] opacity-50 truncate">{item.desc}</p>}
+      </div>
+    </NavLink>
   );
 }
 
@@ -321,45 +391,45 @@ export default function AppSidebar() {
     );
   }
 
-  // ─── Default sidebar ───
+  // ─── Default sidebar — Big Glass Buttons ───
   const mainItems = [
-    { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
-    { to: "/extensoes", label: "Extensões", icon: Puzzle },
-    { to: "/brain", label: "Star AI", icon: Brain },
-    { to: "/notes", label: "Notas", icon: StickyNote },
-    { to: "/community", label: "Comunidade", icon: MessageCircle },
-    { to: "/install", label: "Instalar", icon: Download },
+    { to: "/dashboard", label: "Painel", icon: LayoutDashboard, desc: "Visão geral" },
+    { to: "/extensoes", label: "Extensões", icon: Puzzle, desc: "Loja de extensões" },
+    { to: "/brain", label: "Star AI", icon: Brain, desc: "Assistente inteligente" },
+    { to: "/notes", label: "Notas", icon: StickyNote, desc: "Anotações rápidas" },
+    { to: "/community", label: "Comunidade", icon: MessageCircle, desc: "Fórum & discussões" },
+    { to: "/install", label: "Instalar", icon: Download, desc: "Download da extensão" },
   ];
 
   const lovableItems = [
-    { to: "/lovable/connect", label: "Conectar", icon: Link2 },
-    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen },
+    { to: "/lovable/connect", label: "Conectar", icon: Link2, desc: "Vincular conta" },
+    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos" },
   ];
 
   const accountItems = [
-    { to: `/profile/${user.id}`, label: "Perfil", icon: User },
-    { to: "/plans", label: "Planos", icon: CreditCard },
-    ...(isAffiliate ? [{ to: "/afiliado/dashboard", label: "Afiliado", icon: Users }] : []),
+    { to: `/profile/${user.id}`, label: "Perfil", icon: User, desc: "Sua conta" },
+    { to: "/plans", label: "Planos", icon: CreditCard, desc: "Assinatura" },
+    ...(isAffiliate ? [{ to: "/afiliado/dashboard", label: "Afiliado", icon: Users, desc: "Suas indicações" }] : []),
   ];
 
   const helpItems = [
-    { to: "/ajuda", label: "Central de Ajuda", icon: BookOpen },
-    { to: "/suporte", label: "Suporte", icon: LifeBuoy },
-    { to: "/termos", label: "Termos de Uso", icon: Scale },
+    { to: "/ajuda", label: "Central de Ajuda", icon: BookOpen, desc: "Artigos & guias" },
+    { to: "/suporte", label: "Suporte", icon: LifeBuoy, desc: "Fale conosco" },
+    { to: "/termos", label: "Termos de Uso", icon: Scale, desc: "Políticas" },
   ];
 
   const exploreItems = [
-    { to: "/afiliados", label: "Programa de Afiliados", icon: Users },
-    { to: "/whitelabel", label: "White Label", icon: Globe },
-    { to: "/parceiros", label: "Parceiros", icon: Handshake },
+    { to: "/afiliados", label: "Programa de Afiliados", icon: Users, desc: "Ganhe comissões" },
+    { to: "/whitelabel", label: "White Label", icon: Globe, desc: "Sua marca" },
+    { to: "/parceiros", label: "Parceiros", icon: Handshake, desc: "Parcerias" },
   ];
 
   const adminItems = [
-    ...(isTenantAdmin || isAdmin ? [{ to: "/admin/tenant", label: "Admin Tenant", icon: Shield }] : []),
+    ...(isTenantAdmin || isAdmin ? [{ to: "/admin/tenant", label: "Admin Tenant", icon: Shield, desc: "Seu tenant" }] : []),
     ...(isAdmin ? [
-      { to: "/admin", label: "Admin Operacional", icon: Shield },
-      { to: "/admin/global", label: "Admin Global", icon: Building2 },
-      { to: "/admin/cloud", label: "Lovable Cloud", icon: Zap },
+      { to: "/admin", label: "Admin Operacional", icon: Shield, desc: "Gestão operacional" },
+      { to: "/admin/global", label: "Admin Global", icon: Building2, desc: "Multi-tenant" },
+      { to: "/admin/cloud", label: "Lovable Cloud", icon: Zap, desc: "Infra & deploy" },
     ] : []),
   ];
 
@@ -368,17 +438,34 @@ export default function AppSidebar() {
   const helpActive = helpItems.some(i => isActive(i.to));
   const exploreActive = exploreItems.some(i => isActive(i.to));
 
-  const renderNavItem = (item: { to: string; label: string; icon: React.ElementType }) => {
-    const active = isActive(item.to);
+  const renderGlassItems = (items: { to: string; label: string; icon: React.ElementType; desc?: string }[]) => {
+    if (collapsed) {
+      return (
+        <SidebarMenu>
+          {items.map(item => (
+            <SidebarMenuItem key={item.to}>
+              <SidebarMenuButton asChild isActive={isActive(item.to)} tooltip={item.label}>
+                <NavLink to={item.to}>
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      );
+    }
     return (
-      <SidebarMenuItem key={item.to}>
-        <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
-          <NavLink to={item.to}>
-            <item.icon className="h-4 w-4" />
-            <span>{item.label}</span>
-          </NavLink>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
+      <div className="space-y-1.5 px-1">
+        {items.map(item => (
+          <GlassNavButton
+            key={item.to}
+            item={item}
+            isActive={isActive(item.to)}
+            collapsed={false}
+          />
+        ))}
+      </div>
     );
   };
 
@@ -407,9 +494,7 @@ export default function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Principal</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {mainItems.map(renderNavItem)}
-            </SidebarMenu>
+            {renderGlassItems(mainItems)}
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -426,9 +511,7 @@ export default function AppSidebar() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarGroupContent>
-                <SidebarMenu>
-                  {lovableItems.map(renderNavItem)}
-                </SidebarMenu>
+                {renderGlassItems(lovableItems)}
               </SidebarGroupContent>
             </CollapsibleContent>
           </SidebarGroup>
@@ -447,9 +530,7 @@ export default function AppSidebar() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarGroupContent>
-                <SidebarMenu>
-                  {accountItems.map(renderNavItem)}
-                </SidebarMenu>
+                {renderGlassItems(accountItems)}
               </SidebarGroupContent>
             </CollapsibleContent>
           </SidebarGroup>
@@ -468,9 +549,7 @@ export default function AppSidebar() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarGroupContent>
-                <SidebarMenu>
-                  {helpItems.map(renderNavItem)}
-                </SidebarMenu>
+                {renderGlassItems(helpItems)}
               </SidebarGroupContent>
             </CollapsibleContent>
           </SidebarGroup>
@@ -489,9 +568,7 @@ export default function AppSidebar() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarGroupContent>
-                <SidebarMenu>
-                  {exploreItems.map(renderNavItem)}
-                </SidebarMenu>
+                {renderGlassItems(exploreItems)}
               </SidebarGroupContent>
             </CollapsibleContent>
           </SidebarGroup>
@@ -502,9 +579,7 @@ export default function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupLabel>Administração</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
-                {adminItems.map(renderNavItem)}
-              </SidebarMenu>
+              {renderGlassItems(adminItems)}
             </SidebarGroupContent>
           </SidebarGroup>
         )}

@@ -400,7 +400,11 @@ export default function AdminGlobal() {
   };
 
   const impersonateTenant = (tenantSlug: string) => {
-    window.open(`/admin?tenant=${tenantSlug}`, "_blank");
+    window.open(`/admin/tenant?impersonate=${tenantSlug}`, "_blank");
+  };
+
+  const viewTenantLanding = (tenantSlug: string) => {
+    window.open(`/?tenant=${tenantSlug}`, "_blank");
   };
 
   const creditWallet = async () => {
@@ -677,7 +681,10 @@ export default function AdminGlobal() {
                               {t.is_domain_approved ? "DNS ✓" : "DNS ✗"}
                             </button>
                           )}
-                          <button onClick={() => impersonateTenant(t.slug)} className="lv-btn-icon h-8 w-8" title="Impersonar tenant">
+                          <button onClick={() => viewTenantLanding(t.slug)} className="lv-btn-icon h-8 w-8" title="Ver landing page">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => impersonateTenant(t.slug)} className="lv-btn-icon h-8 w-8" title="God Mode — Admin do tenant">
                             <LogIn className="h-3.5 w-3.5" />
                           </button>
                           <button onClick={() => openEdit(t)} className="lv-btn-icon h-8 w-8">
