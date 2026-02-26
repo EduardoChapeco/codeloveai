@@ -128,21 +128,17 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Verify brain project is accessible (account mismatch detection)
-      if (brain) {
-        const accessible = await verifyProject(brain.lovable_project_id, lovableToken);
-        if (!accessible) {
-          console.warn(`[Brain] Account mismatch detected, recreating brain for ${userId.slice(0,8)}...`);
-          await sc.from("user_brain_projects").delete().eq("user_id", userId);
-          brain = null;
-        }
+      // No brain at all — user must activate first
+      if (!brain) {
+        return json({ error: "Star AI não está ativo. Ative primeiro clicando em 'Ativar Star AI'.", code: "brain_inactive" }, 400);
       }
 
-      // Auto-create if missing
-      if (!brain) {
-        const setupResult = await createFreshBrain(sc, userId, lovableToken);
-        if ("error" in setupResult) return json({ error: setupResult.error }, 502);
-        brain = { lovable_project_id: setupResult.projectId, lovable_workspace_id: setupResult.workspaceId, status: "active" };
+      // Verify brain project is accessible (account mismatch detection)
+      const accessible = await verifyProject(brain.lovable_project_id, lovableToken);
+      if (!accessible) {
+        console.warn(`[Brain] Account mismatch detected for ${userId.slice(0,8)}, deactivating brain`);
+        await sc.from("user_brain_projects").delete().eq("user_id", userId);
+        return json({ error: "Brain não encontrado na conta Lovable atual. Reative o Star AI.", code: "brain_inactive" }, 400);
       }
 
       const projectId = brain.lovable_project_id;

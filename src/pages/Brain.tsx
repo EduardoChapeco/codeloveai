@@ -217,11 +217,14 @@ export default function BrainPage() {
         body: { action: "send", message: userMsg, brain_type: brainType },
       });
       if (error) {
-        if ((data as any)?.code === "no_token") { setLovableConnected(false); setBrainActive(false); }
+        const code = (data as any)?.code;
+        if (code === "no_token") { setLovableConnected(false); setBrainActive(false); }
+        if (code === "brain_inactive") { setBrainActive(false); }
         throw new Error((data as any)?.error || error.message);
       }
       if (data?.error) {
         if (data?.code === "no_token") { setLovableConnected(false); setBrainActive(false); }
+        if (data?.code === "brain_inactive") { setBrainActive(false); }
         throw new Error(data.error);
       }
 
