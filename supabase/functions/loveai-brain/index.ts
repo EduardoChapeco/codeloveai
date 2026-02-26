@@ -543,10 +543,10 @@ Deno.serve(async (req) => {
         return json({ error: "Mensagem inválida (1-10000 chars)" }, 400);
       }
 
-      const brain = await getBrainProject(userId);
+      let brain = await getBrainProject(userId);
       if (!brain) return json({ error: "Star AI não configurado. Execute setup primeiro." }, 404);
 
-      const brainProjectId = brain.lovable_project_id;
+      let brainProjectId = brain.lovable_project_id;
       const chatMode: ChatMode = (requestedMode as ChatMode) || brainTypeToMode(brain_type);
 
       // --- SEO MODE ---
@@ -585,7 +585,7 @@ Deno.serve(async (req) => {
         finalPrompt = buildBrainPrompt(brain_type, message);
       }
 
-      // Take source snapshot
+      // Take source snapshot (ignore errors — project may be inaccessible)
       try {
         const srcRes = await adminFetch(
           `${TARGET_API}/projects/${brainProjectId}/source-code`,
@@ -610,7 +610,7 @@ Deno.serve(async (req) => {
 
       console.log(`[Brain] Sending mode=${chatMode}, brain_type=${brain_type}, project=${brainProjectId}`);
 
-      const chatRes = await adminFetch(
+      let chatRes = await adminFetch(
         `${TARGET_API}/projects/${brainProjectId}/chat`,
         {
           method: "POST",
@@ -619,19 +619,109 @@ Deno.serve(async (req) => {
         }, sc
       );
 
+      // ─── AUTO-RECREATE on 403: project inaccessible (wrong account / deleted) ───
+      if (chatRes.status === 403) {
+        const errText = await chatRes.text().catch(() => "");
+        console.warn(`[Brain] 403 on project ${brainProjectId}, auto-recreating... (${errText.substring(0, 200)})`);
+
+        // 1. Mark old brain as error & delete
+        await sc.from("user_brain_projects")
+          .update({ status: "error" })
+          .eq("user_id", userId).eq("lovable_project_id", brainProjectId);
+        await sc.from("user_brain_projects")
+          .delete()
+          .eq("user_id", userId).eq("status", "error");
+
+        // 2. Create new brain project (inline setup)
+        const wsRes = await adminFetch(`${TARGET_API}/user/workspaces`, { method: "GET" }, sc);
+        if (!wsRes.ok) return json({ error: "Falha ao obter workspaces do admin para recriar Brain." }, 502);
+        const wsBody = await wsRes.json();
+        let wsList: any[] = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || wsBody?.results || wsBody?.items || []);
+        if (wsList.length === 0 && wsBody?.id) wsList = [wsBody];
+        const workspaceId = wsList?.[0]?.id;
+        if (!workspaceId) return json({ error: "Nenhum workspace admin encontrado para recriar Brain." }, 502);
+
+        const setupMsgId = generateTypeId("umsg");
+        const setupAiMsgId = generateTypeId("aimsg");
+        const createRes = await adminFetch(
+          `${TARGET_API}/workspaces/${workspaceId}/projects`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              description: `Starble Brain - User ${obfuscate(userId)}`,
+              visibility: "private",
+              env_vars: {},
+              metadata: { chat_mode_enabled: false },
+              initial_message: {
+                id: setupMsgId,
+                message: "Crie uma pagina em branco com um div id='brain-response' vazio",
+                files: [], optimisticImageUrls: [],
+                chat_only: false, agent_mode_enabled: false,
+                ai_message_id: setupAiMsgId,
+              },
+            }),
+          }, sc
+        );
+        if (!createRes.ok) return json({ error: "Falha ao recriar Brain project." }, 502);
+
+        const project = await createRes.json();
+        const newBrainProjectId = project?.id || project?.project_id;
+        if (!newBrainProjectId) return json({ error: "ID do novo Brain não retornado." }, 502);
+
+        // Cancel initial message
+        try {
+          await adminFetch(
+            `${TARGET_API}/projects/${newBrainProjectId}/chat/${setupMsgId}/cancel`,
+            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
+            sc
+          );
+        } catch { /* ok */ }
+
+        // Inject brain config
+        try {
+          await adminFetch(`${TARGET_API}/projects/${newBrainProjectId}/edit-code`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              changes: [
+                { path: "src/brain-config.md", content: "# Starble Brain System\n\nEste projeto é o Brain da plataforma Starble.\nQuando receber mensagens via chat, responda SOMENTE com o resultado solicitado.\nNÃO crie páginas, componentes ou código a menos que explicitamente solicitado.\nFormato de resposta padrão: texto puro ou JSON conforme instruído no prompt.\n\nRESPONDA SEMPRE EM PORTUGUÊS (Brasil)." },
+                { path: "src/brain-output.json", content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }) },
+              ],
+            }),
+          }, sc);
+        } catch { /* ok */ }
+
+        // Save new mapping
+        await sc.from("user_brain_projects").insert({
+          user_id: userId,
+          lovable_project_id: newBrainProjectId,
+          lovable_workspace_id: workspaceId,
+          status: "active",
+          brain_owner: "admin",
+        });
+
+        console.log(`[Brain] ✅ Auto-recreated brain ${newBrainProjectId} for user ${obfuscate(userId)}`);
+
+        // 3. Retry send with new brain project
+        brainProjectId = newBrainProjectId;
+        const retryPayload = buildChatPayload(chatMode, finalPrompt, msgId, aiMsgId, {
+          view_description: seoViewDesc,
+        });
+
+        chatRes = await adminFetch(
+          `${TARGET_API}/projects/${newBrainProjectId}/chat`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(retryPayload),
+          }, sc
+        );
+      }
+
       if (!chatRes.ok) {
         const errText = await chatRes.text().catch(() => "");
         console.error(`[Brain] Chat failed (${chatMode}):`, chatRes.status, errText.substring(0, 500));
-
-        // If 403 persists after token refresh, the brain project is inaccessible — mark as error
-        if (chatRes.status === 403) {
-          await sc.from("user_brain_projects")
-            .update({ status: "error" })
-            .eq("user_id", userId).eq("lovable_project_id", brainProjectId);
-          console.warn(`[Brain] Project ${brainProjectId} marked as error (403 persistent)`);
-          return json({ error: "Projeto Brain inacessível. Execute setup novamente para recriar.", code: "brain_project_inaccessible" }, 403);
-        }
-
         return json({ error: "Falha ao enviar para Star AI." }, 502);
       }
 
@@ -657,6 +747,7 @@ Deno.serve(async (req) => {
         brain_message_id: msgId,
         ai_message_id: aiMsgId,
         chat_mode: chatMode,
+        brain_recreated: brainProjectId !== brain.lovable_project_id,
       });
     }
 
