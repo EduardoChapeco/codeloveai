@@ -11,7 +11,7 @@
  * Called by cron job or manually by admin.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { DEFAULT_TENANT_ID } from "../_shared/constants.ts";
+import { revokeTokenEverywhere } from "../_shared/token-revocation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,7 +28,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminSecret = Deno.env.get("Starble_ADMIN_SECRET");
-    const workerUrl = "https://Starble-fix-api.eusoueduoficial.workers.dev";
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -63,7 +62,7 @@ Deno.serve(async (req) => {
       errors: [] as string[],
     };
 
-    // ── 1. Deactivate expired licenses (not admin_master) ──
+    // ── 1. Deactivate expired licenses (not admin_master) + revoke in workers ──
     const { data: expiredLicenses } = await adminClient
       .from("licenses")
       .select("id, key, user_id, expires_at, plan")
@@ -77,6 +76,15 @@ Deno.serve(async (req) => {
         .from("licenses")
         .update({ active: false, status: "expired" })
         .in("id", ids);
+
+      for (const lic of expiredLicenses) {
+        if (lic.key?.startsWith("CLF1.") && adminSecret) {
+          const rvk = await revokeTokenEverywhere(lic.key);
+          if (rvk.ok) results.cloudflare_tokens_revoked += 1;
+          if (rvk.errors.length) results.errors.push(...rvk.errors);
+        }
+      }
+
       results.expired_licenses_deactivated = ids.length;
       console.log(`[cleanup] Deactivated ${ids.length} expired licenses`);
     }
@@ -139,34 +147,12 @@ Deno.serve(async (req) => {
             .eq("id", tkn.id);
           results.orphan_tokens_deactivated++;
 
-          // Revoke on Cloudflare worker
+          // Revoke on workers (all known worker URLs/endpoints)
           if (adminSecret && tkn.token && tkn.token.startsWith("CLF1.")) {
-            try {
-              const resp = await fetch(`${workerUrl}/admin/revoke`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-Admin-Secret": adminSecret,
-                },
-                body: JSON.stringify({ token: tkn.token }),
-              });
-
-              if (!resp.ok) {
-                // Try unbind as fallback
-                await fetch(`${workerUrl}/admin/unbind`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "X-Admin-Secret": adminSecret,
-                  },
-                  body: JSON.stringify({ token: tkn.token }),
-                });
-              }
-              results.cloudflare_tokens_revoked++;
-              console.log(`[cleanup] Revoked CF token for user ${tkn.user_id}`);
-            } catch (e) {
-              results.errors.push(`CF revoke failed for ${tkn.user_id}: ${(e as Error).message}`);
-            }
+            const rvk = await revokeTokenEverywhere(tkn.token);
+            if (rvk.ok) results.cloudflare_tokens_revoked += 1;
+            if (rvk.errors.length) results.errors.push(...rvk.errors);
+            console.log(`[cleanup] Revoked CF token for user ${tkn.user_id}`);
           }
         }
       }
@@ -177,6 +163,30 @@ Deno.serve(async (req) => {
       .from("tokens")
       .update({ is_active: false })
       .eq("user_id", ADMIN_USER_ID);
+
+    // ── 5. Scrub inactive token history from account (destroy old token material) ──
+    const { data: inactiveLicenses } = await adminClient
+      .from("licenses")
+      .select("id, key, active, plan")
+      .eq("active", false)
+      .neq("plan", "admin_master")
+      .not("key", "is", null);
+
+    if (inactiveLicenses && inactiveLicenses.length > 0) {
+      for (const lic of inactiveLicenses) {
+        const revokedKey = `REVOKED_${lic.id}`;
+        await adminClient
+          .from("licenses")
+          .update({ key: revokedKey })
+          .eq("id", lic.id)
+          .neq("key", revokedKey);
+      }
+    }
+
+    await adminClient
+      .from("tokens")
+      .delete()
+      .eq("is_active", false);
 
     console.log(`[cleanup] Results:`, results);
 

@@ -68,10 +68,16 @@ async function validateSpeed(token) {
       headers: { 'Content-Type': 'application/json', 'x-clf-token': token }
     });
     const j = await res.json();
-    if (!j.ok) { setBadge('inactive'); return null; }
+    if (!j.ok) {
+      setBadge('inactive');
+      await chrome.storage.local.remove([CK, 'clf_license', 'spd_plan', 'spd_allowed', 'spd_branding']);
+      chrome.storage.local.set({ spd_plan_error: j.error || 'Licença inválida/revogada.' });
+      return null;
+    }
 
     if (!j.allowedExtensions?.includes('speed')) {
       setBadge('inactive');
+      await chrome.storage.local.remove([CK, 'clf_license', 'spd_plan', 'spd_allowed', 'spd_branding']);
       chrome.storage.local.set({ spd_plan_error: `Plano "${j.plan}" não inclui Starble Speed.` });
       return null;
     }
@@ -86,12 +92,10 @@ async function validateSpeed(token) {
     setBadge('active');
     return j;
   } catch {
-    const r = await chrome.storage.local.get([CK]);
-    const c = r[CK];
-    if (c?.v && c?.d === did && c?.t === token && (Date.now() - c.ts) < 86400000) {
-      setBadge('active'); return c.i;
-    }
-    setBadge('inactive'); return null;
+    // Fail-closed: never allow cached token on network/validation failures
+    await chrome.storage.local.remove([CK, 'clf_license', 'spd_plan', 'spd_allowed', 'spd_branding']);
+    setBadge('inactive');
+    return null;
   }
 }
 
