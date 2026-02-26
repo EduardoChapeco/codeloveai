@@ -1,6 +1,7 @@
-// speed-chat v3.0.0 — Thin wrapper that delegates to send-message
-// This function exists only for backward compatibility with the Speed extension.
-// It translates the Speed-specific body format and forwards to send-message logic.
+// speed-chat v3.1.0 — Speed extension endpoint
+// FLUXO: CLF1 válido → edge function usa token Lovable INTERNO → chama API
+// O cliente envia o token Firebase do Lovable (para compatibilidade), mas a
+// edge function TAMBÉM resolve internamente via lovable_accounts.
 // CRITICAL: intent=security_fix_v2, chat_only=false — ALWAYS.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -11,7 +12,7 @@ const LOVABLE_API = "https://api.lovable.dev";
 
 // ── HARDCODED — NUNCA ALTERAR ──
 const INTENT = "security_fix_v2";
-const CHAT_ONLY = false;  // NUNCA true — true = Plan mode = cobra crédito
+const CHAT_ONLY = false;  // NUNCA true
 const VIEW = "security";
 const VIEW_DESC = "The user is currently viewing the security view for their project.";
 
@@ -33,11 +34,42 @@ function makeAiMsgId(): string {
   return "aimsg_" + Array.from({ length: 26 }, () => C[Math.floor(Math.random() * 32)]).join("");
 }
 
+/**
+ * Resolve the internal Lovable token from DB.
+ * Priority: user's own → admin master's (shared).
+ */
+async function resolveInternalToken(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string
+): Promise<string | null> {
+  // Try user's own
+  const { data: userAcc } = await adminClient
+    .from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (userAcc?.token_encrypted) return userAcc.token_encrypted;
+
+  // Fallback: admin's token
+  const { data: adminUser } = await adminClient
+    .from("user_roles").select("user_id").eq("role", "admin").limit(1).maybeSingle();
+  if (adminUser?.user_id) {
+    const { data: adminAcc } = await adminClient
+      .from("lovable_accounts")
+      .select("token_encrypted")
+      .eq("user_id", adminUser.user_id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (adminAcc?.token_encrypted) return adminAcc.token_encrypted;
+  }
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (req.method !== "POST") return fail("Method not allowed", 405);
 
-  // Speed client header check
   if (req.headers.get("X-Speed-Client") !== "1") {
     return fail("Forbidden — missing Speed client header", 403);
   }
@@ -51,7 +83,6 @@ Deno.serve(async (req: Request) => {
   if (!clientVersion || typeof clientVersion !== "string" || !clientVersion.startsWith("speed-")) {
     return fail("Forbidden — invalid client version", 403);
   }
-  if (!token || typeof token !== "string" || !token.startsWith("eyJ")) return fail("Token inválido", 401);
   if (!projectId || !/^[a-f0-9-]{36}$/.test(projectId)) return fail("projectId inválido");
   if (!message || typeof message !== "string" || !message.trim()) return fail("message obrigatória");
   if (!licenseKey || typeof licenseKey !== "string" || !licenseKey.startsWith("CLF1.")) return fail("licenseKey inválida", 401);
@@ -65,6 +96,7 @@ Deno.serve(async (req: Request) => {
   if (!guard.allowed) return fail(guard.error || "Licença inválida", 403);
 
   const licenseId = (guard.license as any)?.id || null;
+  const userId = (guard.license as any)?.user_id || null;
   const isAdmin = !!guard.isAdmin;
 
   // Extension access check (admin bypasses)
@@ -81,6 +113,20 @@ Deno.serve(async (req: Request) => {
         }
       }
     }
+  }
+
+  // Resolve Lovable token INTERNALLY
+  // Accept client token as fallback for backward compat, but prefer internal
+  let lovableToken: string | null = null;
+  if (userId) {
+    lovableToken = await resolveInternalToken(adminClient, userId);
+  }
+  // Fallback: client-provided token (backward compat with extension that captures Bearer)
+  if (!lovableToken && token && typeof token === "string" && token.startsWith("eyJ")) {
+    lovableToken = token;
+  }
+  if (!lovableToken) {
+    return fail("Token Lovable interno não disponível. Admin deve conectar conta.", 500);
   }
 
   // Build payload — ALL HARDCODED
@@ -107,14 +153,13 @@ Deno.serve(async (req: Request) => {
     },
   };
 
-  // Call Lovable
   let lovableRes: Response;
   try {
     lovableRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${lovableToken}`,
         "x-client-git-sha": GIT_SHA,
         Origin: "https://lovable.dev",
         Referer: "https://lovable.dev/",
@@ -126,11 +171,10 @@ Deno.serve(async (req: Request) => {
     return fail("Falha de conexão", 502);
   }
 
-  if (lovableRes.status === 401) return fail("Token expirado — recarregue o Lovable", 401);
+  if (lovableRes.status === 401) return fail("Token Lovable expirado — admin deve reconectar", 401);
   if (lovableRes.status === 429) return fail("Rate limit — aguarde", 429);
 
   if (lovableRes.ok) {
-    // Increment usage on success
     if (licenseId) {
       try { await incrementUsage(adminClient, licenseId); }
       catch (e) { console.error("[speed-chat] Increment error:", e); }
