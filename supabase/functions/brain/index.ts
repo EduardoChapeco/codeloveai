@@ -139,11 +139,12 @@ async function verifyProjectState(
   token: string,
 ): Promise<{ state: ProjectVerificationState; status: number | null }> {
   try {
-    const res = await lovFetch(`${API}/projects/${projectId}/chat`, token, { method: "GET" });
+    // Use GET /projects/{id} — the correct read endpoint (not /chat which is POST-only → 405)
+    const res = await lovFetch(`${API}/projects/${projectId}`, token, { method: "GET" });
 
     if (res.ok) return { state: "accessible", status: res.status };
     if (res.status === 403 || res.status === 404) return { state: "not_found", status: res.status };
-    if (res.status === 401 || res.status === 405 || res.status === 429 || res.status >= 500) {
+    if (res.status === 401 || res.status === 429 || res.status >= 500) {
       return { state: "unknown", status: res.status };
     }
 
