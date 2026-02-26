@@ -41,7 +41,7 @@ export default function FreePlan() {
         return;
       }
       setStatus("success");
-      toast.success("Testdrive de 5 horas ativado!");
+      toast.success("Plano Grátis ativado — 10 mensagens/dia!");
     } catch (err: any) {
       console.error("Free plan error:", err);
       setErrorMsg(err?.message || "Erro ao ativar plano.");
@@ -73,10 +73,10 @@ export default function FreePlan() {
             <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
               <Gift className="h-7 w-7 text-primary" />
             </div>
-            <p className="lv-overline mb-2">Testdrive gratuito</p>
-            <h1 className="lv-heading-lg mb-3">5 horas grátis</h1>
+            <p className="lv-overline mb-2">Plano gratuito</p>
+            <h1 className="lv-heading-lg mb-3">10 mensagens/dia</h1>
             <p className="lv-body mb-8">
-              Ative seu testdrive gratuito de 5 horas para testar a extensão.
+              Ative seu plano gratuito de 10 mensagens diárias para usar a extensão.
               Sem custos, sem compromisso.
             </p>
             {code ? (
@@ -102,9 +102,9 @@ export default function FreePlan() {
               <CheckCircle className="h-7 w-7 text-green-500" />
             </div>
             <p className="lv-overline mb-2">Ativado!</p>
-            <h2 className="lv-heading-lg mb-3">Testdrive ativo</h2>
+            <h2 className="lv-heading-lg mb-3">Plano Grátis ativo</h2>
             <p className="lv-body mb-8">
-              Seu testdrive de 5 horas foi ativado com sucesso. Acesse seu dashboard para ver seu token.
+              Seu plano de 10 mensagens/dia foi ativado com sucesso. Acesse seu dashboard para começar.
             </p>
             <Link to="/dashboard" className="lv-btn-primary lv-btn-lg w-full">
               Ir para dashboard

@@ -151,41 +151,54 @@ export default function Dashboard() {
     loadAll();
   }, [user]);
 
-  // Auto-provision license ONLY for admins (not for regular users)
+  // Auto-provision: admins get lifetime, regular users get free 10msg license
   useEffect(() => {
-    if (!user || !tokensLoaded || tokenGenerating) return;
+    if (!user || !tokensLoaded || tokenGenerating || adminLoading) return;
     const hasActiveToken = tokens.some((t) => t.is_active);
     const hasActiveLicense = license?.active;
     if (hasActiveToken || hasActiveLicense) return;
 
-    // Only admins get auto-provisioned tokens
-    if (!isAdmin) return;
-
-    const tokenKey = `clf_auto_license_v3_${user.id}`;
+    const tokenKey = `clf_auto_license_v4_${user.id}`;
     if (localStorage.getItem(tokenKey) === "true") return;
 
     setTokenGenerating(true);
-    const provisionLicense = async () => {
+    const provision = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("admin-token-actions", {
-          body: {
-            action: "generate",
-            email: user.email,
-            name: user.user_metadata?.name || user.email?.split("@")[0] || "Usuário",
-            plan: "lifetime",
-            user_id: user.id,
-          },
-        });
-        if (!error && data?.token) {
-          setTokens([{ id: "auto", token: data.token, is_active: true }]);
-          toast.success("Acesso Master Vitalício ativado! 👑");
+        if (isAdmin) {
+          // Admin gets lifetime master access
+          const { data, error } = await supabase.functions.invoke("admin-token-actions", {
+            body: {
+              action: "generate",
+              email: user.email,
+              name: user.user_metadata?.name || user.email?.split("@")[0] || "Usuário",
+              plan: "lifetime",
+              user_id: user.id,
+            },
+          });
+          if (!error && data?.token) {
+            setTokens([{ id: "auto", token: data.token, is_active: true }]);
+            toast.success("Acesso Master Vitalício ativado! 👑");
+          }
+        } else {
+          // Regular user gets free 10msg/day license via edge function
+          const { data, error } = await supabase.functions.invoke("auto-onboard", {
+            body: {},
+          });
+          if (!error && data?.license_id) {
+            // Reload license
+            const { data: newLic } = await supabase.from("licenses")
+              .select("id, key, active, plan, plan_type, status, expires_at, daily_messages, messages_used_today")
+              .eq("id", data.license_id).maybeSingle();
+            if (newLic) setLicense(newLic as unknown as MemberLicense);
+            toast.success("Plano Grátis ativado — 10 mensagens/dia! 🎉");
+          }
         }
         localStorage.setItem(tokenKey, "true");
       } catch { /* retry next time */ }
       setTokenGenerating(false);
     };
-    provisionLicense();
-  }, [user, tokensLoaded, tokens, tokenGenerating, license, isAdmin]);
+    provision();
+  }, [user, tokensLoaded, tokens, tokenGenerating, license, isAdmin, adminLoading]);
 
   // Detect extension
   useEffect(() => {
