@@ -1,163 +1,180 @@
-// send-message v5.0.0 — CLF1-only auth (no admin token, no Firebase)
-// Clone exato do lovable-proxy
-
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const LOVABLE_API = "https://api.lovable.dev";
-const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
-
-const ANTI_QUESTION_PREFIX =
-  "IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n";
-
-const corsHeaders = {
+const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-clf-token, x-clf-extension, x-speed-client",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-clf-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function makeAiMsgId(): string {
-  const C = "01PDx4Vtw4YF6XfduRwwS6nKZ6sPAC9nCeR";
-  const first = "01234567"[Math.floor(Math.random() * 8)];
-  return "aimsg_" + first + Array.from({ length: 25 }, () => C[Math.floor(Math.random() * C.length)]).join("");
+const LOVABLE_API = "https://api.lovable.dev";
+const GIT_SHA     = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
+const ANTI_Q      = "IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n";
+
+function genUUID(): string {
+  return crypto.randomUUID();
 }
 
-function json(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+function genAiMsgId(): string {
+  const C = "01PbWWqgKDBDorh525uecKaGZD21FGSoCeR";
+  const prefix = C[Math.floor(Math.random() * 8)];
+  let rand = "";
+  for (let i = 0; i < 25; i++) rand += C[Math.floor(Math.random() * 32)];
+  return "aimsg_" + prefix + rand;
 }
 
-async function getUserTokenFromAccount(adminClient: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
-  const { data } = await adminClient
-    .from("lovable_accounts")
-    .select("token_encrypted")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .limit(1);
-  return data?.[0]?.token_encrypted?.trim() || null;
-}
-
-async function resolveLovableToken(req: Request, body: Record<string, unknown>): Promise<string | null> {
-  const explicit = (
-    (body.lovable_token as string) ||
-    (body.lovableToken as string) ||
-    (body.token as string) ||
-    ""
-  ).trim();
-  if (explicit.length >= 10) return explicit;
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) return null;
-
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
-
-  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || "";
-  if (authHeader.startsWith("Bearer ")) {
-    try {
-      const userClient = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const { data: { user }, error: userError } = await userClient.auth.getUser();
-      if (!userError && user?.id) {
-        const byUser = await getUserTokenFromAccount(adminClient, user.id);
-        if (byUser) return byUser;
-      }
-    } catch { /* ignore */ }
-  }
-
-  const headerClf = (req.headers.get("x-clf-token") || "").trim();
-  const bodyClf = (
-    (body.licenseKey as string) ||
-    (body.clf_license as string) ||
-    (body.clfToken as string) ||
-    ""
-  ).trim();
-  const clf = headerClf.startsWith("CLF1.") ? headerClf : bodyClf.startsWith("CLF1.") ? bodyClf : "";
-
-  if (clf) {
-    const { data: licenseRows } = await adminClient
-      .from("licenses")
-      .select("user_id")
-      .eq("key", clf)
-      .eq("active", true)
-      .limit(1);
-
-    const licenseUserId = licenseRows?.[0]?.user_id;
-    if (licenseUserId) {
-      const byLicenseUser = await getUserTokenFromAccount(adminClient, String(licenseUserId));
-      if (byLicenseUser) return byLicenseUser;
-    }
-  }
-
-  return null;
-}
-
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
-
-  let body: Record<string, unknown>;
-  try { body = await req.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
-
-  const task = ((body.task as string) || (body.message as string) || "").trim();
-  const projectId = ((body.project_id as string) || (body.projectId as string) || "").trim();
-  const runtimeErrors = Array.isArray(body.runtime_errors) ? body.runtime_errors : [];
-  const view = body.view ?? null;
-  const viewDescription = body.view_description ?? null;
-
-  if (!task) return json({ ok: false, error: "task/message is required" }, 400);
-  if (!projectId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId))
-    return json({ ok: false, error: "project_id invalid (UUID expected)" }, 400);
-
-  const lovableToken = await resolveLovableToken(req, body);
-  if (!lovableToken) return json({ ok: false, error: "Token não encontrado. Envie CLF1 via x-clf-token header ou autentique via JWT." }, 401);
-
-  const msgId = crypto.randomUUID();
-  const aiMsgId = makeAiMsgId();
-
-  const payload = {
-    id: msgId,
-    message: ANTI_QUESTION_PREFIX + task,
-    intent: "security_fix_v2",
-    chat_only: false,
-    ai_message_id: aiMsgId,
-    thread_id: "main",
-    view, view_description: viewDescription,
-    model: null, session_replay: "[]",
-    client_logs: [], network_requests: [],
-    runtime_errors: runtimeErrors,
-    integration_metadata: { browser: { preview_viewport_width: 1280, preview_viewport_height: 854 } },
-  };
-
-  let lovableRes: Response;
+function decodeCLF1(token: string): Record<string, unknown> | null {
+  if (!token?.startsWith("CLF1.")) return null;
   try {
-    lovableRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
+    const parts = token.split(".");
+    if (parts.length < 3) return null;
+    let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    b64 += "=".repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(b64));
+  } catch {
+    return null;
+  }
+}
+
+async function validateLicense(licenseKey: string): Promise<boolean> {
+  if (!licenseKey?.startsWith("CLF1.")) return false;
+  const payload = decodeCLF1(licenseKey);
+  if (!payload) return false;
+  const now = Date.now();
+  const expMs = typeof payload.exp === "number"
+    ? (payload.exp > 1e12 ? payload.exp : payload.exp * 1000)
+    : 0;
+  if (expMs > 0 && expMs < now) return false;
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+    const { data, error } = await supabase
+      .from("licenses")
+      .select("active, expires_at")
+      .eq("key", licenseKey)
+      .single();
+    if (error || !data) return true;
+    if (!data.active) return false;
+    if (data.expires_at && new Date(data.expires_at).getTime() < now) return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const {
+      token,
+      projectId,
+      message,
+      msgId,
+      aiMsgId: clientAiMsgId,
+      files = [],
+      licenseKey,
+    } = body;
+
+    const authHeader = req.headers.get("authorization") || req.headers.get("x-clf-token") || "";
+    const licKey = licenseKey
+      || (authHeader.startsWith("Bearer CLF1.") ? authHeader.slice(7) : null)
+      || (authHeader.startsWith("CLF1.") ? authHeader : null);
+
+    if (!licKey) {
+      return new Response(JSON.stringify({ error: "Licença não informada" }), {
+        status: 401, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    const valid = await validateLicense(licKey);
+    if (!valid) {
+      return new Response(JSON.stringify({ error: "Licença inativa ou expirada" }), {
+        status: 403, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    if (!projectId || !message) {
+      return new Response(JSON.stringify({ error: "projectId e message são obrigatórios" }), {
+        status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Token Lovable não disponível. Abra o Lovable.dev e tente novamente." }), {
+        status: 401, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+
+    const finalAiMsgId = clientAiMsgId || genAiMsgId();
+    const finalMsgId   = msgId || genUUID();
+
+    const lovableBody = {
+      id:               finalMsgId,
+      message:          ANTI_Q + message,
+      intent:           "security_fix_v2",
+      chat_only:        false,
+      ai_message_id:    finalAiMsgId,
+      thread_id:        "main",
+      view:             null,
+      view_description: null,
+      model:            null,
+      session_replay:   "[]",
+      client_logs:      [],
+      network_requests: [],
+      runtime_errors:   [],
+      files:            files || [],
+      integration_metadata: {
+        browser: {
+          preview_viewport_width:  1280,
+          preview_viewport_height: 854,
+        },
+      },
+    };
+
+    const lovableRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableToken}`,
-        "Content-Type": "application/json",
+        "Authorization":    `Bearer ${token}`,
+        "Content-Type":     "application/json",
         "X-Client-Git-SHA": GIT_SHA,
-        Origin: "https://lovable.dev",
-        Referer: "https://lovable.dev/",
+        "Origin":           "https://lovable.dev",
+        "Referer":          "https://lovable.dev/",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(lovableBody),
     });
-  } catch (e) {
-    console.error("[send-message] Network error:", e);
-    return json({ ok: false, error: "Connection failed" }, 502);
-  }
 
-  const lovableBody = await lovableRes.text().catch(() => "");
-  let lovableJson: unknown = null;
-  try { lovableJson = JSON.parse(lovableBody); } catch { lovableJson = lovableBody; }
+    const lovableData = await lovableRes.json().catch(() => ({}));
 
-  if (lovableRes.ok) {
-    return json({ ok: true, status: lovableRes.status, lovable_response: lovableJson, messageId: msgId, aiMessageId: aiMsgId });
+    if (lovableRes.status === 401) {
+      return new Response(JSON.stringify({ error: "Token Lovable expirado. Recarregue o Lovable.dev.", lovable_status: 401 }), {
+        status: 401, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    if (lovableRes.status === 429) {
+      return new Response(JSON.stringify({ error: "Rate limit da Lovable. Aguarde alguns segundos.", lovable_status: 429 }), {
+        status: 429, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    if (!lovableRes.ok) {
+      return new Response(JSON.stringify({
+        error: `Lovable API error ${lovableRes.status}`,
+        lovable_status: lovableRes.status,
+        details: lovableData,
+      }), { status: 502, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify({
+      ok:      true,
+      status:  lovableRes.status,
+      aiMsgId: finalAiMsgId,
+      msgId:   finalMsgId,
+      lovable: lovableData,
+    }), { status: 200, headers: { ...CORS, "Content-Type": "application/json" } });
+
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500, headers: { ...CORS, "Content-Type": "application/json" }
+    });
   }
-  return json({ ok: false, error: `Lovable API returned ${lovableRes.status}`, lovable_status: lovableRes.status, details: lovableJson },
-    lovableRes.status >= 500 ? 502 : lovableRes.status);
 });
