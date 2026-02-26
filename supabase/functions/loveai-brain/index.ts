@@ -100,6 +100,15 @@ Deno.serve(async (req) => {
 
       let brain = await getBrain(sc, userId);
 
+      // If brain is in "creating" state, wait for it
+      if (brain && brain.lovable_project_id === "creating") {
+        await new Promise(r => setTimeout(r, 5000));
+        brain = await getBrain(sc, userId);
+        if (!brain || brain.lovable_project_id === "creating") {
+          return json({ error: "Brain está sendo criado. Tente novamente em alguns segundos.", code: "brain_creating" }, 503);
+        }
+      }
+
       if (brain) {
         const accessible = await verifyProject(brain.lovable_project_id, lovableToken);
         if (!accessible) {
