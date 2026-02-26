@@ -9,7 +9,8 @@ import {
   Building2, Users, Key, Wallet, Palette, Globe, FileText,
   Loader2, Save, Pencil, Trash2, Plus, Eye, EyeOff,
   RefreshCw, Copy, BarChart3, Shield, Upload, Settings2, Boxes,
-  Monitor, Smartphone, ExternalLink, Check
+  Monitor, Smartphone, ExternalLink, Check, Sparkles, Zap,
+  CreditCard, ArrowUpRight, ChevronRight, CircleDot, Crown
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -59,23 +60,16 @@ const normalizeFontFamily = (value: string | null | undefined) => {
 };
 
 const toRadiusNumber = (value: unknown) => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(0, Math.min(24, value));
-  }
-  if (typeof value === "string") {
-    const n = Number.parseFloat(value);
-    if (Number.isFinite(n)) {
-      return Math.max(0, Math.min(24, n));
-    }
-  }
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.min(24, value));
+  if (typeof value === "string") { const n = Number.parseFloat(value); if (Number.isFinite(n)) return Math.max(0, Math.min(24, n)); }
   return 12;
 };
 
 const EXTENSION_MODES = [
-  { id: "security_fix_v2", label: "Security Fix (Padrão)" },
-  { id: "seo_fix", label: "SEO Fix" },
-  { id: "error_fix", label: "Error Fix" },
-  { id: "custom", label: "Modo Custom" },
+  { id: "security_fix_v2", label: "Security Fix", desc: "Análise e correção de vulnerabilidades" },
+  { id: "seo_fix", label: "SEO Fix", desc: "Otimização para mecanismos de busca" },
+  { id: "error_fix", label: "Error Fix", desc: "Detecção e correção de erros" },
+  { id: "custom", label: "Modo Custom", desc: "Instrução personalizada para a IA" },
 ];
 
 const DEFAULT_MODULES: Record<string, boolean> = {
@@ -83,16 +77,23 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   split: false, automation: false, whitelabel: false, affiliates: true, community: true,
 };
 
-const MODULE_LABELS: Record<string, string> = {
-  chat: "Chat AI / Star AI",
-  deploy: "Deploy / Publicação",
-  preview: "Preview de Projetos",
-  notes: "Notas",
-  split: "Split View",
-  automation: "Automação",
-  whitelabel: "White Label",
-  affiliates: "Afiliados",
-  community: "Comunidade",
+const MODULE_META: Record<string, { label: string; icon: any; desc: string }> = {
+  chat: { label: "Chat AI", icon: Sparkles, desc: "Assistente inteligente integrado" },
+  deploy: { label: "Deploy", icon: Zap, desc: "Publicação de projetos" },
+  preview: { label: "Preview", icon: Eye, desc: "Visualização de projetos" },
+  notes: { label: "Notas", icon: FileText, desc: "Anotações e documentos" },
+  split: { label: "Split View", icon: Monitor, desc: "Edição dividida" },
+  automation: { label: "Automação", icon: RefreshCw, desc: "Fluxos automatizados" },
+  whitelabel: { label: "White Label", icon: Crown, desc: "Gestão de marca" },
+  affiliates: { label: "Afiliados", icon: Users, desc: "Programa de indicações" },
+  community: { label: "Comunidade", icon: Globe, desc: "Fórum e interações" },
+};
+
+const ROLE_LABELS: Record<string, { label: string; color: string }> = {
+  tenant_owner: { label: "Owner", color: "text-amber-400" },
+  tenant_admin: { label: "Admin", color: "text-primary" },
+  tenant_support: { label: "Suporte", color: "text-cyan-400" },
+  tenant_member: { label: "Membro", color: "text-muted-foreground" },
 };
 
 export default function TenantAdmin() {
@@ -113,28 +114,18 @@ export default function TenantAdmin() {
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [hasChanges, setHasChanges] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
-
-  // Add member inline
   const [addMemberEmail, setAddMemberEmail] = useState("");
   const [addMemberRole, setAddMemberRole] = useState("tenant_member");
   const [addMemberLoading, setAddMemberLoading] = useState(false);
-
-  // Generate token inline
   const [genTokenEmail, setGenTokenEmail] = useState("");
   const [genTokenPlan, setGenTokenPlan] = useState("daily_token");
   const [genTokenLoading, setGenTokenLoading] = useState(false);
-
-  // Topup inline
   const [topupAmount, setTopupAmount] = useState("");
   const [topupPix, setTopupPix] = useState<{ code: string; qr_base64?: string } | null>(null);
-
-  // Upload states
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingFavicon, setUploadingFavicon] = useState(false);
-
   const [dbPlans, setDbPlans] = useState<{ id: string; name: string }[]>([]);
 
-  // ── Unified Editor Form ──
   const [form, setForm] = useState({
     name: "", logo_url: "", favicon_url: "",
     primary_color: DEFAULT_PRIMARY_COLOR, secondary_color: DEFAULT_SECONDARY_COLOR, accent_color: DEFAULT_SECONDARY_COLOR,
@@ -144,11 +135,7 @@ export default function TenantAdmin() {
     modules: { ...DEFAULT_MODULES } as Record<string, boolean>,
   });
 
-  const updateForm = (patch: Partial<typeof form>) => {
-    setForm(f => ({ ...f, ...patch }));
-    setHasChanges(true);
-  };
-
+  const updateForm = (patch: Partial<typeof form>) => { setForm(f => ({ ...f, ...patch })); setHasChanges(true); };
   const canAccess = isTenantAdmin || isGlobalAdmin;
   const fetchAllRef = useRef<(() => void) | null>(null);
 
@@ -176,8 +163,7 @@ export default function TenantAdmin() {
         theme_preset: t.theme_preset || DEFAULT_THEME_PRESET_ID,
         font_family: normalizeFontFamily(t.font_family),
         border_radius: toRadiusNumber(t.border_radius),
-        modules: typeof t.modules === "object" && t.modules !== null
-          ? { ...DEFAULT_MODULES, ...t.modules } : { ...DEFAULT_MODULES },
+        modules: typeof t.modules === "object" && t.modules !== null ? { ...DEFAULT_MODULES, ...t.modules } : { ...DEFAULT_MODULES },
         extension_mode: t.extension_mode || "security_fix_v2",
         custom_mode_prompt: t.custom_mode_prompt || "",
         trial_minutes: t.trial_minutes ?? 30,
@@ -232,7 +218,6 @@ export default function TenantAdmin() {
   }, [tenant]);
   fetchAllRef.current = fetchAll;
 
-  // ── Save All ──
   const saveAll = async () => {
     if (!tenant) return;
     setSaving(true);
@@ -252,7 +237,7 @@ export default function TenantAdmin() {
         modules: form.modules,
       } as any).eq("id", tenant.id);
       if (error) throw error;
-      toast.success("Tenant atualizado com sucesso!");
+      toast.success("Configurações salvas com sucesso!");
       setHasChanges(false);
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar");
@@ -282,12 +267,9 @@ export default function TenantAdmin() {
 
   const applyThemePreset = (presetId: string) => {
     const preset = THEME_PRESETS.find(p => p.id === presetId);
-    if (preset) {
-      updateForm({ theme_preset: presetId, primary_color: preset.primary, secondary_color: preset.secondary });
-    }
+    if (preset) updateForm({ theme_preset: presetId, primary_color: preset.primary, secondary_color: preset.secondary });
   };
 
-  // ── Member / License / Finance actions ──
   const updateMemberRole = async (memberId: string, newRole: string) => {
     const { error } = await supabase.from("tenant_users").update({ role: newRole as any }).eq("id", memberId);
     if (error) return toast.error(error.message);
@@ -303,7 +285,7 @@ export default function TenantAdmin() {
     await supabase.from("licenses").update({ active: false, status: "suspended" }).eq("id", licenseId);
     toast.success("Licença revogada!"); fetchAll();
   };
-  const copyLicenseKey = (key: string) => { navigator.clipboard.writeText(key); toast.success("Licença copiada!"); };
+  const copyLicenseKey = (key: string) => { navigator.clipboard.writeText(key); toast.success("Chave copiada!"); };
 
   const handleAddMember = async () => {
     if (!tenant || !addMemberEmail) return toast.error("Informe o email");
@@ -345,10 +327,20 @@ export default function TenantAdmin() {
   };
 
   if (authLoading || tenantLoading || loading) {
-    return <AppLayout><div className="min-h-full flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></AppLayout>;
+    return (
+      <AppLayout>
+        <div className="min-h-full flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+            <p className="text-xs text-muted-foreground">Carregando painel...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
   }
 
-  // ── Live Preview URL Builder ──
   const buildPreviewUrl = () => {
     const params = new URLSearchParams();
     params.set("_preview", "1");
@@ -365,272 +357,414 @@ export default function TenantAdmin() {
 
   const refreshPreview = () => setPreviewKey(k => k + 1);
 
+  // ── Glass Card wrapper ──
+  const GlassCard = ({ children, className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+    <div
+      className={`relative rounded-2xl border border-white/[0.06] overflow-hidden ${className}`}
+      style={{
+        background: "var(--liquid-glass-bg)",
+        backdropFilter: "blur(40px) saturate(180%)",
+        WebkitBackdropFilter: "blur(40px) saturate(180%)",
+        boxShadow: "var(--clf-shadow-glass), var(--light-specular)",
+      }}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+
   // ── Section Header ──
-  const SectionTitle = ({ icon: Icon, title, description }: { icon: any; title: string; description: string }) => (
-    <div className="flex items-start gap-3 mb-4">
-      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <Icon className="h-4 w-4 text-primary" />
+  const SectionHeader = ({ icon: Icon, title, description, badge }: { icon: any; title: string; description: string; badge?: string }) => (
+    <div className="flex items-start gap-4 mb-6">
+      <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center flex-shrink-0 border border-primary/10">
+        <Icon className="h-5 w-5 text-primary" />
       </div>
-      <div>
-        <h3 className="text-sm font-bold text-foreground">{title}</h3>
-        <p className="text-xs text-muted-foreground">{description}</p>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-bold text-foreground tracking-tight">{title}</h3>
+          {badge && (
+            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">{badge}</span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{description}</p>
       </div>
     </div>
   );
 
+  const TABS = [
+    { id: "editor" as Tab, label: "Editor Visual", icon: Palette, desc: "Personalização" },
+    { id: "users" as Tab, label: "Usuários", icon: Users, desc: `${members.length} membros` },
+    { id: "licenses" as Tab, label: "Licenças", icon: Key, desc: `${licenses.length} ativas` },
+    { id: "finances" as Tab, label: "Financeiro", icon: Wallet, desc: wallet ? `R$${wallet.balance.toFixed(2)}` : "—" },
+  ];
+
   return (
     <AppLayout>
       <div className="min-h-full">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 space-y-5">
-          {/* ── Header ── */}
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+          {/* ══════ HEADER ══════ */}
           <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Admin do Tenant</p>
-              <h1 className="text-xl font-bold text-foreground">{tenant?.name || "Tenant"}</h1>
-              <p className="text-xs text-muted-foreground">/{tenant?.slug} {tenant?.domain_custom && `• ${tenant.domain_custom}`}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {hasChanges && (
-                <span className="text-[10px] text-amber-500 font-medium animate-pulse">Alterações não salvas</span>
+            <div className="flex items-center gap-4">
+              {form.logo_url ? (
+                <img src={form.logo_url} alt="" className="h-12 w-12 rounded-2xl object-contain border border-white/[0.06] bg-background/50" />
+              ) : (
+                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
+                  <Building2 className="h-6 w-6 text-primary" />
+                </div>
               )}
-              <button onClick={saveAll} disabled={saving || !hasChanges} className={`lv-btn-primary h-9 px-5 text-xs flex items-center gap-2 ${!hasChanges ? "opacity-50 cursor-not-allowed" : ""}`}>
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Salvar Tudo
+              <div>
+                <h1 className="text-xl font-bold text-foreground tracking-tight">{tenant?.name || "Tenant"}</h1>
+                <p className="text-xs text-muted-foreground font-mono">/{tenant?.slug}{tenant?.domain_custom ? ` • ${tenant.domain_custom}` : ""}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {hasChanges && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                  <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-[11px] text-amber-500 font-medium">Alterações pendentes</span>
+                </div>
+              )}
+              <button
+                onClick={saveAll}
+                disabled={saving || !hasChanges}
+                className={`h-10 px-6 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all duration-200 ${
+                  hasChanges
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98]"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                }`}
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Salvar
               </button>
             </div>
           </div>
 
-          {/* WL Sub Status */}
+          {/* WL Subscription Banner */}
           {wlSub && (
-            <div className="lv-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-3">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-primary" />
-                <span className="text-sm font-semibold">{wlSub.plan_name || "White Label"}</span>
-                <span className="text-xs text-muted-foreground">
-                  {wlSub.period === "yearly" ? "Anual" : "Mensal"} • R${(wlSub.amount_cents / 100).toFixed(2)}
-                </span>
+            <GlassCard className="p-5">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[hsl(var(--primary))]/20 to-[hsl(var(--primary))]/5 flex items-center justify-center">
+                    <Crown className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-foreground">{wlSub.plan_name || "White Label"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {wlSub.period === "yearly" ? "Plano Anual" : "Plano Mensal"} • R${(wlSub.amount_cents / 100).toFixed(2)}/período
+                    </p>
+                  </div>
+                </div>
+                <div className={`px-3 py-1.5 rounded-full text-[11px] font-semibold ${
+                  wlSub.status === "active" && new Date(wlSub.expires_at) > new Date()
+                    ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                    : "bg-destructive/10 text-destructive border border-destructive/20"
+                }`}>
+                  {wlSub.status === "active" && new Date(wlSub.expires_at) > new Date() ? "● Ativo" : "● Expirado"}
+                </div>
               </div>
-              <span className={`lv-badge text-[10px] ${wlSub.status === "active" && new Date(wlSub.expires_at) > new Date() ? "lv-badge-success" : "lv-badge-muted"}`}>
-                {wlSub.status === "active" && new Date(wlSub.expires_at) > new Date() ? "Ativo" : "Expirado"}
-              </span>
-            </div>
+            </GlassCard>
           )}
 
-          {/* ── Tabs ── */}
-          <div className="flex gap-1.5 border-b border-border pb-0">
-            {([
-              { id: "editor", label: "Editor Visual", icon: Palette },
-              { id: "users", label: "Usuários", icon: Users },
-              { id: "licenses", label: "Licenças", icon: Key },
-              { id: "finances", label: "Financeiro", icon: Wallet },
-            ] as const).map(t => (
+          {/* ══════ TABS ══════ */}
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {TABS.map(t => (
               <button
                 key={t.id}
                 onClick={() => setSearchParams({ tab: t.id })}
-                className={`px-4 py-2.5 text-xs font-medium flex items-center gap-2 border-b-2 transition-colors -mb-px ${
+                className={`group flex items-center gap-3 px-5 py-3 rounded-xl border transition-all duration-200 whitespace-nowrap ${
                   tab === t.id
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "bg-primary/10 border-primary/20 text-primary shadow-sm"
+                    : "border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-white/[0.12] hover:bg-white/[0.03]"
                 }`}
+                style={tab !== t.id ? { background: "var(--liquid-glass-bg)", backdropFilter: "blur(20px)" } : undefined}
               >
-                <t.icon className="h-3.5 w-3.5" /> {t.label}
+                <t.icon className={`h-4 w-4 ${tab === t.id ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
+                <div className="text-left">
+                  <p className="text-xs font-semibold">{t.label}</p>
+                  <p className="text-[10px] opacity-60">{t.desc}</p>
+                </div>
               </button>
             ))}
           </div>
 
-          {/* ═══════ EDITOR TAB ═══════ */}
+          {/* ═══════════════ EDITOR TAB ═══════════════ */}
           {tab === "editor" && (
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6">
-              {/* ── Left: Form Sections ── */}
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_440px] gap-6">
               <div className="space-y-6">
-                {/* Identity */}
-                <div className="lv-card space-y-4">
-                  <SectionTitle icon={Building2} title="Identidade" description="Nome, logo e domínio do tenant." />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Nome do Tenant</label>
-                      <input className="lv-input w-full h-11 text-sm" value={form.name} onChange={e => updateForm({ name: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Domínio Custom</label>
-                      <input className="lv-input w-full h-11 text-sm" value={form.domain_custom} onChange={e => updateForm({ domain_custom: e.target.value })} placeholder="app.seusite.com" />
-                      {tenant?.domain_custom && !tenant.is_domain_approved && <p className="text-[10px] text-amber-500 mt-1">⏳ Aguardando aprovação</p>}
-                      {tenant?.domain_custom && tenant.is_domain_approved && <p className="text-[10px] text-green-600 mt-1">✅ Aprovado</p>}
-                    </div>
-                  </div>
 
-                  {/* Logo & Favicon */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {(["logo", "favicon"] as const).map(type => {
-                      const url = type === "logo" ? form.logo_url : form.favicon_url;
-                      const uploading = type === "logo" ? uploadingLogo : uploadingFavicon;
-                      return (
-                        <div key={type}>
-                          <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">{type === "logo" ? "Logo" : "Favicon"}</label>
-                          <div className="flex items-center gap-2">
-                            {url && <img src={url} alt="" className="h-10 w-10 object-contain rounded-lg border border-border" />}
-                            <input className="lv-input flex-1 h-10 text-xs" value={url} onChange={e => updateForm({ [type === "logo" ? "logo_url" : "favicon_url"]: e.target.value })} placeholder="https://..." />
-                            <label className="lv-btn-secondary h-10 w-10 p-0 flex items-center justify-center cursor-pointer flex-shrink-0">
-                              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                              <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleFileUpload(type, e.target.files[0])} />
+                {/* ── Identity ── */}
+                <GlassCard className="p-6">
+                  <SectionHeader icon={Building2} title="Identidade" description="Nome, logo, favicon e domínio personalizado do seu tenant." />
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Nome</label>
+                        <input
+                          className="w-full h-12 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 transition-all"
+                          value={form.name} onChange={e => updateForm({ name: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Domínio</label>
+                        <input
+                          className="w-full h-12 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 transition-all font-mono"
+                          value={form.domain_custom} onChange={e => updateForm({ domain_custom: e.target.value })} placeholder="app.seusite.com"
+                        />
+                        {tenant?.domain_custom && !tenant.is_domain_approved && (
+                          <p className="text-[10px] text-amber-500 mt-1.5 flex items-center gap-1"><CircleDot className="h-3 w-3" /> Aguardando aprovação</p>
+                        )}
+                        {tenant?.domain_custom && tenant.is_domain_approved && (
+                          <p className="text-[10px] text-emerald-500 mt-1.5 flex items-center gap-1"><Check className="h-3 w-3" /> Domínio aprovado</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Logo & Favicon */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {(["logo", "favicon"] as const).map(type => {
+                        const url = type === "logo" ? form.logo_url : form.favicon_url;
+                        const uploading = type === "logo" ? uploadingLogo : uploadingFavicon;
+                        return (
+                          <div key={type}>
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+                              {type === "logo" ? "Logo" : "Favicon"}
                             </label>
+                            <div className="flex items-center gap-3">
+                              <div className="h-14 w-14 rounded-xl border border-white/[0.08] bg-white/[0.03] flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {url ? (
+                                  <img src={url} alt="" className="h-full w-full object-contain p-1" />
+                                ) : (
+                                  <Upload className="h-4 w-4 text-muted-foreground/40" />
+                                )}
+                              </div>
+                              <div className="flex-1 space-y-1.5">
+                                <input
+                                  className="w-full h-9 px-3 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[11px] text-foreground font-mono placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/20"
+                                  value={url} onChange={e => updateForm({ [type === "logo" ? "logo_url" : "favicon_url"]: e.target.value })} placeholder="URL ou upload →"
+                                />
+                                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-semibold cursor-pointer hover:bg-primary/15 transition-colors">
+                                  {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                                  Upload
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleFileUpload(type, e.target.files[0])} />
+                                </label>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                </GlassCard>
 
-                {/* Colors */}
-                <div className="lv-card space-y-4">
-                  <SectionTitle icon={Palette} title="Cores" description="Paleta de cores do tenant. Escolha um preset ou personalize." />
-                  {/* Presets */}
-                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                {/* ── Colors ── */}
+                <GlassCard className="p-6">
+                  <SectionHeader icon={Palette} title="Paleta de Cores" description="Escolha um tema predefinido ou personalize as cores manualmente." badge={`${THEME_PRESETS.length} temas`} />
+
+                  {/* Presets Grid */}
+                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-2.5 mb-6">
                     {THEME_PRESETS.map(preset => (
                       <button
                         key={preset.id}
                         onClick={() => applyThemePreset(preset.id)}
-                        className={`p-2 rounded-xl border transition-all text-center ${
+                        className={`group relative p-3 rounded-xl border transition-all duration-200 ${
                           form.theme_preset === preset.id
-                            ? "ring-2 ring-primary border-primary/40 scale-105"
-                            : "border-border/50 hover:border-primary/30"
+                            ? "ring-2 ring-primary border-primary/30 scale-105 shadow-lg shadow-primary/10"
+                            : "border-white/[0.06] hover:border-white/[0.15] hover:scale-[1.03]"
                         }`}
+                        style={form.theme_preset !== preset.id ? { background: "var(--liquid-glass-bg)" } : { background: "var(--liquid-glass-bg)" }}
                       >
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                          <div className="w-3 h-3 rounded-full" style={{ background: preset.primary }} />
-                          <div className="w-3 h-3 rounded-full" style={{ background: preset.secondary }} />
+                        <div className="flex items-center justify-center gap-1.5 mb-2">
+                          <div className="w-4 h-4 rounded-full shadow-inner" style={{ background: preset.primary }} />
+                          <div className="w-4 h-4 rounded-full shadow-inner" style={{ background: preset.secondary }} />
                         </div>
-                        <p className="text-[9px] font-medium truncate">{preset.label}</p>
+                        <p className="text-[9px] font-semibold truncate text-center">{preset.label}</p>
+                        {form.theme_preset === preset.id && (
+                          <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary flex items-center justify-center">
+                            <Check className="h-2.5 w-2.5 text-primary-foreground" />
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
-                  {/* Color pickers */}
-                  <div className="grid grid-cols-3 gap-3">
+
+                  {/* Custom Color Pickers */}
+                  <div className="grid grid-cols-3 gap-4">
                     {([
-                      { key: "primary_color", label: "Primária" },
-                      { key: "secondary_color", label: "Secundária" },
-                      { key: "accent_color", label: "Accent" },
-                    ] as const).map(({ key, label }) => (
-                      <div key={key}>
-                        <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">{label}</label>
-                        <div className="flex items-center gap-2">
-                          <input type="color" value={form[key]} onChange={e => updateForm({ [key]: e.target.value })} className="h-10 w-10 rounded-lg cursor-pointer border-0 p-0" />
-                          <input className="lv-input flex-1 h-10 text-xs font-mono" value={form[key]} onChange={e => updateForm({ [key]: e.target.value })} />
+                      { key: "primary_color" as const, label: "Primária" },
+                      { key: "secondary_color" as const, label: "Secundária" },
+                      { key: "accent_color" as const, label: "Accent" },
+                    ]).map(({ key, label }) => (
+                      <div key={key} className="space-y-2">
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</label>
+                        <div className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                          <input type="color" value={form[key]} onChange={e => updateForm({ [key]: e.target.value })} className="h-9 w-9 rounded-lg cursor-pointer border-0 p-0 bg-transparent" />
+                          <input
+                            className="flex-1 h-9 px-2 bg-transparent border-0 text-xs font-mono text-foreground focus:outline-none"
+                            value={form[key]} onChange={e => updateForm({ [key]: e.target.value })}
+                          />
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </GlassCard>
 
-                {/* Typography & Layout */}
-                <div className="lv-card space-y-4">
-                  <SectionTitle icon={Settings2} title="Tipografia & Layout" description="Fonte, raio de borda e configuração visual." />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* ── Typography & Layout ── */}
+                <GlassCard className="p-6">
+                  <SectionHeader icon={Settings2} title="Tipografia & Layout" description="Fonte, border-radius e configuração visual global." />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Font Family</label>
-                      <select className="lv-input w-full h-11 text-sm" value={form.font_family} onChange={e => updateForm({ font_family: e.target.value })}>
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Fonte</label>
+                      <select
+                        className="w-full h-12 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer"
+                        value={form.font_family} onChange={e => updateForm({ font_family: e.target.value })}
+                      >
                         {FONT_OPTIONS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Border Radius: {form.border_radius}px</label>
-                      <input type="range" min={0} max={24} step={1} value={form.border_radius} onChange={e => updateForm({ border_radius: Number(e.target.value) })} className="w-full accent-primary mt-2" />
-                      <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5">
-                        <span>Sharp 0px</span><span>Round 24px</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Extension Mode */}
-                <div className="lv-card space-y-4">
-                  <SectionTitle icon={Shield} title="Extensão" description="Modo de operação da extensão e configuração de trial." />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Modo da Extensão</label>
-                      <select className="lv-input w-full h-11 text-sm" value={form.extension_mode} onChange={e => updateForm({ extension_mode: e.target.value })}>
-                        {EXTENSION_MODES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Trial: {form.trial_minutes} min</label>
-                      <input type="range" min={5} max={120} step={5} value={form.trial_minutes} onChange={e => updateForm({ trial_minutes: Number(e.target.value) })} className="w-full accent-primary mt-2" />
-                      <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5">
-                        <span>5 min</span><span>120 min</span>
-                      </div>
-                    </div>
-                  </div>
-                  {form.extension_mode === "custom" && (
-                    <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Prompt Custom</label>
-                      <textarea className="lv-input w-full h-28 resize-none text-sm" value={form.custom_mode_prompt} onChange={e => updateForm({ custom_mode_prompt: e.target.value })} placeholder="Instrução personalizada para a IA..." />
-                    </div>
-                  )}
-                </div>
-
-                {/* SEO */}
-                <div className="lv-card space-y-4">
-                  <SectionTitle icon={Globe} title="SEO & Meta" description="Título, descrição e termos de uso." />
-                  <div>
-                    <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Meta Title</label>
-                    <input className="lv-input w-full h-11 text-sm" value={form.meta_title} onChange={e => updateForm({ meta_title: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Meta Description</label>
-                    <textarea className="lv-input w-full h-20 resize-none text-sm" value={form.meta_description} onChange={e => updateForm({ meta_description: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">Termos de Uso</label>
-                    <textarea className="lv-input w-full h-32 resize-none text-sm" value={form.terms_template} onChange={e => updateForm({ terms_template: e.target.value })} placeholder="Termos personalizados..." />
-                  </div>
-                </div>
-
-                {/* Modules */}
-                <div className="lv-card space-y-4">
-                  <SectionTitle icon={Boxes} title="Módulos" description="Ative ou desative funcionalidades para os usuários." />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {Object.entries(MODULE_LABELS).map(([key, label]) => (
-                      <label key={key} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                        form.modules[key]
-                          ? "border-primary/30 bg-primary/5"
-                          : "border-border/50 hover:border-border"
-                      }`}>
-                        <span className="text-xs font-medium">{label}</span>
-                        <div className={`h-5 w-9 rounded-full relative transition-colors ${form.modules[key] ? "bg-primary" : "bg-muted"}`}
-                          onClick={e => { e.preventDefault(); updateForm({ modules: { ...form.modules, [key]: !form.modules[key] } }); }}>
-                          <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${form.modules[key] ? "translate-x-4" : "translate-x-0.5"}`} />
-                        </div>
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+                        Border Radius
+                        <span className="ml-2 text-foreground font-bold">{form.border_radius}px</span>
                       </label>
+                      <div className="mt-3 space-y-2">
+                        <input type="range" min={0} max={24} step={1} value={form.border_radius} onChange={e => updateForm({ border_radius: Number(e.target.value) })} className="w-full accent-primary h-1.5" />
+                        <div className="flex justify-between text-[9px] text-muted-foreground">
+                          <span>Sharp</span><span>Round</span>
+                        </div>
+                      </div>
+                      {/* Preview boxes */}
+                      <div className="flex items-center gap-3 mt-3">
+                        <div className="h-10 w-16 bg-primary/15 border border-primary/20" style={{ borderRadius: form.border_radius }} />
+                        <div className="h-8 w-8 bg-primary/15 border border-primary/20" style={{ borderRadius: Math.min(form.border_radius, 12) }} />
+                        <div className="h-6 px-3 bg-primary/15 border border-primary/20 flex items-center" style={{ borderRadius: Math.min(form.border_radius, 8) }}>
+                          <span className="text-[9px] text-primary font-medium">Btn</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </GlassCard>
+
+                {/* ── Extension Mode ── */}
+                <GlassCard className="p-6">
+                  <SectionHeader icon={Shield} title="Extensão" description="Modo de operação e configuração de trial para novos usuários." />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                    {EXTENSION_MODES.map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => updateForm({ extension_mode: m.id })}
+                        className={`p-4 rounded-xl border text-left transition-all duration-200 ${
+                          form.extension_mode === m.id
+                            ? "border-primary/30 bg-primary/10 ring-1 ring-primary/20"
+                            : "border-white/[0.06] hover:border-white/[0.12] bg-white/[0.02]"
+                        }`}
+                      >
+                        <p className={`text-xs font-bold mb-1 ${form.extension_mode === m.id ? "text-primary" : "text-foreground"}`}>{m.label}</p>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">{m.desc}</p>
+                      </button>
                     ))}
                   </div>
-                </div>
+                  {form.extension_mode === "custom" && (
+                    <textarea
+                      className="w-full h-28 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] resize-none text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all mb-5"
+                      value={form.custom_mode_prompt} onChange={e => updateForm({ custom_mode_prompt: e.target.value })} placeholder="Instrução personalizada para a IA..."
+                    />
+                  )}
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+                      Duração do Trial
+                      <span className="ml-2 text-foreground font-bold">{form.trial_minutes} min</span>
+                    </label>
+                    <input type="range" min={5} max={120} step={5} value={form.trial_minutes} onChange={e => updateForm({ trial_minutes: Number(e.target.value) })} className="w-full accent-primary h-1.5" />
+                    <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
+                      <span>5 min</span><span>120 min</span>
+                    </div>
+                  </div>
+                </GlassCard>
+
+                {/* ── SEO ── */}
+                <GlassCard className="p-6">
+                  <SectionHeader icon={Globe} title="SEO & Meta" description="Otimize a presença do seu tenant nos mecanismos de busca." />
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Título</label>
+                      <input className="w-full h-12 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" value={form.meta_title} onChange={e => updateForm({ meta_title: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Descrição</label>
+                      <textarea className="w-full h-24 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] resize-none text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" value={form.meta_description} onChange={e => updateForm({ meta_description: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Termos de Uso</label>
+                      <textarea className="w-full h-36 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] resize-none text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" value={form.terms_template} onChange={e => updateForm({ terms_template: e.target.value })} placeholder="Termos personalizados..." />
+                    </div>
+                  </div>
+                </GlassCard>
+
+                {/* ── Modules ── */}
+                <GlassCard className="p-6">
+                  <SectionHeader icon={Boxes} title="Módulos" description="Ative ou desative funcionalidades para os usuários do seu tenant." badge={`${Object.values(form.modules).filter(Boolean).length} ativos`} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {Object.entries(MODULE_META).map(([key, meta]) => {
+                      const Icon = meta.icon;
+                      const active = form.modules[key];
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => updateForm({ modules: { ...form.modules, [key]: !active } })}
+                          className={`group flex items-start gap-3 p-4 rounded-xl border text-left transition-all duration-200 ${
+                            active
+                              ? "border-primary/25 bg-primary/[0.07]"
+                              : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
+                          }`}
+                        >
+                          <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                            active ? "bg-primary/15 text-primary" : "bg-white/[0.05] text-muted-foreground"
+                          }`}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-bold ${active ? "text-primary" : "text-foreground"}`}>{meta.label}</p>
+                            <p className="text-[10px] text-muted-foreground leading-relaxed mt-0.5">{meta.desc}</p>
+                          </div>
+                          <div className={`h-5 w-9 rounded-full relative flex-shrink-0 transition-colors mt-0.5 ${active ? "bg-primary" : "bg-muted"}`}>
+                            <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${active ? "translate-x-4" : "translate-x-0.5"}`} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </GlassCard>
               </div>
 
-              {/* ── Right: Live Preview ── */}
+              {/* ══════ RIGHT: LIVE PREVIEW ══════ */}
               <div className="space-y-3">
                 <div className="sticky top-6">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Preview ao Vivo</p>
+                    <div>
+                      <p className="text-xs font-bold text-foreground">Preview ao Vivo</p>
+                      <p className="text-[10px] text-muted-foreground">Visualize as mudanças em tempo real</p>
+                    </div>
                     <div className="flex items-center gap-1.5">
-                      <button onClick={refreshPreview} className="lv-btn-secondary h-7 w-7 p-0 flex items-center justify-center" title="Recarregar preview">
-                        <RefreshCw className="h-3 w-3" />
+                      <button onClick={refreshPreview} className="h-8 w-8 rounded-lg border border-white/[0.06] bg-white/[0.03] flex items-center justify-center hover:bg-white/[0.06] transition-colors" title="Recarregar">
+                        <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
-                      <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-                        <button onClick={() => setPreviewDevice("desktop")} className={`p-1.5 rounded-md transition-colors ${previewDevice === "desktop" ? "bg-background shadow-sm" : ""}`}>
+                      <div className="flex items-center gap-0.5 p-1 rounded-lg border border-white/[0.06] bg-white/[0.03]">
+                        <button onClick={() => setPreviewDevice("desktop")} className={`p-1.5 rounded-md transition-all ${previewDevice === "desktop" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
                           <Monitor className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => setPreviewDevice("mobile")} className={`p-1.5 rounded-md transition-colors ${previewDevice === "mobile" ? "bg-background shadow-sm" : ""}`}>
+                        <button onClick={() => setPreviewDevice("mobile")} className={`p-1.5 rounded-md transition-all ${previewDevice === "mobile" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
                           <Smartphone className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
                   </div>
-                  <div
-                    className="border border-border rounded-2xl overflow-hidden bg-background transition-all duration-300"
+                  <GlassCard
+                    className="transition-all duration-300"
                     style={{
                       width: previewDevice === "mobile" ? 375 : "100%",
                       maxWidth: previewDevice === "mobile" ? 375 : "100%",
-                      height: previewDevice === "mobile" ? 667 : 600,
+                      height: previewDevice === "mobile" ? 667 : 620,
                       margin: previewDevice === "mobile" ? "0 auto" : undefined,
                     }}
                   >
@@ -646,163 +780,224 @@ export default function TenantAdmin() {
                         height: previewDevice === "desktop" ? "154%" : "118%",
                       }}
                     />
-                  </div>
+                  </GlassCard>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ═══════ USERS TAB ═══════ */}
+          {/* ═══════════════ USERS TAB ═══════════════ */}
           {tab === "users" && (
-            <div className="space-y-4 max-w-3xl">
-              <p className="lv-body-strong">{members.length} membro(s)</p>
-
-              {/* Inline add member */}
-              <div className="lv-card p-3">
-                <p className="text-[11px] font-semibold text-muted-foreground mb-2">Adicionar Membro</p>
-                <div className="flex items-center gap-2">
-                  <input className="lv-input flex-1 h-10 text-sm" placeholder="email@exemplo.com" value={addMemberEmail} onChange={e => setAddMemberEmail(e.target.value)} />
-                  <select className="lv-input h-10 text-xs w-36" value={addMemberRole} onChange={e => setAddMemberRole(e.target.value)}>
-                    <option value="tenant_member">Membro</option>
-                    <option value="tenant_support">Suporte</option>
-                    <option value="tenant_admin">Admin</option>
-                    <option value="tenant_owner">Owner</option>
-                  </select>
-                  <button onClick={handleAddMember} disabled={addMemberLoading} className="lv-btn-primary h-10 px-4 text-xs flex items-center gap-2">
-                    {addMemberLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Adicionar
+            <div className="max-w-4xl space-y-6">
+              {/* Add Member */}
+              <GlassCard className="p-6">
+                <SectionHeader icon={Plus} title="Adicionar Membro" description="Convide um novo membro pelo email cadastrado na plataforma." />
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Email</label>
+                    <input className="w-full h-12 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" placeholder="email@exemplo.com" value={addMemberEmail} onChange={e => setAddMemberEmail(e.target.value)} />
+                  </div>
+                  <div className="w-40">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Papel</label>
+                    <select className="w-full h-12 px-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer" value={addMemberRole} onChange={e => setAddMemberRole(e.target.value)}>
+                      <option value="tenant_member">Membro</option>
+                      <option value="tenant_support">Suporte</option>
+                      <option value="tenant_admin">Admin</option>
+                      <option value="tenant_owner">Owner</option>
+                    </select>
+                  </div>
+                  <button onClick={handleAddMember} disabled={addMemberLoading} className="h-12 px-6 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-primary/25 transition-all active:scale-[0.98]">
+                    {addMemberLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    Adicionar
                   </button>
                 </div>
-              </div>
+              </GlassCard>
 
+              {/* Members List */}
               <div className="space-y-2">
-                {members.map(m => (
-                  <div key={m.id} className="lv-card flex items-center justify-between py-3">
-                    <div>
-                      <p className="text-sm font-semibold">{m.profile?.name || "?"}</p>
-                      <p className="text-xs text-muted-foreground">{m.profile?.email || m.user_id}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <select className="lv-input h-8 text-xs" value={m.role} onChange={e => updateMemberRole(m.id, e.target.value)}>
-                        <option value="tenant_member">Membro</option>
-                        <option value="tenant_support">Suporte</option>
-                        <option value="tenant_admin">Admin</option>
-                        <option value="tenant_owner">Owner</option>
-                      </select>
-                      <button onClick={() => removeMember(m.id)} className="h-8 w-8 flex items-center justify-center rounded-lg text-destructive hover:bg-destructive/10 transition-colors">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {members.length === 0 && <p className="text-xs text-muted-foreground text-center py-8">Nenhum membro encontrado.</p>}
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">{members.length} membro(s)</p>
+                {members.map(m => {
+                  const roleInfo = ROLE_LABELS[m.role] || ROLE_LABELS.tenant_member;
+                  return (
+                    <GlassCard key={m.id} className="p-4 flex items-center justify-between hover:border-white/[0.12] transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center text-sm font-bold text-primary">
+                          {(m.profile?.name || "?")[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{m.profile?.name || "?"}</p>
+                          <p className="text-[11px] text-muted-foreground">{m.profile?.email || m.user_id}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <select
+                          className="h-9 px-3 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-foreground focus:outline-none cursor-pointer appearance-none"
+                          value={m.role} onChange={e => updateMemberRole(m.id, e.target.value)}
+                        >
+                          <option value="tenant_member">Membro</option>
+                          <option value="tenant_support">Suporte</option>
+                          <option value="tenant_admin">Admin</option>
+                          <option value="tenant_owner">Owner</option>
+                        </select>
+                        <span className={`text-[10px] font-bold ${roleInfo.color}`}>{roleInfo.label}</span>
+                        <button onClick={() => removeMember(m.id)} className="h-9 w-9 flex items-center justify-center rounded-lg text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </GlassCard>
+                  );
+                })}
+                {members.length === 0 && (
+                  <GlassCard className="p-12 text-center">
+                    <Users className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">Nenhum membro encontrado</p>
+                  </GlassCard>
+                )}
               </div>
             </div>
           )}
 
-          {/* ═══════ LICENSES TAB ═══════ */}
+          {/* ═══════════════ LICENSES TAB ═══════════════ */}
           {tab === "licenses" && (
-            <div className="space-y-4 max-w-3xl">
-              <p className="lv-body-strong">{licenses.length} licença(s)</p>
-
-              {/* Inline gen token */}
-              <div className="lv-card p-3">
-                <p className="text-[11px] font-semibold text-muted-foreground mb-2">Gerar Nova Licença</p>
-                <div className="flex items-center gap-2">
-                  <input className="lv-input flex-1 h-10 text-sm" placeholder="email@exemplo.com" value={genTokenEmail} onChange={e => setGenTokenEmail(e.target.value)} />
-                  <select className="lv-input h-10 text-xs w-40" value={genTokenPlan} onChange={e => setGenTokenPlan(e.target.value)}>
-                    {dbPlans.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                    <option value="daily_token">Daily Token</option>
-                  </select>
-                  <button onClick={handleGenerateToken} disabled={genTokenLoading} className="lv-btn-primary h-10 px-4 text-xs flex items-center gap-2">
-                    {genTokenLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Key className="h-3.5 w-3.5" />} Gerar
+            <div className="max-w-4xl space-y-6">
+              {/* Generate License */}
+              <GlassCard className="p-6">
+                <SectionHeader icon={Key} title="Gerar Nova Licença" description="Crie uma licença vinculada a um usuário existente." />
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Email do Usuário</label>
+                    <input className="w-full h-12 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" placeholder="email@exemplo.com" value={genTokenEmail} onChange={e => setGenTokenEmail(e.target.value)} />
+                  </div>
+                  <div className="w-44">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Plano</label>
+                    <select className="w-full h-12 px-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer" value={genTokenPlan} onChange={e => setGenTokenPlan(e.target.value)}>
+                      {dbPlans.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                      <option value="daily_token">Daily Token</option>
+                    </select>
+                  </div>
+                  <button onClick={handleGenerateToken} disabled={genTokenLoading} className="h-12 px-6 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-primary/25 transition-all active:scale-[0.98]">
+                    {genTokenLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+                    Gerar
                   </button>
                 </div>
-              </div>
+              </GlassCard>
 
+              {/* Licenses List */}
               <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">{licenses.length} licença(s)</p>
                 {licenses.map(l => (
-                  <div key={l.id} className="lv-card flex items-center justify-between py-3">
-                    <div>
-                      <p className="text-sm font-semibold">{l.user_name}</p>
-                      <p className="text-xs text-muted-foreground">{l.user_email} • {l.plan_type}</p>
+                  <GlassCard key={l.id} className="p-4 flex items-center justify-between hover:border-white/[0.12] transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${l.active ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}`}>
+                        <Key className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{l.user_name}</p>
+                        <p className="text-[11px] text-muted-foreground">{l.user_email} • {l.plan_type}</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`lv-badge text-[10px] ${l.active ? "lv-badge-success" : "lv-badge-muted"}`}>
-                        {l.active ? "Ativo" : "Inativo"}
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold ${
+                        l.active
+                          ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                          : "bg-muted text-muted-foreground border border-border"
+                      }`}>
+                        {l.active ? "Ativa" : "Inativa"}
                       </span>
-                      <button onClick={() => copyLicenseKey(l.key)} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors">
-                        <Copy className="h-3 w-3" />
+                      <button onClick={() => copyLicenseKey(l.key)} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/[0.06] transition-colors" title="Copiar chave">
+                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                       {l.active && (
-                        <button onClick={() => revokeLicense(l.id)} className="h-8 px-3 text-[10px] rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">
+                        <button onClick={() => revokeLicense(l.id)} className="h-8 px-3 rounded-lg text-[10px] font-semibold bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">
                           Revogar
                         </button>
                       )}
                     </div>
-                  </div>
+                  </GlassCard>
                 ))}
-                {licenses.length === 0 && <p className="text-xs text-muted-foreground text-center py-8">Nenhuma licença encontrada.</p>}
+                {licenses.length === 0 && (
+                  <GlassCard className="p-12 text-center">
+                    <Key className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">Nenhuma licença encontrada</p>
+                  </GlassCard>
+                )}
               </div>
             </div>
           )}
 
-          {/* ═══════ FINANCES TAB ═══════ */}
+          {/* ═══════════════ FINANCES TAB ═══════════════ */}
           {tab === "finances" && (
-            <div className="space-y-4 max-w-3xl">
-              {/* Wallet summary */}
-              <div className="grid grid-cols-3 gap-3">
+            <div className="max-w-4xl space-y-6">
+              {/* Wallet Summary */}
+              <div className="grid grid-cols-3 gap-4">
                 {[
-                  { label: "Saldo", value: `R$${(wallet?.balance ?? 0).toFixed(2)}`, color: "text-primary" },
-                  { label: "Total Creditado", value: `R$${(wallet?.total_credited ?? 0).toFixed(2)}`, color: "text-green-600" },
-                  { label: "Total Debitado", value: `R$${(wallet?.total_debited ?? 0).toFixed(2)}`, color: "text-destructive" },
+                  { label: "Saldo Disponível", value: `R$${(wallet?.balance ?? 0).toFixed(2)}`, icon: Wallet, gradient: "from-primary/15 to-primary/5", textColor: "text-primary" },
+                  { label: "Total Creditado", value: `R$${(wallet?.total_credited ?? 0).toFixed(2)}`, icon: ArrowUpRight, gradient: "from-emerald-500/15 to-emerald-500/5", textColor: "text-emerald-500" },
+                  { label: "Total Debitado", value: `R$${(wallet?.total_debited ?? 0).toFixed(2)}`, icon: CreditCard, gradient: "from-destructive/15 to-destructive/5", textColor: "text-destructive" },
                 ].map(item => (
-                  <div key={item.label} className="lv-card text-center py-4">
-                    <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
-                    <p className="text-[10px] text-muted-foreground">{item.label}</p>
-                  </div>
+                  <GlassCard key={item.label} className="p-5">
+                    <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-3`}>
+                      <item.icon className={`h-5 w-5 ${item.textColor}`} />
+                    </div>
+                    <p className={`text-2xl font-bold ${item.textColor} tracking-tight`}>{item.value}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">{item.label}</p>
+                  </GlassCard>
                 ))}
               </div>
 
-              {/* Inline topup */}
-              <div className="lv-card p-3">
-                <p className="text-[11px] font-semibold text-muted-foreground mb-2">Recarregar via PIX</p>
-                <div className="flex items-center gap-2">
-                  <input type="number" className="lv-input flex-1 h-10 text-sm" placeholder="Valor em R$" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
-                  <button onClick={handleTopup} className="lv-btn-primary h-10 px-4 text-xs flex items-center gap-2">
-                    <Wallet className="h-3.5 w-3.5" /> Gerar PIX
+              {/* Topup */}
+              <GlassCard className="p-6">
+                <SectionHeader icon={CreditCard} title="Recarregar Saldo" description="Adicione créditos via PIX instantâneo." />
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Valor (R$)</label>
+                    <input type="number" className="w-full h-12 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" placeholder="Mínimo R$5,00" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
+                  </div>
+                  <button onClick={handleTopup} className="h-12 px-6 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-primary/25 transition-all active:scale-[0.98]">
+                    <Wallet className="h-4 w-4" /> Gerar PIX
                   </button>
                 </div>
                 {topupPix && (
-                  <div className="mt-3 p-3 bg-muted/50 rounded-xl">
-                    <p className="text-xs font-semibold mb-1">Código PIX:</p>
+                  <div className="mt-5 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-xs font-semibold text-foreground mb-2">Código PIX Copia e Cola:</p>
                     <div className="flex items-center gap-2">
-                      <code className="text-[10px] flex-1 break-all bg-background p-2 rounded">{topupPix.code}</code>
-                      <button onClick={() => { navigator.clipboard.writeText(topupPix.code); toast.success("PIX copiado!"); }} className="lv-btn-secondary h-8 w-8 p-0 flex items-center justify-center">
-                        <Copy className="h-3 w-3" />
+                      <code className="text-[10px] flex-1 break-all bg-white/[0.04] p-3 rounded-lg font-mono text-foreground/80">{topupPix.code}</code>
+                      <button onClick={() => { navigator.clipboard.writeText(topupPix.code); toast.success("PIX copiado!"); }} className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/15 transition-colors flex-shrink-0">
+                        <Copy className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                 )}
-              </div>
+              </GlassCard>
 
               {/* Transactions */}
-              <div className="lv-card">
-                <p className="text-[11px] font-semibold text-muted-foreground mb-3">Últimas Transações</p>
-                <div className="space-y-1.5">
-                  {transactions.slice(0, 20).map(tx => (
-                    <div key={tx.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
-                      <div>
-                        <p className="text-xs font-medium">{tx.description || tx.type}</p>
-                        <p className="text-[10px] text-muted-foreground">{format(new Date(tx.created_at), "dd/MM/yyyy HH:mm")}</p>
+              <GlassCard className="p-6">
+                <SectionHeader icon={BarChart3} title="Extrato" description="Últimas movimentações financeiras do tenant." />
+                <div className="space-y-0">
+                  {transactions.slice(0, 20).map((tx, i) => (
+                    <div key={tx.id} className={`flex items-center justify-between py-3.5 ${i < transactions.length - 1 ? "border-b border-white/[0.04]" : ""}`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${tx.amount > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-destructive/10 text-destructive"}`}>
+                          {tx.amount > 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <CreditCard className="h-3.5 w-3.5" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-foreground">{tx.description || tx.type}</p>
+                          <p className="text-[10px] text-muted-foreground">{format(new Date(tx.created_at), "dd/MM/yyyy HH:mm")}</p>
+                        </div>
                       </div>
-                      <span className={`text-xs font-bold ${tx.amount > 0 ? "text-green-600" : "text-destructive"}`}>
+                      <span className={`text-sm font-bold tabular-nums ${tx.amount > 0 ? "text-emerald-500" : "text-destructive"}`}>
                         {tx.amount > 0 ? "+" : ""}R${Math.abs(tx.amount).toFixed(2)}
                       </span>
                     </div>
                   ))}
-                  {transactions.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Nenhuma transação.</p>}
+                  {transactions.length === 0 && (
+                    <div className="text-center py-10">
+                      <BarChart3 className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+                      <p className="text-sm text-muted-foreground">Nenhuma transação registrada</p>
+                    </div>
+                  )}
                 </div>
-              </div>
+              </GlassCard>
             </div>
           )}
         </div>
