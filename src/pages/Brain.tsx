@@ -105,6 +105,9 @@ export default function BrainPage() {
 
   const [brainActive, setBrainActive] = useState<boolean | null>(null);
   const [brainProjectUrl, setBrainProjectUrl] = useState<string | null>(null);
+  const [brainWorkspaceId, setBrainWorkspaceId] = useState<string | null>(null);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [projectMissing, setProjectMissing] = useState(false);
   const [lovableConnected, setLovableConnected] = useState<boolean | null>(null);
   const [settingUp, setSettingUp] = useState(false);
   const [allConversations, setAllConversations] = useState<Conversation[]>([]);
@@ -142,15 +145,26 @@ export default function BrainPage() {
         body: { action: "status" },
       });
       if (!error && data) {
-        setBrainActive((data as any).active);
-        setLovableConnected((data as any).connected !== false);
-        setBrainProjectUrl((data as any).project_url || null);
+        const payload = data as any;
+        setBrainActive(payload?.active);
+        setLovableConnected(payload?.connected !== false);
+        setBrainProjectUrl(payload?.project_url || null);
+        setBrainWorkspaceId(payload?.stored_workspace_id || payload?.brain?.lovable_workspace_id || null);
+        setCurrentWorkspaceId(payload?.current_workspace_id || null);
+        setProjectMissing(Boolean(payload?.project_missing));
+
+        const persistedSkill = payload?.skill;
+        if (persistedSkill && brainTypes.some(bt => bt.id === persistedSkill)) {
+          setBrainType(persistedSkill as BrainType);
+        }
       } else {
         setBrainActive(false);
         setLovableConnected(false);
+        setProjectMissing(false);
       }
     } catch {
       setBrainActive(false);
+      setProjectMissing(false);
     }
   }, []);
 
@@ -169,12 +183,36 @@ export default function BrainPage() {
     setSettingUp(true);
     try {
       const { data, error } = await supabase.functions.invoke("brain", {
-        body: { action: "setup" },
+        body: { action: "setup", skill: brainType },
       });
-      if (error) throw new Error((data as any)?.error || error.message);
-      if ((data as any)?.error) throw new Error((data as any).error);
+
+      const payload = data as any;
+      if (error || payload?.error) {
+        const code = payload?.code;
+
+        if (code === "project_not_found_in_workspace") {
+          setBrainActive(true);
+          setProjectMissing(true);
+          setBrainProjectUrl(payload?.project_url || null);
+          setBrainWorkspaceId(payload?.stored_workspace_id || null);
+          setCurrentWorkspaceId(payload?.current_workspace_id || null);
+          toast.error(`Projeto não encontrado no workspace atual. Workspace salvo: ${payload?.stored_workspace_id || "desconhecido"}`);
+          return;
+        }
+
+        if (code === "brain_creating") {
+          toast.error("Star AI ainda está sendo criado. Aguarde alguns segundos.");
+          return;
+        }
+
+        throw new Error(payload?.error || error?.message || "Erro ao ativar Star AI");
+      }
+
       setBrainActive(true);
-      setBrainProjectUrl((data as any)?.project_url || null);
+      setProjectMissing(false);
+      setBrainProjectUrl(payload?.project_url || null);
+      setBrainWorkspaceId(payload?.stored_workspace_id || null);
+      setCurrentWorkspaceId(payload?.current_workspace_id || null);
       toast.success("Star AI ativado com sucesso! 🧠");
     } catch (err: any) {
       toast.error(err.message || "Erro ao ativar Star AI");
@@ -220,15 +258,32 @@ export default function BrainPage() {
         body: { action: "send", message: userMsg, brain_type: brainType },
       });
       if (error) {
-        const code = (data as any)?.code;
+        const payload = data as any;
+        const code = payload?.code;
         if (code === "no_token") { setLovableConnected(false); setBrainActive(false); }
         if (code === "brain_inactive") { setBrainActive(false); }
-        throw new Error((data as any)?.error || error.message);
+        if (code === "project_not_found_in_workspace") {
+          setBrainActive(true);
+          setProjectMissing(true);
+          setBrainProjectUrl(payload?.project_url || null);
+          setBrainWorkspaceId(payload?.stored_workspace_id || null);
+          setCurrentWorkspaceId(payload?.current_workspace_id || null);
+        }
+        throw new Error(payload?.error || error.message);
       }
       if (data?.error) {
-        if (data?.code === "no_token") { setLovableConnected(false); setBrainActive(false); }
-        if (data?.code === "brain_inactive") { setBrainActive(false); }
-        throw new Error(data.error);
+        const payload = data as any;
+        const code = payload?.code;
+        if (code === "no_token") { setLovableConnected(false); setBrainActive(false); }
+        if (code === "brain_inactive") { setBrainActive(false); }
+        if (code === "project_not_found_in_workspace") {
+          setBrainActive(true);
+          setProjectMissing(true);
+          setBrainProjectUrl(payload?.project_url || null);
+          setBrainWorkspaceId(payload?.stored_workspace_id || null);
+          setCurrentWorkspaceId(payload?.current_workspace_id || null);
+        }
+        throw new Error(payload.error);
       }
 
       const conversationId = data.conversation_id || tempId;
@@ -368,7 +423,19 @@ export default function BrainPage() {
             </div>
             <div className="min-w-0 mr-auto">
               <p className="text-sm font-semibold leading-tight">Star AI</p>
-              <p className="text-[11px] text-muted-foreground leading-tight">🟢 Ativo</p>
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                {projectMissing ? "🟠 Projeto não encontrado no workspace atual" : "🟢 Ativo"}
+              </p>
+              {brainWorkspaceId && (
+                <p className="text-[10px] text-muted-foreground leading-tight truncate">
+                  Workspace salvo: <span className="font-mono">{brainWorkspaceId}</span>
+                  {currentWorkspaceId && currentWorkspaceId !== brainWorkspaceId ? (
+                    <>
+                      {" "}· atual: <span className="font-mono">{currentWorkspaceId}</span>
+                    </>
+                  ) : null}
+                </p>
+              )}
             </div>
 
             {brainProjectUrl && (
@@ -428,6 +495,36 @@ export default function BrainPage() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-4">
+            {projectMissing && (
+              <div className="max-w-3xl mx-auto rounded-2xl border border-border bg-accent/40 px-4 py-3 text-xs">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+                  <div className="space-y-1">
+                    <p className="font-medium">Projeto Brain não encontrado no workspace atual.</p>
+                    <p className="text-muted-foreground">
+                      Workspace salvo: <span className="font-mono">{brainWorkspaceId || "desconhecido"}</span>
+                      {currentWorkspaceId ? (
+                        <>
+                          {" "}· atual: <span className="font-mono">{currentWorkspaceId}</span>
+                        </>
+                      ) : null}
+                    </p>
+                    {brainProjectUrl && (
+                      <a
+                        href={brainProjectUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Abrir projeto salvo
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {displayConvos.length === 0 && !currentConvoId && (
               <div className="text-center py-12 sm:py-20">
                 <BrainIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/20" />
