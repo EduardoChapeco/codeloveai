@@ -64,14 +64,12 @@ async function resolveLovableToken(req: Request, body: Record<string, unknown>):
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || "";
   if (authHeader.startsWith("Bearer ")) {
     try {
-      const jwt = authHeader.replace("Bearer ", "");
       const userClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: authHeader } },
       });
-      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(jwt);
-      if (!claimsError && claimsData?.claims?.sub) {
-        const userId = String(claimsData.claims.sub);
-        const byUser = await getUserTokenFromAccount(adminClient, userId);
+      const { data: { user }, error: userError } = await userClient.auth.getUser();
+      if (!userError && user?.id) {
+        const byUser = await getUserTokenFromAccount(adminClient, user.id);
         if (byUser) return byUser;
       }
     } catch {
