@@ -146,29 +146,72 @@ async function handleManagementAction(body: Record<string, unknown>, userId: str
   // Route-based proxy (workspaces, projects, etc.)
   if (body.route) {
     const { data: acct } = await sc.from("lovable_accounts")
-      .select("token_encrypted").eq("user_id", userId).maybeSingle();
-    if (!acct?.token_encrypted) return { error: "Conta Lovable não conectada. Vá em Lovable Connect.", status: 401 };
+      .select("token_encrypted, refresh_token_encrypted, status")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!acct?.token_encrypted || acct.status !== "active") {
+      return { error: "Conta Lovable não conectada. Vá em Lovable Connect.", status: 401 };
+    }
+
     const method = (body.method as string) || "GET";
     const url = `${LOVABLE_API}${body.route}`;
-    const fetchOpts: RequestInit = {
-      method,
-      headers: {
-        "Authorization": `Bearer ${acct.token_encrypted}`,
-        "Content-Type": "application/json",
-        "X-Client-Git-SHA": GIT_SHA,
-        "Origin": "https://lovable.dev",
-        "Referer": "https://lovable.dev/",
-      },
+
+    const callLovable = async (authToken: string) => {
+      const fetchOpts: RequestInit = {
+        method,
+        headers: {
+          "Authorization": `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+          "X-Client-Git-SHA": GIT_SHA,
+          "Origin": "https://lovable.dev",
+          "Referer": "https://lovable.dev/",
+        },
+      };
+      if (body.payload && method !== "GET") fetchOpts.body = JSON.stringify(body.payload);
+      const res = await fetch(url, fetchOpts);
+      const data = await res.json().catch(() => ({}));
+      return { res, data };
     };
-    if (body.payload && method !== "GET") fetchOpts.body = JSON.stringify(body.payload);
-    const res = await fetch(url, fetchOpts);
-    const data = await res.json().catch(() => ({}));
+
+    let { res, data } = await callLovable(acct.token_encrypted);
+
+    // Auto refresh expired Lovable token and retry once
+    if ((res.status === 401 || res.status === 403) && acct.refresh_token_encrypted) {
+      const firebaseKey = Deno.env.get("FIREBASE_API_KEY");
+      if (firebaseKey) {
+        const refreshRes = await fetch(`https://securetoken.googleapis.com/v1/token?key=${firebaseKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(acct.refresh_token_encrypted)}`,
+        });
+
+        if (refreshRes.ok) {
+          const refreshed = await refreshRes.json().catch(() => ({}));
+          const newToken = refreshed.id_token || refreshed.access_token;
+          if (newToken) {
+            await sc.from("lovable_accounts").update({
+              token_encrypted: newToken,
+              ...(refreshed.refresh_token ? { refresh_token_encrypted: refreshed.refresh_token } : {}),
+              status: "active",
+              updated_at: new Date().toISOString(),
+            }).eq("user_id", userId);
+
+            const retried = await callLovable(newToken);
+            res = retried.res;
+            data = retried.data;
+          }
+        }
+      }
+    }
+
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) {
         return { error: "Token Lovable expirado. Reconecte sua conta.", status: 401, isTokenExpired: true };
       }
       return { error: data.message || `Lovable API error ${res.status}`, status: res.status, details: data };
     }
+
     return data;
   }
 
