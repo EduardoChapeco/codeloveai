@@ -513,18 +513,15 @@ async function sendChat() {
 
   try {
     const { clf_license } = await cget(['clf_license']);
-    const res = await fetch(SUPABASE + '/functions/v1/send-message', {
+    const res = await fetch(SUPABASE + '/functions/v1/lovable-proxy', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-clf-token': clf_license,
-        'x-clf-extension': 'speed',
       },
       body: JSON.stringify({
-        projectId: S.projectId,
-        lovableToken: S.idToken,
-        message: text,
-        mode: mode,
+        task: text,
+        lovable_token: S.idToken,
+        project_id: S.projectId,
       }),
     });
     removeTyping(typingEl);

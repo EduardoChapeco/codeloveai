@@ -2,7 +2,7 @@
 // Handles UI logic, chat communication, and tab switching
 
 const SB = 'https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1';
-const SPEED_EDGE = `${SB}/speed-chat`;
+const SPEED_EDGE = `${SB}/lovable-proxy`;
 const LOVABLE_API = 'https://api.lovable.dev';
 const GIT_SHA = '9810ecd6b501b23b14c5d4ee731d8cda244d003b';
 
@@ -111,13 +111,9 @@ async function sendMessage() {
         'X-Speed-Client': '1'
       },
       body: JSON.stringify({
-        token: state.token,
-        projectId: state.projectId,
-        message: text,
-        msgId: makeUuid(),
-        aiMsgId: makeAiMsgId(),
-        licenseKey: state.license,
-        clientVersion: 'speed-1.0'
+        task: text,
+        lovable_token: state.token,
+        project_id: state.projectId,
       })
     });
 
