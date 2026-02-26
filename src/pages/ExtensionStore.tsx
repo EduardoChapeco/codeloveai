@@ -117,13 +117,13 @@ export default function ExtensionStore() {
       </section>
 
       {/* Extensions Grid */}
-      <section className="px-6 pb-20 max-w-5xl mx-auto">
+      <section className="px-6 pb-20 max-w-7xl mx-auto">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
             {extensions.map((ext) => {
               const Icon = iconMap[ext.icon] || Puzzle;
               const userHasAccess = !accessLoading && hasAccessTo(ext.slug);
@@ -131,65 +131,61 @@ export default function ExtensionStore() {
               return (
                 <div
                   key={ext.id}
-                  className="group clf-liquid-glass hover:ring-1 hover:ring-primary/20 transition-all duration-300 flex flex-col overflow-hidden cursor-pointer"
+                  className="group clf-liquid-glass hover:ring-1 hover:ring-primary/30 transition-all duration-300 flex flex-col overflow-hidden cursor-pointer rounded-2xl p-2"
                   onClick={() => navigate(`/extensoes/${ext.slug}`)}
                 >
-                  {/* Header with color accent */}
                   <div
-                    className="h-32 flex items-center justify-center relative"
-                    style={{ background: `linear-gradient(135deg, ${ext.hero_color}15, ${ext.hero_color}05)` }}
+                    className="h-44 flex items-center justify-center relative rounded-2xl"
+                    style={{ background: `linear-gradient(135deg, ${ext.hero_color}20, ${ext.hero_color}08)` }}
                   >
                     <div
-                      className="h-16 w-16 rounded-2xl flex items-center justify-center shadow-lg"
+                      className="h-20 w-20 rounded-2xl flex items-center justify-center shadow-lg"
                       style={{ backgroundColor: ext.hero_color }}
                     >
-                      <Icon className="h-8 w-8 text-white" />
+                      <Icon className="h-10 w-10 text-white" />
                     </div>
                     {ext.is_featured && (
-                      <span className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 text-[10px] font-bold">
+                      <span className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 text-[10px] font-bold">
                         <Star className="h-3 w-3" /> Destaque
                       </span>
                     )}
                   </div>
 
-                  {/* Content */}
-                  <div className="p-5 flex flex-col flex-1">
+                  <div className="p-6 flex flex-col flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-sm font-bold text-foreground">{ext.name}</h3>
+                      <h3 className="text-base font-bold text-foreground">{ext.name}</h3>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tierColors[ext.tier] || tierColors.free}`}>
                         {tierLabels[ext.tier] || ext.tier}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground mb-4 line-clamp-2">{ext.tagline}</p>
+                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{ext.tagline}</p>
 
-                    {/* Feature preview */}
-                    <div className="space-y-1.5 mb-4 flex-1">
+                    <div className="space-y-2 mb-5 flex-1">
                       {ext.features.slice(0, 3).map((f, i) => (
                         <div key={i} className="flex items-center gap-2">
-                          <Check className="h-3 w-3 text-primary shrink-0" />
-                          <span className="text-[11px] text-muted-foreground">{f.title}</span>
+                          <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="text-xs text-muted-foreground">{f.title}</span>
                         </div>
                       ))}
                       {ext.features.length > 3 && (
-                        <p className="text-[10px] text-muted-foreground/60 pl-5">
+                        <p className="text-[11px] text-muted-foreground/70 pl-5">
                           +{ext.features.length - 3} recursos
                         </p>
                       )}
                     </div>
 
-                    {/* CTA */}
                     <div className="mt-auto">
                       {userHasAccess ? (
-                        <div className="flex items-center gap-2 text-xs font-semibold text-green-600">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-green-600">
                           <Check className="h-4 w-4" /> Desbloqueado
                         </div>
                       ) : ext.tier === "free" ? (
-                        <button className="w-full h-9 rounded-xl bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors flex items-center justify-center gap-1.5">
-                          Instalar Grátis <ArrowRight className="h-3.5 w-3.5" />
+                        <button className="w-full h-11 rounded-2xl bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/20 transition-colors flex items-center justify-center gap-1.5">
+                          Instalar Grátis <ArrowRight className="h-4 w-4" />
                         </button>
                       ) : (
-                        <button className="w-full h-9 rounded-xl bg-muted text-muted-foreground text-xs font-semibold hover:bg-muted/80 transition-colors flex items-center justify-center gap-1.5">
-                          <Lock className="h-3 w-3" /> Requer Plano {tierLabels[ext.tier]}
+                        <button className="w-full h-11 rounded-2xl bg-muted text-muted-foreground text-sm font-semibold hover:bg-muted/80 transition-colors flex items-center justify-center gap-1.5">
+                          <Lock className="h-3.5 w-3.5" /> Requer Plano {tierLabels[ext.tier]}
                         </button>
                       )}
                     </div>
