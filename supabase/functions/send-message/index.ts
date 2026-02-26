@@ -34,8 +34,28 @@ function decodeCLF1(token: string): Record<string, unknown> | null {
   }
 }
 
+async function verifyCLF1Signature(token: string): Promise<boolean> {
+  const secret = Deno.env.get("CLF_TOKEN_SECRET");
+  if (!secret) return false;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "CLF1") return false;
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(parts[1]));
+    const computed = btoa(String.fromCharCode(...new Uint8Array(sig)))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return computed === parts[2];
+  } catch { return false; }
+}
+
 async function validateLicense(licenseKey: string): Promise<boolean> {
   if (!licenseKey?.startsWith("CLF1.")) return false;
+  // Verify HMAC signature first — reject forged tokens
+  const sigValid = await verifyCLF1Signature(licenseKey);
+  if (!sigValid) return false;
   const payload = decodeCLF1(licenseKey);
   if (!payload) return false;
   const now = Date.now();
@@ -50,15 +70,18 @@ async function validateLicense(licenseKey: string): Promise<boolean> {
     );
     const { data, error } = await supabase
       .from("licenses")
-      .select("active, expires_at")
+      .select("active, expires_at, status")
       .eq("key", licenseKey)
       .single();
-    if (error || !data) return true;
+    // SECURITY: license MUST exist in DB — reject unknown tokens
+    if (error || !data) return false;
     if (!data.active) return false;
+    if (data.status === "suspended") return false;
     if (data.expires_at && new Date(data.expires_at).getTime() < now) return false;
     return true;
   } catch {
-    return true;
+    // SECURITY: fail closed — deny on error
+    return false;
   }
 }
 
