@@ -242,16 +242,45 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Check daily usage limits
+  // Check daily usage limits (admin master bypasses)
   let usedToday = 0;
   let dailyLimit: number | null = null;
+  let isAdmin = false;
 
-  if (auth.licenseId) {
+  if (auth.licenseId && auth.userId) {
+    // Check if admin master
+    const { data: adminRole } = await adminClient
+      .from("user_roles").select("role").eq("user_id", auth.userId).eq("role", "admin").maybeSingle();
+    isAdmin = !!adminRole;
+  }
+
+  if (auth.licenseId && !isAdmin) {
     const { data: licRow } = await adminClient
       .from("licenses")
-      .select("daily_messages")
+      .select("daily_messages, expires_at, type, token_valid_until, trial_expires_at")
       .eq("id", auth.licenseId)
       .maybeSingle();
+
+    // Auto-deactivate expired licenses
+    const now = new Date();
+    if (licRow?.expires_at && new Date(licRow.expires_at) < now) {
+      await adminClient.from("licenses").update({ active: false, status: "expired" }).eq("id", auth.licenseId);
+      return new Response(JSON.stringify({ error: "Licença expirada.", blocked: true }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (licRow?.type === "trial" && licRow?.trial_expires_at && new Date(licRow.trial_expires_at) < now) {
+      await adminClient.from("licenses").update({ active: false, status: "expired" }).eq("id", auth.licenseId);
+      return new Response(JSON.stringify({ error: "Trial expirado.", blocked: true }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (licRow?.type === "daily_token" && licRow?.token_valid_until && new Date(licRow.token_valid_until) < now) {
+      await adminClient.from("licenses").update({ active: false, status: "expired" }).eq("id", auth.licenseId);
+      return new Response(JSON.stringify({ error: "Token expirado. Renove.", blocked: true }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     dailyLimit = licRow?.daily_messages ?? null;
     const today = new Date().toISOString().split("T")[0];
