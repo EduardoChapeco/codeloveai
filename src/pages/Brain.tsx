@@ -6,7 +6,7 @@ import { useSEO } from "@/hooks/useSEO";
 import AppLayout from "@/components/AppLayout";
 import {
   Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
-  Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon,
+  Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon, ExternalLink,
   MessageSquare, ChevronLeft, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -104,6 +104,7 @@ export default function BrainPage() {
   useSEO({ title: "Star AI" });
 
   const [brainActive, setBrainActive] = useState<boolean | null>(null);
+  const [brainProjectUrl, setBrainProjectUrl] = useState<string | null>(null);
   const [lovableConnected, setLovableConnected] = useState<boolean | null>(null);
   const [settingUp, setSettingUp] = useState(false);
   const [allConversations, setAllConversations] = useState<Conversation[]>([]);
@@ -143,6 +144,7 @@ export default function BrainPage() {
       if (!error && data) {
         setBrainActive((data as any).active);
         setLovableConnected((data as any).connected !== false);
+        setBrainProjectUrl((data as any).project_url || null);
       } else {
         setBrainActive(false);
         setLovableConnected(false);
@@ -172,6 +174,7 @@ export default function BrainPage() {
       if (error) throw new Error((data as any)?.error || error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
       setBrainActive(true);
+      setBrainProjectUrl((data as any)?.project_url || null);
       toast.success("Star AI ativado com sucesso! 🧠");
     } catch (err: any) {
       toast.error(err.message || "Erro ao ativar Star AI");
@@ -367,6 +370,19 @@ export default function BrainPage() {
               <p className="text-sm font-semibold leading-tight">Star AI</p>
               <p className="text-[11px] text-muted-foreground leading-tight">🟢 Ativo</p>
             </div>
+
+            {brainProjectUrl && (
+              <a
+                href={brainProjectUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-accent text-foreground text-[11px] font-medium hover:bg-accent/80 transition-colors shrink-0"
+                title="Acessar projeto Brain no Lovable"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Acessar Projeto
+              </a>
+            )}
 
             <button onClick={resetBrain} title="Resetar Star AI" className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0">
               <RotateCcw className="h-4 w-4" />
