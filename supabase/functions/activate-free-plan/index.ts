@@ -1,4 +1,4 @@
-﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isDisposableEmail } from "../_shared/disposable-emails.ts";
 import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
@@ -67,8 +67,7 @@ Deno.serve(async (req) => {
     const tenantInfo = await resolveTenant(serviceClient, req, userId);
     const tenantId = tenantInfo.id || tenantInfo.tenant_id;
 
-    // Validate the free plan code exists in admin_notifications as a generated link
-    // The code format is: FREE_<timestamp>_<random>
+    // Validate code format
     if (!sanitizedCode.startsWith("FREE_")) {
       return new Response(JSON.stringify({ error: "Código inválido" }), {
         status: 400,
@@ -76,7 +75,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check if user already used a free plan
+    // Check if user already has any active license (including auto-onboard free)
+    const { data: existingLicense } = await serviceClient
+      .from("licenses")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("active", true)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingLicense) {
+      return new Response(JSON.stringify({ error: "Você já possui um plano ativo" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Check if code was already used by this user
     const { data: existingFree } = await serviceClient
       .from("subscriptions")
       .select("id")
@@ -85,133 +100,79 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (existingFree && existingFree.length > 0) {
-      return new Response(JSON.stringify({ error: "Você já utilizou este plano gratuito" }), {
+      return new Response(JSON.stringify({ error: "Você já utilizou este código" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Check if user already has any free plan or license
-    const [{ data: anyFreeSub }, { data: anyFreeLicense }] = await Promise.all([
-      serviceClient.from("subscriptions").select("id").eq("user_id", userId).like("payment_id", "free_%").limit(1),
-      serviceClient.from("licenses").select("id").eq("user_id", userId).eq("type", "trial").limit(1)
-    ]);
+    // Find the "Grátis" plan in DB
+    const { data: freePlan } = await serviceClient
+      .from("plans")
+      .select("id, daily_message_limit")
+      .eq("name", "Grátis")
+      .eq("is_active", true)
+      .maybeSingle();
 
-    if ((anyFreeSub && anyFreeSub.length > 0) || (anyFreeLicense && anyFreeLicense.length > 0)) {
-      return new Response(JSON.stringify({ error: "Cada usuário pode usar apenas 1 plano gratuito" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const planId = freePlan?.id || null;
+    const dailyMessages = freePlan?.daily_message_limit || 10;
 
-    // Create 1-day subscription (Legacy v1)
-    const startsAt = new Date();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 1);
+    // Create perpetual free license (same as auto-onboard)
+    const expiresAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString();
+    const keyRandom = crypto.randomUUID().replace(/-/g, "").substring(0, 16).toUpperCase();
+    const licenseKey = `CLF1.FREE-${keyRandom}`;
 
-    const { error: insertError } = await serviceClient
-      .from("subscriptions")
-      .insert({
-        user_id: userId,
-        plan: "1_day",
-        status: "active",
-        starts_at: startsAt.toISOString(),
-        expires_at: expiresAt.toISOString(),
-        payment_id: `free_${sanitizedCode}`,
-        tenant_id: tenantId,
-      });
-
-    if (insertError) {
-      console.error("Insert error:", insertError);
-      return new Response(JSON.stringify({ error: "Erro ao ativar plano legado" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Create License (Modern v2)
     const { error: licenseError } = await serviceClient
       .from("licenses")
       .insert({
         user_id: userId,
         tenant_id: tenantId,
-        key: `CLF1.FREE-${sanitizedCode.substring(5, 15)}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        key: licenseKey,
         active: true,
-        plan: "Grátis",
-        plan_type: "messages",   // alinhado com send-message MODE_MAP (plan_type 'messages' tem daily_messages)
-        type: "trial",
+        plan: "free",
+        plan_id: planId,
+        plan_type: "messages",
+        type: "daily_token",
         status: "active",
-        daily_messages: 10,      // 10 mensagens conforme plano free_trial na tabela plans
-        expires_at: expiresAt.toISOString(),
-        trial_expires_at: expiresAt.toISOString(),
+        daily_messages: dailyMessages,
+        expires_at: expiresAt,
       });
 
     if (licenseError) {
       console.error("License insert error:", licenseError);
+      return new Response(JSON.stringify({ error: "Erro ao ativar plano" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Legacy: create subscription record for tracking
+    const { error: subError } = await serviceClient
+      .from("subscriptions")
+      .insert({
+        user_id: userId,
+        plan: "free",
+        status: "active",
+        starts_at: new Date().toISOString(),
+        expires_at: expiresAt,
+        payment_id: `free_${sanitizedCode}`,
+        tenant_id: tenantId,
+      });
+
+    if (subError) {
+      console.error("Subscription insert error:", subError);
     }
 
     // Notify admin
     await serviceClient.from("admin_notifications").insert({
       type: "free_plan",
-      title: "Testdrive gratuito ativado",
-      description: `Usuário ${userEmail || userId} ativou o testdrive gratuito de 5 horas. Código: ${sanitizedCode}`,
+      title: "Plano Grátis ativado via código",
+      description: `Usuário ${userEmail || userId} ativou o plano gratuito de ${dailyMessages} mensagens/dia. Código: ${sanitizedCode}`,
       user_id: userId,
       tenant_id: tenantId,
     });
 
-    // Call external webhook for token generation
-    const webhookSecret = Deno.env.get("Starble_WEBHOOK_SECRET");
-    console.log(`Starble_WEBHOOK_SECRET present: ${!!webhookSecret}`);
-    if (webhookSecret) {
-      try {
-        const requestBody = {
-          webhookSecret,
-          email: userEmail || "",
-          name: userEmail?.split("@")[0] || "",
-          plan: "test_1d",
-        };
-        console.log(`Calling external webhook for user ${userId}, email: ${userEmail}, plan: test_1d`);
-        
-        const webhookResponse = await fetch("https://Starble-fix-api.eusoueduoficial.workers.dev/webhook/purchase", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-        });
-        
-        const responseText = await webhookResponse.text();
-        console.log(`External webhook response status: ${webhookResponse.status}, body: ${responseText}`);
-        
-        if (webhookResponse.ok) {
-          try {
-            const webhookData = JSON.parse(responseText);
-            if (webhookData.token) {
-              // Store the auto-generated token
-              await serviceClient.from("tokens").update({ is_active: false }).eq("user_id", userId);
-              await serviceClient.from("tokens").insert({
-                user_id: userId,
-                token: webhookData.token,
-                is_active: true,
-                tenant_id: tenantId,
-              });
-              console.log(`Auto-generated token stored for user ${userId}`);
-            } else {
-              console.warn(`External webhook responded OK but no token in response: ${responseText}`);
-            }
-          } catch (parseErr) {
-            console.error(`Failed to parse webhook response: ${responseText}`);
-          }
-        } else {
-          console.error(`External webhook returned error ${webhookResponse.status}: ${responseText}`);
-        }
-      } catch (webhookErr) {
-        console.error("External webhook network error:", webhookErr);
-        // Don't fail the main flow
-      }
-    } else {
-      console.warn("Starble_WEBHOOK_SECRET not configured, skipping external token generation");
-    }
-
-    return new Response(JSON.stringify({ status: "activated" }), {
+    return new Response(JSON.stringify({ status: "activated", daily_messages: dailyMessages }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

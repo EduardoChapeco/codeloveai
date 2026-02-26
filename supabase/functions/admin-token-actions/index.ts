@@ -1,4 +1,4 @@
-﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveTenant } from "../_shared/tenant-resolver.ts";
 
 const corsHeaders = {
@@ -8,6 +8,10 @@ const corsHeaders = {
 };
 
 const WORKER_URL = "https://Starble-fix-api.eusoueduoficial.workers.dev";
+
+// Tenant costs (platform fee)
+const DEFAULT_TOKEN_COST = 2.90;   // R$2,90 per 24h token
+const DEFAULT_MONTHLY_COST = 29.90; // R$29,90/month unlimited
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -53,6 +57,17 @@ Deno.serve(async (req) => {
 
     const isGlobalAdmin = roleData && roleData.length > 0;
 
+    // Tenant cost config — loaded for all users, used only for non-admins
+    const { data: tenantConfig } = await serviceClient
+      .from("tenants").select("token_cost, monthly_user_cost").eq("id", tenantId).maybeSingle();
+    const effectiveTokenCost = (tenantConfig?.token_cost && tenantConfig.token_cost > 0)
+      ? tenantConfig.token_cost
+      : DEFAULT_TOKEN_COST;
+    const effectiveMonthlyCost = (tenantConfig?.monthly_user_cost && tenantConfig.monthly_user_cost > 0)
+      ? tenantConfig.monthly_user_cost
+      : DEFAULT_MONTHLY_COST;
+    let effectiveCost = effectiveTokenCost; // default; updated per action
+
     if (!isGlobalAdmin) {
       const { data: tenantRole } = await serviceClient
         .from("tenant_users").select("role").eq("user_id", userId).eq("tenant_id", tenantId).maybeSingle();
@@ -61,21 +76,6 @@ Deno.serve(async (req) => {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
-      // Check tenant wallet for token cost — tenants ALWAYS pay
-      // Token 24h = R$2,90 | Mensal ilimitado = R$29,90
-      const DEFAULT_TOKEN_COST = 2.90;
-      const DEFAULT_MONTHLY_COST = 29.90;
-      const { data: tenantConfig } = await serviceClient
-        .from("tenants").select("token_cost, monthly_user_cost").eq("id", tenantId).maybeSingle();
-      const effectiveTokenCost = (tenantConfig?.token_cost && tenantConfig.token_cost > 0)
-        ? tenantConfig.token_cost
-        : DEFAULT_TOKEN_COST;
-      const effectiveMonthlyCost = (tenantConfig?.monthly_user_cost && tenantConfig.monthly_user_cost > 0)
-        ? tenantConfig.monthly_user_cost
-        : DEFAULT_MONTHLY_COST;
-      // effectiveCost starts as token cost; updated in generate action if monthly plan
-      let effectiveCost = effectiveTokenCost;
     }
 
     const body = await req.json();
@@ -99,14 +99,12 @@ Deno.serve(async (req) => {
         });
       }
 
-      // v1: unbind via Worker
       const resp = await fetch(`${WORKER_URL}/admin/unbind`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Admin-Secret": adminSecret },
         body: JSON.stringify({ token: userToken }),
       });
 
-      // v2: also clear device_id in licenses table
       await serviceClient.from("licenses").update({ device_id: null })
         .eq("key", userToken);
 
@@ -152,9 +150,7 @@ Deno.serve(async (req) => {
       const planToWorkerMap: Record<string, string> = {
         "test_5h": "test_5h", "test_1d": "test_1d", "days_15": "days_15",
         "days_30": "days_30", "days_90": "days_90", "days_1000": "days_90",
-        // v1 / legacy mappings
         "1_day": "test_1d", "7_days": "days_15", "1_month": "days_30", "12_months": "days_90", "lifetime": "days_90",
-        // v2 plan types → default worker plan
         "daily_token": "test_1d", "free_trial": "test_1d", "messages": "days_30", "hourly": "days_30",
       };
 
@@ -170,12 +166,12 @@ Deno.serve(async (req) => {
       const planLimitsMap: Record<string, { daily_messages: number | null; hourly_limit: number | null }> = {
         "daily_token": { daily_messages: null, hourly_limit: null },
         "free_trial": { daily_messages: 10, hourly_limit: null },
-        "messages": { daily_messages: 200, hourly_limit: null },
+        "messages": { daily_messages: null, hourly_limit: null }, // monthly unlimited
         "hourly": { daily_messages: null, hourly_limit: 20 },
-        "1_day": { daily_messages: 50, hourly_limit: null },
-        "7_days": { daily_messages: 100, hourly_limit: null },
-        "1_month": { daily_messages: 200, hourly_limit: null },
-        "12_months": { daily_messages: 500, hourly_limit: null },
+        "1_day": { daily_messages: null, hourly_limit: null },
+        "7_days": { daily_messages: null, hourly_limit: null },
+        "1_month": { daily_messages: null, hourly_limit: null }, // monthly unlimited
+        "12_months": { daily_messages: null, hourly_limit: null },
         "lifetime": { daily_messages: null, hourly_limit: null },
       };
 
@@ -188,11 +184,12 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Determine cost: monthly plans (messages/days_30/1_month) = R$29,90, daily tokens = R$2,90
+      // Determine cost: monthly plans = R$29,90, daily tokens = R$2,90
       const isMonthlyPlan = ["messages", "days_30", "1_month", "days_90", "12_months", "days_1000"].includes(requestedPlan);
-      if (!isGlobalAdmin) {
-        effectiveCost = isMonthlyPlan ? effectiveMonthlyCost : effectiveTokenCost;
+      effectiveCost = isMonthlyPlan ? effectiveMonthlyCost : effectiveTokenCost;
 
+      // Wallet check — tenants ALWAYS pay
+      if (!isGlobalAdmin) {
         const { data: wallet } = await serviceClient
           .from("tenant_wallets").select("balance").eq("tenant_id", tenantId).maybeSingle();
         if (!wallet || wallet.balance < effectiveCost) {
@@ -231,7 +228,7 @@ Deno.serve(async (req) => {
               // v2: also write to licenses table (dual-write)
               const expiresAt = new Date();
               expiresAt.setDate(expiresAt.getDate() + (planDaysMap[requestedPlan] || 30));
-              const limits = planLimitsMap[requestedPlan] || { daily_messages: 50, hourly_limit: null };
+              const limits = planLimitsMap[requestedPlan] || { daily_messages: null, hourly_limit: null };
 
               await serviceClient.from("licenses").update({ active: false, status: "expired" })
                 .eq("user_id", body.user_id).eq("active", true);
@@ -241,8 +238,8 @@ Deno.serve(async (req) => {
                 active: true,
                 status: "active",
                 plan: requestedPlan,
-                plan_type: requestedPlan,
-                type: requestedPlan,
+                plan_type: isMonthlyPlan ? "messages" : requestedPlan,
+                type: isMonthlyPlan ? "monthly" : "daily_token",
                 expires_at: expiresAt.toISOString(),
                 daily_messages: limits.daily_messages,
                 hourly_limit: limits.hourly_limit,
@@ -255,6 +252,7 @@ Deno.serve(async (req) => {
                 const { data: tw } = await serviceClient
                   .from("tenant_wallets").select("balance, total_debited").eq("tenant_id", tenantId).maybeSingle();
                 if (tw) {
+                  const label = isMonthlyPlan ? "mensal ilimitado" : "token 24h";
                   await serviceClient.from("tenant_wallets").update({
                     balance: tw.balance - effectiveCost,
                     total_debited: tw.total_debited + effectiveCost,
@@ -262,7 +260,7 @@ Deno.serve(async (req) => {
 
                   await serviceClient.from("tenant_wallet_transactions").insert({
                     tenant_id: tenantId, amount: -effectiveCost, type: "token_cost",
-                    description: `Licença gerada para ${sanitizedEmail} (R$${effectiveCost.toFixed(2)})`,
+                    description: `Licença ${label} para ${sanitizedEmail} (R$${effectiveCost.toFixed(2)})`,
                   });
                 }
               }
