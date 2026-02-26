@@ -89,7 +89,7 @@ export default function LovableProjects() {
         published_url: p.published_url || null,
         preview_build_commit_sha: p.preview_build_commit_sha || null,
         workspace_id: selectedWs,
-      }, { onConflict: "lovable_project_id" });
+      }, { onConflict: "user_id,lovable_project_id" });
     }
   }, [user, selectedWs]);
 

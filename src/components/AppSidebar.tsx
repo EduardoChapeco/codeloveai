@@ -11,7 +11,7 @@ import {
   Zap, CreditCard, BookOpen, LifeBuoy, Workflow, Scale,
   Rocket, Globe, Handshake, Puzzle, Key, Wallet, Palette,
   DollarSign, Package, Sliders, UserPlus, BarChart3, MessageSquare,
-  CloudLightning, Activity,
+  CloudLightning, Activity, Sparkles,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -401,7 +401,8 @@ export default function AppSidebar() {
     { to: "/extensoes", label: "Extensões", icon: Puzzle, desc: "Loja de extensões" },
     { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
     { to: "/assistente", label: "Assistente", icon: Bot, desc: "Dúvidas da plataforma" },
-    { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de tarefas" },
+    { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de projetos" },
+    { to: "/automation", label: "Automação", icon: Zap, desc: "Regras automáticas" },
     { to: "/notes", label: "Notas", icon: StickyNote, desc: "Anotações rápidas" },
     { to: "/community", label: "Comunidade", icon: MessageCircle, desc: "Fórum & discussões" },
     { to: "/install", label: "Instalar", icon: Download, desc: "Download da extensão" },
@@ -428,6 +429,7 @@ export default function AppSidebar() {
     ...(isDefaultTenant ? [{ to: "/afiliados", label: "Programa de Afiliados", icon: Users, desc: "Ganhe comissões" }] : []),
     ...(isDefaultTenant ? [{ to: "/whitelabel", label: "White Label", icon: Globe, desc: "Sua marca" }] : []),
     { to: "/parceiros", label: "Parceiros", icon: Handshake, desc: "Parcerias" },
+    { to: "/extensoes/venus", label: "Venus AI", icon: Sparkles, desc: "Assistente visual" },
   ];
 
   const adminItems = [
