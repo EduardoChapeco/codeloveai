@@ -63,22 +63,19 @@ Deno.serve(async (req) => {
       }
 
       // Check tenant wallet for token cost — tenants ALWAYS pay
+      // Token 24h = R$2,90 | Mensal ilimitado = R$29,90
       const DEFAULT_TOKEN_COST = 2.90;
+      const DEFAULT_MONTHLY_COST = 29.90;
       const { data: tenantConfig } = await serviceClient
-        .from("tenants").select("token_cost").eq("id", tenantId).maybeSingle();
-      const effectiveCost = (tenantConfig?.token_cost && tenantConfig.token_cost > 0)
+        .from("tenants").select("token_cost, monthly_user_cost").eq("id", tenantId).maybeSingle();
+      const effectiveTokenCost = (tenantConfig?.token_cost && tenantConfig.token_cost > 0)
         ? tenantConfig.token_cost
         : DEFAULT_TOKEN_COST;
-
-      const { data: wallet } = await serviceClient
-        .from("tenant_wallets").select("balance").eq("tenant_id", tenantId).maybeSingle();
-      if (!wallet || wallet.balance < effectiveCost) {
-        return new Response(JSON.stringify({
-          error: `Saldo insuficiente para gerar tokens. Custo: R$${effectiveCost.toFixed(2)}. Saldo: R$${(wallet?.balance ?? 0).toFixed(2)}`
-        }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      const effectiveMonthlyCost = (tenantConfig?.monthly_user_cost && tenantConfig.monthly_user_cost > 0)
+        ? tenantConfig.monthly_user_cost
+        : DEFAULT_MONTHLY_COST;
+      // effectiveCost starts as token cost; updated in generate action if monthly plan
+      let effectiveCost = effectiveTokenCost;
     }
 
     const body = await req.json();
@@ -189,6 +186,23 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: `Plano inválido: ${requestedPlan}` }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      // Determine cost: monthly plans (messages/days_30/1_month) = R$29,90, daily tokens = R$2,90
+      const isMonthlyPlan = ["messages", "days_30", "1_month", "days_90", "12_months", "days_1000"].includes(requestedPlan);
+      if (!isGlobalAdmin) {
+        effectiveCost = isMonthlyPlan ? effectiveMonthlyCost : effectiveTokenCost;
+
+        const { data: wallet } = await serviceClient
+          .from("tenant_wallets").select("balance").eq("tenant_id", tenantId).maybeSingle();
+        if (!wallet || wallet.balance < effectiveCost) {
+          const label = isMonthlyPlan ? "mensal ilimitado" : "token 24h";
+          return new Response(JSON.stringify({
+            error: `Saldo insuficiente para ${label}. Custo: R$${effectiveCost.toFixed(2)}. Saldo: R$${(wallet?.balance ?? 0).toFixed(2)}`
+          }), {
+            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
 
       const sanitizedEmail = email.trim().toLowerCase().substring(0, 254);
