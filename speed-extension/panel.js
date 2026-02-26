@@ -13,6 +13,9 @@ let state = {
   license: null,
   branding: null,
   activePage: 'page-chat',
+  workspaceId: null,
+  projects: [],
+  projectsLoaded: false,
 };
 
 // ── DOM Elements ───────────────────────────────────────────────────
@@ -37,7 +40,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById(targetPage).classList.add('active');
     
     state.activePage = targetPage;
-    if (targetPage === 'page-project') refreshProjects();
+    if (targetPage === 'page-project') {
+      if (!state.projectsLoaded || state.projects.length === 0) loadProjects();
+      else renderProjList();
+    }
   });
 });
 
@@ -63,7 +69,6 @@ if (toggleDark) {
 
 // ── Chat Logic ─────────────────────────────────────────────────────
 function addMessage(text, role = 'ai') {
-  // Remove empty state message if exists
   const statusEl = document.getElementById('chat-status');
   if (statusEl) statusEl.remove();
 
@@ -123,7 +128,6 @@ async function sendMessage() {
       addMessage(`Erro: ${data.error || 'Falha ao enviar'}`, 'system');
       btnSend.disabled = false;
     }
-    // Success — response will arrive via SPD_AI_RESPONSE listener
   } catch (err) {
     hideTyping();
     addMessage(`Erro de rede: ${err.message}`, 'system');
@@ -139,7 +143,6 @@ chatInput.addEventListener('keydown', (e) => {
   }
 });
 
-// Auto-resize textarea
 chatInput.addEventListener('input', () => {
   chatInput.style.height = 'auto';
   chatInput.style.height = (chatInput.scrollHeight) + 'px';
@@ -152,12 +155,11 @@ async function refreshSettingsUI() {
 
   const { spd_email, spd_name, spd_cache, spd_license } = await chrome.storage.local.get(['spd_email', 'spd_name', 'spd_cache', 'spd_license']);
   
-  // Account
   if (spd_license) {
     const isValid = spd_cache?.valid;
     containerAcc.innerHTML = `
       <div class="card">
-        <div class="card-label">LicençaAtiva</div>
+        <div class="card-label">Licença Ativa</div>
         <div class="card-value">
           <span class="status-dot ${isValid ? 'green' : 'red'}"></span>
           ${spd_license.substring(0, 10)}... 
@@ -189,7 +191,6 @@ async function refreshSettingsUI() {
     };
   }
 
-  // Token Status
   const statusColor = state.token ? 'green' : 'yellow';
   const statusText = state.token ? 'Token capturado' : 'Aguardando Lovable...';
   containerTok.innerHTML = `
@@ -208,64 +209,175 @@ async function refreshSettingsUI() {
 }
 
 // ── Project Logic ──────────────────────────────────────────────────
-async function refreshProjects() {
-  const activeContainer = document.getElementById('active-project');
-  const listContainer = document.getElementById('projects-list');
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-  // Active
-  if (state.projectId) {
-    activeContainer.innerHTML = `
-      <div class="card">
-        <div class="project-name">Projeto Atual</div>
-        <div class="project-id">${state.projectId}</div>
-        <button class="btn btn-primary btn-block" style="margin-top:10px;" id="btn-deploy">Deploy no Lovable</button>
-        <div id="deploy-status" style="font-size:12px; margin-top:8px; text-align:center;"></div>
-      </div>
-    `;
-    document.getElementById('btn-deploy').onclick = async () => {
-      const status = document.getElementById('deploy-status');
-      status.textContent = 'Iniciando deploy...';
-      chrome.runtime.sendMessage({ type: 'SPD_DEPLOY' }, (res) => {
-        if (res?.ok) status.textContent = '✅ Publicado com sucesso!';
-        else status.textContent = '❌ Erro: ' + (res?.error || 'Falha');
-      });
-    };
-  } else {
-    activeContainer.innerHTML = '<div class="empty-state">Nenhum projeto selecionado</div>';
-  }
-
-  // List
+async function loadProjects() {
+  const list = document.getElementById('projects-list');
+  if (list) list.innerHTML = '<div class="empty-state">Carregando...</div>';
   if (!state.token) {
-    listContainer.innerHTML = '<div class="empty-state">Abra o Lovable para listar projetos</div>';
+    // Try to sync from storage
+    const d = await new Promise(r => chrome.storage.local.get(['spd_token'], r));
+    state.token = d.spd_token || null;
+    if (!state.token) {
+      chrome.runtime.sendMessage({ type: 'SPD_CAPTURE_TOKENS' });
+      await new Promise(r => setTimeout(r, 1200));
+      const d2 = await new Promise(r => chrome.storage.local.get(['spd_token'], r));
+      state.token = d2.spd_token || null;
+    }
+  }
+  if (!state.token) {
+    if (list) list.innerHTML = '<div class="empty-state">Token não capturado. Abra o Lovable.dev e clique em Capturar Token.</div>';
     return;
   }
 
-  try {
-    const res = await fetch(`${LOVABLE_API}/projects`, {
-      headers: { Authorization: `Bearer ${state.token}` }
-    });
-    const projects = await res.json();
-    if (!Array.isArray(projects)) throw new Error();
+  const H = {
+    'Authorization': 'Bearer ' + state.token,
+    'Origin': 'https://lovable.dev',
+    'Referer': 'https://lovable.dev/',
+    'x-client-git-sha': GIT_SHA,
+  };
 
-    listContainer.innerHTML = projects.map(p => `
-      <div class="project-card ${p.id === state.projectId ? 'selected' : ''}" data-id="${p.id}">
-        <div class="project-name">${p.name || 'Sem nome'}</div>
-        <div class="project-id">${p.id}</div>
-      </div>
-    `).join('');
+  // STEP 1: resolve workspaceId
+  if (!state.workspaceId) {
+    try {
+      const r = await fetch(`${LOVABLE_API}/user/workspaces`, { headers: H });
+      if (r.ok) {
+        const d = await r.json();
+        const arr = Array.isArray(d) ? d : (d.workspaces || d.data || []);
+        const ws = arr[0];
+        state.workspaceId = ws?.id || ws?.workspace_id || ws || null;
+        if (typeof state.workspaceId !== 'string') state.workspaceId = null;
+        if (state.workspaceId) chrome.storage.local.set({ spd_workspace_id: state.workspaceId });
+      }
+    } catch {}
 
-    document.querySelectorAll('.project-card').forEach(card => {
-      card.onclick = () => {
-        const id = card.dataset.id;
-        chrome.storage.local.set({ spd_project_id: id });
-        state.projectId = id;
-        refreshProjects();
-        alert('Projeto alterado!');
-      };
-    });
-  } catch (e) {
-    listContainer.innerHTML = '<div class="empty-state">Erro ao carregar projetos</div>';
+    // Fallback: capture from open Lovable tabs
+    if (!state.workspaceId) {
+      try {
+        const tabs = await new Promise(r => chrome.tabs.query({ url: 'https://lovable.dev/*' }, r));
+        for (const tab of (tabs || [])) {
+          const m = (tab.url || '').match(/\/workspaces\/([A-Za-z0-9_-]{5,60})/);
+          if (m) { state.workspaceId = m[1]; chrome.storage.local.set({ spd_workspace_id: state.workspaceId }); break; }
+        }
+      } catch {}
+    }
+
+    // Fallback 2: ask content script
+    if (!state.workspaceId) {
+      try {
+        const tabs = await new Promise(r => chrome.tabs.query({ url: 'https://lovable.dev/*' }, r));
+        if (tabs[0]) {
+          const st = await new Promise(r => {
+            chrome.tabs.sendMessage(tabs[0].id, { type: 'SPD_GET_STATE' }, s => r(s || {}));
+            setTimeout(() => r({}), 2000);
+          });
+          if (st.workspaceId) { state.workspaceId = st.workspaceId; chrome.storage.local.set({ spd_workspace_id: state.workspaceId }); }
+        }
+      } catch {}
+    }
   }
+
+  // STEP 2: fetch projects via workspace
+  if (state.token && state.workspaceId) {
+    try {
+      for (const lim of [100, 50]) {
+        const r = await fetch(`${LOVABLE_API}/workspaces/${state.workspaceId}/projects?limit=${lim}`, { headers: H });
+        if (r.ok) {
+          const d = await r.json();
+          const arr = Array.isArray(d) ? d : (d.projects || d.data || d.items || []);
+          if (arr.length > 0 || lim === 50) {
+            state.projects = arr.map(p => ({
+              id: p.id || p.project_id,
+              display_name: p.display_name || p.name || p.title || (p.id || '').slice(0, 14),
+              slug: p.slug || null,
+              custom_domain: p.custom_domain || null,
+            })).filter(p => p.id);
+            state.projectsLoaded = true;
+            renderProjList();
+            return;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // STEP 3 (fallback): fetch projects directly
+  if (state.token) {
+    try {
+      const r = await fetch(`${LOVABLE_API}/projects?limit=50`, { headers: H });
+      if (r.ok) {
+        const d = await r.json();
+        const arr = Array.isArray(d) ? d : (d.projects || d.data || []);
+        if (arr.length > 0) {
+          state.projects = arr.map(p => ({
+            id: p.id || p.project_id,
+            display_name: p.display_name || p.name || p.title || (p.id || '').slice(0, 14),
+          })).filter(p => p.id);
+          state.projectsLoaded = true;
+          renderProjList();
+          return;
+        }
+      }
+    } catch {}
+  }
+
+  state.projectsLoaded = true;
+  const msg = !state.token
+    ? 'Token não capturado — abra o Lovable.dev primeiro.'
+    : !state.workspaceId
+    ? 'Workspace não encontrado — navegue num projeto no Lovable.dev e tente novamente.'
+    : 'Nenhum projeto encontrado. Verifique sua conta no Lovable.dev.';
+  if (list) list.innerHTML = `<div class="empty-state">${msg}</div>`;
+}
+
+function renderProjList() {
+  const el = document.getElementById('projects-list');
+  if (!el) return;
+  const q = (document.getElementById('proj-search')?.value || '').toLowerCase();
+  const items = state.projects.filter(p =>
+    (p.display_name || p.name || '').toLowerCase().includes(q) || (p.id || '').includes(q)
+  );
+  if (!items.length) {
+    el.innerHTML = state.projects.length === 0
+      ? '<div class="empty-state">Nenhum projeto carregado. Clique em Atualizar.</div>'
+      : '<div class="empty-state">Nenhum projeto encontrado para essa busca.</div>';
+    return;
+  }
+  el.innerHTML = '';
+  items.slice(0, 100).forEach(p => {
+    const name = p.display_name || p.name || (p.id || '').slice(0, 14) || '—';
+    const active = p.id === state.projectId;
+    const card = document.createElement('div');
+    card.className = 'project-card' + (active ? ' selected' : '');
+    card.innerHTML = `
+      <div class="status-dot ${active ? 'green' : ''}"></div>
+      <div class="proj-info">
+        <div class="project-name">${esc(name)}</div>
+        <div class="project-id">${(p.id || '').slice(0, 22)}…</div>
+      </div>
+      <div class="proj-acts">
+        <a href="https://lovable.dev/projects/${p.id}" target="_blank" title="Abrir no Lovable">↗</a>
+        <button class="sel-btn" data-id="${p.id}" title="Selecionar">${active ? '✓' : '›'}</button>
+      </div>
+    `;
+    card.querySelector('.sel-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.projectId = p.id;
+      chrome.storage.local.set({ spd_project_id: p.id });
+      renderProjList();
+    });
+    el.appendChild(card);
+  });
+}
+
+function initProjects() {
+  document.getElementById('proj-refresh-btn')?.addEventListener('click', () => {
+    state.projectsLoaded = false;
+    state.projects = [];
+    state.workspaceId = null;
+    loadProjects();
+  });
+  document.getElementById('proj-search')?.addEventListener('input', renderProjList);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -284,18 +396,17 @@ function makeAiMsgId() {
 // ── Initialize ─────────────────────────────────────────────────────
 async function init() {
   const data = await chrome.storage.local.get([
-    'spd_token', 'spd_project_id', 'spd_license', 'spd_branding', 'spd_theme'
+    'spd_token', 'spd_project_id', 'spd_license', 'spd_branding', 'spd_theme', 'spd_workspace_id'
   ]);
 
   state.token = data.spd_token;
   state.projectId = data.spd_project_id;
   state.license = data.spd_license;
   state.branding = data.spd_branding;
+  state.workspaceId = data.spd_workspace_id || null;
 
-  // Apply Theme
   setTheme(data.spd_theme || 'dark');
 
-  // Apply Branding
   if (state.branding) {
     if (state.branding.primaryColor) {
       document.documentElement.style.setProperty('--acc', state.branding.primaryColor);
@@ -308,7 +419,6 @@ async function init() {
     }
   }
 
-  // Update Status
   const statusEl = document.getElementById('chat-status');
   if (state.token && state.projectId) {
     statusEl.textContent = 'Pronto para conversar';
@@ -320,7 +430,8 @@ async function init() {
   }
 
   refreshSettingsUI();
-  refreshProjects();
+  initProjects();
+  loadProjects();
 }
 
 // ── Listen to storage changes ──────────────────────────────────────
@@ -335,7 +446,7 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.spd_license) state.license = changes.spd_license.newValue;
   if (changes.spd_branding) {
     state.branding = changes.spd_branding.newValue;
-    init(); // re-apply
+    init();
   }
 });
 
