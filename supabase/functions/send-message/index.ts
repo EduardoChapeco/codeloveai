@@ -316,7 +316,7 @@ Deno.serve(async (req: Request) => {
     },
     chat: {
       intent: "security_fix_v2",
-      chat_only: true,
+      chat_only: false,
       view: SECURITY_VIEW,
       view_description: SECURITY_VIEW_DESC,
     },
