@@ -135,3 +135,6 @@ verify_jwt = false
 
 [functions.brain]
 verify_jwt = false
+
+[functions.brain-capture-cron]
+verify_jwt = false
