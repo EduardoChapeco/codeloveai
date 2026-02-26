@@ -3557,6 +3557,7 @@ export type Database = {
           meta_description: string | null
           meta_title: string | null
           modules: Json | null
+          monthly_user_cost: number | null
           mp_access_token: string | null
           name: string
           owner_user_id: string | null
@@ -3597,6 +3598,7 @@ export type Database = {
           meta_description?: string | null
           meta_title?: string | null
           modules?: Json | null
+          monthly_user_cost?: number | null
           mp_access_token?: string | null
           name: string
           owner_user_id?: string | null
@@ -3637,6 +3639,7 @@ export type Database = {
           meta_description?: string | null
           meta_title?: string | null
           modules?: Json | null
+          monthly_user_cost?: number | null
           mp_access_token?: string | null
           name?: string
           owner_user_id?: string | null
