@@ -8,6 +8,29 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function base64url(data: Uint8Array): string {
+  return btoa(String.fromCharCode(...data))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function base64urlEncode(str: string): string {
+  return base64url(new TextEncoder().encode(str));
+}
+
+async function hmacSign(payload: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return base64url(new Uint8Array(sig));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -22,6 +45,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    const clfSecret = Deno.env.get("CLF_TOKEN_SECRET");
+    if (!clfSecret) {
+      return new Response(JSON.stringify({ error: "CLF_TOKEN_SECRET not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -29,16 +60,16 @@ Deno.serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = claimsData.claims.sub;
-    const userEmail = claimsData.claims.email;
+    const userId = user.id;
+    const userEmail = user.email;
 
     // Block disposable/temporary emails
     if (userEmail && isDisposableEmail(userEmail)) {
@@ -75,7 +106,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check if user already has any active license (including auto-onboard free)
+    // Check if user already has any active license
     const { data: existingLicense } = await serviceClient
       .from("licenses")
       .select("id")
@@ -117,10 +148,25 @@ Deno.serve(async (req) => {
     const planId = freePlan?.id || null;
     const dailyMessages = freePlan?.daily_message_limit || 10;
 
-    // Create perpetual free license (same as auto-onboard)
-    const expiresAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString();
-    const keyRandom = crypto.randomUUID().replace(/-/g, "").substring(0, 16).toUpperCase();
-    const licenseKey = `CLF1.FREE-${keyRandom}`;
+    // Build proper CLF1.eyJ... HMAC-signed token
+    const now = Date.now();
+    const expiresMs = 100 * 365.25 * 24 * 60 * 60 * 1000;
+    const exp = now + expiresMs;
+    const expiresAt = new Date(exp).toISOString();
+
+    const payload = JSON.stringify({
+      uid: userId,
+      email: userEmail || "",
+      plan: "free",
+      dailyMessages,
+      exp,
+      iat: now,
+      v: 1,
+    });
+
+    const encodedPayload = base64urlEncode(payload);
+    const signature = await hmacSign(encodedPayload, clfSecret);
+    const licenseKey = `CLF1.${encodedPayload}.${signature}`;
 
     const { error: licenseError } = await serviceClient
       .from("licenses")
@@ -147,7 +193,7 @@ Deno.serve(async (req) => {
     }
 
     // Legacy: create subscription record for tracking
-    const { error: subError } = await serviceClient
+    await serviceClient
       .from("subscriptions")
       .insert({
         user_id: userId,
@@ -157,11 +203,7 @@ Deno.serve(async (req) => {
         expires_at: expiresAt,
         payment_id: `free_${sanitizedCode}`,
         tenant_id: tenantId,
-      });
-
-    if (subError) {
-      console.error("Subscription insert error:", subError);
-    }
+      }).then(() => {}).catch(() => {});
 
     // Notify admin
     await serviceClient.from("admin_notifications").insert({
@@ -170,9 +212,9 @@ Deno.serve(async (req) => {
       description: `Usuário ${userEmail || userId} ativou o plano gratuito de ${dailyMessages} mensagens/dia. Código: ${sanitizedCode}`,
       user_id: userId,
       tenant_id: tenantId,
-    });
+    }).then(() => {}).catch(() => {});
 
-    return new Response(JSON.stringify({ status: "activated", daily_messages: dailyMessages }), {
+    return new Response(JSON.stringify({ status: "activated", daily_messages: dailyMessages, token: licenseKey }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

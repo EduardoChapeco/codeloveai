@@ -8,9 +8,33 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-tenant-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function base64url(data: Uint8Array): string {
+  return btoa(String.fromCharCode(...data))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function base64urlEncode(str: string): string {
+  return base64url(new TextEncoder().encode(str));
+}
+
+async function hmacSign(payload: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return base64url(new Uint8Array(sig));
+}
+
 /**
  * auto-onboard: Auto-provisions a free 10msg/day license for new users.
  * - Idempotent: skips if user already has any active license
+ * - Generates proper CLF1.eyJ... HMAC-signed tokens (same format as generate-clf-token)
  * - Links to the "Grátis" plan in DB for proper extension access (allowedExtensions)
  * - Perpetual free tier (no expiration)
  */
@@ -24,6 +48,14 @@ Deno.serve(async (req) => {
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
         status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const clfSecret = Deno.env.get("CLF_TOKEN_SECRET");
+    if (!clfSecret) {
+      return new Response(JSON.stringify({ error: "CLF_TOKEN_SECRET not configured" }), {
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -89,12 +121,26 @@ Deno.serve(async (req) => {
     const planId = freePlan?.id || null;
     const dailyMessages = freePlan?.daily_message_limit || 10;
 
-    // Generate license key
-    const keyRandom = crypto.randomUUID().replace(/-/g, "").substring(0, 16).toUpperCase();
-    const licenseKey = `CLF1.FREE-${keyRandom}`;
+    // Perpetual free license (100 years)
+    const now = Date.now();
+    const expiresMs = 100 * 365.25 * 24 * 60 * 60 * 1000;
+    const exp = now + expiresMs;
+    const expiresAt = new Date(exp).toISOString();
 
-    // Perpetual free license (100 years = effectively never expires)
-    const expiresAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString();
+    // Build proper CLF1.eyJ... HMAC-signed token
+    const payload = JSON.stringify({
+      uid: userId,
+      email: userEmail || "",
+      plan: "free",
+      dailyMessages,
+      exp,
+      iat: now,
+      v: 1,
+    });
+
+    const encodedPayload = base64urlEncode(payload);
+    const signature = await hmacSign(encodedPayload, clfSecret);
+    const licenseKey = `CLF1.${encodedPayload}.${signature}`;
 
     const { data: newLicense, error: insertError } = await serviceClient
       .from("licenses")
@@ -126,6 +172,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         license_id: newLicense.id,
+        token: licenseKey,
         plan: "free",
         daily_messages: dailyMessages,
       }),
