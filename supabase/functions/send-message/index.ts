@@ -1,5 +1,7 @@
-// Starble — send-message v3.0.0
-// ÚNICO ponto de envio de mensagens ao Lovable. Todas as extensões e automações usam ESTA função.
+// Starble — send-message v3.1.0
+// ÚNICO ponto de envio de mensagens ao Lovable.
+// FLUXO: CLF1 válido → edge function usa token Lovable INTERNO → chama API
+// O cliente NUNCA envia lovableToken. A edge function resolve internamente.
 // REGRAS ABSOLUTAS:
 //   intent = "security_fix_v2"  — NUNCA MUDAR
 //   chat_only = false           — NUNCA true (true = Plan mode = cobra crédito)
@@ -108,6 +110,49 @@ async function authenticate(
   return { ok: false, error: "Autenticação necessária (CLF1 ou JWT).", purgeToken: true };
 }
 
+/**
+ * Resolve the internal Lovable token.
+ * Priority:
+ *   1. User's own lovable_accounts token (if exists)
+ *   2. Admin master's lovable_accounts token (shared/internal)
+ * The client NEVER needs to send a Lovable token.
+ */
+async function resolveInternalLovableToken(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string
+): Promise<string | null> {
+  // Try user's own token first
+  const { data: userAccount } = await adminClient
+    .from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (userAccount?.token_encrypted) return userAccount.token_encrypted;
+
+  // Fallback: admin master's token (internal shared token)
+  const { data: adminUser } = await adminClient
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "admin")
+    .limit(1)
+    .maybeSingle();
+
+  if (adminUser?.user_id) {
+    const { data: adminAccount } = await adminClient
+      .from("lovable_accounts")
+      .select("token_encrypted")
+      .eq("user_id", adminUser.user_id)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (adminAccount?.token_encrypted) return adminAccount.token_encrypted;
+  }
+
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return fail("Method not allowed", 405);
@@ -116,7 +161,7 @@ Deno.serve(async (req: Request) => {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // ── 1. Authenticate ──
+  // ── 1. Authenticate (CLF1 ou JWT) ──
   const auth = await authenticate(req, adminClient, supabaseUrl);
   if (!auth.ok) {
     return fail(auth.error!, 403, { purgeToken: !!auth.purgeToken });
@@ -199,25 +244,17 @@ Deno.serve(async (req: Request) => {
 
   const projectId = body.projectId as string;
   const message = (body.message as string) || (body.prompt as string) || "";
-  const lovableTokenFromBody = body.lovableToken as string || body.token as string || "";
   const files = Array.isArray(body.files) ? body.files : [];
   const runtimeErrors = Array.isArray(body.runtimeErrors) ? body.runtimeErrors : [];
 
   if (!projectId || !isUuid(projectId)) return fail("projectId inválido.");
   if (!message.trim()) return fail("message é obrigatória.");
 
-  // ── 5. Resolve Lovable token ──
-  let lovableToken = lovableTokenFromBody;
-  if (!lovableToken && auth.userId) {
-    const { data: account } = await adminClient
-      .from("lovable_accounts")
-      .select("token_encrypted")
-      .eq("user_id", auth.userId)
-      .eq("status", "active")
-      .maybeSingle();
-    if (account?.token_encrypted) lovableToken = account.token_encrypted;
+  // ── 5. Resolve Lovable token INTERNALLY — client never sends it ──
+  const lovableToken = await resolveInternalLovableToken(adminClient, auth.userId!);
+  if (!lovableToken) {
+    return fail("Token Lovable interno não configurado. Admin deve conectar conta Lovable.", 500);
   }
-  if (!lovableToken) return fail("lovableToken não encontrado. Conecte sua conta Lovable.", 400);
 
   // ── 6. Build payload — ALL HARDCODED, NEVER FROM CLIENT ──
   const msgId = crypto.randomUUID();
@@ -266,7 +303,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 8. Handle response ──
-  if (lovableRes.status === 401) return fail("Token Lovable expirado — reconecte.", 401);
+  if (lovableRes.status === 401) return fail("Token Lovable interno expirado — admin deve reconectar.", 401);
   if (lovableRes.status === 429) return fail("Rate limit — aguarde.", 429);
 
   const responseData = await lovableRes.json().catch(() => ({}));
@@ -289,7 +326,7 @@ Deno.serve(async (req: Request) => {
     metadata: { plan: auth.plan, projectId: projectId.substring(0, 8) },
   }).then(() => {}).catch(() => {});
 
-  // ── 11. Return — NEVER expose intent/view/chat_only ──
+  // ── 11. Return — NEVER expose intent/view/chat_only/lovableToken ──
   return new Response(
     JSON.stringify({
       ok: lovableRes.ok,
