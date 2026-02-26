@@ -66,6 +66,57 @@ async function getUserIdFromJwt(authHeader: string, supabaseUrl: string, anonKey
   }
 }
 
+function isProjectChatRoute(route: string): boolean {
+  return /^\/projects\/[0-9a-f-]{36}\/chat(?:$|\?)/i.test(route);
+}
+
+function normalizeChatPayload(rawPayload: unknown): Record<string, unknown> {
+  const payload = rawPayload && typeof rawPayload === "object"
+    ? { ...(rawPayload as Record<string, unknown>) }
+    : {};
+
+  const message = typeof payload.message === "string" ? payload.message.trim() : "";
+  if (!message) {
+    throw new Error("Message é obrigatória para rota de chat.");
+  }
+
+  return {
+    ...payload,
+    id: typeof payload.id === "string" && payload.id ? payload.id : crypto.randomUUID(),
+    message,
+    intent: "security_fix_v2",
+    chat_only: false,
+    ai_message_id:
+      typeof payload.ai_message_id === "string" && payload.ai_message_id
+        ? payload.ai_message_id
+        : `aimsg_${crypto.randomUUID().replace(/-/g, "").slice(0, 26)}`,
+    thread_id: typeof payload.thread_id === "string" && payload.thread_id ? payload.thread_id : "main",
+    view: "security",
+    view_description:
+      typeof payload.view_description === "string" && payload.view_description.trim()
+        ? payload.view_description
+        : "The user is currently viewing the security view for their project.",
+    model: null,
+    files: Array.isArray(payload.files) ? payload.files : [],
+    optimisticImageUrls: Array.isArray(payload.optimisticImageUrls) ? payload.optimisticImageUrls : [],
+    selected_elements: Array.isArray(payload.selected_elements) ? payload.selected_elements : [],
+    debug_mode: false,
+    session_replay: typeof payload.session_replay === "string" ? payload.session_replay : "[]",
+    client_logs: Array.isArray(payload.client_logs) ? payload.client_logs : [],
+    network_requests: Array.isArray(payload.network_requests) ? payload.network_requests : [],
+    runtime_errors: Array.isArray(payload.runtime_errors) ? payload.runtime_errors : [],
+    integration_metadata:
+      payload.integration_metadata && typeof payload.integration_metadata === "object"
+        ? payload.integration_metadata
+        : {
+            browser: {
+              preview_viewport_width: 1280,
+              preview_viewport_height: 854,
+            },
+          },
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -102,8 +153,19 @@ Deno.serve(async (req) => {
     const body = req.method !== "GET" ? await req.json().catch(() => ({})) : {};
     const action = body.action || "";
     const lovableRoute = body.route || "";
-    const lovableMethod = body.method || "GET";
-    const lovableBody = body.payload || null;
+    const lovableMethod = (body.method || "GET").toUpperCase();
+    let lovableBody = body.payload || null;
+
+    if (lovableRoute && lovableMethod !== "GET" && isProjectChatRoute(lovableRoute)) {
+      try {
+        lovableBody = normalizeChatPayload(lovableBody);
+      } catch (normalizeErr) {
+        return new Response(JSON.stringify({ error: normalizeErr instanceof Error ? normalizeErr.message : "Payload de chat inválido" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     if (!lovableRoute && action !== "save-token" && action !== "delete-token" && action !== "verify" && action !== "refresh-token") {
       return new Response(JSON.stringify({ error: "Route é obrigatória" }), {
@@ -328,6 +390,8 @@ Deno.serve(async (req) => {
       headers: {
         Authorization: `Bearer ${lovableToken}`,
         "Content-Type": "application/json",
+        Origin: "https://lovable.dev",
+        Referer: "https://lovable.dev/",
       },
     };
 
@@ -382,6 +446,8 @@ Deno.serve(async (req) => {
                 headers: {
                   Authorization: `Bearer ${lovableToken}`,
                   "Content-Type": "application/json",
+                  Origin: "https://lovable.dev",
+                  Referer: "https://lovable.dev/",
                 },
               };
               if (lovableBody && lovableMethod !== "GET") {
