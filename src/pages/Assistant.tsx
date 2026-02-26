@@ -46,12 +46,25 @@ export default function AssistantPage() {
     try {
       const history = messages.filter(m => !m.loading).slice(-10).map(m => ({ role: m.role, content: m.content }));
       const { data, error } = await supabase.functions.invoke("gemini-chat", { body: { message: text, history } });
-      if (error) throw error;
-      const reply = (data as any).reply || "Não consegui processar sua pergunta.";
+      const payload = data as any;
+
+      if (error) {
+        const status = (error as any)?.context?.status;
+        if (status === 429) throw new Error("Muitas requisições agora. Aguarde alguns segundos e tente novamente.");
+        if (status === 402) throw new Error("Créditos de IA insuficientes no workspace.");
+        throw new Error(payload?.error || error.message || "Erro ao conectar com IA");
+      }
+
+      if (payload?.error) throw new Error(payload.error);
+
+      const reply = typeof payload?.reply === "string" && payload.reply.trim().length > 0
+        ? payload.reply
+        : "Não consegui processar sua pergunta.";
+
       setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, content: reply, loading: false } : m));
     } catch (e: any) {
       setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, content: "Erro ao conectar.", loading: false } : m));
-      toast.error(e.message);
+      toast.error(e.message || "Falha ao obter resposta da IA");
     } finally {
       setLoading(false);
     }

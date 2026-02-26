@@ -16,11 +16,18 @@ export function logExtensionUsage(params: {
   metadata?: Record<string, unknown>;
 }) {
   try {
+    // user_id in extension_usage_logs is UUID; skip invalid values to avoid DB errors
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(params.userId || "");
+    if (!isUuid) {
+      console.warn(`[usage-logger] skipped log due invalid userId: ${params.userId}`);
+      return;
+    }
+
     const sc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
-    // fire-and-forget
+
     sc.from("extension_usage_logs").insert({
       user_id: params.userId,
       function_name: params.functionName,

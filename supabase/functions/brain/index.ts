@@ -369,13 +369,67 @@ async function captureResponse(
   return { response: null, status: "timeout" };
 }
 
-// ── Project creation + skill injection ─────────────────────────
+// ── Project creation + ghost cancel + skill injection ─────────────────────────
+
+function extractMessageId(payload: any): string | null {
+  const raw = payload?.message_id || payload?.initial_message_id || payload?.message?.id || payload?.data?.message_id || null;
+  return typeof raw === "string" && raw.trim().length > 0 ? raw : null;
+}
+
+async function getLatestMessageId(projectId: string, token: string): Promise<string | null> {
+  try {
+    const res = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
+    if (!res.ok) return null;
+
+    const payload = await res.json().catch(() => null);
+    const raw = payload?.id || payload?.message_id || payload?.data?.id || payload?.data?.message_id || null;
+    return typeof raw === "string" && raw.trim().length > 0 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+async function cancelInitialCreation(
+  projectId: string,
+  token: string,
+  createPayload: any,
+): Promise<{ cancelled: boolean; messageId: string | null }> {
+  let messageId = extractMessageId(createPayload);
+
+  // In many create responses message_id is omitted; probe latest-message after 1s
+  if (!messageId) {
+    await new Promise((r) => setTimeout(r, 1_000));
+    messageId = await getLatestMessageId(projectId, token);
+  }
+
+  if (!messageId) {
+    console.warn(`[Brain] Ghost cancel skipped (message_id not found) project=${projectId}`);
+    return { cancelled: false, messageId: null };
+  }
+
+  try {
+    const cancelRes = await lovFetch(`${API}/projects/${projectId}/chat/${messageId}/cancel`, token, {
+      method: "POST",
+    });
+
+    if (!cancelRes.ok) {
+      const body = await cancelRes.text().catch(() => "");
+      console.warn(`[Brain] Ghost cancel failed project=${projectId} message=${messageId} status=${cancelRes.status} body=${body.slice(0, 180)}`);
+      return { cancelled: false, messageId };
+    }
+
+    console.log(`[Brain] Ghost cancel OK project=${projectId} message=${messageId}`);
+    return { cancelled: true, messageId };
+  } catch (err) {
+    console.warn(`[Brain] Ghost cancel exception project=${projectId} message=${messageId}`, err);
+    return { cancelled: false, messageId };
+  }
+}
 
 async function sendSkillInjection(projectId: string, token: string, skill: BrainSkill): Promise<boolean> {
   const prompt = buildSkillInjectionPrompt(skill);
   const payload = buildPayload(prompt);
 
-  console.log(`[Brain] Injecting skill "${skill}" into project ${projectId}`);
   const res = await lovFetch(`${API}/projects/${projectId}/chat`, token, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -387,7 +441,7 @@ async function sendSkillInjection(projectId: string, token: string, skill: Brain
     return false;
   }
 
-  console.log(`[Brain] Skill injection sent OK for "${skill}"`);
+  console.log(`[Brain] Skill injection OK skill=${skill} project=${projectId}`);
   return true;
 }
 
@@ -415,7 +469,7 @@ async function createFreshBrain(
     const skillLabel = SKILL_PROFILES[skill].title.replace(/Star AI — /, "").toLowerCase().replace(/\s+/g, "-");
     const projectName = `star-${skillLabel}-${Date.now()}`;
 
-    console.log(`[Brain] Creating project: ${projectName} skill=${skill}`);
+    console.log(`[Brain] Creating project=${projectName} skill=${skill} workspace=${workspaceId}`);
     const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
       method: "POST",
       body: JSON.stringify({
@@ -426,15 +480,15 @@ async function createFreshBrain(
     });
 
     const createBody = await createRes.text().catch(() => "");
-    console.log(`[Brain] Create response: status=${createRes.status}`);
-
     if (!createRes.ok) {
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
     }
 
     let created: any;
-    try { created = JSON.parse(createBody); } catch {
+    try {
+      created = JSON.parse(createBody);
+    } catch {
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: "Resposta inválida da API ao criar projeto" };
     }
@@ -445,7 +499,6 @@ async function createFreshBrain(
       return { error: "ID do projeto não retornado pela API" };
     }
 
-    // Save to DB as active
     await sc.from("user_brain_projects")
       .update({
         lovable_project_id: projectId,
@@ -455,12 +508,10 @@ async function createFreshBrain(
       })
       .eq("user_id", userId);
 
-    console.log(`[Brain] Project saved: ${projectId}. Waiting 8s before skill injection...`);
-
-    // Wait for project to initialize, then inject skill prompt
-    await new Promise((r) => setTimeout(r, 8_000));
+    const cancelResult = await cancelInitialCreation(projectId, token, created);
     const injected = await sendSkillInjection(projectId, token, skill);
-    console.log(`[Brain] Skill injection result: ${injected ? "OK" : "FAILED"}`);
+
+    console.log(`[Brain] Setup pipeline project=${projectId} cancel=${cancelResult.cancelled} injected=${injected}`);
 
     return { projectId, workspaceId };
   } catch (err) {
