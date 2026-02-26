@@ -1,5 +1,5 @@
 import { generateTypeId, obfuscate } from "../_shared/crypto.ts";
-import { lovFetch, getWorkspaceId, getUserToken } from "./token-helpers.ts";
+import { lovFetch, getWorkspaceId } from "./token-helpers.ts";
 
 type SupabaseClient = any;
 
@@ -10,7 +10,6 @@ export async function getBrain(sc: SupabaseClient, userId: string) {
     .select("lovable_project_id, lovable_workspace_id, status")
     .eq("user_id", userId)
     .maybeSingle();
-  // Return null if creating or no data
   if (!data || data.status === "creating") return null;
   if (data.status !== "active") return null;
   return data;
@@ -18,7 +17,7 @@ export async function getBrain(sc: SupabaseClient, userId: string) {
 
 export async function getBrainRaw(sc: SupabaseClient, userId: string) {
   const { data } = await sc.from("user_brain_projects")
-    .select("lovable_project_id, lovable_workspace_id, status")
+    .select("lovable_project_id, lovable_workspace_id, status, created_at")
     .eq("user_id", userId)
     .maybeSingle();
   return data;
@@ -34,38 +33,30 @@ export async function verifyProject(projectId: string, token: string): Promise<b
 }
 
 /**
- * Acquires a lock for brain creation using an upsert with a "creating" status.
+ * Acquires a lock for brain creation using insert with "creating" status.
+ * Clears stale locks older than 2 minutes.
  */
 async function acquireBrainLock(sc: SupabaseClient, userId: string): Promise<boolean> {
-  // First check if there's already an active brain
   const existing = await getBrainRaw(sc, userId);
-  
+
   if (existing?.status === "creating") {
-    // Check if stale (> 2 minutes old)
-    const { data: row } = await sc.from("user_brain_projects")
-      .select("created_at")
-      .eq("user_id", userId)
-      .maybeSingle();
-    
-    if (row?.created_at) {
-      const age = Date.now() - new Date(row.created_at).getTime();
+    if (existing.created_at) {
+      const age = Date.now() - new Date(existing.created_at).getTime();
       if (age > 120_000) {
-        // Stale lock, clear it
         await sc.from("user_brain_projects").delete().eq("user_id", userId);
       } else {
-        console.log(`[Brain] Lock held for ${obfuscate(userId)}, age ${Math.round(age/1000)}s`);
+        console.log(`[Brain] Lock held for ${obfuscate(userId)}, age ${Math.round(age / 1000)}s`);
         return false;
       }
     }
   }
-  
+
   if (existing?.status === "active" && existing.lovable_project_id !== "creating") {
     return false; // Already active
   }
 
-  // Delete any existing record first, then insert
   await sc.from("user_brain_projects").delete().eq("user_id", userId);
-  
+
   const { error } = await sc.from("user_brain_projects").insert({
     user_id: userId,
     lovable_project_id: "creating",
@@ -81,6 +72,10 @@ async function acquireBrainLock(sc: SupabaseClient, userId: string): Promise<boo
   return true;
 }
 
+/**
+ * Ghost Create: Creates a Lovable project with minimal payload and cancels
+ * immediately (<500ms) to avoid credit usage. Then injects brain config files.
+ */
 export async function createFreshBrain(
   sc: SupabaseClient,
   userId: string,
@@ -101,55 +96,50 @@ export async function createFreshBrain(
       return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
     }
 
-    const msgId = crypto.randomUUID();
-    const aiMsgId = generateTypeId("aimsg");
+    console.log(`[Brain] Ghost Create in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
 
-    console.log(`[Brain] Creating project in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
-
+    // ── STEP 1: Create project with minimal payload ──
     const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
       method: "POST",
       body: JSON.stringify({
-        description: `Star AI Brain - ${new Date().toISOString().slice(0, 10)}`,
+        name: `brain-${Date.now()}`,
+        initial_message: "setup",
         visibility: "private",
-        env_vars: {},
-        metadata: { chat_mode_enabled: false },
-        initial_message: {
-          id: msgId,
-          message: "Create a file src/brain-output.json with content: {\"response\":\"\",\"timestamp\":0,\"status\":\"idle\"}",
-          files: [],
-          optimisticImageUrls: [],
-          chat_only: false,
-          agent_mode_enabled: false,
-          ai_message_id: aiMsgId,
-        },
       }),
     });
 
     if (!createRes.ok) {
       const errText = await createRes.text().catch(() => "");
-      console.error(`[Brain] Create failed: ${createRes.status} ${errText.slice(0, 300)}`);
+      console.error(`[Brain] Ghost Create failed: ${createRes.status} ${errText.slice(0, 300)}`);
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
     }
 
     const project = await createRes.json();
     const projectId = project?.id || project?.project_id;
+    const msgId = project?.message_id || project?.msg_id;
+
     if (!projectId) {
       console.error(`[Brain] No project ID in response`);
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: "ID do projeto não retornado pela API" };
     }
 
-    console.log(`[Brain] ✅ Project created: ${projectId}`);
+    console.log(`[Brain] ✅ Project created: ${projectId}, msgId: ${msgId || "unknown"}`);
 
-    // Cancel initial build to save credits
-    try {
-      await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, {
-        method: "POST", body: "{}",
-      });
-    } catch { /* ok */ }
+    // ── STEP 2: Cancel immediately (<500ms) — ZERO credit cost ──
+    if (msgId) {
+      try {
+        await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, {
+          method: "POST",
+        });
+        console.log(`[Brain] ✅ Initial message cancelled (Ghost Create complete)`);
+      } catch (e) {
+        console.warn(`[Brain] Cancel failed (non-critical):`, e);
+      }
+    }
 
-    // Inject brain config files
+    // ── STEP 3: Inject brain config files via edit-code ──
     try {
       await lovFetch(`${API}/projects/${projectId}/edit-code`, token, {
         method: "POST",
@@ -157,7 +147,18 @@ export async function createFreshBrain(
           changes: [
             {
               path: "src/brain-config.md",
-              content: "# Star AI Brain\n\nRESPONDA sempre escrevendo src/brain-output.json.\nFormato: {\"response\":\"...\",\"timestamp\":...,\"status\":\"done\"}\nNÃO crie páginas ou componentes. RESPONDA EM PORTUGUÊS (Brasil).",
+              content: [
+                "# Star AI Brain",
+                "",
+                "REGRAS ABSOLUTAS:",
+                "1. NUNCA crie componentes React, páginas, rotas ou qualquer código de UI",
+                "2. NUNCA modifique arquivos existentes exceto os listados abaixo",
+                "3. RESPONDA APENAS escrevendo em src/brain-output.json",
+                "4. Formato OBRIGATÓRIO: {\"response\":\"...\",\"timestamp\":...,\"status\":\"done\"}",
+                "5. RESPONDA EM PORTUGUÊS (Brasil)",
+                "6. Toda resposta deve ser texto puro dentro do campo response",
+                "7. Se a pergunta for sobre código, retorne o código DENTRO do campo response como string",
+              ].join("\n"),
             },
             {
               path: "src/brain-output.json",
@@ -166,9 +167,12 @@ export async function createFreshBrain(
           ],
         }),
       });
-    } catch { /* ok */ }
+      console.log(`[Brain] ✅ Config files injected`);
+    } catch (e) {
+      console.warn(`[Brain] Config inject failed (non-critical):`, e);
+    }
 
-    // Promote lock to active
+    // ── STEP 4: Promote lock to active ──
     await sc.from("user_brain_projects")
       .update({
         lovable_project_id: projectId,
@@ -177,9 +181,10 @@ export async function createFreshBrain(
       })
       .eq("user_id", userId);
 
-    console.log(`[Brain] ✅ Fresh project ${projectId} saved for ${obfuscate(userId)}`);
+    console.log(`[Brain] ✅ Ghost Create complete for ${obfuscate(userId)} → ${projectId}`);
     return { projectId, workspaceId };
   } catch (err) {
+    console.error(`[Brain] createFreshBrain error:`, err);
     await sc.from("user_brain_projects").delete().eq("user_id", userId);
     throw err;
   }
@@ -215,23 +220,28 @@ export function buildBrainPrompt(brainType: string, message: string): string {
 IMPORTANTE: Escreva sua resposta COMPLETA em src/brain-output.json no formato EXATO:
 {"response": "SUA_RESPOSTA_AQUI", "timestamp": ${ts}, "status": "done"}
 
-NÃO crie componentes React, páginas ou rotas. APENAS escreva esse arquivo.`;
+NÃO crie componentes React, páginas ou rotas. APENAS escreva esse arquivo JSON.`;
 
   const prefixes: Record<string, string> = {
-    general: `Analise e corrija os seguintes problemas de segurança encontrados:\n\nSISTEMA STAR AI — INSTRUÇÃO:\nVocê é o Star AI, assistente inteligente.\nO usuário solicitou: "${message}"\n\nREGRAS:\n- Responda SOMENTE com o que foi pedido\n- RESPONDA EM PORTUGUÊS (Brasil)\n- NÃO diga "vou criar" ou "adicionei" — apenas RESPONDA`,
-    design: `Analise e corrija os seguintes problemas de design encontrados:\n\nSISTEMA STAR AI — MODO DESIGN:\nO usuário quer: "${message}"\nRetorne prompt de design COMPLETO.`,
-    code: `Analise e corrija os seguintes problemas de código encontrados:\n\nSISTEMA STAR AI — MODO CODE:\nO usuário quer: "${message}"\nRetorne APENAS o código necessário.`,
-    scraper: `Analise e corrija os seguintes problemas no script de scraping:\n\nSISTEMA STAR AI — MODO SCRAPER:\nO usuário quer extrair dados de: "${message}"\nRetorne script completo.`,
-    migration: `Analise e corrija os seguintes problemas de migração SQL:\n\nSISTEMA STAR AI — MODO MIGRATION:\nO usuário quer migrar: "${message}"\nGere script SQL completo.`,
+    general: `Analise e corrija os seguintes problemas de segurança encontrados:\n\nSISTEMA STAR AI — INSTRUÇÃO:\nVocê é o Star AI, assistente inteligente.\nO usuário solicitou: "${message}"\n\nREGRAS:\n- Responda SOMENTE com o que foi pedido\n- RESPONDA EM PORTUGUÊS (Brasil)\n- NÃO diga "vou criar" ou "adicionei" — apenas RESPONDA\n- NÃO crie componentes, páginas ou rotas\n- Escreva APENAS no arquivo src/brain-output.json`,
+    design: `Analise e corrija os seguintes problemas de design encontrados:\n\nSISTEMA STAR AI — MODO DESIGN:\nO usuário quer: "${message}"\nRetorne prompt de design COMPLETO.\nEscreva APENAS no arquivo src/brain-output.json`,
+    code: `Analise e corrija os seguintes problemas de código encontrados:\n\nSISTEMA STAR AI — MODO CODE:\nO usuário quer: "${message}"\nRetorne APENAS o código necessário dentro do campo response.\nEscreva APENAS no arquivo src/brain-output.json`,
+    scraper: `Analise e corrija os seguintes problemas no script de scraping:\n\nSISTEMA STAR AI — MODO SCRAPER:\nO usuário quer extrair dados de: "${message}"\nRetorne script completo dentro do campo response.\nEscreva APENAS no arquivo src/brain-output.json`,
+    migration: `Analise e corrija os seguintes problemas de migração SQL:\n\nSISTEMA STAR AI — MODO MIGRATION:\nO usuário quer migrar: "${message}"\nGere script SQL completo dentro do campo response.\nEscreva APENAS no arquivo src/brain-output.json`,
   };
 
   return (prefixes[brainType] || prefixes.general) + outputInstruction;
 }
 
+/**
+ * Captures the Brain's response by polling source-code for brain-output.json
+ * and also checking .lovable/tasks/brain-response.md as fallback.
+ * Also checks latest-message endpoint for direct AI responses.
+ */
 export async function captureResponse(
   projectId: string,
   token: string,
-  maxWaitMs = 60000,
+  maxWaitMs = 90000,
   intervalMs = 4000,
   initialDelayMs = 6000
 ): Promise<{ response: string | null; status: "completed" | "processing" | "timeout" }> {
@@ -239,6 +249,7 @@ export async function captureResponse(
   const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() < deadline) {
+    // Strategy 1: Check latest-message for direct AI response
     try {
       const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
       if (latestRes.ok) {
@@ -250,6 +261,7 @@ export async function captureResponse(
       }
     } catch { /* continue */ }
 
+    // Strategy 2: Poll source-code for brain-output.json and brain-response.md
     try {
       const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
       if (srcRes.ok) {
@@ -268,6 +280,7 @@ export async function captureResponse(
           return null;
         };
 
+        // Check brain-output.json
         const jsonContent = getContent("src/brain-output.json", "brain-output.json");
         if (jsonContent) {
           let clean = jsonContent.trim();
@@ -278,6 +291,20 @@ export async function captureResponse(
               return { response: parsed.response, status: "completed" };
             }
           } catch { /* not ready */ }
+        }
+
+        // Check .lovable/tasks/brain-response.md (fallback)
+        const mdContent = getContent(".lovable/tasks/brain-response.md", "brain-response.md");
+        if (mdContent) {
+          const statusMatch = mdContent.match(/status:\s*done/i);
+          if (statusMatch) {
+            // Extract content after frontmatter
+            const parts = mdContent.split("---");
+            if (parts.length >= 3) {
+              const body = parts.slice(2).join("---").trim();
+              if (body.length > 5) return { response: body, status: "completed" };
+            }
+          }
         }
       }
     } catch { /* continue */ }
