@@ -132,12 +132,24 @@ async function getBrain(sc: SupabaseClient, userId: string) {
   return data;
 }
 
-async function verifyProject(projectId: string, token: string): Promise<boolean> {
+type ProjectVerificationState = "accessible" | "not_found" | "unknown";
+
+async function verifyProjectState(
+  projectId: string,
+  token: string,
+): Promise<{ state: ProjectVerificationState; status: number | null }> {
   try {
     const res = await lovFetch(`${API}/projects/${projectId}/chat`, token, { method: "GET" });
-    return res.status !== 404 && res.status !== 403;
+
+    if (res.ok) return { state: "accessible", status: res.status };
+    if (res.status === 403 || res.status === 404) return { state: "not_found", status: res.status };
+    if (res.status === 401 || res.status === 405 || res.status === 429 || res.status >= 500) {
+      return { state: "unknown", status: res.status };
+    }
+
+    return { state: "unknown", status: res.status };
   } catch {
-    return false;
+    return { state: "unknown", status: null };
   }
 }
 
@@ -498,17 +510,29 @@ Deno.serve(async (req) => {
 
       const brain = await getBrain(sc, userId);
       const raw = await getBrainRaw(sc, userId);
-      const projectUrl = brain?.lovable_project_id
-        ? `https://lovable.dev/projects/${brain.lovable_project_id}`
-        : null;
+      const projectId = brain?.lovable_project_id || (raw?.status === "active" ? raw?.lovable_project_id : null);
+      const safeProjectId = projectId && projectId !== "creating" ? projectId : null;
+      const projectUrl = safeProjectId ? `https://lovable.dev/projects/${safeProjectId}` : null;
+      const currentWorkspaceId = await getWorkspaceId(token);
+      const verification = safeProjectId
+        ? await verifyProjectState(safeProjectId, token)
+        : { state: "unknown" as ProjectVerificationState, status: null as number | null };
+      const projectMissing = verification.state === "not_found";
+
       return json({
-        active: !!brain,
+        active: raw?.status === "active" && !!safeProjectId,
         connected: true,
         brain: brain || null,
         creating: raw?.status === "creating",
         project_url: projectUrl,
-        project_id: brain?.lovable_project_id || null,
+        project_id: safeProjectId,
         skill: brain?.brain_skill || raw?.brain_skill || "general",
+        stored_workspace_id: raw?.lovable_workspace_id || null,
+        current_workspace_id: currentWorkspaceId || null,
+        workspace_match: !!raw?.lovable_workspace_id && !!currentWorkspaceId && raw.lovable_workspace_id === currentWorkspaceId,
+        project_missing: projectMissing,
+        verification_state: verification.state,
+        verification_status: verification.status,
       });
     }
 
@@ -540,20 +564,54 @@ Deno.serve(async (req) => {
     if (action === "setup") {
       const rawSkill = typeof body?.skill === "string" ? body.skill : "general";
       const skill: BrainSkill = (VALID_SKILLS.has(rawSkill) ? rawSkill : "general") as BrainSkill;
+      const existingRaw = await getBrainRaw(sc, userId);
 
-      const existing = await getBrain(sc, userId);
-      if (existing) {
-        const accessible = await verifyProject(existing.lovable_project_id, lovableToken);
-        if (accessible) {
+      if (existingRaw?.status === "creating") {
+        const ageMs = existingRaw.created_at ? Date.now() - new Date(existingRaw.created_at).getTime() : 0;
+        if (ageMs <= 120_000) {
+          return json({
+            error: "Brain ainda está sendo criado. Aguarde alguns segundos.",
+            code: "brain_creating",
+            creating: true,
+            skill: existingRaw.brain_skill || skill,
+          }, 409);
+        }
+        await sc.from("user_brain_projects").delete().eq("user_id", userId).eq("status", "creating");
+      }
+
+      if (existingRaw?.status === "active" && existingRaw.lovable_project_id && existingRaw.lovable_project_id !== "creating") {
+        const projectId = existingRaw.lovable_project_id;
+        const projectUrl = `https://lovable.dev/projects/${projectId}`;
+        const currentWorkspaceId = await getWorkspaceId(lovableToken);
+        const verification = await verifyProjectState(projectId, lovableToken);
+
+        if (verification.state === "accessible" || verification.state === "unknown") {
           return json({
             success: true,
-            project_id: existing.lovable_project_id,
-            project_url: `https://lovable.dev/projects/${existing.lovable_project_id}`,
-            skill: existing.brain_skill || "general",
+            project_id: projectId,
+            project_url: projectUrl,
+            skill: existingRaw.brain_skill || "general",
+            stored_workspace_id: existingRaw.lovable_workspace_id || null,
+            current_workspace_id: currentWorkspaceId || null,
+            workspace_match: !!existingRaw.lovable_workspace_id && !!currentWorkspaceId && existingRaw.lovable_workspace_id === currentWorkspaceId,
             already_exists: true,
+            verification_state: verification.state,
+            warning: verification.state === "unknown"
+              ? "Não foi possível validar o projeto agora, mas ele permanece vinculado e será reutilizado."
+              : null,
           });
         }
-        await sc.from("user_brain_projects").delete().eq("user_id", userId);
+
+        return json({
+          error: "Projeto Brain não encontrado no workspace atual. Histórico preservado — não criaremos um novo automaticamente.",
+          code: "project_not_found_in_workspace",
+          project_id: projectId,
+          project_url: projectUrl,
+          skill: existingRaw.brain_skill || "general",
+          stored_workspace_id: existingRaw.lovable_workspace_id || null,
+          current_workspace_id: currentWorkspaceId || null,
+          workspace_match: false,
+        }, 409);
       }
 
       const result = await createFreshBrain(sc, userId, lovableToken, skill);
@@ -563,6 +621,7 @@ Deno.serve(async (req) => {
         project_id: result.projectId,
         project_url: `https://lovable.dev/projects/${result.projectId}`,
         skill,
+        stored_workspace_id: result.workspaceId,
       });
     }
 
@@ -588,10 +647,22 @@ Deno.serve(async (req) => {
         return json({ error: "Star AI não está ativo. Ative primeiro.", code: "brain_inactive" }, 400);
       }
 
-      const access = await verifyProject(brain.lovable_project_id, lovableToken);
-      if (!access) {
-        await sc.from("user_brain_projects").delete().eq("user_id", userId);
-        return json({ error: "Brain não encontrado. Reative o Star AI.", code: "brain_inactive" }, 400);
+      const access = await verifyProjectState(brain.lovable_project_id, lovableToken);
+      if (access.state === "not_found") {
+        const currentWorkspaceId = await getWorkspaceId(lovableToken);
+        return json({
+          error: "Projeto Brain não foi encontrado no workspace atual. Histórico preservado para evitar criação infinita.",
+          code: "project_not_found_in_workspace",
+          project_id: brain.lovable_project_id,
+          project_url: `https://lovable.dev/projects/${brain.lovable_project_id}`,
+          stored_workspace_id: brain.lovable_workspace_id || null,
+          current_workspace_id: currentWorkspaceId || null,
+          workspace_match: !!brain.lovable_workspace_id && !!currentWorkspaceId && brain.lovable_workspace_id === currentWorkspaceId,
+        }, 409);
+      }
+
+      if (access.state === "unknown") {
+        console.warn(`[Brain] Access check unknown for ${brain.lovable_project_id} (status=${access.status}) - proceeding without deleting link.`);
       }
 
       // Use the brain's stored skill, or override if provided
@@ -633,6 +704,20 @@ Deno.serve(async (req) => {
 
       if (!chatRes.ok) {
         if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+
+        if (chatRes.status === 403 || chatRes.status === 404) {
+          const currentWorkspaceId = await getWorkspaceId(chatToken);
+          return json({
+            error: "Projeto Brain não encontrado durante envio. Histórico preservado para evitar recriações automáticas.",
+            code: "project_not_found_in_workspace",
+            project_id: brain.lovable_project_id,
+            project_url: `https://lovable.dev/projects/${brain.lovable_project_id}`,
+            stored_workspace_id: brain.lovable_workspace_id || null,
+            current_workspace_id: currentWorkspaceId || null,
+            workspace_match: !!brain.lovable_workspace_id && !!currentWorkspaceId && brain.lovable_workspace_id === currentWorkspaceId,
+          }, 409);
+        }
+
         return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
       }
 
