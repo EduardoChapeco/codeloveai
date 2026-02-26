@@ -45,7 +45,7 @@ const FREE_MODES: Record<string, ModeConfig> = {
   },
   chat: {
     intent: "security_fix_v2",
-    chat_only: true,
+    chat_only: false,
     view: "security",
     view_description: "The user is currently viewing the security view for their project.",
   },
