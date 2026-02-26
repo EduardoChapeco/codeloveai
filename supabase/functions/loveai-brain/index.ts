@@ -1,15 +1,16 @@
 /**
- * Star AI Brain v6.0 — Clean refactor
+ * Star AI Brain v7.0 — Always-fresh project creation
  * 
  * Actions:
  *   status   — Check if brain is active + connected
- *   setup    — Create brain project in user's Lovable workspace, cancel initial msg
- *   send     — Send message via security_fix_v2 (free), poll for response, return it
+ *   setup    — ALWAYS creates a fresh brain project (deletes old one)
+ *   send     — Send message via security_fix_v2 (free), poll for response
  *   history  — List past conversations
+ *   reset    — Delete brain project record
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { generateTypeId, hashText, obfuscate } from "../_shared/crypto.ts";
+import { generateTypeId, obfuscate } from "../_shared/crypto.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -27,7 +28,6 @@ function json(data: unknown, status = 200) {
   });
 }
 
-// ─── Lovable API helper ───
 function lovFetch(url: string, token: string, opts: RequestInit = {}) {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
@@ -42,7 +42,7 @@ function lovFetch(url: string, token: string, opts: RequestInit = {}) {
   return fetch(url, { ...opts, headers });
 }
 
-// ─── Get user's stored Lovable token ───
+// ─── Token helpers ───
 async function getUserToken(sc: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
   const { data } = await sc.from("lovable_accounts")
     .select("token_encrypted")
@@ -51,6 +51,70 @@ async function getUserToken(sc: ReturnType<typeof createClient>, userId: string)
     .limit(1)
     .maybeSingle();
   return data?.token_encrypted?.trim() || null;
+}
+
+async function refreshToken(sc: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
+  try {
+    const { data: acct } = await sc.from("lovable_accounts")
+      .select("refresh_token_encrypted")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!acct?.refresh_token_encrypted) return null;
+
+    const fbKey = Deno.env.get("FIREBASE_API_KEY");
+    if (!fbKey) return null;
+
+    const res = await fetch(
+      `https://securetoken.googleapis.com/v1/token?key=${fbKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(acct.refresh_token_encrypted)}`,
+      }
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    const newToken = d.id_token || d.access_token;
+    if (!newToken) return null;
+
+    await sc.from("lovable_accounts").update({
+      token_encrypted: newToken,
+      ...(d.refresh_token ? { refresh_token_encrypted: d.refresh_token } : {}),
+    }).eq("user_id", userId).eq("status", "active");
+
+    console.log(`[Brain] 🔄 Token refreshed for ${obfuscate(userId)}`);
+    return newToken;
+  } catch (e) {
+    console.error(`[Brain] Token refresh failed:`, e);
+    return null;
+  }
+}
+
+async function getValidToken(sc: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
+  let token = await getUserToken(sc, userId);
+  if (!token) return null;
+
+  // Quick validation: hit /user/workspaces
+  const check = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
+  if (check.ok) return token;
+
+  if (check.status === 401 || check.status === 403) {
+    console.warn(`[Brain] Token expired (${check.status}), refreshing...`);
+    const refreshed = await refreshToken(sc, userId);
+    return refreshed;
+  }
+  return token;
+}
+
+// ─── Get workspace ID ───
+async function getWorkspaceId(token: string): Promise<string | null> {
+  const res = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
+  if (!res.ok) return null;
+  const body = await res.json();
+  const list: any[] = Array.isArray(body) ? body : (body?.workspaces || body?.data || []);
+  if (list.length === 0 && body?.id) return body.id;
+  return list?.[0]?.id || null;
 }
 
 // ─── Get brain project for user ───
@@ -63,7 +127,92 @@ async function getBrain(sc: ReturnType<typeof createClient>, userId: string) {
   return data;
 }
 
-// ─── Build security_fix_v2 payload (free channel) ───
+// ─── Create a FRESH brain project (always new) ───
+async function createFreshBrain(
+  sc: ReturnType<typeof createClient>,
+  userId: string,
+  token: string
+): Promise<{ projectId: string; workspaceId: string } | { error: string }> {
+  // 1. Delete any old brain records
+  await sc.from("user_brain_projects").delete().eq("user_id", userId);
+
+  // 2. Get workspace
+  const workspaceId = await getWorkspaceId(token);
+  if (!workspaceId) return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
+
+  // 3. Create project
+  const msgId = generateTypeId("umsg");
+  const aiMsgId = generateTypeId("aimsg");
+
+  const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
+    method: "POST",
+    body: JSON.stringify({
+      description: `Star AI Brain - ${new Date().toISOString().slice(0, 10)}`,
+      visibility: "private",
+      env_vars: {},
+      metadata: { chat_mode_enabled: false },
+      initial_message: {
+        id: msgId,
+        message: "Crie um arquivo src/brain-output.json com o conteúdo: {\"response\":\"\",\"timestamp\":0,\"status\":\"idle\"}",
+        files: [],
+        optimisticImageUrls: [],
+        chat_only: false,
+        agent_mode_enabled: false,
+        ai_message_id: aiMsgId,
+      },
+    }),
+  });
+
+  if (!createRes.ok) {
+    const errText = await createRes.text().catch(() => "");
+    console.error(`[Brain] Create failed: ${createRes.status} ${errText.slice(0, 200)}`);
+    return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
+  }
+
+  const project = await createRes.json();
+  const projectId = project?.id || project?.project_id;
+  if (!projectId) return { error: "ID do projeto não retornado" };
+
+  // 4. Cancel initial message
+  try {
+    await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, {
+      method: "POST", body: "{}",
+    });
+  } catch { /* ok */ }
+
+  // 5. Inject brain config
+  try {
+    await lovFetch(`${API}/projects/${projectId}/edit-code`, token, {
+      method: "POST",
+      body: JSON.stringify({
+        changes: [
+          {
+            path: "src/brain-config.md",
+            content: "# Star AI Brain\n\nRESPONDA sempre escrevendo src/brain-output.json.\nFormato: {\"response\":\"...\",\"timestamp\":...,\"status\":\"done\"}\nNÃO crie páginas ou componentes. RESPONDA EM PORTUGUÊS (Brasil).",
+          },
+          {
+            path: "src/brain-output.json",
+            content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }),
+          },
+        ],
+      }),
+    });
+  } catch { /* ok */ }
+
+  // 6. Save to DB
+  await sc.from("user_brain_projects").insert({
+    user_id: userId,
+    lovable_project_id: projectId,
+    lovable_workspace_id: workspaceId,
+    status: "active",
+    brain_owner: "user",
+  });
+
+  console.log(`[Brain] ✅ Fresh project ${projectId} for ${obfuscate(userId)}`);
+  return { projectId, workspaceId };
+}
+
+// ─── Build payload ───
 function buildPayload(prompt: string, msgId: string, aiMsgId: string) {
   return {
     id: msgId,
@@ -82,214 +231,60 @@ function buildPayload(prompt: string, msgId: string, aiMsgId: string) {
     files: [],
     selected_elements: [],
     optimisticImageUrls: [],
-    integration_metadata: {
-      browser: { preview_viewport_width: 1280, preview_viewport_height: 854 },
-    },
+    integration_metadata: { browser: { preview_viewport_width: 1280, preview_viewport_height: 854 } },
   };
 }
 
-// ─── Build brain prompt ───
 function buildBrainPrompt(brainType: string, message: string): string {
   const ts = Date.now();
   const outputInstruction = `
 
-IMPORTANTE: Escreva sua resposta COMPLETA em DOIS arquivos:
-
-1. src/brain-output.json no formato EXATO:
+IMPORTANTE: Escreva sua resposta COMPLETA em src/brain-output.json no formato EXATO:
 {"response": "SUA_RESPOSTA_AQUI", "timestamp": ${ts}, "status": "done"}
 
-2. .lovable/tasks/brain-response.md no formato:
----
-status: done
-timestamp: ${ts}
----
-
-SUA_RESPOSTA_COMPLETA_AQUI
-
-NÃO crie componentes React, páginas ou rotas. APENAS escreva esses dois arquivos.`;
+NÃO crie componentes React, páginas ou rotas. APENAS escreva esse arquivo.`;
 
   const prefixes: Record<string, string> = {
     general: `Analise e corrija os seguintes problemas de segurança encontrados:
 
-SISTEMA STARBLE BRAIN — INSTRUÇÃO:
-Você é o Star AI, assistente inteligente da plataforma Starble.
+SISTEMA STAR AI — INSTRUÇÃO:
+Você é o Star AI, assistente inteligente.
 O usuário solicitou: "${message}"
 
 REGRAS:
 - Responda SOMENTE com o que foi pedido
-- Se for pergunta técnica: texto claro e objetivo
-- Se for prompt de design/código: retorne prompt estruturado
 - RESPONDA EM PORTUGUÊS (Brasil)
 - NÃO diga "vou criar" ou "adicionei" — apenas RESPONDA`,
 
     design: `Analise e corrija os seguintes problemas de design encontrados:
 
-SISTEMA STARBLE BRAIN — MODO DESIGN:
+SISTEMA STAR AI — MODO DESIGN:
 O usuário quer: "${message}"
-Retorne prompt de design COMPLETO: paleta, tipografia, espaçamentos, componentes, layout, sombras, bordas, animações, responsividade.`,
+Retorne prompt de design COMPLETO.`,
 
     code: `Analise e corrija os seguintes problemas de código encontrados:
 
-SISTEMA STARBLE BRAIN — MODO CODE:
+SISTEMA STAR AI — MODO CODE:
 O usuário quer: "${message}"
-Retorne APENAS o código necessário. TypeScript, React, TailwindCSS, shadcn/ui, Supabase.`,
+Retorne APENAS o código necessário.`,
 
     scraper: `Analise e corrija os seguintes problemas no script de scraping:
 
-SISTEMA STARBLE BRAIN — MODO SCRAPER:
+SISTEMA STAR AI — MODO SCRAPER:
 O usuário quer extrair dados de: "${message}"
-Retorne script completo para captura dos dados em formato JSON.`,
+Retorne script completo.`,
 
     migration: `Analise e corrija os seguintes problemas de migração SQL:
 
-SISTEMA STARBLE BRAIN — MODO MIGRATION:
+SISTEMA STAR AI — MODO MIGRATION:
 O usuário quer migrar: "${message}"
-Gere script SQL completo: schemas, tabelas, RLS, triggers, functions, seed data.`,
+Gere script SQL completo.`,
   };
 
   return (prefixes[brainType] || prefixes.general) + outputInstruction;
 }
 
-// ─── Create brain project ───
-async function refreshLovableToken(
-  sc: ReturnType<typeof createClient>,
-  userId: string
-): Promise<string | null> {
-  try {
-    const { data: acct } = await sc.from("lovable_accounts")
-      .select("refresh_token_encrypted")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .maybeSingle();
-    if (!acct?.refresh_token_encrypted) return null;
-
-    const FIREBASE_API_KEY = Deno.env.get("FIREBASE_API_KEY");
-    if (!FIREBASE_API_KEY) return null;
-
-    const res = await fetch(
-      `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(acct.refresh_token_encrypted)}`,
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const newToken = data.id_token || data.access_token;
-    if (!newToken) return null;
-
-    await sc.from("lovable_accounts").update({
-      token_encrypted: newToken,
-      ...(data.refresh_token ? { refresh_token_encrypted: data.refresh_token } : {}),
-    }).eq("user_id", userId).eq("status", "active");
-
-    console.log(`[Brain] 🔄 Token refreshed for ${obfuscate(userId)}`);
-    return newToken;
-  } catch (e) {
-    console.error(`[Brain] Token refresh failed:`, e);
-    return null;
-  }
-}
-
-async function createBrainProject(
-  sc: ReturnType<typeof createClient>,
-  userId: string,
-  token: string
-): Promise<{ projectId: string; workspaceId: string } | { error: string }> {
-  // Get workspace — try with current token first
-  let wsRes = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
-
-  // If unauthorized, try refreshing the token
-  if (wsRes.status === 401 || wsRes.status === 403) {
-    console.warn(`[Brain] Workspace fetch got ${wsRes.status}, attempting token refresh...`);
-    const newToken = await refreshLovableToken(sc, userId);
-    if (newToken) {
-      token = newToken;
-      wsRes = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
-    }
-  }
-
-  if (!wsRes.ok) {
-    const errBody = await wsRes.text().catch(() => "");
-    console.error(`[Brain] Workspace fetch failed: ${wsRes.status} ${errBody.substring(0, 200)}`);
-    return { error: `Falha ao obter workspaces (HTTP ${wsRes.status}). Reconecte seu token em /lovable/connect.` };
-  }
-  const wsBody = await wsRes.json();
-  let wsList: any[] = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || []);
-  if (wsList.length === 0 && wsBody?.id) wsList = [wsBody];
-  const workspaceId = wsList?.[0]?.id;
-  if (!workspaceId) return { error: "Nenhum workspace encontrado" };
-
-  const msgId = generateTypeId("umsg");
-  const aiMsgId = generateTypeId("aimsg");
-
-  // Create project
-  const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
-    method: "POST",
-    body: JSON.stringify({
-      description: `Starble Brain - ${obfuscate(userId)}`,
-      visibility: "private",
-      env_vars: {},
-      metadata: { chat_mode_enabled: false },
-      initial_message: {
-        id: msgId,
-        message: "Crie um arquivo src/brain-output.json com o conteúdo: {\"response\":\"\",\"timestamp\":0,\"status\":\"idle\"}",
-        files: [],
-        optimisticImageUrls: [],
-        chat_only: false,
-        agent_mode_enabled: false,
-        ai_message_id: aiMsgId,
-      },
-    }),
-  });
-
-  if (!createRes.ok) return { error: "Falha ao criar projeto Brain" };
-  const project = await createRes.json();
-  const projectId = project?.id || project?.project_id;
-  if (!projectId) return { error: "ID do projeto não retornado" };
-
-  // Cancel initial message to avoid credit usage
-  try {
-    await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, {
-      method: "POST",
-      body: "{}",
-    });
-  } catch { /* ok */ }
-
-  // Inject brain config via edit-code
-  try {
-    await lovFetch(`${API}/projects/${projectId}/edit-code`, token, {
-      method: "POST",
-      body: JSON.stringify({
-        changes: [
-          {
-            path: "src/brain-config.md",
-            content: "# Starble Brain\n\nQuando receber mensagens, responda SOMENTE escrevendo src/brain-output.json.\nNÃO crie páginas, componentes ou rotas.\nFormato: {\"response\":\"...\",\"timestamp\":...,\"status\":\"done\"}\n\nRESPONDA EM PORTUGUÊS (Brasil).",
-          },
-          {
-            path: "src/brain-output.json",
-            content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }),
-          },
-        ],
-      }),
-    });
-  } catch { /* ok */ }
-
-  // Save to DB
-  await sc.from("user_brain_projects").insert({
-    user_id: userId,
-    lovable_project_id: projectId,
-    lovable_workspace_id: workspaceId,
-    status: "active",
-    brain_owner: "user",
-  });
-
-  console.log(`[Brain] ✅ Created ${projectId} for ${obfuscate(userId)}`);
-  return { projectId, workspaceId };
-}
-
-// ─── Capture response from source-code (brain-output.json) ───
+// ─── Capture response ───
 async function captureResponse(
   projectId: string,
   token: string,
@@ -298,7 +293,6 @@ async function captureResponse(
   initialDelayMs = 6000
 ): Promise<{ response: string | null; status: "completed" | "processing" | "timeout" }> {
   await new Promise(r => setTimeout(r, initialDelayMs));
-
   const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() < deadline) {
@@ -309,36 +303,31 @@ async function captureResponse(
         const msg = await latestRes.json();
         if (msg && !msg.is_streaming && msg.role !== "user") {
           const content = msg.content || msg.message || msg.text || "";
-          if (content.length > 20) {
-            return { response: content, status: "completed" };
-          }
+          if (content.length > 20) return { response: content, status: "completed" };
         }
       }
     } catch { /* continue */ }
 
     try {
-      // Strategy 2 & 3: source-code → brain-output.json OR brain-response.md
+      // Strategy 2: source-code → brain-output.json
       const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
       if (srcRes.ok) {
         const rawText = await srcRes.text();
         let srcData: any;
         try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
-
         const files = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
 
-        // Helper to find file content
-        const getFileContent = (filePath: string, fileName: string): string | null => {
+        const getContent = (path: string, name: string): string | null => {
           if (Array.isArray(files)) {
-            const f = files.find((f: any) => f.path === filePath || f.name === fileName);
+            const f = files.find((f: any) => f.path === path || f.name === name);
             return f?.content || f?.source || null;
           } else if (files && typeof files === "object") {
-            return files[filePath] || null;
+            return files[path] || null;
           }
           return null;
         };
 
-        // Strategy 2: brain-output.json
-        const jsonContent = getFileContent("src/brain-output.json", "brain-output.json");
+        const jsonContent = getContent("src/brain-output.json", "brain-output.json");
         if (jsonContent) {
           let clean = jsonContent.trim();
           if (clean.startsWith("```")) clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
@@ -348,18 +337,6 @@ async function captureResponse(
               return { response: parsed.response, status: "completed" };
             }
           } catch { /* not ready */ }
-        }
-
-        // Strategy 3: brain-response.md
-        const mdContent = getFileContent(".lovable/tasks/brain-response.md", "brain-response.md");
-        if (mdContent && mdContent.length > 30) {
-          let clean = mdContent.trim();
-          // Extract content after frontmatter
-          const fmMatch = clean.match(/^---[\s\S]*?status:\s*done[\s\S]*?---\s*([\s\S]+)$/);
-          if (fmMatch && fmMatch[1]?.trim().length > 5) {
-            console.log(`[Brain] ✅ Captured via .md strategy, len=${fmMatch[1].trim().length}`);
-            return { response: fmMatch[1].trim(), status: "completed" };
-          }
         }
       }
     } catch { /* continue */ }
@@ -394,10 +371,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = body.action;
 
-    const lovableToken = await getUserToken(sc, userId);
-
     // ── STATUS ──
     if (action === "status") {
+      const lovableToken = await getUserToken(sc, userId);
       if (!lovableToken) return json({ active: false, connected: false, reason: "no_token" });
       const brain = await getBrain(sc, userId);
       return json({ active: !!brain, connected: true, brain: brain || null });
@@ -414,48 +390,25 @@ Deno.serve(async (req) => {
       return json({ conversations: data || [] });
     }
 
-    // All remaining actions need token
-    if (!lovableToken) {
-      return json({ error: "Token Lovable não encontrado. Reconecte via /lovable/connect.", code: "no_token" }, 503);
-    }
-
     // ── RESET ──
     if (action === "reset") {
-      // Delete all brain projects for this user
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
-      console.log(`[Brain] 🗑️ Reset brain for ${obfuscate(userId)}`);
-      return json({ success: true, message: "Brain resetado. Clique em Ativar para recriar." });
+      await sc.from("loveai_conversations").delete().eq("user_id", userId);
+      console.log(`[Brain] 🗑️ Full reset for ${obfuscate(userId)}`);
+      return json({ success: true, message: "Star AI resetado completamente." });
     }
 
-    // ── SETUP ──
+    // All remaining need a valid token
+    const lovableToken = await getValidToken(sc, userId);
+    if (!lovableToken) {
+      return json({ error: "Token Lovable inválido. Reconecte via /lovable/connect.", code: "no_token" }, 503);
+    }
+
+    // ── SETUP ── Always creates a fresh project
     if (action === "setup") {
-      const existing = await getBrain(sc, userId);
-      if (existing) {
-        // Verify project is still accessible with current token
-        try {
-          const verifyRes = await lovFetch(
-            `${API}/projects/${existing.lovable_project_id}`,
-            lovableToken,
-            { method: "GET" }
-          );
-          if (verifyRes.status === 403 || verifyRes.status === 404) {
-            // Account changed or project inaccessible — auto-reset and recreate
-            console.warn(`[Brain] ⚠️ Project ${existing.lovable_project_id} inaccessible (${verifyRes.status}), account may have changed. Recreating...`);
-            await sc.from("user_brain_projects").delete().eq("user_id", userId);
-          } else {
-            return json({ success: true, already_exists: true });
-          }
-        } catch {
-          return json({ success: true, already_exists: true });
-        }
-      }
-
-      // Clean up any errored brain
-      await sc.from("user_brain_projects").delete().eq("user_id", userId).eq("status", "error");
-
-      const result = await createBrainProject(sc, userId, lovableToken);
+      const result = await createFreshBrain(sc, userId, lovableToken);
       if ("error" in result) return json({ error: result.error }, 502);
-      return json({ success: true, already_exists: false, recreated: true });
+      return json({ success: true, project_id: result.projectId });
     }
 
     // ── SEND ──
@@ -466,126 +419,95 @@ Deno.serve(async (req) => {
       }
 
       let brain = await getBrain(sc, userId);
-      if (!brain) return json({ error: "Star AI não configurado. Execute setup primeiro." }, 404);
 
-      let brainProjectId = brain.lovable_project_id;
-      const prompt = buildBrainPrompt(brain_type, message);
+      // Auto-setup if no brain exists
+      if (!brain) {
+        console.log(`[Brain] No brain found, auto-creating for ${obfuscate(userId)}`);
+        const setupResult = await createFreshBrain(sc, userId, lovableToken);
+        if ("error" in setupResult) return json({ error: setupResult.error }, 502);
+        brain = { lovable_project_id: setupResult.projectId, lovable_workspace_id: setupResult.workspaceId };
+      }
+
+      const projectId = brain.lovable_project_id;
       const msgId = generateTypeId("umsg");
       const aiMsgId = generateTypeId("aimsg");
+      const prompt = buildBrainPrompt(brain_type, message);
       const payload = buildPayload(prompt, msgId, aiMsgId);
 
-      console.log(`[Brain] Sending type=${brain_type}, project=${brainProjectId}`);
-
-      let activeToken = lovableToken;
-
-      let chatRes = await lovFetch(`${API}/projects/${brainProjectId}/chat`, activeToken, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-
-      // Auto-refresh token on 401
-      if (chatRes.status === 401) {
-        console.warn(`[Brain] 401 on chat, attempting token refresh...`);
-        const newToken = await refreshLovableToken(sc, userId);
-        if (newToken) {
-          activeToken = newToken;
-          chatRes = await lovFetch(`${API}/projects/${brainProjectId}/chat`, activeToken, {
-            method: "POST",
-            body: JSON.stringify(payload),
-          });
-        }
-      }
-
-      // Auto-recreate on 403
-      if (chatRes.status === 403) {
-        console.warn(`[Brain] 403 on ${brainProjectId}, auto-recreating...`);
-        await sc.from("user_brain_projects").delete().eq("user_id", userId).eq("lovable_project_id", brainProjectId);
-
-        const result = await createBrainProject(sc, userId, activeToken);
-        if ("error" in result) return json({ error: result.error }, 502);
-
-        brainProjectId = result.projectId;
-
-        chatRes = await lovFetch(`${API}/projects/${brainProjectId}/chat`, activeToken, {
-          method: "POST",
-          body: JSON.stringify(buildPayload(prompt, msgId, aiMsgId)),
-        });
-      }
-
-      if (!chatRes.ok) {
-        const errText = await chatRes.text().catch(() => "");
-        console.error(`[Brain] Chat failed: ${chatRes.status} ${errText.substring(0, 300)}`);
-        return json({ error: "Falha ao enviar para Star AI." }, 502);
-      }
-
       // Save conversation
-      const { data: convo } = await sc.from("loveai_conversations").insert({
+      const { data: convoRow } = await sc.from("loveai_conversations").insert({
         user_id: userId,
-        target_project_id: body.target_project_id || null,
-        brain_message_id: msgId,
-        brain_type,
         user_message: message,
+        brain_type: brain_type,
         status: "processing",
+        target_project_id: projectId,
       }).select("id").single();
 
-      await sc.from("user_brain_projects")
-        .update({ last_message_at: new Date().toISOString() })
-        .eq("user_id", userId).eq("status", "active");
+      const convoId = convoRow?.id;
 
-      // ── Poll for response (up to 90s) ──
-      const { response, status: captureStatus } = await captureResponse(
-        brainProjectId,
+      // Send to Lovable
+      const chatRes = await lovFetch(
+        `${API}/projects/${projectId}/chat`,
         lovableToken,
-        90000, // 90s max
-        4000,  // poll every 4s
-        8000   // initial delay 8s
+        { method: "POST", body: JSON.stringify(payload) }
       );
 
-      const conversationId = convo?.id;
-
-      if (response) {
-        // Clean brain markers from response
-        let cleanResponse = response;
-        const markers = ["SISTEMA STARBLE BRAIN", "SISTEMA CODELOVE BRAIN", "Analise e corrija"];
-        for (const m of markers) {
-          if (cleanResponse.startsWith(m)) {
-            const idx = cleanResponse.indexOf("\n\n");
-            if (idx > 0) cleanResponse = cleanResponse.substring(idx + 2);
+      if (!chatRes.ok) {
+        // If 401/403, try refresh + retry once
+        if (chatRes.status === 401 || chatRes.status === 403) {
+          const newToken = await refreshToken(sc, userId);
+          if (newToken) {
+            const retry = await lovFetch(
+              `${API}/projects/${projectId}/chat`,
+              newToken,
+              { method: "POST", body: JSON.stringify(payload) }
+            );
+            if (!retry.ok) {
+              if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+              return json({ error: `Falha no envio (HTTP ${retry.status}). Reconecte /lovable/connect.` }, 502);
+            }
+          } else {
+            if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+            return json({ error: "Token expirado. Reconecte /lovable/connect.", code: "no_token" }, 503);
           }
+        } else {
+          if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+          return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
         }
-
-        if (conversationId) {
-          await sc.from("loveai_conversations").update({
-            ai_response: cleanResponse,
-            status: "completed",
-          }).eq("id", conversationId);
-        }
-
-        console.log(`[Brain] ✅ Response captured, len=${cleanResponse.length}`);
-        return json({
-          success: true,
-          conversation_id: conversationId,
-          response: cleanResponse,
-          status: "completed",
-        });
       }
 
-      // Timeout
-      if (conversationId) {
-        await sc.from("loveai_conversations").update({ status: "timeout" }).eq("id", conversationId);
+      // Poll for response
+      const capture = await captureResponse(projectId, lovableToken, 90000, 4000, 8000);
+
+      // Clean system prefixes
+      let finalResponse = capture.response;
+      if (finalResponse) {
+        finalResponse = finalResponse
+          .replace(/^(?:SISTEMA (?:STARBLE|STAR AI|CODELOVE) BRAIN[\s\S]*?(?:REGRAS:|RESPONDA)[\s\S]*?\n)/i, "")
+          .replace(/^(?:Analise e corrija[\s\S]*?\n)/i, "")
+          .trim();
       }
+
+      if (convoId) {
+        await sc.from("loveai_conversations").update({
+          ai_response: finalResponse || null,
+          status: capture.status === "completed" ? "completed" : capture.status === "timeout" ? "timeout" : "failed",
+        }).eq("id", convoId);
+      }
+
+      // Update last_message_at
+      await sc.from("user_brain_projects").update({ last_message_at: new Date().toISOString() }).eq("user_id", userId).eq("status", "active");
 
       return json({
-        success: true,
-        conversation_id: conversationId,
-        response: null,
-        status: "timeout",
+        conversation_id: convoId,
+        response: finalResponse,
+        status: capture.status,
       });
     }
 
-    return json({ error: "Ação não reconhecida" }, 400);
-  } catch (error) {
-    console.error("[Brain] Error:", error);
-    return json({ error: "Erro interno" }, 500);
+    return json({ error: "Ação desconhecida" }, 400);
+  } catch (err) {
+    console.error("[Brain] Unhandled error:", err);
+    return json({ error: "Erro interno no Star AI" }, 500);
   }
 });
