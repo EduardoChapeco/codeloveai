@@ -182,8 +182,18 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .alert.info{background:var(--primary-bg);color:var(--primary-l);border:0.5px solid var(--primary-border)}
 .alert.warn{background:var(--warn-glow);color:var(--warn);border:0.5px solid rgba(255,214,10,0.25)}
 
-/* Scrollbar for settings */
-.scroll-inner::-webkit-scrollbar{width:0}
+/* ── PROJECTS ── */
+.proj-card{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r-sm);margin-bottom:5px;transition:all 0.15s}
+.proj-card:hover{background:var(--surface-hover);border-color:var(--border-bright)}
+.proj-card.active{border-color:var(--primary-border);background:var(--glass-active)}
+.proj-dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.proj-dot.ok{background:var(--ok);box-shadow:0 0 6px var(--ok-glow)}
+.proj-name{font-size:11.5px;font-weight:700;color:var(--fg)}
+.proj-id-text{font-size:9px;color:var(--fg3);font-family:var(--mono)}
+.proj-acts{display:flex;gap:4px;align-items:center}
+.proj-act{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:transparent;border:0.5px solid var(--border);color:var(--fg3);font-size:13px;cursor:pointer;text-decoration:none;font-family:var(--font);transition:all 0.15s}
+.proj-act:hover{background:var(--glass-hover);color:var(--fg);border-color:var(--border-bright)}
+.empty-state{text-align:center;padding:24px;color:var(--fg3);font-size:11px}
 </style>
 </head>
 <body>
@@ -202,6 +212,11 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <button class="nav-btn" data-screen="chat" title="Chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       <span>Chat</span>
+    </button>
+
+    <button class="nav-btn" data-screen="projects" title="Projetos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span>Projetos</span>
     </button>
 
     <button class="nav-btn" data-screen="settings" title="Config">
@@ -340,6 +355,20 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         </div>
       </div>
 
+      <!-- PROJECTS -->
+      <div class="scr" id="s-projects">
+        <div class="scroll-inner">
+          <div class="settings-pad">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <div class="card-label" style="margin:0;flex:1">Projetos</div>
+              <button class="btn secondary sm" id="proj-refresh-btn" style="width:auto;padding:6px 12px;font-size:10px">↻ Atualizar</button>
+            </div>
+            <input class="inp" id="proj-search" type="text" placeholder="Buscar projeto..." style="margin-bottom:6px">
+            <div id="proj-list"><div class="empty-state" style="text-align:center;padding:24px;color:var(--fg3);font-size:11px">Clique em Atualizar para carregar projetos</div></div>
+          </div>
+        </div>
+      </div>
+
       <!-- SETTINGS -->
       <div class="scr" id="s-settings">
         <div class="scroll-inner">
@@ -380,18 +409,35 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 </div>
 
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 const SUPABASE = 'https://qlhhmmboxlufvdtpbrsm.supabase.co';
 const LOVABLE  = 'https://api.lovable.dev';
 
+const GIT_SHA = '9810ecd6b501b23b14c5d4ee731d8cda244d003b';
+
 // ── State ──
-const S = { licensed:false, licInfo:null, idToken:null, projectId:null };
+const S = { licensed:false, licInfo:null, idToken:null, projectId:null, workspaceId:null, projects:[], projectsLoaded:false };
+
+// ── Helpers ──
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function syncFromTab() {
+  chrome.runtime.sendMessage({__clf_get_tab_state:true},st=>{
+    if (!st||chrome.runtime.lastError) return;
+    if (st.idToken && !S.idToken) { S.idToken=st.idToken; cset({clf_lovable_token:S.idToken,clf_token_ts:Date.now()}); updateStatusUI(); }
+    if (st.projectId && !S.projectId) { S.projectId=st.projectId; cset({clf_project:{id:st.projectId,ts:Date.now()}}); updateStatusUI(); }
+  });
+}
 
 // ── Nav ──
 function gotoScreen(id) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.screen === id));
   document.querySelectorAll('.scr').forEach(s => s.classList.toggle('on', s.id === 's-' + id));
+  if (id === 'projects') { if (!S.projectsLoaded || S.projects.length === 0) loadProjects(); else renderProjList(); }
 }
 document.querySelectorAll('.nav-btn[data-screen]').forEach(btn =>
   btn.addEventListener('click', () => gotoScreen(btn.dataset.screen)));
@@ -408,8 +454,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadState();
   initChat();
   initSettings();
+  initProjects();
   initQA();
   applyBranding();
+  syncFromTab();
 
   // Listen for storage changes
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -420,8 +468,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadState() {
-  const d = await cget(['clf_license','clf_lovable_token','clf_lovable_email','clf_project','spd_s2','spd_branding']);
+  const d = await cget(['clf_license','clf_lovable_token','clf_lovable_email','clf_project','spd_s2','spd_branding','clf_workspace_id']);
   S.idToken = d.clf_lovable_token || null;
+  S.workspaceId = d.clf_workspace_id || null;
   if (d.clf_project?.id && (Date.now() - (d.clf_project.ts||0)) < 7200000) S.projectId = d.clf_project.id;
   const cache = d.spd_s2;
   if (cache?.v && d.clf_license) { S.licensed = true; S.licInfo = cache.i; }
@@ -660,6 +709,141 @@ async function quickDeploy() {
     gotoScreen('chat');
     addMsg('sys err', '❌ Erro: '+e.message);
   }
+}
+
+// ── Projects ──
+async function loadProjects() {
+  const list = document.getElementById('proj-list'); if (list) list.innerHTML = '<div class="empty-state">Carregando...</div>';
+  if (!S.idToken) { syncFromTab(); await new Promise(r => setTimeout(r, 1200)); }
+  if (!S.idToken) { if (list) list.innerHTML = '<div class="empty-state">Token não capturado. Abra o Lovable.dev e clique em Capturar Token.</div>'; return; }
+
+  const H = { 'Authorization': 'Bearer '+S.idToken, 'Origin': 'https://lovable.dev', 'Referer': 'https://lovable.dev/', 'x-client-git-sha': GIT_SHA };
+
+  // STEP 1: resolve workspaceId
+  if (!S.workspaceId) {
+    try {
+      const r = await fetch(`${LOVABLE}/user/workspaces`, { headers: H });
+      if (r.ok) {
+        const d = await r.json();
+        const arr = Array.isArray(d) ? d : (d.workspaces || d.data || []);
+        const ws = arr[0];
+        S.workspaceId = ws?.id || ws?.workspace_id || ws || null;
+        if (typeof S.workspaceId !== 'string') S.workspaceId = null;
+        if (S.workspaceId) cset({ clf_workspace_id: S.workspaceId, _clf_ws: S.workspaceId });
+      }
+    } catch {}
+
+    if (!S.workspaceId) {
+      try {
+        const tabs = await new Promise(r => chrome.tabs.query({ url: 'https://lovable.dev/*' }, r));
+        for (const tab of (tabs||[])) {
+          const m = (tab.url||'').match(/\/workspaces\/([A-Za-z0-9_-]{5,60})/);
+          if (m) { S.workspaceId = m[1]; cset({ clf_workspace_id: S.workspaceId, _clf_ws: S.workspaceId }); break; }
+        }
+      } catch {}
+    }
+
+    if (!S.workspaceId) {
+      try {
+        const tabs = await new Promise(r => chrome.tabs.query({ url: 'https://lovable.dev/*' }, r));
+        if (tabs[0]) {
+          const st = await new Promise(r => { chrome.tabs.sendMessage(tabs[0].id, { __clf_get_state: true }, s => r(s||{})); setTimeout(()=>r({}),2000); });
+          if (st.workspaceId) { S.workspaceId = st.workspaceId; cset({ clf_workspace_id: S.workspaceId, _clf_ws: S.workspaceId }); }
+        }
+      } catch {}
+    }
+  }
+
+  // STEP 2: fetch via workspace
+  if (S.idToken && S.workspaceId) {
+    try {
+      for (const lim of [100, 50]) {
+        const r = await fetch(`${LOVABLE}/workspaces/${S.workspaceId}/projects?limit=${lim}`, { headers: H });
+        if (r.ok) {
+          const d = await r.json();
+          const arr = Array.isArray(d) ? d : (d.projects || d.data || d.items || []);
+          if (arr.length > 0 || lim === 50) {
+            S.projects = arr.map(p => ({
+              id: p.id || p.project_id,
+              display_name: p.display_name || p.name || p.title || (p.id||'').slice(0,14),
+              slug: p.slug || null,
+              custom_domain: p.custom_domain || null,
+            })).filter(p => p.id);
+            S.projectsLoaded = true;
+            renderProjList();
+            return;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // STEP 3 fallback
+  if (S.idToken) {
+    try {
+      const r = await fetch(`${LOVABLE}/projects?limit=50`, { headers: H });
+      if (r.ok) {
+        const d = await r.json();
+        const arr = Array.isArray(d) ? d : (d.projects || d.data || []);
+        if (arr.length > 0) {
+          S.projects = arr.map(p => ({
+            id: p.id || p.project_id,
+            display_name: p.display_name || p.name || p.title || (p.id||'').slice(0,14),
+          })).filter(p => p.id);
+          S.projectsLoaded = true;
+          renderProjList();
+          return;
+        }
+      }
+    } catch {}
+  }
+
+  S.projectsLoaded = true;
+  const msg = !S.idToken
+    ? 'Token não capturado — abra o Lovable.dev primeiro.'
+    : !S.workspaceId
+    ? 'Workspace não encontrado — navegue num projeto no Lovable.dev e tente novamente.'
+    : 'Nenhum projeto encontrado. Verifique sua conta no Lovable.dev.';
+  if (list) list.innerHTML = `<div class="empty-state">${msg}</div>`;
+}
+
+function renderProjList() {
+  const el = document.getElementById('proj-list'); if (!el) return;
+  const q = (document.getElementById('proj-search')?.value||'').toLowerCase();
+  const items = S.projects.filter(p =>
+    (p.display_name||p.name||'').toLowerCase().includes(q) || (p.id||'').includes(q)
+  );
+  if (!items.length) {
+    el.innerHTML = S.projects.length === 0
+      ? '<div class="empty-state">Nenhum projeto carregado. Clique em Atualizar.</div>'
+      : '<div class="empty-state">Nenhum projeto encontrado para essa busca.</div>';
+    return;
+  }
+  el.innerHTML = '';
+  items.slice(0, 100).forEach(p => {
+    const name = p.display_name || p.name || (p.id||'').slice(0,14) || '—';
+    const active = p.id === S.projectId;
+    const card = document.createElement('div');
+    card.className = 'proj-card' + (active ? ' active' : '');
+    card.innerHTML = `<div class="proj-dot ${active?'ok':''}"></div><div><div class="proj-name">${esc(name)}</div><div class="proj-id-text">${(p.id||'').slice(0,22)}…</div></div><div class="proj-acts"><a href="https://lovable.dev/projects/${p.id}" target="_blank" class="proj-act" title="Abrir no Lovable">↗</a><button class="proj-act sel-btn" data-id="${p.id}" title="Selecionar">${active?'✓':'›'}</button></div>`;
+    card.querySelector('.sel-btn').addEventListener('click', async e => {
+      e.stopPropagation();
+      S.projectId = p.id;
+      await cset({ clf_project: { id: p.id, ts: Date.now() }, _clf_proj: { id: p.id, ts: Date.now() } });
+      updateStatusUI(); renderProjList(); gotoScreen('chat');
+    });
+    el.appendChild(card);
+  });
+}
+
+function initProjects() {
+  document.getElementById('proj-refresh-btn')?.addEventListener('click', () => {
+    S.projectsLoaded = false;
+    S.projects = [];
+    S.workspaceId = null;
+    loadProjects();
+  });
+  document.getElementById('proj-search')?.addEventListener('input', renderProjList);
 }
 
 // ── Branding ──
