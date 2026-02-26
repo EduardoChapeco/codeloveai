@@ -108,10 +108,22 @@ async function getValidToken(sc: SupabaseClient, userId: string): Promise<string
 
 async function getWorkspaceId(token: string): Promise<string | null> {
   const res = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`[Brain] Workspaces fetch failed: ${res.status}`);
+    return null;
+  }
 
-  const body = await res.json();
+  const raw = await res.text();
+  console.log(`[Brain] Workspaces raw response: ${raw.slice(0, 600)}`);
+  
+  let body: any;
+  try { body = JSON.parse(raw); } catch { return null; }
+  
   const list = Array.isArray(body) ? body : (body?.workspaces || body?.data || []);
+  
+  if (list.length > 1) {
+    console.log(`[Brain] Multiple workspaces found: ${list.map((w: any) => `${w.id}(${w.name})`).join(", ")}`);
+  }
 
   if (list.length === 0 && body?.id) return body.id;
   return list?.[0]?.id || null;
@@ -138,8 +150,10 @@ async function getBrain(sc: SupabaseClient, userId: string) {
 
 async function verifyProject(projectId: string, token: string): Promise<boolean> {
   try {
-    const res = await lovFetch(`${API}/projects/${projectId}`, token, { method: "GET" });
-    return res.ok;
+    // Use chat history endpoint to verify - GET /projects/{id} returns 405
+    const res = await lovFetch(`${API}/projects/${projectId}/chat`, token, { method: "GET" });
+    console.log(`[Brain] verifyProject ${projectId}: status=${res.status}`);
+    return res.status !== 404 && res.status !== 403;
   } catch {
     return false;
   }
@@ -321,77 +335,51 @@ async function createFreshBrain(
       return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
     }
 
+    const projectName = `star-ai-${Date.now()}`;
     const payload = {
-      name: `project-${Date.now()}`,
+      name: projectName,
       initial_message: { message: "setup" },
       visibility: "private",
     };
 
+    console.log(`[Brain] Creating project: POST /workspaces/${workspaceId}/projects payload=${JSON.stringify(payload)}`);
     const start = Date.now();
     const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
       method: "POST",
       body: JSON.stringify(payload),
     });
 
+    const createBody = await createRes.text().catch(() => "");
+    console.log(`[Brain] Create response: status=${createRes.status} body=${createBody.slice(0, 500)}`);
+
     if (!createRes.ok) {
-      const body = await createRes.text().catch(() => "");
-      console.error(`[Brain] Ghost Create failed: ${createRes.status} ${body.slice(0, 300)}`);
+      console.error(`[Brain] Ghost Create FAILED: ${createRes.status}`);
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
     }
 
-    const created = await createRes.json();
+    let created: any;
+    try {
+      created = JSON.parse(createBody);
+    } catch {
+      console.error(`[Brain] Failed to parse create response as JSON`);
+      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      return { error: "Resposta inválida da API ao criar projeto" };
+    }
+
     const projectId = created?.id;
-    const messageId = created?.message_id;
+    const projectLink = created?.link || `https://lovable.dev/projects/${created?.id}`;
+    console.log(`[Brain] Project created: id=${projectId} link=${projectLink}`);
 
     if (!projectId) {
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: "ID do projeto não retornado pela API" };
     }
 
-    if (messageId) {
-      const elapsed = Date.now() - start;
-      const cancelRes = await lovFetch(`${API}/projects/${projectId}/chat/${messageId}/cancel`, token, {
-        method: "POST",
-      });
+    // Note: API does not return message_id, ghost cancel not possible
+    // Project creation is successful at this point
 
-      if (!cancelRes.ok) {
-        const cancelText = await cancelRes.text().catch(() => "");
-        console.warn(`[Brain] Cancel failed (${cancelRes.status}) after ${elapsed}ms: ${cancelText.slice(0, 200)}`);
-      } else {
-        console.log(`[Brain] Ghost cancel success in ${elapsed}ms`);
-      }
-    }
-
-    try {
-      await lovFetch(`${API}/projects/${projectId}/edit-code`, token, {
-        method: "POST",
-        body: JSON.stringify({
-          changes: [
-            {
-              path: "src/brain-config.md",
-              content: [
-                "# Star AI Brain",
-                "",
-                "REGRAS ABSOLUTAS:",
-                "1. NUNCA crie componentes React, páginas, rotas ou qualquer código de UI",
-                "2. NUNCA modifique arquivos existentes exceto os listados abaixo",
-                "3. RESPONDA APENAS escrevendo em src/brain-output.json",
-                "4. Formato OBRIGATÓRIO: {\"response\":\"...\",\"timestamp\":...,\"status\":\"done\"}",
-                "5. RESPONDA EM PORTUGUÊS (Brasil)",
-              ].join("\n"),
-            },
-            {
-              path: "src/brain-output.json",
-              content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }),
-            },
-          ],
-        }),
-      });
-    } catch (err) {
-      console.warn("[Brain] Non-critical edit-code injection failure:", err);
-    }
-
+    // Save to DB
     await sc.from("user_brain_projects")
       .update({
         lovable_project_id: projectId,
@@ -400,6 +388,8 @@ async function createFreshBrain(
       })
       .eq("user_id", userId);
 
+    const projectUrl = `https://lovable.dev/projects/${projectId}`;
+    console.log(`[Brain] SUCCESS: project=${projectId} workspace=${workspaceId} url=${projectUrl}`);
     return { projectId, workspaceId };
   } catch (err) {
     console.error("[Brain] createFreshBrain unexpected error:", err);
