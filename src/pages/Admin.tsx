@@ -801,40 +801,7 @@ export default function Admin() {
             <h1 className="lv-heading-lg">Gerenciar</h1>
           </div>
           
-          <div className="flex gap-2 flex-wrap bg-primary/5 p-1 rounded-2xl border border-primary/10">
-            {(["members", "affiliates", "invoices", "worker-tokens", "extension", "notifications", "messages", "support"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setSearchParams({ tab: t })}
-                className={`h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 flex items-center gap-2 ${
-                  tab === t 
-                  ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105" 
-                  : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                }`}
-              >
-                {t === "members" && <Users className="h-3 w-3" />}
-                {t === "affiliates" && <UserPlus className="h-3 w-3" />}
-                {t === "invoices" && <FileText className="h-3 w-3" />}
-                {t === "worker-tokens" && <Zap className="h-3 w-3" />}
-                {t === "extension" && <Upload className="h-3 w-3" />}
-                {t === "notifications" && <Bell className="h-3 w-3" />}
-                {t === "messages" && <MessageSquare className="h-3 w-3" />}
-                {t === "support" && <MessageSquare className="h-3 w-3" />}
-                {
-                  { 
-                    members: "Membros", 
-                    affiliates: "Afiliados", 
-                    invoices: "Faturas", 
-                    "worker-tokens": "Tokens API", 
-                    extension: "Extensão", 
-                    notifications: "Alertas", 
-                    messages: "Chat",
-                    support: "Suporte" 
-                  }[t]
-                }
-              </button>
-            ))}
-          </div>
+          {/* Tab navigation moved to sidebar */}
         </div>
 
         {/* Tab Subtitle */}
