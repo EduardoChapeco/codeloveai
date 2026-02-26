@@ -36,13 +36,13 @@ function makeAiMsgId(): string {
 
 /**
  * Resolve the internal Lovable token from DB.
- * Priority: user's own → admin master's (shared).
+ * Priority: user's own → admin master's (shared) → LOVABLE_SERVICE_TOKEN env.
  */
 async function resolveInternalToken(
   adminClient: ReturnType<typeof createClient>,
   userId: string
 ): Promise<string | null> {
-  // Try user's own
+  // 1. Try user's own
   const { data: userAcc } = await adminClient
     .from("lovable_accounts")
     .select("token_encrypted")
@@ -51,7 +51,7 @@ async function resolveInternalToken(
     .maybeSingle();
   if (userAcc?.token_encrypted) return userAcc.token_encrypted;
 
-  // Fallback: admin's token
+  // 2. Fallback: admin's token
   const { data: adminUser } = await adminClient
     .from("user_roles").select("user_id").eq("role", "admin").limit(1).maybeSingle();
   if (adminUser?.user_id) {
@@ -63,6 +63,11 @@ async function resolveInternalToken(
       .maybeSingle();
     if (adminAcc?.token_encrypted) return adminAcc.token_encrypted;
   }
+
+  // 3. Final fallback: LOVABLE_SERVICE_TOKEN env var
+  const serviceToken = Deno.env.get("LOVABLE_SERVICE_TOKEN");
+  if (serviceToken) return serviceToken;
+
   return null;
 }
 
@@ -115,18 +120,13 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Resolve Lovable token INTERNALLY
-  // Accept client token as fallback for backward compat, but prefer internal
+  // Resolve Lovable token INTERNALLY — client NEVER sends it
   let lovableToken: string | null = null;
   if (userId) {
     lovableToken = await resolveInternalToken(adminClient, userId);
   }
-  // Fallback: client-provided token (backward compat with extension that captures Bearer)
-  if (!lovableToken && token && typeof token === "string" && token.startsWith("eyJ")) {
-    lovableToken = token;
-  }
   if (!lovableToken) {
-    return fail("Token Lovable interno não disponível. Admin deve conectar conta.", 500);
+    return fail("Token Lovable interno não disponível. Admin deve conectar conta ou configurar LOVABLE_SERVICE_TOKEN.", 500);
   }
 
   // Build payload — ALL HARDCODED
