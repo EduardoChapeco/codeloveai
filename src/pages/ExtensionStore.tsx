@@ -8,7 +8,7 @@ import AppLayout from "@/components/AppLayout";
 import MeshBackground from "@/components/MeshBackground";
 import {
   Zap, Rocket, FlaskConical, Puzzle, Check, Lock, ArrowRight, Loader2,
-  Star, Download, Shield, Search as SearchIcon, Sparkles,
+  Star, Download, Shield, Search as SearchIcon, Sparkles, AlertTriangle,
 } from "lucide-react";
 
 const iconMap: Record<string, typeof Puzzle> = {
@@ -101,6 +101,17 @@ export default function ExtensionStore() {
           Potencialize seus projetos Lovable com extensões profissionais. 
           Cada plano desbloqueia ferramentas diferentes.
         </p>
+
+        {/* Beta Warning Banner */}
+        <div className="mt-6 max-w-2xl mx-auto rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-3 flex items-start gap-3 text-left">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-amber-600">Fase Beta</p>
+            <p className="text-[11px] text-muted-foreground">
+              Todas as extensões estão em fase beta. Algumas mensagens enviadas podem gerar cobrança de créditos no Lovable. Use com atenção.
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* Extensions Grid */}

@@ -9,7 +9,7 @@ import MeshBackground from "@/components/MeshBackground";
 import { toast } from "sonner";
 import {
   Zap, Rocket, FlaskConical, Puzzle, Check, Lock, ArrowRight, Loader2,
-  ArrowLeft, Star, Download, Shield, Sparkles, ExternalLink, Chrome,
+  ArrowLeft, Star, Download, Shield, Sparkles, ExternalLink, Chrome, AlertTriangle,
 } from "lucide-react";
 
 const iconMap: Record<string, typeof Puzzle> = {
@@ -222,7 +222,15 @@ export default function ExtensionDetail() {
               </div>
             </div>
 
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">{ext.description}</p>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-4">{ext.description}</p>
+
+            {/* Beta Warning */}
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 flex items-start gap-2.5 mb-6">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-muted-foreground">
+                <span className="font-semibold text-amber-600">Beta:</span> Esta extensão está em fase beta. Algumas mensagens podem gerar cobrança de créditos no Lovable.
+              </p>
+            </div>
 
             {/* CTA Buttons */}
             <div className="flex items-center gap-3">
