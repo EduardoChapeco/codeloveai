@@ -1,6 +1,4 @@
-// lovable-proxy v4.1.0 — Proxy direto para Lovable API (security_fix_v2)
-// Aceita lovable_token explícito OU resolve internamente por JWT/CLF1/admin account.
-
+// lovable-proxy v5.0.0 — CLF1-only auth (no admin token, no Firebase)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const LOVABLE_API = "https://api.lovable.dev";
@@ -19,11 +17,7 @@ const corsHeaders = {
 function makeAiMsgId(): string {
   const C = "01PDx4Vtw4YF6XfduRwwS6nKZ6sPAC9nCeR";
   const first = "01234567"[Math.floor(Math.random() * 8)];
-  return (
-    "aimsg_" +
-    first +
-    Array.from({ length: 25 }, () => C[Math.floor(Math.random() * C.length)]).join("")
-  );
+  return "aimsg_" + first + Array.from({ length: 25 }, () => C[Math.floor(Math.random() * C.length)]).join("");
 }
 
 function json(body: Record<string, unknown>, status = 200) {
@@ -40,11 +34,11 @@ async function getUserTokenFromAccount(adminClient: ReturnType<typeof createClie
     .eq("user_id", userId)
     .eq("status", "active")
     .limit(1);
-
   return data?.[0]?.token_encrypted?.trim() || null;
 }
 
 async function resolveLovableToken(req: Request, body: Record<string, unknown>): Promise<string | null> {
+  // 1) Explicit token in body
   const explicit = (
     (body.lovable_token as string) ||
     (body.lovableToken as string) ||
@@ -60,7 +54,7 @@ async function resolveLovableToken(req: Request, body: Record<string, unknown>):
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // 1) Try logged user JWT
+  // 2) JWT auth → user's own lovable_accounts
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || "";
   if (authHeader.startsWith("Bearer ")) {
     try {
@@ -72,12 +66,10 @@ async function resolveLovableToken(req: Request, body: Record<string, unknown>):
         const byUser = await getUserTokenFromAccount(adminClient, user.id);
         if (byUser) return byUser;
       }
-    } catch {
-      // ignore and continue fallback chain
-    }
+    } catch { /* ignore */ }
   }
 
-  // 2) Try CLF1 token -> license user -> lovable_accounts
+  // 3) CLF1 token → license → user → lovable_accounts
   const headerClf = (req.headers.get("x-clf-token") || "").trim();
   const bodyClf = (
     (body.licenseKey as string) ||
@@ -102,15 +94,8 @@ async function resolveLovableToken(req: Request, body: Record<string, unknown>):
     }
   }
 
-  // 3) Fallback admin account
-  const { data: adminRows } = await adminClient
-    .from("lovable_accounts")
-    .select("token_encrypted")
-    .eq("is_admin_account", true)
-    .eq("status", "active")
-    .limit(1);
-
-  return adminRows?.[0]?.token_encrypted?.trim() || null;
+  // No admin fallback — CLF1 or JWT required
+  return null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -118,11 +103,7 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
 
   let body: Record<string, unknown>;
-  try {
-    body = await req.json();
-  } catch {
-    return json({ ok: false, error: "Body JSON inválido" }, 400);
-  }
+  try { body = await req.json(); } catch { return json({ ok: false, error: "Body JSON inválido" }, 400); }
 
   const task = ((body.task as string) || (body.message as string) || "").trim();
   const projectId = ((body.project_id as string) || (body.projectId as string) || "").trim();
@@ -131,14 +112,11 @@ Deno.serve(async (req: Request) => {
   const viewDescription = body.view_description ?? null;
 
   if (!task) return json({ ok: false, error: "task é obrigatório" }, 400);
-  if (!projectId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId)) {
+  if (!projectId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId))
     return json({ ok: false, error: "project_id inválido (UUID esperado)" }, 400);
-  }
 
   const lovableToken = await resolveLovableToken(req, body);
-  if (!lovableToken) {
-    return json({ ok: false, error: "Nenhum token Lovable vinculado (JWT/CLF1/admin)." }, 401);
-  }
+  if (!lovableToken) return json({ ok: false, error: "Token não encontrado. Envie CLF1 via x-clf-token header ou autentique via JWT." }, 401);
 
   const msgId = crypto.randomUUID();
   const aiMsgId = makeAiMsgId();
@@ -150,19 +128,11 @@ Deno.serve(async (req: Request) => {
     chat_only: false,
     ai_message_id: aiMsgId,
     thread_id: "main",
-    view,
-    view_description: viewDescription,
-    model: null,
-    session_replay: "[]",
-    client_logs: [],
-    network_requests: [],
+    view, view_description: viewDescription,
+    model: null, session_replay: "[]",
+    client_logs: [], network_requests: [],
     runtime_errors: runtimeErrors,
-    integration_metadata: {
-      browser: {
-        preview_viewport_width: 1280,
-        preview_viewport_height: 854,
-      },
-    },
+    integration_metadata: { browser: { preview_viewport_width: 1280, preview_viewport_height: 854 } },
   };
 
   let lovableRes: Response;
@@ -185,29 +155,13 @@ Deno.serve(async (req: Request) => {
 
   const lovableBody = await lovableRes.text().catch(() => "");
   let lovableJson: unknown = null;
-  try {
-    lovableJson = JSON.parse(lovableBody);
-  } catch {
-    lovableJson = lovableBody;
-  }
+  try { lovableJson = JSON.parse(lovableBody); } catch { lovableJson = lovableBody; }
 
   if (lovableRes.ok) {
-    return json({
-      ok: true,
-      status: lovableRes.status,
-      lovable_response: lovableJson,
-      messageId: msgId,
-      aiMessageId: aiMsgId,
-    });
+    return json({ ok: true, status: lovableRes.status, lovable_response: lovableJson, messageId: msgId, aiMessageId: aiMsgId });
   }
-
   return json(
-    {
-      ok: false,
-      error: `Lovable API retornou ${lovableRes.status}`,
-      lovable_status: lovableRes.status,
-      details: lovableJson,
-    },
+    { ok: false, error: `Lovable API retornou ${lovableRes.status}`, lovable_status: lovableRes.status, details: lovableJson },
     lovableRes.status >= 500 ? 502 : lovableRes.status,
   );
 });

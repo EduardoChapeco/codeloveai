@@ -47,13 +47,12 @@ async function getUserId(req: Request, anonSc: SupabaseClient, body?: Record<str
   } catch { return null; }
 }
 
-// getLovableToken and refreshLovableToken removed — all operations now use admin token
-
-async function getAdminToken(sc: SupabaseClient): Promise<string | null> {
+// getUserToken — resolves from user's own lovable_accounts (no admin fallback)
+async function getUserToken(sc: SupabaseClient, userId: string): Promise<string | null> {
   const { data } = await sc
     .from("lovable_accounts")
     .select("token_encrypted")
-    .eq("is_admin_account", true)
+    .eq("user_id", userId)
     .eq("status", "active")
     .limit(1)
     .maybeSingle();
@@ -486,8 +485,8 @@ Deno.serve(async (req: Request) => {
       const { client_prompt, workspace_id } = body as { client_prompt: string; workspace_id?: string };
       if (!client_prompt?.trim()) return json({ error: "client_prompt required" }, 400);
 
-      const adminToken = await getAdminToken(sc);
-      if (!adminToken) return json({ error: "Platform Brain unavailable. Contact administrator." }, 503);
+      const adminToken = await getUserToken(sc, userId);
+      if (!adminToken) return json({ error: "Nenhum token Lovable vinculado. Reconecte via /lovable/connect." }, 503);
 
       const { data: project, error: projErr } = await sc
         .from("orchestrator_projects")
@@ -560,12 +559,12 @@ Deno.serve(async (req: Request) => {
       if (project.status === "failed") return json({ status: "failed", error: project.last_error });
       if (project.status === "planning") return json({ status: "still_planning" });
 
-      // Token check — use admin token for all operations
-      const adminTk = await getAdminToken(sc);
+      // Token check — use user's own token
+      const adminTk = await getUserToken(sc, project.user_id);
       if (!adminTk) {
-        await addLog(sc, project_id, "❌ Admin token unavailable — pausing", "error");
-        await sc.from("orchestrator_projects").update({ status: "paused", last_error: "Admin token unavailable" }).eq("id", project_id);
-        return json({ error: "Platform Brain unavailable. Contact administrator." }, 503);
+        await addLog(sc, project_id, "❌ Token do usuário indisponível — pausando", "error");
+        await sc.from("orchestrator_projects").update({ status: "paused", last_error: "User token unavailable" }).eq("id", project_id);
+        return json({ error: "Token Lovable não encontrado. Reconecte via /lovable/connect." }, 503);
       }
 
       if (!project.lovable_project_id) return json({ error: "No Lovable project linked." }, 400);
@@ -733,8 +732,8 @@ Deno.serve(async (req: Request) => {
         .select("lovable_project_id").eq("id", project_id).eq("user_id", userId).maybeSingle();
       if (!project?.lovable_project_id) return json({ error: "No Lovable project linked" }, 404);
 
-      const adminTk2 = await getAdminToken(sc);
-      if (!adminTk2) return json({ error: "Platform unavailable" }, 503);
+      const adminTk2 = await getUserToken(sc, userId);
+      if (!adminTk2) return json({ error: "Token Lovable não encontrado" }, 503);
 
       const srcRes = await extFetch(
         `${EXT_API}/projects/${project.lovable_project_id}/source-code`,
@@ -814,8 +813,8 @@ Deno.serve(async (req: Request) => {
       };
       if (!project_id || !workspace_id) return json({ error: "project_id and workspace_id required" }, 400);
 
-      const adminTk3 = await getAdminToken(sc);
-      if (!adminTk3) return json({ error: "Platform unavailable" }, 503);
+      const adminTk3 = await getUserToken(sc, userId);
+      if (!adminTk3) return json({ error: "Token Lovable não encontrado" }, 503);
 
       const { data: orch } = await sc.from("orchestrator_projects")
         .select("id, status").eq("id", project_id).eq("user_id", userId).maybeSingle();
@@ -870,8 +869,8 @@ Deno.serve(async (req: Request) => {
         .eq("id", project_id).eq("user_id", userId).maybeSingle();
       if (!orch?.lovable_project_id) return json({ error: "Project not linked" }, 404);
 
-      const adminTk4 = await getAdminToken(sc);
-      if (!adminTk4) return json({ error: "Platform unavailable" }, 503);
+      const adminTk4 = await getUserToken(sc, userId);
+      if (!adminTk4) return json({ error: "Token Lovable não encontrado" }, 503);
 
       try {
         const srcRes = await extFetch(
@@ -908,8 +907,8 @@ Deno.serve(async (req: Request) => {
       const { data: orch } = await auditQuery.maybeSingle();
       if (!orch?.lovable_project_id) return json({ error: "Project not linked" }, 404);
 
-      const adminTk5 = await getAdminToken(sc);
-      if (!adminTk5) return json({ error: "Platform unavailable" }, 503);
+      const adminTk5 = await getUserToken(sc, userId);
+      if (!adminTk5) return json({ error: "Token Lovable não encontrado" }, 503);
 
       await sc.from("orchestrator_projects").update({ status: "auditing" }).eq("id", project_id);
       await addLog(sc, project_id, "🔍 Audit checkpoint started", "info", undefined, task_id);

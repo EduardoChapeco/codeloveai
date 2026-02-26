@@ -83,12 +83,11 @@ Deno.serve(async (req: Request) => {
       try {
         tickLog.push(`→ Project ${project.id} (user: ${project.user_id})`);
 
-        // 2. Get user's lovable token — Phase 9: read access_token directly
-        // Use admin token instead of per-user tokens
+        // Get user's own lovable token (no admin fallback)
         const { data: account } = await sc
           .from("lovable_accounts")
           .select("token_encrypted, token_expires_at, status")
-          .eq("is_admin_account", true)
+          .eq("user_id", project.user_id)
           .eq("status", "active")
           .limit(1)
           .maybeSingle();
