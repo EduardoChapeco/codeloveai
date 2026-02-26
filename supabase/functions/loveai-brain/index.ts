@@ -2,7 +2,7 @@
  * Star AI Brain v8.1 — Refactored into modules to fix bundle timeout
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { getUserToken, getValidToken, refreshToken, lovFetch } from "./token-helpers.ts";
 import {
   getBrain, verifyProject, createFreshBrain,
@@ -22,8 +22,11 @@ function json(data: unknown, status = 200) {
   });
 }
 
+const VALID_ACTIONS = new Set(["status", "history", "reset", "setup", "send"]);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -39,8 +42,16 @@ Deno.serve(async (req) => {
 
     const userId = user.id;
     const sc = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const body = await req.json();
-    const action = body.action;
+
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "JSON inválido" }, 400);
+    }
+
+    const action = typeof body.action === "string" ? body.action : "";
+    if (!VALID_ACTIONS.has(action)) return json({ error: "Ação desconhecida" }, 400);
 
     // ── STATUS ──
     if (action === "status") {
