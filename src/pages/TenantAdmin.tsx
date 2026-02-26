@@ -341,7 +341,9 @@ export default function TenantAdmin() {
     );
   }
 
-  const buildPreviewUrl = () => {
+  const previewUrlRef = useRef("");
+
+  const buildPreviewUrl = useCallback(() => {
     const params = new URLSearchParams();
     params.set("_preview", "1");
     if (form.name) params.set("name", form.name);
@@ -353,9 +355,35 @@ export default function TenantAdmin() {
     if (form.font_family && form.font_family !== "system") params.set("font", form.font_family);
     if (form.logo_url) params.set("logo", form.logo_url);
     return `/?${params.toString()}`;
-  };
+  }, [form.name, form.theme_preset, form.primary_color, form.secondary_color, form.accent_color, form.border_radius, form.font_family, form.logo_url]);
 
-  const refreshPreview = () => setPreviewKey(k => k + 1);
+  // Only rebuild preview URL on first load or manual refresh
+  const [stablePreviewUrl, setStablePreviewUrl] = useState(() => buildPreviewUrl());
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Send live updates via postMessage instead of reloading iframe
+  useEffect(() => {
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({
+        type: "tenant-preview-update",
+        payload: {
+          name: form.name,
+          preset: form.theme_preset,
+          primary: form.primary_color,
+          secondary: form.secondary_color,
+          accent: form.accent_color,
+          radius: form.border_radius,
+          font: form.font_family,
+          logo: form.logo_url,
+        },
+      }, "*");
+    }
+  }, [form.name, form.theme_preset, form.primary_color, form.secondary_color, form.accent_color, form.border_radius, form.font_family, form.logo_url]);
+
+  const refreshPreview = () => {
+    setStablePreviewUrl(buildPreviewUrl());
+    setPreviewKey(k => k + 1);
+  };
 
   // ── Glass Card wrapper ──
   const GlassCard = ({ children, className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) => (
@@ -749,8 +777,9 @@ export default function TenantAdmin() {
                     }}
                   >
                     <iframe
+                      ref={iframeRef}
                       key={previewKey}
-                      src={buildPreviewUrl()}
+                      src={stablePreviewUrl}
                       className="w-full h-full border-0"
                       title="Tenant Preview"
                       style={{
