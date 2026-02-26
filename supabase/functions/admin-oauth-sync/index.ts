@@ -116,8 +116,8 @@ Deno.serve(async (req) => {
 
     // ─── REFRESH: Auto-refresh admin token ───
     if (action === "refresh") {
-      const firebaseApiKey = Deno.env.get("LOVABLE_FIREBASE_API_KEY") || Deno.env.get("lovable_firebase_api_key");
-      if (!firebaseApiKey) return json({ error: "LOVABLE_FIREBASE_API_KEY not configured" }, 500);
+      const firebaseApiKey = Deno.env.get("FIREBASE_API_KEY");
+      if (!firebaseApiKey) return json({ error: "FIREBASE_API_KEY not configured" }, 500);
 
       // Read refresh token from internal.admin_secrets
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
         token_updated_at: tokenEntry?.updated_at || null,
         refresh_updated_at: refreshEntry?.updated_at || null,
         env_token_configured: !!Deno.env.get("ADMIN_LOVABLE_TOKEN"),
-        firebase_key_configured: !!Deno.env.get("LOVABLE_FIREBASE_API_KEY"),
+        firebase_key_configured: !!Deno.env.get("FIREBASE_API_KEY"),
       });
     }
 

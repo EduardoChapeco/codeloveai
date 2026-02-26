@@ -9,7 +9,7 @@ const corsHeaders = {
 const LOVABLE_API_BASE = "https://api.lovable.dev";
 
 function getFirebaseApiKey(): string | null {
-  const key = Deno.env.get("LOVABLE_FIREBASE_API_KEY") || Deno.env.get("lovable_firebase_api_key");
+  const key = Deno.env.get("FIREBASE_API_KEY");
   if (!key || typeof key !== "string") return null;
   return key.trim() || null;
 }
