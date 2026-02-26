@@ -127,6 +127,7 @@ const TermsOfUse = lazyRetry(() => import("./pages/TermsOfUse"));
 const SupportPage = lazyRetry(() => import("./pages/SupportPage"));
 const ExtensionStore = lazyRetry(() => import("./pages/ExtensionStore"));
 const ExtensionDetail = lazyRetry(() => import("./pages/ExtensionDetail"));
+const VenusPage = lazyRetry(() => import("./pages/VenusPage"));
 
 const queryClient = new QueryClient();
 
@@ -198,6 +199,7 @@ const App = () => (
                 <Route path="/termos" element={<TermsOfUse />} />
                 <Route path="/suporte" element={<SupportPage />} />
                 <Route path="/extensoes" element={<ExtensionStore />} />
+                <Route path="/extensoes/venus" element={<VenusPage />} />
                 <Route path="/extensoes/:slug" element={<ExtensionDetail />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
