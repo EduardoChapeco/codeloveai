@@ -91,6 +91,8 @@ const LovableProjects = lazyRetry(() => import("./pages/LovableProjects"));
 const LovablePreview = lazyRetry(() => import("./pages/LovablePreview"));
 const LovableUploadTest = lazyRetry(() => import("./pages/LovableUploadTest"));
 const Brain = lazyRetry(() => import("./pages/Brain"));
+const Assistant = lazyRetry(() => import("./pages/Assistant"));
+const OrchestratorPage = lazyRetry(() => import("./pages/OrchestratorPage"));
 const ProjectEditor = lazyRetry(() => import("./pages/ProjectEditor"));
 const OrchestratorProjectPanel = lazyRetry(() => import("./pages/OrchestratorProjectPanel"));
 const NotFound = lazyRetry(() => import("./pages/NotFound"));
@@ -161,6 +163,8 @@ const App = () => (
                 <Route path="/lovable/preview" element={<LovablePreview />} />
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
                 <Route path="/brain" element={<Brain />} />
+                <Route path="/assistente" element={<Assistant />} />
+                <Route path="/orquestrador" element={<OrchestratorPage />} />
                 <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
                 <Route path="/orquestrador/:id" element={<OrchestratorProjectPanel />} />
                 <Route path="/automation" element={<Automation />} />

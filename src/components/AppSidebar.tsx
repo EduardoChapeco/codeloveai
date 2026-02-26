@@ -395,7 +395,9 @@ export default function AppSidebar() {
   const mainItems = [
     { to: "/dashboard", label: "Painel", icon: LayoutDashboard, desc: "Visão geral" },
     { to: "/extensoes", label: "Extensões", icon: Puzzle, desc: "Loja de extensões" },
-    { to: "/brain", label: "Star AI", icon: Brain, desc: "Assistente inteligente" },
+    { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
+    { to: "/assistente", label: "Assistente", icon: Bot, desc: "Dúvidas da plataforma" },
+    { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de tarefas" },
     { to: "/notes", label: "Notas", icon: StickyNote, desc: "Anotações rápidas" },
     { to: "/community", label: "Comunidade", icon: MessageCircle, desc: "Fórum & discussões" },
     { to: "/install", label: "Instalar", icon: Download, desc: "Download da extensão" },
