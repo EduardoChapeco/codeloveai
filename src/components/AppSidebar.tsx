@@ -9,7 +9,9 @@ import {
   ArrowLeft, Bell, Send, Upload,
   PanelLeftClose, PanelLeft, Building2, StickyNote, Brain, Users, Unlock, FileText,
   Zap, CreditCard, BookOpen, LifeBuoy, Workflow, Scale,
-  Rocket, Globe, Handshake, Puzzle,
+  Rocket, Globe, Handshake, Puzzle, Key, Wallet, Palette,
+  DollarSign, Package, Sliders, UserPlus, BarChart3, MessageSquare,
+  CloudLightning,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -31,13 +33,226 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-const adminTabs = [
-  { id: "members", label: "Membros", icon: Users },
-  { id: "worker-tokens", label: "Tokens API", icon: Unlock },
-  { id: "extension", label: "Extensão", icon: Upload },
-  { id: "notifications", label: "Notificações", icon: Bell },
-  { id: "messages", label: "Mensagens", icon: Send },
+// ── Tab definitions for each admin page ──
+
+const adminOperationalTabs = [
+  { id: "members", label: "Membros", icon: Users, desc: "Gestão de usuários" },
+  { id: "affiliates", label: "Afiliados", icon: UserPlus, desc: "Programa de indicações" },
+  { id: "invoices", label: "Faturas", icon: FileText, desc: "Pagamentos pendentes" },
+  { id: "worker-tokens", label: "Tokens API", icon: Zap, desc: "Geração de tokens" },
+  { id: "extension", label: "Extensão", icon: Upload, desc: "Uploads e versões" },
+  { id: "notifications", label: "Alertas", icon: Bell, desc: "Notificações do sistema" },
+  { id: "messages", label: "Chat", icon: MessageSquare, desc: "Mensagens diretas" },
+  { id: "support", label: "Suporte", icon: Headphones, desc: "Tickets de suporte" },
 ];
+
+const adminGlobalTabs = [
+  { id: "tenants", label: "Tenants", icon: Building2, desc: "Multi-tenant" },
+  { id: "plans", label: "Planos", icon: DollarSign, desc: "Pricing & billing" },
+  { id: "modules", label: "Módulos", icon: Package, desc: "Feature toggles" },
+  { id: "extensions", label: "Extensões", icon: Puzzle, desc: "Catálogo" },
+  { id: "feature_flags", label: "Feature Flags", icon: Sliders, desc: "Flags globais" },
+  { id: "lovable_cloud", label: "Lovable Cloud", icon: CloudLightning, desc: "Infra & deploy" },
+  { id: "wl_plans", label: "Planos WL", icon: Package, desc: "White Label" },
+  { id: "wl_affiliates", label: "Afiliados WL", icon: UserPlus, desc: "Indicações WL" },
+  { id: "wl_subs", label: "Assinaturas WL", icon: FileText, desc: "Contratos" },
+  { id: "finances", label: "Faturamento", icon: BarChart3, desc: "Receita geral" },
+  { id: "commissions", label: "Comissões", icon: BarChart3, desc: "Split & repasse" },
+  { id: "wallets", label: "Wallets", icon: Wallet, desc: "Saldos por tenant" },
+  { id: "ledger", label: "Ledger", icon: BookOpen, desc: "Extrato contábil" },
+  { id: "api_keys", label: "API Keys", icon: Key, desc: "Chaves de acesso" },
+  { id: "operations", label: "Operações", icon: Shield, desc: "Ações globais" },
+];
+
+const adminTenantTabs = [
+  { id: "editor", label: "Editor Visual", icon: Palette, desc: "Personalização" },
+  { id: "users", label: "Usuários", icon: Users, desc: "Membros do tenant" },
+  { id: "licenses", label: "Licenças", icon: Key, desc: "Tokens ativos" },
+  { id: "finances", label: "Financeiro", icon: Wallet, desc: "Saldo & extrato" },
+];
+
+// ── Liquid Glass Tab Button ──
+function GlassTabButton({
+  tab,
+  isActive,
+  onClick,
+  collapsed,
+}: {
+  tab: { id: string; label: string; icon: React.ElementType; desc: string };
+  isActive: boolean;
+  onClick: () => void;
+  collapsed: boolean;
+}) {
+  const Icon = tab.icon;
+
+  if (collapsed) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          isActive={isActive}
+          onClick={onClick}
+          tooltip={tab.label}
+        >
+          <Icon className="h-4 w-4" />
+          <span>{tab.label}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={`group w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
+        isActive
+          ? "bg-primary/10 border-primary/20 text-primary shadow-sm"
+          : "border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-white/[0.12] hover:bg-white/[0.03]"
+      }`}
+      style={
+        !isActive
+          ? {
+              background: "rgba(255,255,255,0.035)",
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            }
+          : undefined
+      }
+    >
+      <Icon
+        className={`h-4 w-4 flex-shrink-0 ${
+          isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+        }`}
+      />
+      <div className="min-w-0">
+        <p className="text-xs font-semibold truncate">{tab.label}</p>
+        <p className="text-[10px] opacity-60 truncate">{tab.desc}</p>
+      </div>
+    </button>
+  );
+}
+
+// ── Admin Contextual Sidebar ──
+function AdminContextualSidebar({
+  tabs,
+  currentTab,
+  onTabChange,
+  title,
+  backTo,
+  backLabel,
+}: {
+  tabs: typeof adminOperationalTabs;
+  currentTab: string;
+  onTabChange: (tab: string) => void;
+  title: string;
+  backTo: string;
+  backLabel: string;
+}) {
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+  const { toggleChat, isChatOpen } = useChatContext();
+  const { toggleSupport, isOpen: isSupportOpen, unreadCount } = useSupportChat();
+  const { state: sidebarState, toggleSidebar } = useSidebar();
+  const collapsed = sidebarState === "collapsed";
+  const brandName = "Starble";
+
+  return (
+    <Sidebar collapsible="icon" className="clf-glass-sidebar">
+      <SidebarHeader className="p-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={() => navigate(backTo)} tooltip={backLabel}>
+              <ArrowLeft className="h-4 w-4" />
+              <span>{backLabel}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        {!collapsed && (
+          <button
+            onClick={toggleSidebar}
+            className="absolute right-2 top-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>{title}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            {collapsed ? (
+              <SidebarMenu>
+                {tabs.map((tab) => (
+                  <GlassTabButton
+                    key={tab.id}
+                    tab={tab}
+                    isActive={currentTab === tab.id}
+                    onClick={() => onTabChange(tab.id)}
+                    collapsed
+                  />
+                ))}
+              </SidebarMenu>
+            ) : (
+              <div className="space-y-1.5 px-1">
+                {tabs.map((tab) => (
+                  <GlassTabButton
+                    key={tab.id}
+                    tab={tab}
+                    isActive={currentTab === tab.id}
+                    onClick={() => onTabChange(tab.id)}
+                    collapsed={false}
+                  />
+                ))}
+              </div>
+            )}
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border">
+        <SidebarMenu>
+          {collapsed && (
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={toggleSidebar} tooltip="Expandir">
+                <PanelLeft className="h-4 w-4" />
+                <span>Expandir</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={isSupportOpen} onClick={toggleSupport} tooltip="Suporte">
+              <span className="relative">
+                <Headphones className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-3.5 min-w-[14px] rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground flex items-center justify-center px-0.5">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </span>
+              <span>Suporte</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
+              <Bot className="h-4 w-4" />
+              <span>{brandName} AI</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={signOut}
+              tooltip="Sair"
+              className="hover:!bg-destructive/10 hover:!text-destructive"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Sair</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
 
 export default function AppSidebar() {
   const { user, signOut } = useAuth();
@@ -58,92 +273,51 @@ export default function AppSidebar() {
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
   const isAdminPage = location.pathname === "/admin";
-  const currentAdminTab = searchParams.get("tab") || "members";
+  const isAdminGlobalPage = location.pathname === "/admin/global";
+  const isAdminTenantPage = location.pathname === "/admin/tenant";
 
-  // ─── Admin contextual sidebar ───
+  // ─── Admin Operational contextual sidebar ───
   if (isAdminPage && isAdmin) {
+    const currentTab = searchParams.get("tab") || "members";
     return (
-      <Sidebar collapsible="icon" className="clf-glass-sidebar">
-        <SidebarHeader className="p-2">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton onClick={() => navigate("/dashboard")} tooltip="Voltar">
-                <ArrowLeft className="h-4 w-4" />
-                <span>Voltar</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-          {!collapsed && (
-            <button onClick={toggleSidebar} className="absolute right-2 top-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors">
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          )}
-        </SidebarHeader>
+      <AdminContextualSidebar
+        tabs={adminOperationalTabs}
+        currentTab={currentTab}
+        onTabChange={(tab) => setSearchParams({ tab })}
+        title="Admin Operacional"
+        backTo="/dashboard"
+        backLabel="Voltar"
+      />
+    );
+  }
 
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Administração</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {adminTabs.map(tab => (
-                  <SidebarMenuItem key={tab.id}>
-                    <SidebarMenuButton
-                      isActive={currentAdminTab === tab.id}
-                      onClick={() => setSearchParams({ tab: tab.id })}
-                      tooltip={tab.label}
-                    >
-                      <tab.icon className="h-4 w-4" />
-                      <span>{tab.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
+  // ─── Admin Global contextual sidebar ───
+  if (isAdminGlobalPage && isAdmin) {
+    const currentTab = searchParams.get("tab") || "tenants";
+    return (
+      <AdminContextualSidebar
+        tabs={adminGlobalTabs}
+        currentTab={currentTab}
+        onTabChange={(tab) => setSearchParams({ tab })}
+        title="Admin Global"
+        backTo="/admin"
+        backLabel="Operacional"
+      />
+    );
+  }
 
-        <SidebarFooter className="border-t border-sidebar-border">
-          <SidebarMenu>
-            {collapsed && (
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={toggleSidebar} tooltip="Expandir">
-                  <PanelLeft className="h-4 w-4" />
-                  <span>Expandir</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )}
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={isSupportOpen} onClick={toggleSupport} tooltip="Suporte">
-                <span className="relative">
-                  <Headphones className="h-4 w-4" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1.5 h-3.5 min-w-[14px] rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground flex items-center justify-center px-0.5">
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
-                  )}
-                </span>
-                <span>Suporte</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
-                <Bot className="h-4 w-4" />
-                <span>{brandName} AI</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={signOut}
-                tooltip="Sair"
-                className="hover:!bg-destructive/10 hover:!text-destructive"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Sair</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarFooter>
-      </Sidebar>
+  // ─── Admin Tenant contextual sidebar ───
+  if (isAdminTenantPage && (isTenantAdmin || isAdmin)) {
+    const currentTab = searchParams.get("tab") || "editor";
+    return (
+      <AdminContextualSidebar
+        tabs={adminTenantTabs}
+        currentTab={currentTab}
+        onTabChange={(tab) => setSearchParams({ tab })}
+        title={tenant?.name || "Tenant"}
+        backTo="/dashboard"
+        backLabel="Voltar"
+      />
     );
   }
 
@@ -302,7 +476,7 @@ export default function AppSidebar() {
           </SidebarGroup>
         </Collapsible>
 
-        {/* Explorar — Landing pages públicas */}
+        {/* Explorar */}
         <Collapsible defaultOpen={exploreActive} className="group/collapsible">
           <SidebarGroup>
             <CollapsibleTrigger className="w-full">

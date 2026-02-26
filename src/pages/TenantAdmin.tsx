@@ -466,27 +466,7 @@ export default function TenantAdmin() {
             </GlassCard>
           )}
 
-          {/* ══════ TABS ══════ */}
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {TABS.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setSearchParams({ tab: t.id })}
-                className={`group flex items-center gap-3 px-5 py-3 rounded-xl border transition-all duration-200 whitespace-nowrap ${
-                  tab === t.id
-                    ? "bg-primary/10 border-primary/20 text-primary shadow-sm"
-                    : "border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-white/[0.12] hover:bg-white/[0.03]"
-                }`}
-                style={tab !== t.id ? { background: "var(--liquid-glass-bg)", backdropFilter: "blur(20px)" } : undefined}
-              >
-                <t.icon className={`h-4 w-4 ${tab === t.id ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
-                <div className="text-left">
-                  <p className="text-xs font-semibold">{t.label}</p>
-                  <p className="text-[10px] opacity-60">{t.desc}</p>
-                </div>
-              </button>
-            ))}
-          </div>
+          {/* Tab navigation moved to sidebar */}
 
           {/* ═══════════════ EDITOR TAB ═══════════════ */}
           {tab === "editor" && (

@@ -453,34 +453,7 @@ export default function AdminGlobal() {
             </button>
           </div>
 
-          {/* Tab navigation */}
-          <div className="flex gap-2 flex-wrap">
-            {([
-              { id: "tenants", label: "Tenants", icon: Building2 },
-              { id: "plans", label: "Planos", icon: DollarSign },
-              { id: "modules", label: "Módulos", icon: Package },
-              { id: "extensions", label: "Extensões", icon: Puzzle },
-              { id: "feature_flags", label: "Feature Flags", icon: Sliders },
-              { id: "lovable_cloud", label: "Lovable Cloud", icon: CloudLightning },
-              { id: "wl_plans", label: "Planos WL", icon: Package },
-              { id: "wl_affiliates", label: "Afiliados WL", icon: UserPlus },
-              { id: "wl_subs", label: "Assinaturas WL", icon: FileText },
-              { id: "finances", label: "Faturamento", icon: BarChart3 },
-              { id: "commissions", label: "Comissões", icon: BarChart3 },
-              { id: "wallets", label: "Wallets", icon: Wallet },
-              { id: "ledger", label: "Ledger", icon: BookOpen },
-              { id: "api_keys", label: "API Keys", icon: Key },
-              { id: "operations", label: "Operações", icon: Shield },
-            ] as const).map(t => (
-              <button
-                key={t.id}
-                onClick={() => setSearchParams({ tab: t.id })}
-                className={`lv-btn-secondary h-9 px-4 text-xs flex items-center gap-2 ${tab === t.id ? "lv-btn-primary" : ""}`}
-              >
-                <t.icon className="h-3.5 w-3.5" /> {t.label}
-              </button>
-            ))}
-          </div>
+          {/* Tab navigation moved to sidebar */}
 
           {/* ─── PLANS TAB ─── */}
           {tab === "plans" && (
