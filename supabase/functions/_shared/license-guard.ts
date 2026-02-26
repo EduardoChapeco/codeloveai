@@ -3,6 +3,7 @@
 // Admin master users bypass ALL limits
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { revokeTokenEverywhere } from "./token-revocation.ts";
 
 export interface LicenseGuardResult {
   allowed: boolean;
@@ -46,7 +47,7 @@ export async function guardLicense(
   // Find license
   const { data: license } = await adminClient
     .from("licenses")
-    .select("id, user_id, tenant_id, type, status, active, plan, plan_id, daily_messages, hourly_limit, messages_used_today, messages_used_month, last_reset_at, token_valid_until, trial_expires_at, expires_at")
+    .select("id, key, user_id, tenant_id, type, status, active, plan, plan_id, device_id, daily_messages, hourly_limit, messages_used_today, messages_used_month, last_reset_at, token_valid_until, trial_expires_at, expires_at")
     .eq("key", licenseKey)
     .eq("active", true)
     .maybeSingle();
@@ -65,19 +66,19 @@ export async function guardLicense(
 
   // Check general expiry
   if (license.expires_at && new Date(license.expires_at) < now) {
-    await deactivateLicense(adminClient, license.id, "expired");
+    await deactivateLicense(adminClient, license.id, "expired", license.key);
     return { allowed: false, error: "Licença expirada." };
   }
 
   // Check trial expiry
   if (license.type === "trial" && license.trial_expires_at && new Date(license.trial_expires_at) < now) {
-    await deactivateLicense(adminClient, license.id, "expired");
+    await deactivateLicense(adminClient, license.id, "expired", license.key);
     return { allowed: false, error: "Período de teste expirado." };
   }
 
   // Check daily token expiry
   if (license.type === "daily_token" && license.token_valid_until && new Date(license.token_valid_until) < now) {
-    await deactivateLicense(adminClient, license.id, "expired");
+    await deactivateLicense(adminClient, license.id, "expired", license.key);
     return { allowed: false, error: "Token expirado. Renove para continuar." };
   }
 
@@ -119,12 +120,17 @@ export async function guardLicense(
 async function deactivateLicense(
   adminClient: SupabaseClient,
   licenseId: string,
-  status: string
+  status: string,
+  token?: string
 ): Promise<void> {
   await adminClient
     .from("licenses")
     .update({ active: false, status })
     .eq("id", licenseId);
+
+  if (token && token.startsWith("CLF1.")) {
+    revokeTokenEverywhere(token).then(() => {}).catch(() => {});
+  }
 }
 
 /**

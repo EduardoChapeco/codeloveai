@@ -205,27 +205,39 @@ async function validateLicense(licenseKey) {
   try {
     const hwid = await getDeviceId();
 
-    const res = await fetch(`${baseUrl}/validate-hwid`, {
+    const res = await fetch(`${baseUrl}/validate-plan`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ licenseKey, hwid }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-clf-token": licenseKey,
+        "x-clf-hwid": hwid,
+      },
+      body: JSON.stringify({}),
     });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return { valid: false, error: data.error || `Status ${res.status}` };
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.ok) {
+      await chrome.storage.local.remove([
+        "clf_token",
+        "license_validated",
+        "license_validated_at",
+        "lovable_api_token",
+        "lovable_refresh_token",
+        "lovable_token_history",
+      ]);
+      return { valid: false, error: data.error || `Status ${res.status}`, purgeToken: true };
     }
 
-    const data = await res.json();
-    if (data.valid) {
-      chrome.storage.local.set({
-        license_validated: true,
-        license_validated_at: new Date().toISOString(),
-      });
-    }
-    return data;
+    chrome.storage.local.set({
+      license_validated: true,
+      license_validated_at: new Date().toISOString(),
+    });
+
+    return { valid: true, ...data };
   } catch (e) {
-    return { valid: false, error: e.message };
+    await chrome.storage.local.remove(["clf_token", "license_validated", "license_validated_at"]);
+    return { valid: false, error: e.message, purgeToken: true };
   }
 }
 

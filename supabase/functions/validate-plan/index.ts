@@ -1,9 +1,8 @@
-// Starble — validate-plan v2.0.0
-// DB-driven extension access, Labs restricted to tenant owners, device binding enforced
+// Starble — validate-plan v2.1.0
+// DB-driven validation only (no external worker trust), strict revocation, device binding enforced
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const WORKER_URL = "https://codelove-fix-api.eusoueduoficial.workers.dev";
+import { guardLicense } from "../_shared/license-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin":  "*",
@@ -18,7 +17,7 @@ Deno.serve(async (req: Request) => {
   const hwid = req.headers.get("x-clf-hwid") || "";
 
   if (!clfToken.startsWith("CLF1.")) {
-    return new Response(JSON.stringify({ ok: false, error: "Token inválido." }), {
+    return new Response(JSON.stringify({ ok: false, purgeToken: true, error: "Token inválido." }), {
       status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -28,40 +27,23 @@ Deno.serve(async (req: Request) => {
   const sb = createClient(sbUrl, sbKey);
 
   try {
-    // Validate CLF token against worker
-    const res = await fetch(WORKER_URL + "/validate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: clfToken }),
-    });
-    const data = await res.json();
-    if (!data.valid) {
-      return new Response(JSON.stringify({ ok: false, error: "Licença inválida ou expirada." }), {
+    // Strict DB guard (includes expiry checks + auto-deactivation)
+    const guard = await guardLicense(sb, clfToken);
+    if (!guard.allowed) {
+      return new Response(JSON.stringify({ ok: false, purgeToken: true, error: guard.error || "Licença inválida ou expirada." }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Find license in DB
-    const { data: license } = await sb
-      .from("licenses")
-      .select("id, user_id, plan_id, device_id, plan")
-      .eq("key", clfToken)
-      .eq("active", true)
-      .maybeSingle();
-
-    if (!license) {
-      return new Response(JSON.stringify({ ok: false, error: "Licença não encontrada." }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const license = (guard.license || {}) as any;
 
     // ── Device binding ──
     if (hwid) {
       if (!license.device_id) {
-        // First use: bind device
         await sb.from("licenses").update({ device_id: hwid }).eq("id", license.id);
+        license.device_id = hwid;
       } else if (license.device_id !== hwid) {
-        return new Response(JSON.stringify({ ok: false, error: "Dispositivo não autorizado. Esta licença está vinculada a outro computador." }), {
+        return new Response(JSON.stringify({ ok: false, purgeToken: true, error: "Dispositivo não autorizado. Esta licença está vinculada a outro computador." }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -94,8 +76,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (!tenantUser) {
-        // Remove labs from allowed extensions for non-tenant-owners
-        allowedExtensions = allowedExtensions.filter(e => e !== "labs");
+        allowedExtensions = allowedExtensions.filter((e) => e !== "labs");
       }
     }
 
@@ -106,7 +87,14 @@ Deno.serve(async (req: Request) => {
       if (planRow) maxProjects = planRow.max_projects;
     }
 
-    const plan = (license.plan || data.plan || "free").toLowerCase();
+    // Profile identity
+    const { data: profile } = await sb
+      .from("profiles")
+      .select("name, email")
+      .eq("user_id", license.user_id)
+      .maybeSingle();
+
+    const plan = (license.plan || "free").toLowerCase();
 
     return new Response(
       JSON.stringify({
@@ -114,18 +102,19 @@ Deno.serve(async (req: Request) => {
         plan,
         allowedExtensions,
         maxProjects,
-        name: data.name || data.n || null,
-        email: data.email || data.e || null,
-        exp: data.exp || null,
-        tenant: data.tenant || null,
-        branding: data.branding || null,
+        name: profile?.name || null,
+        email: profile?.email || null,
+        exp: license.expires_at ? new Date(license.expires_at).getTime() : null,
+        tenant: license.tenant_id || null,
         deviceBound: !!license.device_id || !!hwid,
+        dailyMessages: guard.dailyLimit ?? null,
+        usedToday: guard.usedToday ?? 0,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("validate-plan error:", err);
-    return new Response(JSON.stringify({ ok: false, error: "Erro de conexão." }), {
+    return new Response(JSON.stringify({ ok: false, purgeToken: true, error: "Erro de conexão." }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

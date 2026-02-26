@@ -40,28 +40,43 @@ function decodeCLF1(licenseKey) {
 async function validateLicense(licenseKey) {
   try {
     const hwid = await getDeviceId();
-    const res = await fetch(`${SB}/validate-hwid`, {
+    const res = await fetch(`${SB}/validate-plan`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ licenseKey, hwid }),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-clf-token': licenseKey,
+        'x-clf-hwid': hwid,
+      },
+      body: JSON.stringify({}),
     });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return { valid: false, error: data.error || `Status ${res.status}` };
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.ok) {
+      await chrome.storage.local.remove([
+        'spd_license',
+        'spd_cache',
+        'spd_branding',
+        'spd_plan',
+        'spd_allowed',
+        'license_validated',
+        'license_validated_at',
+      ]);
+      return { valid: false, error: data.error || `Status ${res.status}`, purgeToken: true };
     }
-    const data = await res.json();
-    if (data.valid) {
-      await chrome.storage.local.set({
-        spd_cache: {
-          valid: true,
-          data,
-          ts: Date.now(),
-        },
-      });
-    }
-    return data;
+
+    await chrome.storage.local.set({
+      spd_cache: {
+        valid: true,
+        data,
+        ts: Date.now(),
+      },
+    });
+
+    return { valid: true, ...data };
   } catch (e) {
-    return { valid: false, error: e.message };
+    await chrome.storage.local.remove(['spd_license', 'spd_cache', 'license_validated', 'license_validated_at']);
+    return { valid: false, error: e.message, purgeToken: true };
   }
 }
 

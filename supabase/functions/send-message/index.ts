@@ -3,10 +3,10 @@
 // v2.2.0: Added JWT auth for web editor + auto-fetch lovable token from DB
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { guardLicense } from "../_shared/license-guard.ts";
 
 const GIT_SHA      = "9810ecd6b501b23b14c5d4ee731d8cda244d003b";
 const LOVABLE_API  = "https://api.lovable.dev";
-const WORKER_URL   = "https://codelove-fix-api.eusoueduoficial.workers.dev";
 
 function uuid4(): string {
   return crypto.randomUUID();
@@ -35,6 +35,10 @@ interface ValidateResult {
   error?: string;
   plan?: string;
   licenseData?: Record<string, unknown>;
+  licenseId?: string;
+  userId?: string;
+  isAdmin?: boolean;
+  purgeToken?: boolean;
 }
 
 interface AuthResult {
@@ -44,34 +48,40 @@ interface AuthResult {
   userId?: string;
   licenseId?: string;
   authMethod: "clf" | "jwt";
+  purgeToken?: boolean;
 }
 
 async function validateCLFToken(
   token: string,
-  extensionRequested: string
+  adminClient: any
 ): Promise<ValidateResult> {
   if (!token?.startsWith("CLF1.")) {
-    return { ok: false, error: "Token inválido. Use uma licença CLF1." };
+    return { ok: false, error: "Token inválido. Use uma licença CLF1.", purgeToken: true };
   }
+
   try {
-    const res = await fetch(WORKER_URL + "/validate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    if (res.status === 401) return { ok: false, error: "Licença expirada ou revogada." };
-    if (!res.ok) return { ok: false, error: "Erro ao validar licença." };
+    const guard = await guardLicense(adminClient, token);
 
-    const data = await res.json();
-    if (!data.valid) return { ok: false, error: "Licença inválida." };
+    if (!guard.allowed) {
+      return {
+        ok: false,
+        error: guard.error || "Licença inválida ou expirada.",
+        purgeToken: true,
+      };
+    }
 
-    const plan: string = (data.plan || data.plan_type || "free").toLowerCase();
-
-    // Extension access is validated later against DB (plan_extensions).
-    // CLF token validation only checks license validity here.
-    return { ok: true, plan, licenseData: data };
+    const lic = (guard.license || {}) as any;
+    return {
+      ok: true,
+      plan: (lic.plan || "free").toLowerCase(),
+      licenseData: lic,
+      licenseId: lic.id,
+      userId: lic.user_id,
+      isAdmin: !!guard.isAdmin,
+      purgeToken: false,
+    };
   } catch {
-    return { ok: false, error: "Erro de conexão ao validar licença." };
+    return { ok: false, error: "Erro de conexão ao validar licença.", purgeToken: true };
   }
 }
 
@@ -81,33 +91,42 @@ async function authenticateRequest(
   supabaseUrl: string
 ): Promise<AuthResult> {
   const clfToken = req.headers.get("x-clf-token") || "";
-  const extensionId = req.headers.get("x-clf-extension") || "speed";
 
   // Method 1: CLF1 license token (Chrome extension)
   if (clfToken.startsWith("CLF1.")) {
-    const auth = await validateCLFToken(clfToken, extensionId);
-    if (!auth.ok) return { ok: false, error: auth.error, plan: auth.plan, authMethod: "clf" };
+    const auth = await validateCLFToken(clfToken, adminClient);
+    if (!auth.ok) {
+      return {
+        ok: false,
+        error: auth.error,
+        plan: auth.plan,
+        authMethod: "clf",
+        purgeToken: auth.purgeToken,
+      };
+    }
 
-    const { data: licenseRow } = await adminClient
-      .from("licenses")
-      .select("id, user_id, plan_id")
-      .eq("key", clfToken)
-      .eq("active", true)
-      .maybeSingle();
+    if (!auth.licenseId || !auth.userId) {
+      return {
+        ok: false,
+        error: "Licença não encontrada ou inativa.",
+        authMethod: "clf",
+        purgeToken: true,
+      };
+    }
 
     return {
       ok: true,
       plan: auth.plan,
-      userId: licenseRow?.user_id,
-      licenseId: licenseRow?.id,
+      userId: auth.userId,
+      licenseId: auth.licenseId,
       authMethod: "clf",
+      purgeToken: false,
     };
   }
 
   // Method 2: JWT auth (web editor)
   const authHeader = req.headers.get("authorization") || "";
   if (authHeader.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -130,16 +149,20 @@ async function authenticateRequest(
       .limit(1)
       .maybeSingle();
 
+    if (!licenseRow?.id) {
+      return { ok: false, error: "Licença ativa não encontrada.", authMethod: "jwt" };
+    }
+
     return {
       ok: true,
-      plan: licenseRow?.plan?.toLowerCase() || "free",
+      plan: licenseRow.plan?.toLowerCase() || "free",
       userId,
-      licenseId: licenseRow?.id,
+      licenseId: licenseRow.id,
       authMethod: "jwt",
     };
   }
 
-  return { ok: false, error: "Autenticação necessária (CLF1 ou JWT).", authMethod: "clf" };
+  return { ok: false, error: "Autenticação necessária (CLF1 ou JWT).", authMethod: "clf", purgeToken: true };
 }
 
 Deno.serve(async (req: Request) => {
@@ -154,7 +177,7 @@ Deno.serve(async (req: Request) => {
 
   const auth = await authenticateRequest(req, adminClient, supabaseUrl);
   if (!auth.ok) {
-    return new Response(JSON.stringify({ error: auth.error, plan: auth.plan }), {
+    return new Response(JSON.stringify({ error: auth.error, plan: auth.plan, purgeToken: !!auth.purgeToken }), {
       status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
