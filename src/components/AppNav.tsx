@@ -43,15 +43,14 @@ export default function AppNav() {
     >
       {/* ── Brand ── */}
       <Link to="/" className="flex items-center gap-2.5 shrink-0 select-none">
-        <div
-          className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center text-primary-foreground text-[12px] font-black shrink-0 bg-primary shadow-md"
-        >
-          {brandName.substring(0, 1)}
-        </div>
-        <span
-          className="text-[13px] font-bold text-foreground hidden sm:inline"
-          style={{ letterSpacing: "-0.02em" }}
-        >
+        {tenant?.logo_url ? (
+          <img src={tenant.logo_url} alt="" className="w-[30px] h-[30px] rounded-[9px] object-cover shrink-0 shadow-md" />
+        ) : (
+          <div className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center text-primary-foreground text-[12px] font-black shrink-0 bg-primary shadow-md">
+            {brandName.substring(0, 1)}
+          </div>
+        )}
+        <span className="text-[13px] font-bold text-foreground hidden sm:inline" style={{ letterSpacing: "-0.02em" }}>
           {brandName}
         </span>
       </Link>

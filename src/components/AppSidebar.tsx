@@ -223,7 +223,8 @@ function AdminContextualSidebar({
   const { toggleSupport, isOpen: isSupportOpen, unreadCount } = useSupportChat();
   const { state: sidebarState, toggleSidebar } = useSidebar();
   const collapsed = sidebarState === "collapsed";
-  const brandName = "Starble";
+  const { tenant } = useTenant();
+  const brandName = tenant?.name || "Starble";
 
   return (
     <Sidebar collapsible="icon" className="clf-glass-sidebar">
@@ -327,8 +328,9 @@ function AdminContextualSidebar({
 export default function AppSidebar() {
   const { user, signOut } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const brandName = "Starble";
-  const brandInitials = "SB";
+  const isDefaultTenant = !tenant || tenant.id === "a0000000-0000-0000-0000-000000000001";
+  const brandName = tenant?.name || "Starble";
+  const brandInitials = brandName.substring(0, 2).toUpperCase();
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
@@ -421,8 +423,8 @@ export default function AppSidebar() {
   ];
 
   const exploreItems = [
-    { to: "/afiliados", label: "Programa de Afiliados", icon: Users, desc: "Ganhe comissões" },
-    { to: "/whitelabel", label: "White Label", icon: Globe, desc: "Sua marca" },
+    ...(isDefaultTenant ? [{ to: "/afiliados", label: "Programa de Afiliados", icon: Users, desc: "Ganhe comissões" }] : []),
+    ...(isDefaultTenant ? [{ to: "/whitelabel", label: "White Label", icon: Globe, desc: "Sua marca" }] : []),
     { to: "/parceiros", label: "Parceiros", icon: Handshake, desc: "Parcerias" },
   ];
 
@@ -477,8 +479,12 @@ export default function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip={brandName}>
-              <NavLink to="/dashboard" className="font-semibold">
-                <span className="text-[13px] font-bold">{brandInitials}</span>
+              <NavLink to="/dashboard" className="font-semibold flex items-center gap-2">
+                {tenant?.logo_url ? (
+                  <img src={tenant.logo_url} alt="" className="h-5 w-5 rounded object-cover shrink-0" />
+                ) : (
+                  <span className="text-[13px] font-bold">{brandInitials}</span>
+                )}
                 <span>{brandName}</span>
               </NavLink>
             </SidebarMenuButton>

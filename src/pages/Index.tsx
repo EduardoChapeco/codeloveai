@@ -39,12 +39,12 @@ const plans = [
 ];
 
 const faqs = [
-  { q: "Como funciona a extensão?", a: "Após criar sua conta, você recebe automaticamente acesso à extensão e um token de ativação. Instale a extensão no navegador, ative com o token e comece a usar imediatamente." },
-  { q: "Meus créditos do Lovable são descontados?", a: "Não. Nossa extensão utiliza um método próprio de comunicação. Nenhum crédito da sua conta Lovable é utilizado." },
-  { q: "É realmente gratuito?", a: "Sim! O plano grátis inclui 10 mensagens por dia sem custo algum. Basta criar uma conta." },
-  { q: "Posso ter minha conta bloqueada?", a: "Existe o risco de bloqueio, suspensão ou exclusão da sua conta Lovable a qualquer momento. A utilização da extensão é de sua total responsabilidade." },
-  { q: "O que é o White Label?", a: "Com o White Label você cria sua própria plataforma com sua marca, cores, logo e domínio. Ideal para agências e revendedores." },
-  { q: "Como funciona o programa de afiliados?", a: "Ao se tornar afiliado, você recebe um link único. Cada pessoa que assinar um plano através do seu link gera 30% de comissão recorrente para você." },
+  { q: "Como funciona a extensão?", a: "Após criar sua conta, você recebe automaticamente acesso à extensão e um token de ativação. Instale a extensão no navegador, ative com o token e comece a usar imediatamente.", wlOnly: false },
+  { q: "Meus créditos do Lovable são descontados?", a: "Não. Nossa extensão utiliza um método próprio de comunicação. Nenhum crédito da sua conta Lovable é utilizado.", wlOnly: false },
+  { q: "É realmente gratuito?", a: "Sim! O plano grátis inclui 10 mensagens por dia sem custo algum. Basta criar uma conta.", wlOnly: false },
+  { q: "Posso ter minha conta bloqueada?", a: "Existe o risco de bloqueio, suspensão ou exclusão da sua conta Lovable a qualquer momento. A utilização da extensão é de sua total responsabilidade.", wlOnly: false },
+  { q: "O que é o White Label?", a: "Com o White Label você cria sua própria plataforma com sua marca, cores, logo e domínio. Ideal para agências e revendedores.", wlOnly: true },
+  { q: "Como funciona o programa de afiliados?", a: "Ao se tornar afiliado, você recebe um link único. Cada pessoa que assinar um plano através do seu link gera 30% de comissão recorrente para você.", wlOnly: true },
 ];
 
 export default function Index() {
@@ -53,9 +53,21 @@ export default function Index() {
   const { tenant } = useTenant();
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get("_preview") === "1";
-  const brandName = isPreview ? (searchParams.get("name") || "Starble Ai") : "Starble Ai";
-  useSEO({ title: brandName, description: "A extensão que turbina o Lovable sem gastar seus créditos. Mensagens ilimitadas, White Label e programa de afiliados." });
+
+  // Dynamic brand: preview params > tenant context > default
+  const isDefaultTenant = !tenant || tenant.id === "a0000000-0000-0000-0000-000000000001";
+  const brandName = isPreview
+    ? (searchParams.get("name") || tenant?.name || "Starble Ai")
+    : (tenant?.name || "Starble Ai");
+  const brandLogo = isPreview
+    ? searchParams.get("logo") ? decodeURIComponent(searchParams.get("logo")!) : tenant?.logo_url
+    : tenant?.logo_url;
+
   const demoRef = useRef<HTMLDivElement>(null);
+  useSEO({
+    title: tenant?.meta_title || brandName,
+    description: tenant?.meta_description || "A extensão que turbina o Lovable sem gastar seus créditos. Mensagens ilimitadas, White Label e programa de afiliados.",
+  });
 
   // Apply theme overrides when in preview mode
   useEffect(() => {
@@ -112,13 +124,11 @@ export default function Index() {
 
   const scrollToDemo = () => demoRef.current?.scrollIntoView({ behavior: "smooth" });
 
-  const previewLogoUrl = isPreview ? searchParams.get("logo") : null;
-
   const guestNav = ((!authLoading && !user) || isPreview) ? (
     <nav className="sticky top-0 z-20 px-6 py-3 flex items-center justify-between">
       <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between w-full">
         <div className="flex items-center gap-2">
-          {previewLogoUrl && <img src={decodeURIComponent(previewLogoUrl)} alt="" className="h-6 w-6 object-contain rounded-md" />}
+          {brandLogo && <img src={brandLogo} alt="" className="h-6 w-6 object-contain rounded-md" />}
           <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
         </div>
         <div className="flex items-center gap-2">
@@ -142,10 +152,16 @@ export default function Index() {
           <span className="text-sm font-medium text-primary">10 mensagens grátis por dia</span>
         </div>
         <h1 className="lv-heading-xl mb-6">
-          A extensão que turbina o Lovable<br />sem gastar seus créditos
+          {isDefaultTenant
+            ? <>A extensão que turbina o Lovable<br />sem gastar seus créditos</>
+            : <>Sua plataforma de IA.<br />Turbinada por {brandName}.</>
+          }
         </h1>
         <p className="lv-body-lg text-base max-w-2xl mx-auto mb-10">
-          Envie mensagens ilimitadas, gerencie projetos e automatize tarefas — tudo sem consumir tokens do Lovable.
+          {isDefaultTenant
+            ? "Envie mensagens ilimitadas, gerencie projetos e automatize tarefas — tudo sem consumir tokens do Lovable."
+            : `Envie mensagens ilimitadas, gerencie projetos e automatize tarefas com ${brandName}.`
+          }
         </p>
         <div className="flex items-center justify-center gap-3 flex-wrap">
           <Link to="/register" className="lv-btn-primary lv-btn-lg">Começar Grátis</Link>
@@ -229,7 +245,8 @@ export default function Index() {
         </div>
       </section>
 
-      {/* ━━━ WHITE LABEL ━━━ */}
+      {/* ━━━ WHITE LABEL (only for default tenant) ━━━ */}
+      {isDefaultTenant && (
       <section className="px-6 pb-24 max-w-4xl mx-auto">
         <div className="lv-card p-8 md:p-12 text-center">
           <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
@@ -237,7 +254,7 @@ export default function Index() {
           </div>
           <h2 className="lv-heading-lg mb-4">Tenha sua própria plataforma com sua marca</h2>
           <p className="lv-body-lg max-w-xl mx-auto mb-4">
-            Sua logo, suas cores, seu domínio, seus preços. Revenda a extensão Starble com branding personalizado.
+            Sua logo, suas cores, seu domínio, seus preços. Revenda a extensão com branding personalizado.
           </p>
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             {["Sua logo e cores", "Domínio personalizado", "Painel de gestão", "Comissões automáticas"].map((f) => (
@@ -252,8 +269,10 @@ export default function Index() {
           </Link>
         </div>
       </section>
+      )}
 
-      {/* ━━━ AFFILIATES ━━━ */}
+      {/* ━━━ AFFILIATES (only for default tenant) ━━━ */}
+      {isDefaultTenant && (
       <section className="px-6 pb-24 max-w-4xl mx-auto">
         <div className="lv-card p-8 md:p-12 text-center">
           <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
@@ -268,13 +287,14 @@ export default function Index() {
           </Link>
         </div>
       </section>
+      )}
 
       {/* ━━━ FAQ ━━━ */}
       <section className="px-6 pb-24 max-w-2xl mx-auto">
         <p className="lv-overline text-center mb-3">Dúvidas frequentes</p>
         <h2 className="lv-heading-lg text-center mb-10">FAQ</h2>
         <div className="space-y-2">
-          {faqs.map((faq, i) => (
+          {faqs.filter(faq => isDefaultTenant || !faq.wlOnly).map((faq, i) => (
             <div key={i} className="lv-card-sm cursor-pointer" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
               <div className="flex items-center justify-between">
                 <span className="lv-body-strong">{faq.q}</span>
@@ -292,9 +312,8 @@ export default function Index() {
           <p className="lv-caption">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
           <div className="flex items-center gap-4">
             <Link to="/community" className="lv-caption hover:text-foreground transition-colors">Comunidade</Link>
-            <Link to="/afiliados" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>
-            <Link to="/whitelabel" className="lv-caption hover:text-foreground transition-colors">White Label</Link>
-            <Link to="/faq" className="lv-caption hover:text-foreground transition-colors">FAQ</Link>
+            {isDefaultTenant && <Link to="/afiliados" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>}
+            {isDefaultTenant && <Link to="/whitelabel" className="lv-caption hover:text-foreground transition-colors">White Label</Link>}
             <Link to="/termos" className="lv-caption hover:text-foreground transition-colors">Termos</Link>
             <Link to="/ajuda" className="lv-caption hover:text-foreground transition-colors">Ajuda</Link>
             <Link to="/suporte" className="lv-caption hover:text-foreground transition-colors">Suporte</Link>
