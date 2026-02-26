@@ -1506,6 +1506,7 @@ export type Database = {
       extension_files: {
         Row: {
           created_at: string
+          extension_id: string | null
           file_url: string
           id: string
           instructions: string
@@ -1516,6 +1517,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          extension_id?: string | null
           file_url: string
           id?: string
           instructions?: string
@@ -1526,6 +1528,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          extension_id?: string | null
           file_url?: string
           id?: string
           instructions?: string
@@ -1535,6 +1538,13 @@ export type Database = {
           version?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "extension_files_extension_id_fkey"
+            columns: ["extension_id"]
+            isOneToOne: false
+            referencedRelation: "extension_catalog"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "extension_files_tenant_id_fkey"
             columns: ["tenant_id"]
