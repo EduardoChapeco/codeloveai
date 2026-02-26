@@ -84,8 +84,10 @@ export default function TermsOfUse() {
           <section>
             <h2 className="lv-heading-sm mb-3">6. Créditos Lovable</h2>
             <p className="lv-body leading-relaxed">
-              Não utilizamos créditos da conta Lovable. Todos os projetos, mensagens e planos criados/enviados através da extensão
-              não descontam créditos da sua conta Lovable.
+              O sistema Starble utiliza métodos otimizados para minimizar o consumo de créditos da sua conta Lovable.
+              No entanto, <strong>algumas mensagens e funcionalidades podem gerar cobrança de créditos no Lovable</strong>,
+              especialmente durante a fase beta das extensões. O Starble não se responsabiliza por créditos consumidos
+              na plataforma Lovable em decorrência do uso das extensões.
             </p>
           </section>
 

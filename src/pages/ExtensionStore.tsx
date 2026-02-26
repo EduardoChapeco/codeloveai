@@ -33,10 +33,12 @@ const tierLabels: Record<string, string> = {
   free: "Grátis",
   pro: "Pro",
   enterprise: "Enterprise",
+  white_label_only: "White Label",
 };
 
 const tierColors: Record<string, string> = {
   free: "bg-green-500/10 text-green-600",
+  white_label_only: "bg-amber-500/10 text-amber-600",
   pro: "bg-primary/10 text-primary",
   enterprise: "bg-amber-500/10 text-amber-600",
 };
