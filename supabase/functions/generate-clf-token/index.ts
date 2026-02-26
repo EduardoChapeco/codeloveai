@@ -29,14 +29,8 @@ async function hmacSign(payload: string, secret: string): Promise<string> {
   return base64url(new Uint8Array(sig));
 }
 
-// Plan config — server-side only, never trust client
-const PLAN_DEFAULTS: Record<string, { expiresMs: number; dailyMessages: number | null; type: string }> = {
-  speed:   { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: 50,   type: "monthly" },
-  booster: { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: 100,  type: "monthly" },
-  labs:    { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: null,  type: "monthly" },
-  pro:     { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: null,  type: "monthly" },
-  admin:   { expiresMs: 365 * 24 * 60 * 60 * 1000, dailyMessages: null,  type: "custom" },
-};
+// Admin master: unlimited, expires 2099
+const ADMIN_MASTER_EXPIRES_MS = (2099 - new Date().getFullYear()) * 365.25 * 24 * 60 * 60 * 1000;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -71,7 +65,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validate user JWT
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -88,14 +81,16 @@ Deno.serve(async (req) => {
     const userId = claimsData.claims.sub as string;
     const userEmail = claimsData.claims.email as string;
 
-    // Use service role client for DB operations
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // ── SERVER-SIDE PLAN RESOLUTION ──
-    // NEVER trust client-provided plan. Only paid plans or admin get tokens.
+    // ── Resolve plan from DB (never trust client) ──
     let resolvedPlan: string | null = null;
+    let resolvedPlanId: string | null = null;
+    let dailyMessages: number | null = null;
+    let expiresMs: number = 30 * 24 * 60 * 60 * 1000; // default 30d
+    let licenseType = "monthly";
 
-    // 0. Check if user is a global admin
+    // 0. Check if user is global admin
     const { data: adminRole } = await adminClient
       .from("user_roles")
       .select("role")
@@ -105,9 +100,12 @@ Deno.serve(async (req) => {
 
     if (adminRole) {
       resolvedPlan = "admin";
+      dailyMessages = null; // unlimited
+      expiresMs = ADMIN_MASTER_EXPIRES_MS;
+      licenseType = "custom";
     }
 
-    // 1. Check if user is a tenant_owner (White Label owner gets admin-level access)
+    // 1. Check if user is tenant_owner
     if (!resolvedPlan) {
       const { data: tenantOwner } = await adminClient
         .from("tenant_users")
@@ -119,14 +117,17 @@ Deno.serve(async (req) => {
 
       if (tenantOwner) {
         resolvedPlan = "admin";
+        dailyMessages = null;
+        expiresMs = ADMIN_MASTER_EXPIRES_MS;
+        licenseType = "custom";
       }
     }
 
-    // 2. Check if user has an active paid subscription
+    // 2. Check active paid subscription → resolve plan from DB
     if (!resolvedPlan) {
       const { data: activeSub } = await adminClient
         .from("subscriptions")
-        .select("plan, status, expires_at")
+        .select("plan, status, expires_at, plan_id")
         .eq("user_id", userId)
         .eq("status", "active")
         .order("created_at", { ascending: false })
@@ -135,16 +136,32 @@ Deno.serve(async (req) => {
 
       if (activeSub && activeSub.plan) {
         const subPlan = (activeSub.plan as string).toLowerCase();
-        if (["speed", "booster", "labs", "pro"].includes(subPlan)) {
-          // Check not expired
-          if (!activeSub.expires_at || new Date(activeSub.expires_at) > new Date()) {
-            resolvedPlan = subPlan;
+        const notExpired = !activeSub.expires_at || new Date(activeSub.expires_at) > new Date();
+
+        if (notExpired && ["speed", "booster", "labs", "pro"].includes(subPlan)) {
+          resolvedPlan = subPlan;
+
+          // Pull limits from plans table (single source of truth)
+          if (activeSub.plan_id) {
+            const { data: planRow } = await adminClient
+              .from("plans")
+              .select("id, daily_message_limit, billing_cycle")
+              .eq("id", activeSub.plan_id)
+              .eq("is_active", true)
+              .maybeSingle();
+            if (planRow) {
+              resolvedPlanId = planRow.id;
+              dailyMessages = planRow.daily_message_limit; // null = unlimited
+              const cycle = (planRow.billing_cycle || "monthly").toLowerCase();
+              expiresMs = cycle === "yearly" ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+              licenseType = "monthly";
+            }
           }
         }
       }
     }
 
-    // 3. Check if user has an active license with a valid plan_id (tenant-generated)
+    // 3. Check existing active license with plan_id (tenant-generated)
     if (!resolvedPlan) {
       const { data: existingLicense } = await adminClient
         .from("licenses")
@@ -156,19 +173,24 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existingLicense && existingLicense.plan_id) {
-        const { data: planData } = await adminClient
-          .from("plans")
-          .select("name, daily_message_limit")
-          .eq("id", existingLicense.plan_id)
-          .eq("is_active", true)
-          .maybeSingle();
+        const notExpired = !existingLicense.expires_at || new Date(existingLicense.expires_at) > new Date();
+        if (notExpired) {
+          const { data: planRow } = await adminClient
+            .from("plans")
+            .select("id, name, daily_message_limit, billing_cycle")
+            .eq("id", existingLicense.plan_id)
+            .eq("is_active", true)
+            .maybeSingle();
 
-        if (planData) {
-          const planName = (planData.name as string).toLowerCase();
-          if (["speed", "booster", "labs", "pro"].includes(planName)) {
-            // Check not expired
-            if (!existingLicense.expires_at || new Date(existingLicense.expires_at) > new Date()) {
+          if (planRow) {
+            const planName = (planRow.name as string).toLowerCase();
+            if (["speed", "booster", "labs", "pro"].includes(planName)) {
               resolvedPlan = planName;
+              resolvedPlanId = planRow.id;
+              dailyMessages = planRow.daily_message_limit;
+              const cycle = (planRow.billing_cycle || "monthly").toLowerCase();
+              expiresMs = cycle === "yearly" ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+              licenseType = existingLicense.type || "monthly";
             }
           }
         }
@@ -176,12 +198,11 @@ Deno.serve(async (req) => {
     }
 
     // ── NO PLAN = NO TOKEN ──
-    // Free/trial users CANNOT generate CLF1 tokens. They must purchase a plan first.
     if (!resolvedPlan) {
       return new Response(
         JSON.stringify({
           error: "no_active_plan",
-          message: "Você precisa de um plano ativo para gerar um token. Acesse a página de planos para adquirir.",
+          message: "Você precisa de um plano ativo para gerar um token. Acesse a página de planos.",
         }),
         {
           status: 403,
@@ -190,9 +211,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const planConfig = PLAN_DEFAULTS[resolvedPlan] || PLAN_DEFAULTS.speed;
-
-    // Verify user exists in profiles
+    // Verify profile exists
     const { data: profile, error: profileError } = await adminClient
       .from("profiles")
       .select("user_id, email, name")
@@ -215,12 +234,12 @@ Deno.serve(async (req) => {
 
     // Build CLF1 token
     const now = Date.now();
-    const exp = now + planConfig.expiresMs;
+    const exp = now + expiresMs;
     const payload = JSON.stringify({
       uid: userId,
       email: userEmail || profile.email,
       plan: resolvedPlan,
-      dailyMessages: planConfig.dailyMessages,
+      dailyMessages,
       exp,
       iat: now,
       v: 1,
@@ -232,14 +251,15 @@ Deno.serve(async (req) => {
 
     const expiresAt = new Date(exp).toISOString();
 
-    // Save to licenses table
+    // Save to licenses table with plan_id linkage
     const { error: insertError } = await adminClient.from("licenses").insert({
       key: clfToken,
       user_id: userId,
       plan: resolvedPlan,
+      plan_id: resolvedPlanId,
       plan_type: "messages",
-      type: planConfig.type,
-      daily_messages: planConfig.dailyMessages,
+      type: licenseType,
+      daily_messages: dailyMessages,
       expires_at: expiresAt,
       active: true,
       status: "active",
@@ -259,8 +279,8 @@ Deno.serve(async (req) => {
         token: clfToken,
         expires_at: expiresAt,
         plan: resolvedPlan,
-        dailyMessages: planConfig.dailyMessages,
-        type: planConfig.type,
+        dailyMessages,
+        type: licenseType,
         email: userEmail || profile.email,
         name: profile.name,
       }),
