@@ -10,16 +10,20 @@ import remarkGfm from "remark-gfm";
 import {
   Send, Loader2, ExternalLink, RefreshCw, BrainCircuit, X,
   Sparkles, Code2, Palette, Search, Copy, ArrowRight, Link2, AlertTriangle,
+  Shield, Bug, Wrench, Zap,
 } from "lucide-react";
 
 type BrainType = "design" | "code" | "scraper" | "custom";
+
+type ChatMode = "task" | "task_error" | "chat" | "security" | "build_error";
 
 interface ChatMessage {
   id: string;
   role: "user" | "ai";
   content: string;
   timestamp: string;
-  status?: "sending" | "sent" | "error";
+  status?: "sending" | "sent" | "error" | "processing";
+  mode?: ChatMode;
 }
 
 const brainModes: { id: BrainType; label: string; icon: typeof Sparkles }[] = [
@@ -27,6 +31,14 @@ const brainModes: { id: BrainType; label: string; icon: typeof Sparkles }[] = [
   { id: "code", label: "Code", icon: Code2 },
   { id: "scraper", label: "Scraper", icon: Search },
   { id: "custom", label: "Custom", icon: Sparkles },
+];
+
+const chatModes: { id: ChatMode; label: string; icon: typeof Zap; desc: string }[] = [
+  { id: "task", label: "Task", icon: Zap, desc: "Executa tarefa diretamente" },
+  { id: "task_error", label: "Fix Error", icon: Bug, desc: "Corrige erro específico" },
+  { id: "security", label: "Security", icon: Shield, desc: "Fix de segurança" },
+  { id: "chat", label: "Chat", icon: Send, desc: "Conversa livre" },
+  { id: "build_error", label: "Build Fix", icon: Wrench, desc: "Corrige erro de build" },
 ];
 
 export default function ProjectEditor() {
@@ -41,6 +53,7 @@ export default function ProjectEditor() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [projectName, setProjectName] = useState("");
+  const [chatMode, setChatMode] = useState<ChatMode>("task");
 
   // Star AI Modal
   const [showAiModal, setShowAiModal] = useState(false);
@@ -88,22 +101,14 @@ export default function ProjectEditor() {
     if (!id) return;
     setLoadingPreview(true);
     try {
-      try {
-        await invoke({ route: `/projects/${id}/sandbox/start`, method: "POST", payload: {} });
-      } catch { /* may already be running */ }
-
-      const data = await invoke<{ url: string }>({ route: `/projects/${id}/sandbox/url` });
-      if (data?.url) {
-        setSandboxUrl(data.url);
-      } else {
-        setSandboxUrl(`https://id-preview--${id}.lovable.app`);
-      }
+      // Use the standard preview URL directly - more reliable
+      setSandboxUrl(`https://id-preview--${id}.lovable.app`);
     } catch {
       setSandboxUrl(`https://id-preview--${id}.lovable.app`);
     } finally {
       setLoadingPreview(false);
     }
-  }, [id, invoke]);
+  }, [id]);
   loadSandboxUrlRef.current = loadSandboxUrl;
 
   const sendChatMessage = async () => {
@@ -120,30 +125,33 @@ export default function ProjectEditor() {
       content: userMsg,
       timestamp: new Date().toISOString(),
       status: "sending",
+      mode: chatMode,
     }]);
 
     try {
-      // Use lovable-proxy edge function (security_fix_v2, chat_only: false)
-      const { data: smData, error: smError } = await supabase.functions.invoke("lovable-proxy", {
+      // Use venus-chat edge function — resolves Lovable token automatically via JWT
+      const { data: venusData, error: venusError } = await supabase.functions.invoke("venus-chat", {
         body: {
           task: userMsg,
-          projectId: id,
+          project_id: id,
+          mode: chatMode,
         },
       });
 
-      if (smError || smData?.error) {
-        throw new Error(smData?.error || smError?.message || "Erro ao enviar mensagem");
+      if (venusError || !venusData?.ok) {
+        throw new Error(venusData?.error || venusError?.message || "Erro ao enviar mensagem");
       }
 
       setChatMessages(prev =>
         prev.map(m => m.id === tempId ? { ...m, status: "sent" } : m)
       );
 
+      const modeLabel = chatModes.find(m => m.id === chatMode)?.label || chatMode;
       const aiResponseId = crypto.randomUUID();
       setChatMessages(prev => [...prev, {
         id: aiResponseId,
         role: "ai",
-        content: "✅ Mensagem enviada via Security Fix. O Lovable está processando...",
+        content: `✅ Mensagem enviada via **${modeLabel}** (gratuito). O Lovable está processando...\n\n> Modo: \`${chatMode}\` | MsgID: \`${venusData.msgId?.slice(0, 8)}...\``,
         timestamp: new Date().toISOString(),
         status: "sent",
       }]);
@@ -153,14 +161,16 @@ export default function ProjectEditor() {
         await supabase.from("loveai_conversations").insert({
           user_id: user!.id,
           target_project_id: id,
-          brain_type: "code",
+          brain_type: chatMode,
           user_message: userMsg,
-          status: "completed",
+          status: "processing",
         });
       } catch { /* silent */ }
 
       // Reload preview after delay
-      setTimeout(() => iframeRef.current?.contentWindow?.location.reload(), 4000);
+      setTimeout(() => {
+        try { iframeRef.current?.contentWindow?.location.reload(); } catch { /* cross-origin */ }
+      }, 5000);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Erro ao enviar mensagem";
       setChatMessages(prev =>
@@ -183,14 +193,34 @@ export default function ProjectEditor() {
         body: { action: "send", message: aiPrompt, brain_type: brainType },
       });
 
-      if (error || data?.error) throw { message: data?.error || error?.message };
+      if (error || data?.error) throw new Error(data?.error || error?.message);
 
-      const { data: captureData } = await supabase.functions.invoke("brain", {
-        body: { action: "capture", conversation_id: data.conversation_id },
-      });
-
-      if (captureData?.response) {
-        setAiResponse(captureData.response);
+      if (data?.response) {
+        setAiResponse(data.response);
+      } else if (data?.conversation_id) {
+        // Poll for response via capture
+        toast.info("Star AI processando... aguarde.");
+        let attempts = 0;
+        const poll = setInterval(async () => {
+          attempts++;
+          if (attempts > 12) { // max 60s
+            clearInterval(poll);
+            toast.error("Star AI não respondeu a tempo. Use 'capture' para verificar.");
+            setAiLoading(false);
+            return;
+          }
+          try {
+            const { data: captureData } = await supabase.functions.invoke("brain", {
+              body: { action: "capture", conversation_id: data.conversation_id },
+            });
+            if (captureData?.response) {
+              clearInterval(poll);
+              setAiResponse(captureData.response);
+              setAiLoading(false);
+            }
+          } catch { /* retry */ }
+        }, 5000);
+        return; // don't set aiLoading false yet
       } else {
         toast.error("Star AI não respondeu a tempo.");
       }
@@ -230,11 +260,30 @@ export default function ProjectEditor() {
             </button>
           </div>
 
+          {/* Mode selector */}
+          <div className="flex gap-1 px-3 py-2 border-b border-border/40 overflow-x-auto">
+            {chatModes.map(m => (
+              <button
+                key={m.id}
+                onClick={() => setChatMode(m.id)}
+                title={m.desc}
+                className={`h-7 px-2.5 rounded-md text-[10px] font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
+                  chatMode === m.id
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/40 text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <m.icon className="h-3 w-3" /> {m.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {chatMessages.length === 0 && (
               <div className="text-center py-10 text-muted-foreground">
                 <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
                 <p className="text-xs">Envie instruções para editar o projeto</p>
+                <p className="text-[10px] mt-1 opacity-60">Todos os modos são gratuitos (security_fix_v2)</p>
               </div>
             )}
             {chatMessages.map(msg => (
@@ -242,7 +291,13 @@ export default function ProjectEditor() {
                 <div className={`max-w-[90%] rounded-xl px-3 py-2 text-xs ${
                   msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                 }`}>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.role === "ai" ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-xs">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
                   {msg.status === "sending" && <Loader2 className="h-3 w-3 animate-spin mt-1 opacity-60" />}
                   {msg.status === "error" && <span className="text-[10px] text-destructive">Erro ao enviar</span>}
                 </div>
@@ -252,16 +307,16 @@ export default function ProjectEditor() {
           </div>
 
           <div className="border-t border-border/60 p-3 shrink-0 space-y-2">
-            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-amber-500/8 border border-amber-500/15">
-              <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
-              <p className="text-[10px] text-amber-500/90 leading-tight">O Lovable pode cobrar créditos em alguns casos. Use com moderação.</p>
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-emerald-500/8 border border-emerald-500/15">
+              <Shield className="h-3 w-3 text-emerald-500 shrink-0" />
+              <p className="text-[10px] text-emerald-500/90 leading-tight">Modo gratuito via Venus API — sem custo de créditos.</p>
             </div>
             <div className="flex items-end gap-2">
               <textarea
                 value={message}
                 onChange={e => setMessage(e.target.value)}
                 onKeyDown={handleChatKeyDown}
-                placeholder="Enviar instrução ao projeto..."
+                placeholder={`Enviar instrução (${chatModes.find(m => m.id === chatMode)?.label})...`}
                 rows={1}
                 disabled={sending}
                 className="flex-1 min-h-[36px] max-h-[100px] py-2 px-3 resize-none text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -298,7 +353,14 @@ export default function ProjectEditor() {
               >
                 <Link2 className="h-3.5 w-3.5" />
               </button>
-              <button onClick={loadSandboxUrl} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted" title="Recarregar preview">
+              <button onClick={() => {
+                setSandboxUrl(null);
+                setLoadingPreview(true);
+                setTimeout(() => {
+                  setSandboxUrl(`https://id-preview--${id}.lovable.app`);
+                  setLoadingPreview(false);
+                }, 300);
+              }} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted" title="Recarregar preview">
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               {sandboxUrl && (
