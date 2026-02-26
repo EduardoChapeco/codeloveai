@@ -1,20 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useLovableProxy } from "@/hooks/useLovableProxy";
+import { useEditorUsage } from "@/hooks/useEditorUsage";
 import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
+import EditorStatusCard from "@/components/editor/EditorStatusCard";
+import EditorUsageBar from "@/components/editor/EditorUsageBar";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Send, Loader2, ExternalLink, RefreshCw, BrainCircuit, X,
-  Sparkles, Code2, Palette, Search, Copy, ArrowRight, Link2, AlertTriangle,
-  Shield, Bug, Wrench, Zap,
+  Send, Loader2, ExternalLink, RefreshCw, X,
+  Sparkles, Code2, Search, Link2,
+  Shield, Bug, Wrench, Zap, BrainCircuit, Copy, ArrowRight, Palette,
 } from "lucide-react";
 
 type BrainType = "design" | "code" | "scraper" | "custom";
-
 type ChatMode = "task" | "task_error" | "chat" | "security" | "build_error";
 
 interface ChatMessage {
@@ -26,13 +27,6 @@ interface ChatMessage {
   mode?: ChatMode;
 }
 
-const brainModes: { id: BrainType; label: string; icon: typeof Sparkles }[] = [
-  { id: "design", label: "Design", icon: Palette },
-  { id: "code", label: "Code", icon: Code2 },
-  { id: "scraper", label: "Scraper", icon: Search },
-  { id: "custom", label: "Custom", icon: Sparkles },
-];
-
 const chatModes: { id: ChatMode; label: string; icon: typeof Zap; desc: string }[] = [
   { id: "task", label: "Task", icon: Zap, desc: "Executa tarefa diretamente" },
   { id: "task_error", label: "Fix Error", icon: Bug, desc: "Corrige erro específico" },
@@ -41,11 +35,18 @@ const chatModes: { id: ChatMode; label: string; icon: typeof Zap; desc: string }
   { id: "build_error", label: "Build Fix", icon: Wrench, desc: "Corrige erro de build" },
 ];
 
+const brainModes: { id: BrainType; label: string; icon: typeof Sparkles }[] = [
+  { id: "design", label: "Design", icon: Palette },
+  { id: "code", label: "Code", icon: Code2 },
+  { id: "scraper", label: "Scraper", icon: Search },
+  { id: "custom", label: "Custom", icon: Sparkles },
+];
+
 export default function ProjectEditor() {
   const { id } = useParams<{ id: string }>();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const { invoke } = useLovableProxy();
+  const usage = useEditorUsage();
 
   const [sandboxUrl, setSandboxUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(true);
@@ -54,6 +55,7 @@ export default function ProjectEditor() {
   const [sending, setSending] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [chatMode, setChatMode] = useState<ChatMode>("task");
+  const [showStatusCard, setShowStatusCard] = useState(false);
 
   // Star AI Modal
   const [showAiModal, setShowAiModal] = useState(false);
@@ -69,15 +71,10 @@ export default function ProjectEditor() {
     if (!authLoading && !user) navigate("/login");
   }, [user, authLoading, navigate]);
 
-  const loadProjectRef = useRef<(() => void) | null>(null);
-  const loadSandboxUrlRef = useRef<(() => void) | null>(null);
-
   useEffect(() => {
     if (!id || !user) return;
-    setTimeout(() => {
-      loadProjectRef.current?.();
-      loadSandboxUrlRef.current?.();
-    }, 0);
+    loadProject();
+    loadSandboxUrl();
   }, [id, user]);
 
   useEffect(() => {
@@ -95,87 +92,80 @@ export default function ProjectEditor() {
       if (data) setProjectName(data.display_name || data.name || id || "");
     } catch { /* silent */ }
   }, [id]);
-  loadProjectRef.current = loadProject;
 
   const loadSandboxUrl = useCallback(async () => {
     if (!id) return;
     setLoadingPreview(true);
-    try {
-      // Use the standard preview URL directly - more reliable
-      setSandboxUrl(`https://id-preview--${id}.lovable.app`);
-    } catch {
-      setSandboxUrl(`https://id-preview--${id}.lovable.app`);
-    } finally {
-      setLoadingPreview(false);
-    }
+    setSandboxUrl(`https://id-preview--${id}.lovable.app`);
+    setLoadingPreview(false);
   }, [id]);
-  loadSandboxUrlRef.current = loadSandboxUrl;
+
+  const reloadPreview = useCallback(() => {
+    if (!id) return;
+    setSandboxUrl(null);
+    setLoadingPreview(true);
+    setTimeout(() => {
+      setSandboxUrl(`https://id-preview--${id}.lovable.app`);
+      setLoadingPreview(false);
+    }, 400);
+  }, [id]);
+
+  const handleStatusComplete = useCallback(() => {
+    setShowStatusCard(false);
+    // Auto-reload preview when AI finishes
+    reloadPreview();
+  }, [reloadPreview]);
 
   const sendChatMessage = async () => {
     if (!message.trim() || sending || !id) return;
 
+    if (!usage.canSend) {
+      toast.error("Limite de mensagens atingido. Faça upgrade para o plano Venus.");
+      return;
+    }
+
     const userMsg = message.trim();
     setMessage("");
     setSending(true);
+    setShowStatusCard(true);
 
     const tempId = crypto.randomUUID();
     setChatMessages(prev => [...prev, {
-      id: tempId,
-      role: "user",
-      content: userMsg,
-      timestamp: new Date().toISOString(),
-      status: "sending",
-      mode: chatMode,
+      id: tempId, role: "user", content: userMsg,
+      timestamp: new Date().toISOString(), status: "sending", mode: chatMode,
     }]);
 
     try {
-      // Use venus-chat edge function — resolves Lovable token automatically via JWT
       const { data: venusData, error: venusError } = await supabase.functions.invoke("venus-chat", {
-        body: {
-          task: userMsg,
-          project_id: id,
-          mode: chatMode,
-        },
+        body: { task: userMsg, project_id: id, mode: chatMode },
       });
 
       if (venusError || !venusData?.ok) {
         throw new Error(venusData?.error || venusError?.message || "Erro ao enviar mensagem");
       }
 
-      setChatMessages(prev =>
-        prev.map(m => m.id === tempId ? { ...m, status: "sent" } : m)
-      );
+      setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "sent" } : m));
+      usage.increment();
 
       const modeLabel = chatModes.find(m => m.id === chatMode)?.label || chatMode;
-      const aiResponseId = crypto.randomUUID();
       setChatMessages(prev => [...prev, {
-        id: aiResponseId,
-        role: "ai",
-        content: `✅ Mensagem enviada via **${modeLabel}** (gratuito). O Lovable está processando...\n\n> Modo: \`${chatMode}\` | MsgID: \`${venusData.msgId?.slice(0, 8)}...\``,
-        timestamp: new Date().toISOString(),
-        status: "sent",
+        id: crypto.randomUUID(), role: "ai",
+        content: `✅ Task enviada via **${modeLabel}**. Processando alterações...\n\n> MsgID: \`${venusData.msgId?.slice(0, 8)}...\``,
+        timestamp: new Date().toISOString(), status: "sent",
       }]);
 
-      // Log to conversations table (fire and forget)
+      // Log conversation
       try {
         await supabase.from("loveai_conversations").insert({
-          user_id: user!.id,
-          target_project_id: id,
-          brain_type: chatMode,
-          user_message: userMsg,
-          status: "processing",
+          user_id: user!.id, target_project_id: id,
+          brain_type: chatMode, user_message: userMsg, status: "processing",
         });
       } catch { /* silent */ }
 
-      // Reload preview after delay
-      setTimeout(() => {
-        try { iframeRef.current?.contentWindow?.location.reload(); } catch { /* cross-origin */ }
-      }, 5000);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Erro ao enviar mensagem";
-      setChatMessages(prev =>
-        prev.map(m => m.id === tempId ? { ...m, status: "error" } : m)
-      );
+      setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "error" } : m));
+      setShowStatusCard(false);
       toast.error(errorMsg);
     } finally {
       setSending(false);
@@ -198,52 +188,29 @@ export default function ProjectEditor() {
       if (data?.response) {
         setAiResponse(data.response);
       } else if (data?.conversation_id) {
-        // Poll for response via capture
-        toast.info("Star AI processando... aguarde.");
+        toast.info("Star AI processando...");
         let attempts = 0;
         const poll = setInterval(async () => {
           attempts++;
-          if (attempts > 12) { // max 60s
-            clearInterval(poll);
-            toast.error("Star AI não respondeu a tempo. Use 'capture' para verificar.");
-            setAiLoading(false);
-            return;
-          }
+          if (attempts > 12) { clearInterval(poll); toast.error("Timeout"); setAiLoading(false); return; }
           try {
-            const { data: captureData } = await supabase.functions.invoke("brain", {
+            const { data: cap } = await supabase.functions.invoke("brain", {
               body: { action: "capture", conversation_id: data.conversation_id },
             });
-            if (captureData?.response) {
-              clearInterval(poll);
-              setAiResponse(captureData.response);
-              setAiLoading(false);
-            }
+            if (cap?.response) { clearInterval(poll); setAiResponse(cap.response); setAiLoading(false); }
           } catch { /* retry */ }
         }, 5000);
-        return; // don't set aiLoading false yet
-      } else {
-        toast.error("Star AI não respondeu a tempo.");
+        return;
       }
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      toast.error(errorMsg);
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setAiLoading(false);
     }
   };
 
-  const applyAiResponseToProject = async () => {
-    if (!aiResponse || !id) return;
-    setMessage(aiResponse);
-    setShowAiModal(false);
-    toast.info("Resposta colada no chat. Envie para aplicar ao projeto.");
-  };
-
   const handleChatKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
   };
 
   if (authLoading || !user) return <div className="min-h-screen bg-background" />;
@@ -251,26 +218,35 @@ export default function ProjectEditor() {
   return (
     <AppLayout>
       <div className="flex" style={{ height: "calc(100vh - 3rem)" }}>
-        {/* Left: Chat */}
-        <div className="w-[380px] flex flex-col shrink-0 border-r border-border/60">
-          <div className="h-10 border-b border-border/60 px-4 flex items-center justify-between shrink-0">
-            <span className="text-xs font-semibold">Editor</span>
-            <button onClick={() => setShowAiModal(true)} className="h-7 px-2.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1.5 text-xs font-medium transition-colors">
-              <BrainCircuit className="h-3.5 w-3.5" /> Star AI
+        {/* ── LEFT: Chat Panel ── */}
+        <div className="w-[420px] flex flex-col shrink-0" style={{ borderRight: "0.5px solid var(--clf-border)" }}>
+          {/* Header */}
+          <div className="h-12 px-4 flex items-center justify-between shrink-0 clf-glass-nav">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Code2 className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <span className="text-[13px] font-semibold text-foreground">Editor</span>
+            </div>
+            <button
+              onClick={() => setShowAiModal(true)}
+              className="clf-glass-sm h-8 px-3 rounded-xl flex items-center gap-1.5 text-xs font-medium text-foreground hover:scale-[1.03] transition-transform"
+            >
+              <BrainCircuit className="h-3.5 w-3.5 text-primary" /> Star AI
             </button>
           </div>
 
           {/* Mode selector */}
-          <div className="flex gap-1 px-3 py-2 border-b border-border/40 overflow-x-auto">
+          <div className="flex gap-1.5 px-3 py-2.5 overflow-x-auto" style={{ borderBottom: "0.5px solid var(--clf-border)" }}>
             {chatModes.map(m => (
               <button
                 key={m.id}
                 onClick={() => setChatMode(m.id)}
                 title={m.desc}
-                className={`h-7 px-2.5 rounded-md text-[10px] font-medium flex items-center gap-1 transition-colors whitespace-nowrap ${
+                className={`h-8 px-3 rounded-xl text-[11px] font-medium flex items-center gap-1.5 transition-all whitespace-nowrap ${
                   chatMode === m.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted/40 text-muted-foreground hover:bg-muted"
+                    ? "clf-glass text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
                 <m.icon className="h-3 w-3" /> {m.label}
@@ -278,102 +254,130 @@ export default function ProjectEditor() {
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {/* Usage bar */}
+          <EditorUsageBar
+            messagesUsed={usage.messagesUsed}
+            messagesLimit={usage.messagesLimit}
+            plan={usage.plan}
+            percentUsed={usage.percentUsed}
+            canSend={usage.canSend}
+          />
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
             {chatMessages.length === 0 && (
-              <div className="text-center py-10 text-muted-foreground">
-                <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p className="text-xs">Envie instruções para editar o projeto</p>
-                <p className="text-[10px] mt-1 opacity-60">Todos os modos são gratuitos (security_fix_v2)</p>
+              <div className="text-center py-16">
+                <div className="clf-liquid-glass inline-flex p-4 mb-4">
+                  <Send className="h-6 w-6 text-muted-foreground/40" />
+                </div>
+                <p className="text-[13px] font-medium text-foreground/60">Envie instruções para editar</p>
+                <p className="text-[11px] text-muted-foreground/50 mt-1">Todas as edições são processadas pela Venus API</p>
               </div>
             )}
+
             {chatMessages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[90%] rounded-xl px-3 py-2 text-xs ${
-                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                }`}>
-                  {msg.role === "ai" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none text-xs">
+              <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}>
+                {msg.role === "ai" ? (
+                  <div className="clf-liquid-glass max-w-[92%] p-4 space-y-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-5 w-5 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Sparkles className="h-3 w-3 text-primary" />
+                      </div>
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Venus AI</span>
+                    </div>
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     </div>
-                  ) : (
+                  </div>
+                ) : (
+                  <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-[13px] bg-primary text-primary-foreground">
                     <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                  {msg.status === "sending" && <Loader2 className="h-3 w-3 animate-spin mt-1 opacity-60" />}
-                  {msg.status === "error" && <span className="text-[10px] text-destructive">Erro ao enviar</span>}
-                </div>
+                    {msg.status === "sending" && <Loader2 className="h-3 w-3 animate-spin mt-1.5 opacity-60" />}
+                    {msg.status === "error" && <span className="text-[10px] opacity-80 block mt-1">Erro ao enviar</span>}
+                  </div>
+                )}
               </div>
             ))}
+
+            {/* Status card */}
+            <EditorStatusCard active={showStatusCard} onComplete={handleStatusComplete} />
+
             <div ref={chatEndRef} />
           </div>
 
-          <div className="border-t border-border/60 p-3 shrink-0 space-y-2">
-            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-emerald-500/8 border border-emerald-500/15">
-              <Shield className="h-3 w-3 text-emerald-500 shrink-0" />
-              <p className="text-[10px] text-emerald-500/90 leading-tight">Modo gratuito via Venus API — sem custo de créditos.</p>
-            </div>
+          {/* Input area */}
+          <div className="p-3 shrink-0 space-y-2" style={{ borderTop: "0.5px solid var(--clf-border)" }}>
             <div className="flex items-end gap-2">
-              <textarea
-                value={message}
-                onChange={e => setMessage(e.target.value)}
-                onKeyDown={handleChatKeyDown}
-                placeholder={`Enviar instrução (${chatModes.find(m => m.id === chatMode)?.label})...`}
-                rows={1}
-                disabled={sending}
-                className="flex-1 min-h-[36px] max-h-[100px] py-2 px-3 resize-none text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                onInput={e => {
-                  const t = e.currentTarget;
-                  t.style.height = "auto";
-                  t.style.height = Math.min(t.scrollHeight, 100) + "px";
-                }}
-              />
+              <div className="flex-1 clf-glass-sm rounded-2xl overflow-hidden">
+                <textarea
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  onKeyDown={handleChatKeyDown}
+                  placeholder={usage.canSend
+                    ? `Descreva a alteração (${chatModes.find(m => m.id === chatMode)?.label})...`
+                    : "Limite atingido — faça upgrade"
+                  }
+                  rows={1}
+                  disabled={sending || !usage.canSend}
+                  className="w-full min-h-[40px] max-h-[120px] py-2.5 px-4 resize-none text-[13px] bg-transparent focus:outline-none placeholder:text-muted-foreground/50 disabled:opacity-50"
+                  onInput={e => {
+                    const t = e.currentTarget;
+                    t.style.height = "auto";
+                    t.style.height = Math.min(t.scrollHeight, 120) + "px";
+                  }}
+                />
+              </div>
               <button
                 onClick={sendChatMessage}
-                disabled={!message.trim() || sending}
-                className="h-9 w-9 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                disabled={!message.trim() || sending || !usage.canSend}
+                className="h-10 w-10 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-40 transition-all hover:scale-105 active:scale-95"
               >
-                {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Right: iframe preview */}
+        {/* ── RIGHT: Preview ── */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="h-10 border-b border-border/60 px-4 flex items-center justify-between shrink-0">
-            <span className="text-xs font-medium truncate">{projectName || "Preview"}</span>
-            <div className="flex items-center gap-2">
+          <div className="h-12 px-4 flex items-center justify-between shrink-0 clf-glass-nav">
+            <span className="text-[13px] font-medium truncate text-foreground">{projectName || "Preview"}</span>
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => {
-                  const editorUrl = `${window.location.origin}/projeto/${id}/editar`;
-                  navigator.clipboard.writeText(editorUrl);
+                  navigator.clipboard.writeText(`${window.location.origin}/projeto/${id}/editar`);
                   toast.success("Link copiado!");
                 }}
-                className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted"
-                title="Copiar link do editor"
+                className="h-8 w-8 rounded-xl flex items-center justify-center hover:bg-muted/60 transition-colors"
+                title="Copiar link"
               >
-                <Link2 className="h-3.5 w-3.5" />
+                <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
-              <button onClick={() => {
-                setSandboxUrl(null);
-                setLoadingPreview(true);
-                setTimeout(() => {
-                  setSandboxUrl(`https://id-preview--${id}.lovable.app`);
-                  setLoadingPreview(false);
-                }, 300);
-              }} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted" title="Recarregar preview">
-                <RefreshCw className="h-3.5 w-3.5" />
+              <button
+                onClick={reloadPreview}
+                className="h-8 w-8 rounded-xl flex items-center justify-center hover:bg-muted/60 transition-colors"
+                title="Recarregar"
+              >
+                <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
               {sandboxUrl && (
-                <a href={sandboxUrl} target="_blank" rel="noopener noreferrer" className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted" title="Abrir preview em nova aba">
-                  <ExternalLink className="h-3.5 w-3.5" />
+                <a href={sandboxUrl} target="_blank" rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-xl flex items-center justify-center hover:bg-muted/60 transition-colors"
+                  title="Abrir em nova aba"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                 </a>
               )}
             </div>
           </div>
-          <div className="flex-1 bg-muted/30">
+
+          <div className="flex-1 bg-muted/20">
             {loadingPreview ? (
               <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <div className="clf-liquid-glass p-6 flex flex-col items-center gap-3">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <span className="text-xs text-muted-foreground">Carregando preview...</span>
+                </div>
               </div>
             ) : sandboxUrl ? (
               <iframe
@@ -391,27 +395,29 @@ export default function ProjectEditor() {
           </div>
         </div>
 
-        {/* Star AI Modal */}
+        {/* ── Star AI Modal ── */}
         {showAiModal && (
-          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-background border border-border rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-border/60">
-                <div className="flex items-center gap-2">
-                  <BrainCircuit className="h-5 w-5 text-primary" />
-                  <span className="font-semibold text-sm">Star AI</span>
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="clf-glass-modal rounded-3xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+              <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "0.5px solid var(--clf-border)" }}>
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <BrainCircuit className="h-4 w-4 text-primary" />
+                  </div>
+                  <span className="font-semibold text-[15px]">Star AI</span>
                 </div>
-                <button onClick={() => setShowAiModal(false)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted">
+                <button onClick={() => setShowAiModal(false)} className="h-8 w-8 rounded-xl flex items-center justify-center hover:bg-muted/60">
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              <div className="flex gap-2 px-5 pt-3">
+              <div className="flex gap-2 px-6 pt-4">
                 {brainModes.map(m => (
                   <button
                     key={m.id}
                     onClick={() => setAiMode(m.id)}
-                    className={`h-8 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
-                      aiMode === m.id ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    className={`h-9 px-4 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all ${
+                      aiMode === m.id ? "clf-glass text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                     }`}
                   >
                     <m.icon className="h-3.5 w-3.5" /> {m.label}
@@ -419,17 +425,19 @@ export default function ProjectEditor() {
                 ))}
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 py-3">
-                <textarea
-                  value={aiPrompt}
-                  onChange={e => setAiPrompt(e.target.value)}
-                  placeholder={`Descreva o que você quer (modo ${aiMode})...`}
-                  rows={3}
-                  className="w-full min-h-[80px] py-3 px-4 resize-none text-sm rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                <div className="clf-glass-sm rounded-2xl overflow-hidden">
+                  <textarea
+                    value={aiPrompt}
+                    onChange={e => setAiPrompt(e.target.value)}
+                    placeholder={`Descreva o que você quer (modo ${aiMode})...`}
+                    rows={3}
+                    className="w-full min-h-[80px] py-3 px-4 resize-none text-sm bg-transparent focus:outline-none"
+                  />
+                </div>
 
                 {aiResponse && (
-                  <div className="mt-3 rounded-xl bg-muted/60 p-4 max-h-[40vh] overflow-y-auto">
+                  <div className="mt-4 clf-liquid-glass p-5 max-h-[40vh] overflow-y-auto">
                     <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiResponse}</ReactMarkdown>
                     </div>
@@ -437,14 +445,16 @@ export default function ProjectEditor() {
                 )}
               </div>
 
-              <div className="flex items-center justify-between px-5 py-3 border-t border-border/60">
+              <div className="flex items-center justify-between px-6 py-4" style={{ borderTop: "0.5px solid var(--clf-border)" }}>
                 <div className="flex gap-2">
                   {aiResponse && (
                     <>
-                      <button onClick={() => { navigator.clipboard.writeText(aiResponse); toast.success("Copiado!"); }} className="h-8 px-3 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 flex items-center gap-1.5">
+                      <button onClick={() => { navigator.clipboard.writeText(aiResponse); toast.success("Copiado!"); }}
+                        className="clf-glass-sm h-9 px-4 rounded-xl text-xs font-medium flex items-center gap-1.5 hover:scale-[1.03] transition-transform">
                         <Copy className="h-3.5 w-3.5" /> Copiar
                       </button>
-                      <button onClick={applyAiResponseToProject} className="h-8 px-3 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5">
+                      <button onClick={() => { setMessage(aiResponse); setShowAiModal(false); toast.info("Colado no chat"); }}
+                        className="h-9 px-4 rounded-xl text-xs font-medium bg-primary text-primary-foreground flex items-center gap-1.5 hover:scale-[1.03] transition-transform">
                         <ArrowRight className="h-3.5 w-3.5" /> Enviar ao Projeto
                       </button>
                     </>
@@ -453,7 +463,7 @@ export default function ProjectEditor() {
                 <button
                   onClick={sendAiPrompt}
                   disabled={!aiPrompt.trim() || aiLoading}
-                  className="h-8 px-4 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5"
+                  className="h-9 px-5 rounded-xl text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5 transition-all hover:scale-[1.03]"
                 >
                   {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   {aiLoading ? "Gerando..." : "Gerar"}
