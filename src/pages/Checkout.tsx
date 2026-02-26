@@ -20,22 +20,8 @@ interface Plan {
   discountedPrice?: number;
 }
 
-// Hardcoded fallback plans (used when DB returns nothing)
-// Prices must match the `plans` table: daily=490 cents, monthly=9700 cents
-const fallbackPlans: Plan[] = [
-  {
-    id: "individual", name: "Individual", price: 4.90, originalPrice: "", period: "por dia",
-    description: "Ideal para uso pessoal. Ative quando precisar.",
-    popular: true,
-    features: ["Mensagens ilimitadas por 24h", "Até 2 projetos", "Ativação imediata", "Sem mensalidade fixa"],
-  },
-  {
-    id: "agency", name: "Agência", price: 49.90, originalPrice: "", period: "por mês",
-    description: "Para equipes e agências que gerenciam múltiplos projetos.",
-    highlight: false,
-    features: ["Mensagens ilimitadas", "Até 10 projetos", "Renovação automática", "Suporte prioritário"],
-  },
-];
+// No hardcoded fallback — all plans are fetched from DB
+const fallbackPlans: Plan[] = [];
 
 const defaultTerms = [
   "Estamos vendendo acesso à extensão, e não acesso à plataforma Lovable.",
@@ -44,14 +30,14 @@ const defaultTerms = [
   "O cancelamento ou paralisação temporária do serviço não gera direito a indenização de qualquer natureza.",
   "O cliente assume total responsabilidade pela utilização de uma extensão não oficial, estando ciente de que contas, projetos e dados podem ser bloqueados, suspensos ou excluídos pela Lovable a qualquer momento.",
   "Não nos responsabilizamos por quaisquer consequências do uso da extensão, incluindo mas não se limitando a perda de dados, bloqueio de conta ou suspensão de serviços.",
-  "O plano 'Vitalício' oferece acesso enquanto a extensão estiver funcional. Caso a extensão pare de funcionar, seja limitada ou descontinuada, NÃO temos obrigação de fornecer nova extensão, novo método, créditos ou qualquer tipo de compensação.",
   "A ativação da extensão será registrada com dados do dispositivo, IP e localização para fins de comprovação de entrega do serviço.",
   "Nosso método é não oficial e utiliza a própria plataforma para se comunicar. Por ser não oficial, está sob risco constante de suspensão.",
-  "Não utilizamos créditos da conta Lovable — todos os projetos, mensagens e planos criados/enviados não descontam créditos.",
+  "O Lovable pode cobrar créditos em alguns casos durante o uso da extensão. Recomendamos monitorar seu saldo de créditos na plataforma Lovable.",
   "Ao ativar a extensão, o cliente reconhece que o serviço foi entregue e declara ciência de todos os riscos envolvidos.",
 ];
 
-const UNLIMITED_DEADLINE = new Date("2026-03-15T23:59:59-03:00").getTime();
+// Promotional deadline — update or remove when promotion ends
+const UNLIMITED_DEADLINE = new Date("2026-04-15T23:59:59-03:00").getTime();
 
 function useCountdown(deadline: number) {
   const [timeLeft, setTimeLeft] = useState(() => {
