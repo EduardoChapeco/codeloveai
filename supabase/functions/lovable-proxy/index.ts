@@ -51,22 +51,174 @@ async function validateLicense(licenseKey: string): Promise<boolean> {
   return true;
 }
 
+/** Resolve user from Supabase JWT */
+async function resolveJwtUser(authHeader: string) {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+  if (token.startsWith("CLF1.")) return null; // not a JWT
+  try {
+    const sc = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
+    const { data: { user }, error } = await sc.auth.getUser(token);
+    if (error || !user) return null;
+    return user;
+  } catch { return null; }
+}
+
+/** Resolve the user's active CLF1 license key from DB */
+async function resolveUserLicense(userId: string): Promise<string | null> {
+  try {
+    const sc = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+    const { data } = await sc
+      .from("licenses")
+      .select("key")
+      .eq("user_id", userId)
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data?.key || null;
+  } catch { return null; }
+}
+
+/** Handle management actions (save-token, delete-token, refresh-token, route-based proxy) */
+async function handleManagementAction(body: Record<string, unknown>, userId: string) {
+  const sc = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  );
+  const action = body.action as string | undefined;
+
+  if (action === "save-token") {
+    const token = body.token as string;
+    const refreshToken = body.refreshToken as string | undefined;
+    if (!token) return { error: "Token obrigatório", status: 400 };
+    const encrypted = token; // already handled by previous flow
+    const row: Record<string, unknown> = {
+      user_id: userId,
+      token_encrypted: encrypted,
+      status: "active",
+      updated_at: new Date().toISOString(),
+    };
+    if (refreshToken) row.refresh_token_encrypted = refreshToken;
+    const { data: existing } = await sc.from("lovable_accounts").select("id").eq("user_id", userId).maybeSingle();
+    if (existing) {
+      await sc.from("lovable_accounts").update(row).eq("user_id", userId);
+    } else {
+      await sc.from("lovable_accounts").insert(row);
+    }
+    return { ok: true };
+  }
+
+  if (action === "delete-token") {
+    await sc.from("lovable_accounts").delete().eq("user_id", userId);
+    return { ok: true };
+  }
+
+  if (action === "refresh-token") {
+    const { data: acct } = await sc.from("lovable_accounts")
+      .select("refresh_token_encrypted").eq("user_id", userId).maybeSingle();
+    if (!acct?.refresh_token_encrypted) return { error: "Nenhum refresh token salvo", status: 400 };
+    const firebaseKey = Deno.env.get("FIREBASE_API_KEY");
+    if (!firebaseKey) return { error: "Firebase API Key não configurada", status: 500 };
+    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${firebaseKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=refresh_token&refresh_token=${acct.refresh_token_encrypted}`,
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error?.message || "Falha ao renovar", status: 502 };
+    await sc.from("lovable_accounts").update({
+      token_encrypted: data.id_token,
+      refresh_token_encrypted: data.refresh_token,
+      status: "active",
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", userId);
+    return { ok: true, token: data.id_token };
+  }
+
+  // Route-based proxy (workspaces, projects, etc.)
+  if (body.route) {
+    const { data: acct } = await sc.from("lovable_accounts")
+      .select("token_encrypted").eq("user_id", userId).maybeSingle();
+    if (!acct?.token_encrypted) return { error: "Conta Lovable não conectada. Vá em Lovable Connect.", status: 401 };
+    const method = (body.method as string) || "GET";
+    const url = `${LOVABLE_API}${body.route}`;
+    const fetchOpts: RequestInit = {
+      method,
+      headers: {
+        "Authorization": `Bearer ${acct.token_encrypted}`,
+        "Content-Type": "application/json",
+        "X-Client-Git-SHA": GIT_SHA,
+        "Origin": "https://lovable.dev",
+        "Referer": "https://lovable.dev/",
+      },
+    };
+    if (body.payload && method !== "GET") fetchOpts.body = JSON.stringify(body.payload);
+    const res = await fetch(url, fetchOpts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        return { error: "Token Lovable expirado. Reconecte sua conta.", status: 401, isTokenExpired: true };
+      }
+      return { error: data.message || `Lovable API error ${res.status}`, status: res.status, details: data };
+    }
+    return data;
+  }
+
+  return { error: "Ação desconhecida", status: 400 };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   const startTime = Date.now();
   try {
     const body = await req.json().catch(() => ({}));
-
     const authHeader = req.headers.get("authorization") || "";
     const clfHeader  = req.headers.get("x-clf-token") || "";
-    const licenseKey = body.licenseKey
+
+    // --- Path 1: Supabase JWT auth (from web app) ---
+    const jwtUser = await resolveJwtUser(authHeader);
+    if (jwtUser) {
+      const action = body.action as string | undefined;
+      const isManagement = action || body.route;
+      
+      if (isManagement) {
+        const result = await handleManagementAction(body, jwtUser.id);
+        const status = (result as any).status || 200;
+        delete (result as any).status;
+        return new Response(JSON.stringify(result), {
+          status, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+
+      // Message sending via JWT - resolve CLF1 from user's license
+      const licenseKey = await resolveUserLicense(jwtUser.id);
+      if (!licenseKey) {
+        return new Response(JSON.stringify({ error: "Nenhuma licença ativa encontrada. Ative um plano." }), {
+          status: 403, headers: { ...CORS, "Content-Type": "application/json" }
+        });
+      }
+      // Fall through to message sending with resolved license
+      body._resolvedUserId = jwtUser.id;
+      body._resolvedLicenseKey = licenseKey;
+    }
+
+    // --- Path 2: CLF1 token auth (from extensions) ---
+    const licenseKey = body._resolvedLicenseKey
+      || body.licenseKey
       || clfHeader
-      || (authHeader.startsWith("Bearer CLF1.") ? authHeader.slice(7) : null)
-      || (authHeader.startsWith("Bearer ") && authHeader.slice(7).startsWith("CLF1.") ? authHeader.slice(7) : null);
+      || (authHeader.startsWith("Bearer CLF1.") ? authHeader.slice(7) : null);
 
     if (!licenseKey) {
-      return new Response(JSON.stringify({ error: "CLF1 token obrigatório via x-clf-token, Authorization ou body.licenseKey" }), {
+      return new Response(JSON.stringify({ error: "Autenticação obrigatória. Faça login ou forneça CLF1 token." }), {
         status: 401, headers: { ...CORS, "Content-Type": "application/json" }
       });
     }
@@ -136,9 +288,10 @@ serve(async (req) => {
       }), { status: 502, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
-    // Resolve userId from license
-    const clfPayload = decodeCLF1(licenseKey);
-    const resolvedUserId = (clfPayload?.sub as string) || (clfPayload?.user_id as string) || "unknown";
+    const resolvedUserId = body._resolvedUserId
+      || (decodeCLF1(licenseKey)?.sub as string)
+      || (decodeCLF1(licenseKey)?.user_id as string)
+      || "unknown";
 
     logExtensionUsage({
       userId: resolvedUserId,
