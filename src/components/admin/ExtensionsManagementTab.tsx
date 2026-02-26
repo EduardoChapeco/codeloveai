@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Save, Pencil, Plus, Trash2, Check, X, Puzzle, Link2, Unlink } from "lucide-react";
+import { Loader2, Save, Pencil, Plus, Trash2, Check, X, Puzzle, Link2, Unlink, Upload, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { format } from "date-fns";
 
 interface ExtensionItem {
   id: string;
@@ -32,6 +34,16 @@ interface PlanExtensionLink {
   extension_id: string;
 }
 
+interface ExtensionFile {
+  id: string;
+  file_url: string;
+  version: string;
+  instructions: string;
+  is_latest: boolean;
+  created_at: string;
+  uploaded_by: string;
+}
+
 const tierOptions = ["free", "pro", "enterprise"];
 
 const emptyForm = {
@@ -50,13 +62,23 @@ export default function ExtensionsManagementTab() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [linkingExtId, setLinkingExtId] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  // Extension files upload state
+  const [extFiles, setExtFiles] = useState<ExtensionFile[]>([]);
+  const [extVersion, setExtVersion] = useState("");
+  const [extFile, setExtFile] = useState<File | null>(null);
+  const [extInstructions, setExtInstructions] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [activeSection, setActiveSection] = useState<"catalog" | "files">("files");
 
   const fetchAll = async () => {
     setLoading(true);
-    const [extRes, plansRes, linksRes] = await Promise.all([
+    const [extRes, plansRes, linksRes, filesRes] = await Promise.all([
       supabase.from("extension_catalog").select("*").order("display_order"),
       supabase.from("plans").select("id, name, price, billing_cycle").eq("is_active", true).order("display_order"),
       supabase.from("plan_extensions").select("*"),
+      supabase.from("extension_files").select("*").order("created_at", { ascending: false }),
     ]);
     setExtensions((extRes.data || []).map((e: any) => ({
       ...e,
@@ -64,7 +86,31 @@ export default function ExtensionsManagementTab() {
     })));
     setPlans((plansRes.data || []) as PlanOption[]);
     setPlanLinks((linksRes.data || []) as PlanExtensionLink[]);
+    setExtFiles((filesRes.data as ExtensionFile[]) || []);
     setLoading(false);
+  };
+
+  const uploadExtension = async () => {
+    if (!extFile || !extVersion) return toast.error("Selecione arquivo e versão.");
+    if (!user) return toast.error("Não autenticado.");
+    setUploading(true);
+    try {
+      const path = `extensions/v${extVersion}/${extFile.name}`;
+      const { error: upErr } = await supabase.storage.from("extensions").upload(path, extFile);
+      if (upErr) throw upErr;
+      await supabase.from("extension_files").update({ is_latest: false } as any).eq("is_latest", true);
+      await supabase.from("extension_files").insert({
+        file_url: path, version: extVersion, uploaded_by: user.id, is_latest: true,
+        instructions: extInstructions,
+      } as any);
+      toast.success("Extensão publicada!");
+      setExtVersion(""); setExtFile(null); setExtInstructions("");
+      fetchAll();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao fazer upload");
+    } finally {
+      setUploading(false);
+    }
   };
 
   useEffect(() => { fetchAll(); }, []);
@@ -242,107 +288,188 @@ export default function ExtensionsManagementTab() {
     </div>
   );
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="lv-body-strong">Catálogo de Extensões — {extensions.length} extensão(ões)</p>
-          <p className="lv-caption text-muted-foreground mt-0.5">Gerencie extensões e vincule a planos dinamicamente.</p>
+  const renderFilesSection = () => (
+    <div className="space-y-6">
+      {/* Upload form */}
+      <div className="lv-card p-6 space-y-4">
+        <p className="lv-body-strong flex items-center gap-2"><Upload className="h-4 w-4 text-primary" /> Upload de Nova Versão</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <label className="lv-caption block">Versão</label>
+            <input placeholder="ex: 2.1.0" value={extVersion}
+              onChange={e => setExtVersion(e.target.value)}
+              className="lv-input w-full" />
+          </div>
+          <div className="space-y-1.5 md:col-span-2">
+            <label className="lv-caption block">Arquivo (.zip / .crx)</label>
+            <input type="file" accept=".zip,.crx,.xpi,.txt"
+              onChange={e => setExtFile(e.target.files?.[0] || null)}
+              className="lv-input w-full file:hidden pt-2.5" />
+          </div>
         </div>
-        {!creating && !editingId && (
-          <button onClick={startCreate} className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-2">
-            <Plus className="h-3.5 w-3.5" /> Nova Extensão
-          </button>
-        )}
+        <div className="space-y-1.5">
+          <label className="lv-caption block">Changelog / Instruções</label>
+          <textarea
+            placeholder="Quais são as novidades desta versão?"
+            value={extInstructions}
+            onChange={e => setExtInstructions(e.target.value)}
+            rows={3}
+            className="lv-input w-full"
+          />
+        </div>
+        <button onClick={uploadExtension} disabled={uploading} className="lv-btn-primary h-9 px-6 text-xs flex items-center gap-2">
+          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+          PUBLICAR VERSÃO
+        </button>
       </div>
 
-      {(creating || editingId) && renderForm()}
-
-      {/* Extensions list */}
+      {/* Files list */}
       <div className="space-y-3">
-        {extensions.map(ext => {
-          const linked = getLinkedPlans(ext.id);
-          return (
-            <div key={ext.id} className="lv-card p-4">
-              <div className="flex items-start gap-4">
-                <div
-                  className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: ext.hero_color }}
-                >
-                  <Puzzle className="h-5 w-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="lv-body-strong">{ext.name}</span>
-                    <span className={`lv-badge text-[10px] ${ext.is_active ? 'lv-badge-success' : 'lv-badge-muted'}`}>
-                      {ext.is_active ? 'Ativo' : 'Inativo'}
-                    </span>
-                    <span className="lv-badge lv-badge-muted text-[10px]">{ext.tier}</span>
-                    <span className="lv-badge lv-badge-muted text-[10px]">v{ext.version}</span>
-                    {ext.is_featured && <span className="lv-badge text-[10px]" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}>Destaque</span>}
-                  </div>
-                  <p className="lv-caption text-muted-foreground">{ext.tagline}</p>
-                  <p className="lv-caption text-muted-foreground/60 mt-0.5">slug: <code className="text-xs bg-muted px-1 rounded">{ext.slug}</code> · {ext.features.length} features</p>
+        <p className="lv-body-strong">{extFiles.length} arquivo(s) publicado(s)</p>
+        {extFiles.map(ef => (
+          <div key={ef.id} className="lv-card p-4 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <Puzzle className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="lv-body-strong">v{ef.version}</span>
+                <span className={`lv-badge text-[10px] ${ef.is_latest ? 'lv-badge-success' : 'lv-badge-muted'}`}>
+                  {ef.is_latest ? 'PRODUÇÃO' : 'ARQUIVADA'}
+                </span>
+              </div>
+              <p className="lv-caption text-muted-foreground">{format(new Date(ef.created_at), "dd/MM/yyyy HH:mm")}</p>
+              {ef.instructions && <p className="lv-caption text-muted-foreground/60 mt-1 line-clamp-2">{ef.instructions}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
-                  {/* Plan links */}
-                  <div className="mt-3">
-                    <p className="lv-caption font-medium mb-1.5">Planos vinculados:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {linked.map(link => {
-                        const plan = plans.find(p => p.id === link.plan_id);
-                        return (
-                          <span key={link.id} className="inline-flex items-center gap-1.5 lv-badge lv-badge-muted text-[10px]">
-                            {plan?.name || link.plan_id.slice(0, 8)}
-                            <button onClick={() => unlinkPlan(link.id)} className="hover:text-destructive" title="Desvincular">
-                              <X className="h-3 w-3" />
+  return (
+    <div className="space-y-4">
+      {/* Section tabs */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setActiveSection("files")}
+          className={`h-9 px-4 rounded-xl text-xs font-medium flex items-center gap-2 transition-all ${activeSection === "files" ? "lv-btn-primary" : "lv-btn-secondary"}`}
+        >
+          <Upload className="h-3.5 w-3.5" /> Arquivos da Extensão
+        </button>
+        <button
+          onClick={() => setActiveSection("catalog")}
+          className={`h-9 px-4 rounded-xl text-xs font-medium flex items-center gap-2 transition-all ${activeSection === "catalog" ? "lv-btn-primary" : "lv-btn-secondary"}`}
+        >
+          <Puzzle className="h-3.5 w-3.5" /> Catálogo & Planos
+        </button>
+      </div>
+
+      {activeSection === "files" && renderFilesSection()}
+
+      {activeSection === "catalog" && (
+        <>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="lv-body-strong">Catálogo de Extensões — {extensions.length} extensão(ões)</p>
+              <p className="lv-caption text-muted-foreground mt-0.5">Gerencie extensões e vincule a planos dinamicamente.</p>
+            </div>
+            {!creating && !editingId && (
+              <button onClick={startCreate} className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-2">
+                <Plus className="h-3.5 w-3.5" /> Nova Extensão
+              </button>
+            )}
+          </div>
+
+          {(creating || editingId) && renderForm()}
+
+          {/* Extensions list */}
+          <div className="space-y-3">
+            {extensions.map(ext => {
+              const linked = getLinkedPlans(ext.id);
+              return (
+                <div key={ext.id} className="lv-card p-4">
+                  <div className="flex items-start gap-4">
+                    <div
+                      className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: ext.hero_color }}
+                    >
+                      <Puzzle className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="lv-body-strong">{ext.name}</span>
+                        <span className={`lv-badge text-[10px] ${ext.is_active ? 'lv-badge-success' : 'lv-badge-muted'}`}>
+                          {ext.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
+                        <span className="lv-badge lv-badge-muted text-[10px]">{ext.tier}</span>
+                        <span className="lv-badge lv-badge-muted text-[10px]">v{ext.version}</span>
+                        {ext.is_featured && <span className="lv-badge text-[10px]" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}>Destaque</span>}
+                      </div>
+                      <p className="lv-caption text-muted-foreground">{ext.tagline}</p>
+                      <p className="lv-caption text-muted-foreground/60 mt-0.5">slug: <code className="text-xs bg-muted px-1 rounded">{ext.slug}</code> · {ext.features.length} features</p>
+
+                      {/* Plan links */}
+                      <div className="mt-3">
+                        <p className="lv-caption font-medium mb-1.5">Planos vinculados:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {linked.map(link => {
+                            const plan = plans.find(p => p.id === link.plan_id);
+                            return (
+                              <span key={link.id} className="inline-flex items-center gap-1.5 lv-badge lv-badge-muted text-[10px]">
+                                {plan?.name || link.plan_id.slice(0, 8)}
+                                <button onClick={() => unlinkPlan(link.id)} className="hover:text-destructive" title="Desvincular">
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                          {linkingExtId === ext.id ? (
+                            <div className="flex items-center gap-1">
+                              <select
+                                className="lv-input h-7 text-xs"
+                                defaultValue=""
+                                onChange={e => { if (e.target.value) { linkPlan(ext.id, e.target.value); setLinkingExtId(null); } }}
+                              >
+                                <option value="">Selecionar plano...</option>
+                                {plans
+                                  .filter(p => !linked.some(l => l.plan_id === p.id))
+                                  .map(p => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} (R${(p.price / 100).toFixed(2)}/{p.billing_cycle})
+                                    </option>
+                                  ))}
+                              </select>
+                              <button onClick={() => setLinkingExtId(null)} className="lv-btn-icon h-7 w-7">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setLinkingExtId(ext.id)}
+                              className="inline-flex items-center gap-1 lv-badge text-[10px] cursor-pointer hover:bg-primary/10"
+                            >
+                              <Link2 className="h-3 w-3" /> Vincular Plano
                             </button>
-                          </span>
-                        );
-                      })}
-                      {linkingExtId === ext.id ? (
-                        <div className="flex items-center gap-1">
-                          <select
-                            className="lv-input h-7 text-xs"
-                            defaultValue=""
-                            onChange={e => { if (e.target.value) { linkPlan(ext.id, e.target.value); setLinkingExtId(null); } }}
-                          >
-                            <option value="">Selecionar plano...</option>
-                            {plans
-                              .filter(p => !linked.some(l => l.plan_id === p.id))
-                              .map(p => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name} (R${(p.price / 100).toFixed(2)}/{p.billing_cycle})
-                                </option>
-                              ))}
-                          </select>
-                          <button onClick={() => setLinkingExtId(null)} className="lv-btn-icon h-7 w-7">
-                            <X className="h-3 w-3" />
-                          </button>
+                          )}
                         </div>
-                      ) : (
-                        <button
-                          onClick={() => setLinkingExtId(ext.id)}
-                          className="inline-flex items-center gap-1 lv-badge text-[10px] cursor-pointer hover:bg-primary/10"
-                        >
-                          <Link2 className="h-3 w-3" /> Vincular Plano
-                        </button>
-                      )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => startEdit(ext)} className="lv-btn-icon h-8 w-8" title="Editar">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => deleteExtension(ext.id)} className="lv-btn-icon h-8 w-8 hover:text-destructive" title="Deletar">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => startEdit(ext)} className="lv-btn-icon h-8 w-8" title="Editar">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button onClick={() => deleteExtension(ext.id)} className="lv-btn-icon h-8 w-8 hover:text-destructive" title="Deletar">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
