@@ -51,7 +51,15 @@ Deno.serve(async (req: Request) => {
 
     // ── Resolve allowed extensions from DB (plan_extensions) ──
     let allowedExtensions: string[] = [];
-    if (license.plan_id) {
+
+    // Admin master gets ALL active extensions
+    if (guard.isAdmin) {
+      const { data: allExts } = await sb
+        .from("extension_catalog")
+        .select("slug")
+        .eq("is_active", true);
+      allowedExtensions = (allExts || []).map((e: any) => e.slug);
+    } else if (license.plan_id) {
       const { data: peData } = await sb
         .from("plan_extensions")
         .select("extension_id")
@@ -67,7 +75,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Labs restriction: ONLY tenant owners can access ──
-    if (allowedExtensions.includes("labs")) {
+    if (!guard.isAdmin && allowedExtensions.includes("labs")) {
       const { data: tenantUser } = await sb
         .from("tenant_users")
         .select("role")
