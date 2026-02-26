@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { generateTypeId } from "../_shared/crypto.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -16,11 +17,7 @@ function genUUID(): string {
 }
 
 function genAiMsgId(): string {
-  const C = "01PbWWqgKDBDorh525uecKaGZD21FGSoCeR";
-  const prefix = C[Math.floor(Math.random() * 8)];
-  let rand = "";
-  for (let i = 0; i < 25; i++) rand += C[Math.floor(Math.random() * 32)];
-  return "aimsg_" + prefix + rand;
+  return generateTypeId("aimsg");
 }
 
 function decodeCLF1(token: string): Record<string, unknown> | null {

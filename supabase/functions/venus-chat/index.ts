@@ -3,6 +3,7 @@
 // Token resolution: explicit > JWT user > CLF1 license
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { generateTypeId } from "../_shared/crypto.ts";
 
 const LOVABLE_API = "https://api.lovable.dev";
 const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
@@ -74,9 +75,7 @@ function json(body: Record<string, unknown>, status = 200) {
 }
 
 function makeAiMsgId(): string {
-  const C = "01PDx4Vtw4YF6XfduRwwS6nKZ6sPAC9nCeR";
-  const first = "01234567"[Math.floor(Math.random() * 8)];
-  return "aimsg_" + first + Array.from({ length: 25 }, () => C[Math.floor(Math.random() * C.length)]).join("");
+  return generateTypeId("aimsg");
 }
 
 // ─── Token resolution (same pattern as speed-chat/lovable-proxy) ───
