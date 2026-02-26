@@ -111,6 +111,10 @@ export default function LovableConnect() {
         body: {},
       });
       if (error) throw error;
+      if (data?.error === "no_active_plan") {
+        toast.error("Você precisa de um plano ativo para gerar um token. Acesse a página de planos.");
+        return null;
+      }
       if (data?.error) throw new Error(data.error);
       setClfToken(data.token);
       setClfExpiresAt(data.expires_at);
