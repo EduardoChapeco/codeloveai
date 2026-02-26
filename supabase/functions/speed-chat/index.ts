@@ -72,41 +72,40 @@ Deno.serve(async (req: Request) => {
   if (!licenseKey || typeof licenseKey !== 'string' || !(licenseKey as string).startsWith('CLF1.'))
     return fail('licenseKey invalida', 401);
 
-  // ── 7. Validate license in database ────────────────────────────────
+  // ── 7. Validate license with smart lifecycle guard ────────────────
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  let licenseId: string | null = null;
+  let isAdmin = false;
+
   if (supabaseUrl && serviceKey) {
     try {
-      const licRes = await fetch(
-        `${supabaseUrl}/rest/v1/licenses?key=eq.${encodeURIComponent(licenseKey as string)}&status=eq.active&select=id,plan_id`,
-        { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
-      );
-      if (licRes.ok) {
-        const lics = await licRes.json();
-        if (!Array.isArray(lics) || lics.length === 0)
-          return fail('Licenca invalida ou expirada', 401);
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+      const { guardLicense } = await import("../_shared/license-guard.ts");
+      const adminClient = createClient(supabaseUrl, serviceKey);
 
-        // Check if plan allows "speed" extension
-        const planId = lics[0].plan_id;
+      const guard = await guardLicense(adminClient, licenseKey as string);
+      if (!guard.allowed) {
+        return fail(guard.error || 'Licença inválida', 401);
+      }
+
+      isAdmin = !!guard.isAdmin;
+      licenseId = (guard.license as any)?.id || null;
+
+      // Check plan allows "speed" extension (admin bypasses)
+      if (!isAdmin && licenseId) {
+        const planId = (guard.license as any)?.plan_id;
         if (planId) {
-          const peRes = await fetch(
-            `${supabaseUrl}/rest/v1/plan_extensions?plan_id=eq.${planId}&select=extension_id`,
-            { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
-          );
-          if (peRes.ok) {
-            const peData = await peRes.json();
-            const extIds = (peData || []).map((pe: any) => pe.extension_id);
+          const { data: peData } = await adminClient
+            .from("plan_extensions").select("extension_id").eq("plan_id", planId);
+          if (peData) {
+            const extIds = peData.map((pe: any) => pe.extension_id);
             if (extIds.length > 0) {
-              const ecRes = await fetch(
-                `${supabaseUrl}/rest/v1/extension_catalog?id=in.(${extIds.join(',')})&select=slug`,
-                { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
-              );
-              if (ecRes.ok) {
-                const exts = await ecRes.json();
-                const slugs = (exts || []).map((e: any) => e.slug);
-                if (!slugs.includes('speed')) {
-                  return fail('Seu plano não inclui a extensão Speed. Faça upgrade.', 403);
-                }
+              const { data: exts } = await adminClient
+                .from("extension_catalog").select("slug").in("id", extIds);
+              const slugs = (exts || []).map((e: any) => e.slug);
+              if (!slugs.includes('speed')) {
+                return fail('Seu plano não inclui a extensão Speed. Faça upgrade.', 403);
               }
             }
           }
@@ -164,16 +163,16 @@ Deno.serve(async (req: Request) => {
   if (lovableRes.status === 429) return fail('Rate limit — aguarde alguns segundos', 429);
 
   if (lovableRes.status === 200 || lovableRes.status === 202) {
-    // Call increment-usage async (fire and forget)
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (supabaseUrl && anonKey) {
-      fetch(`${supabaseUrl}/functions/v1/increment-usage`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anonKey}` },
-        body:    JSON.stringify({ licenseKey }),
-      }).catch((e) => console.error('[speed-chat] Erro increment-usage:', e));
+    // Increment usage ONLY on confirmed successful delivery (not cancelled)
+    if (licenseId && supabaseUrl && serviceKey) {
+      try {
+        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+        const { incrementUsage } = await import("../_shared/license-guard.ts");
+        const adminClient = createClient(supabaseUrl, serviceKey);
+        await incrementUsage(adminClient, licenseId);
+      } catch (e) { console.error('[speed-chat] Erro increment-usage:', e); }
     }
-    return succeed({ msgId: payload.id, aiMsgId: payload.ai_message_id });
+    return succeed({ msgId: payload.id, aiMsgId: payload.ai_message_id, isAdmin });
   }
 
   // ── Any other error ────────────────────────────────────────────────
