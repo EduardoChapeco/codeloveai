@@ -389,7 +389,7 @@ export default function Profile() {
         {/* Stats */}
         <div className="flex gap-6 mb-6">
           <div className="text-center">
-            <p className="lv-stat text-lg">{profile.posts_count}</p>
+            <p className="lv-stat text-lg">{posts.length}</p>
             <p className="lv-caption">Posts</p>
           </div>
           <button onClick={loadFollowers} className="text-center hover:opacity-80 transition-opacity">

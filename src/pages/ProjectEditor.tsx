@@ -127,8 +127,7 @@ export default function ProjectEditor() {
       const { data: smData, error: smError } = await supabase.functions.invoke("lovable-proxy", {
         body: {
           task: userMsg,
-          lovable_token: "", // Will be resolved; user must have token saved
-          project_id: id,
+          projectId: id,
         },
       });
 
