@@ -115,13 +115,14 @@ async function authenticate(
  * Priority:
  *   1. User's own lovable_accounts token (if exists)
  *   2. Admin master's lovable_accounts token (shared/internal)
+ *   3. LOVABLE_SERVICE_TOKEN env var (final fallback)
  * The client NEVER needs to send a Lovable token.
  */
 async function resolveInternalLovableToken(
   adminClient: ReturnType<typeof createClient>,
   userId: string
 ): Promise<string | null> {
-  // Try user's own token first
+  // 1. Try user's own token
   const { data: userAccount } = await adminClient
     .from("lovable_accounts")
     .select("token_encrypted")
@@ -131,7 +132,7 @@ async function resolveInternalLovableToken(
 
   if (userAccount?.token_encrypted) return userAccount.token_encrypted;
 
-  // Fallback: admin master's token (internal shared token)
+  // 2. Fallback: admin master's token
   const { data: adminUser } = await adminClient
     .from("user_roles")
     .select("user_id")
@@ -149,6 +150,10 @@ async function resolveInternalLovableToken(
 
     if (adminAccount?.token_encrypted) return adminAccount.token_encrypted;
   }
+
+  // 3. Final fallback: LOVABLE_SERVICE_TOKEN env var
+  const serviceToken = Deno.env.get("LOVABLE_SERVICE_TOKEN");
+  if (serviceToken) return serviceToken;
 
   return null;
 }
