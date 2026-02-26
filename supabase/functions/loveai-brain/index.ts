@@ -1,11 +1,11 @@
 /**
- * Star AI Brain v8.1 — Refactored into modules to fix bundle timeout
+ * Star AI Brain v8.2 — Improved stability, account mismatch auto-recovery
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getUserToken, getValidToken, refreshToken, lovFetch } from "./token-helpers.ts";
 import {
-  getBrain, verifyProject, createFreshBrain,
+  getBrain, getBrainRaw, verifyProject, createFreshBrain,
   buildPayload, buildBrainPrompt, captureResponse,
 } from "./brain-helpers.ts";
 
@@ -58,7 +58,13 @@ Deno.serve(async (req) => {
       const lovableToken = await getUserToken(sc, userId);
       if (!lovableToken) return json({ active: false, connected: false, reason: "no_token" });
       const brain = await getBrain(sc, userId);
-      return json({ active: !!brain, connected: true, brain: brain || null });
+      const raw = await getBrainRaw(sc, userId);
+      return json({ 
+        active: !!brain, 
+        connected: true, 
+        brain: brain || null,
+        creating: raw?.status === "creating",
+      });
     }
 
     // ── HISTORY ──
@@ -86,6 +92,18 @@ Deno.serve(async (req) => {
 
     // ── SETUP ──
     if (action === "setup") {
+      // If brain already exists and is accessible, return it
+      const existingBrain = await getBrain(sc, userId);
+      if (existingBrain) {
+        const accessible = await verifyProject(existingBrain.lovable_project_id, lovableToken);
+        if (accessible) {
+          return json({ success: true, project_id: existingBrain.lovable_project_id, already_exists: true });
+        }
+        // Not accessible — account mismatch, delete and recreate
+        console.warn(`[Brain] Project ${existingBrain.lovable_project_id} not accessible, recreating...`);
+        await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      }
+
       const result = await createFreshBrain(sc, userId, lovableToken);
       if ("error" in result) return json({ error: result.error }, 502);
       return json({ success: true, project_id: result.projectId });
@@ -100,27 +118,31 @@ Deno.serve(async (req) => {
 
       let brain = await getBrain(sc, userId);
 
-      // If brain is in "creating" state, wait for it
-      if (brain && brain.lovable_project_id === "creating") {
+      // If brain is creating, wait briefly
+      const raw = await getBrainRaw(sc, userId);
+      if (raw?.status === "creating") {
         await new Promise(r => setTimeout(r, 5000));
         brain = await getBrain(sc, userId);
-        if (!brain || brain.lovable_project_id === "creating") {
+        if (!brain) {
           return json({ error: "Brain está sendo criado. Tente novamente em alguns segundos.", code: "brain_creating" }, 503);
         }
       }
 
+      // Verify brain project is accessible (account mismatch detection)
       if (brain) {
         const accessible = await verifyProject(brain.lovable_project_id, lovableToken);
         if (!accessible) {
+          console.warn(`[Brain] Account mismatch detected, recreating brain for ${userId.slice(0,8)}...`);
           await sc.from("user_brain_projects").delete().eq("user_id", userId);
           brain = null;
         }
       }
 
+      // Auto-create if missing
       if (!brain) {
         const setupResult = await createFreshBrain(sc, userId, lovableToken);
         if ("error" in setupResult) return json({ error: setupResult.error }, 502);
-        brain = { lovable_project_id: setupResult.projectId, lovable_workspace_id: setupResult.workspaceId };
+        brain = { lovable_project_id: setupResult.projectId, lovable_workspace_id: setupResult.workspaceId, status: "active" };
       }
 
       const projectId = brain.lovable_project_id;
@@ -143,6 +165,7 @@ Deno.serve(async (req) => {
         { method: "POST", body: JSON.stringify(payload) }
       );
 
+      // Handle auth failures with auto-recovery
       if (!chatRes.ok && (chatRes.status === 401 || chatRes.status === 403)) {
         const newToken = await refreshToken(sc, userId);
         if (newToken) {
@@ -154,16 +177,16 @@ Deno.serve(async (req) => {
               { method: "POST", body: JSON.stringify(payload) }
             );
           } else {
+            // Account changed — recreate brain
             const newBrain = await createFreshBrain(sc, userId, newToken);
             if ("error" in newBrain) {
               if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
               return json({ error: newBrain.error }, 502);
             }
-            const newPayload = buildPayload(prompt);
             chatRes = await lovFetch(
               `https://api.lovable.dev/projects/${newBrain.projectId}/chat`,
               newToken,
-              { method: "POST", body: JSON.stringify(newPayload) }
+              { method: "POST", body: JSON.stringify(buildPayload(prompt)) }
             );
             if (convoId) await sc.from("loveai_conversations").update({ target_project_id: newBrain.projectId }).eq("id", convoId);
           }
@@ -174,13 +197,13 @@ Deno.serve(async (req) => {
       }
 
       if (!chatRes.ok) {
-        const errBody = await chatRes.text().catch(() => "");
         if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
         return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
       }
 
       const activeToken = await getUserToken(sc, userId) || lovableToken;
-      const activeProjectId = (await getBrain(sc, userId))?.lovable_project_id || projectId;
+      const activeBrain = await getBrain(sc, userId);
+      const activeProjectId = activeBrain?.lovable_project_id || projectId;
 
       const capture = await captureResponse(activeProjectId, activeToken, 90000, 4000, 8000);
 
@@ -199,7 +222,10 @@ Deno.serve(async (req) => {
         }).eq("id", convoId);
       }
 
-      await sc.from("user_brain_projects").update({ last_message_at: new Date().toISOString() }).eq("user_id", userId).eq("status", "active");
+      await sc.from("user_brain_projects")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("status", "active");
 
       return json({
         conversation_id: convoId,

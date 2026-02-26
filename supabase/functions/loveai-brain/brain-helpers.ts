@@ -1,5 +1,5 @@
 import { generateTypeId, obfuscate } from "../_shared/crypto.ts";
-import { lovFetch, getWorkspaceId } from "./token-helpers.ts";
+import { lovFetch, getWorkspaceId, getUserToken } from "./token-helpers.ts";
 
 type SupabaseClient = any;
 
@@ -7,9 +7,19 @@ const API = "https://api.lovable.dev";
 
 export async function getBrain(sc: SupabaseClient, userId: string) {
   const { data } = await sc.from("user_brain_projects")
-    .select("lovable_project_id, lovable_workspace_id")
+    .select("lovable_project_id, lovable_workspace_id, status")
     .eq("user_id", userId)
-    .eq("status", "active")
+    .maybeSingle();
+  // Return null if creating or no data
+  if (!data || data.status === "creating") return null;
+  if (data.status !== "active") return null;
+  return data;
+}
+
+export async function getBrainRaw(sc: SupabaseClient, userId: string) {
+  const { data } = await sc.from("user_brain_projects")
+    .select("lovable_project_id, lovable_workspace_id, status")
+    .eq("user_id", userId)
     .maybeSingle();
   return data;
 }
@@ -25,42 +35,49 @@ export async function verifyProject(projectId: string, token: string): Promise<b
 
 /**
  * Acquires a lock for brain creation using an upsert with a "creating" status.
- * Returns true if lock acquired, false if another process is already creating.
  */
 async function acquireBrainLock(sc: SupabaseClient, userId: string): Promise<boolean> {
-  // Try to insert a "creating" placeholder — if one already exists, skip
-  const { data, error } = await sc.from("user_brain_projects")
-    .upsert(
-      {
-        user_id: userId,
-        lovable_project_id: "creating",
-        lovable_workspace_id: "pending",
-        status: "creating",
-        brain_owner: "user",
-      },
-      { onConflict: "user_id", ignoreDuplicates: false }
-    )
-    .select("status")
-    .single();
-
-  if (error) {
-    // If there's a conflict with an existing active/creating record, check status
-    const { data: existing } = await sc.from("user_brain_projects")
-      .select("status, lovable_project_id")
+  // First check if there's already an active brain
+  const existing = await getBrainRaw(sc, userId);
+  
+  if (existing?.status === "creating") {
+    // Check if stale (> 2 minutes old)
+    const { data: row } = await sc.from("user_brain_projects")
+      .select("created_at")
       .eq("user_id", userId)
       .maybeSingle();
     
-    if (existing?.status === "creating") {
-      console.log(`[Brain] Lock already held for ${obfuscate(userId)}, skipping creation`);
-      return false;
-    }
-    // If active, no need to create
-    if (existing?.status === "active" && existing.lovable_project_id !== "creating") {
-      console.log(`[Brain] Active brain already exists for ${obfuscate(userId)}`);
-      return false;
+    if (row?.created_at) {
+      const age = Date.now() - new Date(row.created_at).getTime();
+      if (age > 120_000) {
+        // Stale lock, clear it
+        await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      } else {
+        console.log(`[Brain] Lock held for ${obfuscate(userId)}, age ${Math.round(age/1000)}s`);
+        return false;
+      }
     }
   }
+  
+  if (existing?.status === "active" && existing.lovable_project_id !== "creating") {
+    return false; // Already active
+  }
 
+  // Delete any existing record first, then insert
+  await sc.from("user_brain_projects").delete().eq("user_id", userId);
+  
+  const { error } = await sc.from("user_brain_projects").insert({
+    user_id: userId,
+    lovable_project_id: "creating",
+    lovable_workspace_id: "pending",
+    status: "creating",
+    brain_owner: "user",
+  });
+
+  if (error) {
+    console.error(`[Brain] Lock insert failed:`, error.message);
+    return false;
+  }
   return true;
 }
 
@@ -69,14 +86,12 @@ export async function createFreshBrain(
   userId: string,
   token: string
 ): Promise<{ projectId: string; workspaceId: string } | { error: string }> {
-  // Acquire lock to prevent concurrent creation
   const locked = await acquireBrainLock(sc, userId);
   if (!locked) {
-    // Wait briefly and check if a brain became available
     await new Promise(r => setTimeout(r, 3000));
     const existing = await getBrain(sc, userId);
     if (existing) return { projectId: existing.lovable_project_id, workspaceId: existing.lovable_workspace_id };
-    return { error: "Brain creation already in progress. Tente novamente em alguns segundos." };
+    return { error: "Brain está sendo criado. Tente novamente em alguns segundos." };
   }
 
   try {
@@ -114,25 +129,27 @@ export async function createFreshBrain(
       const errText = await createRes.text().catch(() => "");
       console.error(`[Brain] Create failed: ${createRes.status} ${errText.slice(0, 300)}`);
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
-      return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status}). ${errText.slice(0, 100)}` };
+      return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
     }
 
     const project = await createRes.json();
     const projectId = project?.id || project?.project_id;
     if (!projectId) {
-      console.error(`[Brain] No project ID in response:`, JSON.stringify(project).slice(0, 300));
+      console.error(`[Brain] No project ID in response`);
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: "ID do projeto não retornado pela API" };
     }
 
     console.log(`[Brain] ✅ Project created: ${projectId}`);
 
+    // Cancel initial build to save credits
     try {
       await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, {
         method: "POST", body: "{}",
       });
     } catch { /* ok */ }
 
+    // Inject brain config files
     try {
       await lovFetch(`${API}/projects/${projectId}/edit-code`, token, {
         method: "POST",
@@ -151,7 +168,7 @@ export async function createFreshBrain(
       });
     } catch { /* ok */ }
 
-    // Promote lock to active with real project data
+    // Promote lock to active
     await sc.from("user_brain_projects")
       .update({
         lovable_project_id: projectId,
@@ -163,7 +180,6 @@ export async function createFreshBrain(
     console.log(`[Brain] ✅ Fresh project ${projectId} saved for ${obfuscate(userId)}`);
     return { projectId, workspaceId };
   } catch (err) {
-    // Release lock on failure
     await sc.from("user_brain_projects").delete().eq("user_id", userId);
     throw err;
   }
