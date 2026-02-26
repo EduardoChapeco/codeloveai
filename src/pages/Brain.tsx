@@ -1,25 +1,17 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useSEO } from "@/hooks/useSEO";
 import AppLayout from "@/components/AppLayout";
-import OrchestratorDashboard from "@/components/orchestrator/OrchestratorDashboard";
 import {
   Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
   Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon,
-  MessageSquare, ChevronLeft, ChevronRight, Bug, Globe, Zap, Volume2, VolumeX, Stars,
+  MessageSquare, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-
-interface AssistantMessage {
-  role: "user" | "ai";
-  content: string;
-  audioUrl?: string;
-  loading?: boolean;
-}
 
 type BrainType = "general" | "design" | "code" | "scraper" | "migration";
 type ConvoStatus = "pending" | "processing" | "completed" | "timeout" | "failed";
@@ -68,6 +60,7 @@ function groupByDate(convos: Conversation[]): Record<string, Conversation[]> {
 export default function BrainPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  useSEO({ title: "Star AI" });
 
   const [brainActive, setBrainActive] = useState<boolean | null>(null);
   const [lovableConnected, setLovableConnected] = useState<boolean | null>(null);
@@ -77,16 +70,8 @@ export default function BrainPage() {
   const [message, setMessage] = useState("");
   const [brainType, setBrainType] = useState<BrainType>("general");
   const [sending, setSending] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [brainMode, setBrainMode] = useState<"chat" | "orchestrator" | "assistant">("chat");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const assistantEndRef = useRef<HTMLDivElement>(null);
-
-  // ── Gemini Assistant state
-  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
-  const [assistantInput, setAssistantInput] = useState("");
-  const [assistantLoading, setAssistantLoading] = useState(false);
-  const [playingAudio, setPlayingAudio] = useState<HTMLAudioElement | null>(null);
 
   const historyConvos = useMemo(() => {
     return allConversations.filter(c => c.status === "completed" || c.status === "timeout" || c.status === "failed");
@@ -136,16 +121,6 @@ export default function BrainPage() {
     } catch { /* silent */ }
   };
 
-  const startNewConversation = () => {
-    setCurrentConvoId(null);
-    setMessage("");
-  };
-
-  const selectConversation = (convo: Conversation) => {
-    setCurrentConvoId(convo.id);
-    setBrainType(convo.brain_type);
-  };
-
   const setupBrain = async () => {
     setSettingUp(true);
     try {
@@ -163,7 +138,6 @@ export default function BrainPage() {
     }
   };
 
-  // ── Send message — response comes back directly from the edge function ──
   const sendMessage = async () => {
     if (!message.trim() || sending) return;
     const userMsg = message.trim();
@@ -172,13 +146,9 @@ export default function BrainPage() {
 
     const tempId = crypto.randomUUID();
     const tempConvo: Conversation = {
-      id: tempId,
-      user_message: userMsg,
-      ai_response: null,
-      brain_type: brainType,
-      status: "processing",
-      created_at: new Date().toISOString(),
-      target_project_id: null,
+      id: tempId, user_message: userMsg, ai_response: null,
+      brain_type: brainType, status: "processing",
+      created_at: new Date().toISOString(), target_project_id: null,
     };
     setAllConversations(prev => [...prev, tempConvo]);
 
@@ -186,20 +156,12 @@ export default function BrainPage() {
       const { data, error } = await supabase.functions.invoke("loveai-brain", {
         body: { action: "send", message: userMsg, brain_type: brainType },
       });
-
       if (error) {
-        const errData = data as any;
-        if (errData?.code === "no_token") {
-          setLovableConnected(false);
-          setBrainActive(false);
-        }
-        throw new Error(errData?.error || error.message);
+        if ((data as any)?.code === "no_token") { setLovableConnected(false); setBrainActive(false); }
+        throw new Error((data as any)?.error || error.message);
       }
       if (data?.error) {
-        if (data?.code === "no_token") {
-          setLovableConnected(false);
-          setBrainActive(false);
-        }
+        if (data?.code === "no_token") { setLovableConnected(false); setBrainActive(false); }
         throw new Error(data.error);
       }
 
@@ -208,21 +170,12 @@ export default function BrainPage() {
       const finalStatus = data.status === "completed" ? "completed" : data.status === "timeout" ? "timeout" : "failed";
 
       setAllConversations(prev =>
-        prev.map(c =>
-          c.id === tempId
-            ? { ...c, id: conversationId, ai_response: responseText, status: finalStatus as ConvoStatus }
-            : c
-        )
+        prev.map(c => c.id === tempId ? { ...c, id: conversationId, ai_response: responseText, status: finalStatus as ConvoStatus } : c)
       );
       setCurrentConvoId(conversationId);
-
-      if (finalStatus === "timeout") {
-        toast.error("Star AI não respondeu a tempo (90s). Tente novamente.");
-      }
+      if (finalStatus === "timeout") toast.error("Star AI não respondeu a tempo (90s). Tente novamente.");
     } catch (err: any) {
-      setAllConversations(prev =>
-        prev.map(c => c.id === tempId ? { ...c, status: "failed" } : c)
-      );
+      setAllConversations(prev => prev.map(c => c.id === tempId ? { ...c, status: "failed" } : c));
       toast.error(err.message || "Erro ao processar");
     } finally {
       setSending(false);
@@ -230,48 +183,8 @@ export default function BrainPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
-
-  // ── Gemini assistant
-  const sendAssistantMessage = useCallback(async () => {
-    const text = assistantInput.trim();
-    if (!text || assistantLoading) return;
-    setAssistantInput("");
-    setAssistantMessages(prev => [...prev, { role: "user", content: text }, { role: "ai", content: "", loading: true }]);
-    setAssistantLoading(true);
-    try {
-      const history = assistantMessages.filter(m => !m.loading).slice(-10).map(m => ({ role: m.role, content: m.content }));
-      const { data, error } = await supabase.functions.invoke("gemini-chat", { body: { message: text, history } });
-      if (error) throw error;
-      const reply = (data as any).reply || "Não consegui processar sua pergunta.";
-      setAssistantMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, content: reply, loading: false } : m));
-    } catch (e: any) {
-      setAssistantMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, content: "Erro ao conectar.", loading: false } : m));
-      toast.error(e.message);
-    } finally {
-      setAssistantLoading(false);
-    }
-  }, [assistantInput, assistantLoading, assistantMessages]);
-
-  const playVoice = useCallback(async (text: string) => {
-    if (playingAudio) { playingAudio.pause(); setPlayingAudio(null); return; }
-    try {
-      const { data, error } = await supabase.functions.invoke("voice-response", { body: { text } });
-      if (error || !(data as any).url) throw new Error("Sem URL de áudio");
-      const audio = new Audio((data as any).url);
-      setPlayingAudio(audio);
-      audio.onended = () => setPlayingAudio(null);
-      audio.play();
-    } catch { toast.error("Não foi possível gerar o áudio."); }
-  }, [playingAudio]);
-
-  useEffect(() => {
-    assistantEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [assistantMessages]);
 
   const copyResponse = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -279,15 +192,10 @@ export default function BrainPage() {
   };
 
   if (authLoading || !user) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </AppLayout>
-    );
+    return <AppLayout><div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
 
+  // Not connected
   if (lovableConnected === false) {
     return (
       <AppLayout>
@@ -298,7 +206,7 @@ export default function BrainPage() {
           <h1 className="text-2xl font-bold mb-3">Lovable não conectado</h1>
           <p className="text-muted-foreground mb-2">Para usar o Star AI, conecte sua conta Lovable primeiro.</p>
           <p className="text-sm text-muted-foreground/70 mb-8">O Star AI utiliza o Lovable como motor de IA — sem gastar créditos.</p>
-          <Link to="/lovable/connect" className="lv-btn-primary h-12 px-8 text-sm inline-flex items-center gap-2">
+          <Link to="/lovable/connect" className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
             <LinkIcon className="h-4 w-4" /> Conectar Lovable
           </Link>
         </div>
@@ -306,6 +214,7 @@ export default function BrainPage() {
     );
   }
 
+  // Not activated
   if (brainActive === false) {
     return (
       <AppLayout>
@@ -316,7 +225,7 @@ export default function BrainPage() {
           <h1 className="text-2xl font-bold mb-3">Star AI</h1>
           <p className="text-muted-foreground mb-2">O Star AI é sua IA pessoal alimentada pelo Lovable.</p>
           <p className="text-sm text-muted-foreground/70 mb-8">Funciona via modos gratuitos — sem gastar créditos.</p>
-          <button onClick={setupBrain} disabled={settingUp} className="lv-btn-primary h-12 px-8 text-sm inline-flex items-center gap-2">
+          <button onClick={setupBrain} disabled={settingUp} className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
             {settingUp ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando Star AI...</> : <><Power className="h-4 w-4" /> Ativar Star AI</>}
           </button>
         </div>
@@ -324,14 +233,9 @@ export default function BrainPage() {
     );
   }
 
+  // Loading status
   if (brainActive === null) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      </AppLayout>
-    );
+    return <AppLayout><div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
 
   const displayConvos = currentConvoId
@@ -340,14 +244,28 @@ export default function BrainPage() {
 
   return (
     <AppLayout>
-      <div className="flex" style={{ height: "calc(100vh - 3rem)" }}>
-        {/* Sidebar */}
-        <div className={`clf-glass-sidebar flex flex-col shrink-0 transition-all duration-200 ${sidebarOpen ? "w-64" : "w-0 overflow-hidden"}`}>
-          <div className="p-3 border-b border-white/[0.06] flex items-center justify-between">
+      <div className="flex h-[calc(100vh-3rem)] relative">
+        {/* History sidebar — overlay on mobile, inline on desktop */}
+        {sidebarOpen && (
+          <div className="absolute inset-0 z-20 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        )}
+        <div className={`
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden"}
+          absolute lg:relative z-30 lg:z-auto
+          w-72 lg:w-64 h-full
+          clf-liquid-glass border-r border-border/30
+          flex flex-col shrink-0 transition-all duration-200
+        `}>
+          <div className="p-3 border-b border-border/20 flex items-center justify-between">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Histórico</span>
-            <button onClick={startNewConversation} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-white/[0.06] transition-colors" title="Nova conversa">
-              <Plus className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button onClick={() => { setCurrentConvoId(null); setMessage(""); }} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-foreground/5 transition-colors" title="Nova conversa">
+                <Plus className="h-4 w-4" />
+              </button>
+              <button onClick={() => setSidebarOpen(false)} className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-foreground/5 transition-colors lg:hidden">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-3">
             {Object.keys(groupedHistory).length === 0 && (
@@ -359,9 +277,9 @@ export default function BrainPage() {
                 {convos.map(c => (
                   <button
                     key={c.id}
-                    onClick={() => selectConversation(c)}
+                    onClick={() => { setCurrentConvoId(c.id); setBrainType(c.brain_type); setSidebarOpen(false); }}
                     className={`w-full text-left px-2.5 py-2 rounded-xl text-xs truncate transition-all ${
-                      currentConvoId === c.id ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-white/[0.04]"
+                      currentConvoId === c.id ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-foreground/5"
                     }`}
                   >
                     <MessageSquare className="h-3 w-3 inline mr-1.5 opacity-50" />
@@ -373,260 +291,139 @@ export default function BrainPage() {
           </div>
         </div>
 
-        {/* Main area */}
+        {/* Main chat area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
-          <div className="border-b border-white/[0.06] px-4 py-3 flex items-center gap-3 shrink-0">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-white/[0.06] transition-colors">
-              {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <div className="border-b border-border/40 px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-foreground/5 transition-colors shrink-0">
+              {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
             </button>
-            <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
               <BrainIcon className="h-4 w-4 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold">Star AI</p>
               <p className="text-[11px] text-muted-foreground">🟢 Ativo</p>
             </div>
 
-            {/* Mode toggle */}
-            <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-0.5 ml-2">
-              {[
-                { id: "chat" as const, label: "Chat", icon: MessageSquare },
-                { id: "assistant" as const, label: "Assistente", icon: Stars },
-                { id: "orchestrator" as const, label: "Orquestrador", icon: Zap },
-              ].map(m => (
+            {/* Brain type selector */}
+            <div className="flex items-center gap-1 ml-auto flex-wrap justify-end">
+              {brainTypes.map(bt => (
                 <button
-                  key={m.id}
-                  onClick={() => setBrainMode(m.id)}
-                  className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1 transition-colors ${
-                    brainMode === m.id ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                  key={bt.id}
+                  onClick={() => setBrainType(bt.id)}
+                  title={bt.desc}
+                  className={`h-8 px-3 rounded-2xl text-[11px] font-medium flex items-center gap-1.5 transition-all ${
+                    brainType === bt.id
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "clf-liquid-glass text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <m.icon className="h-3 w-3" /> {m.label}
+                  <bt.icon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{bt.label}</span>
                 </button>
               ))}
             </div>
-
-            {brainMode === "chat" && (
-              <div className="ml-auto flex items-center gap-1 flex-wrap justify-end">
-                {brainTypes.map(bt => (
-                  <button
-                    key={bt.id}
-                    onClick={() => setBrainType(bt.id)}
-                    title={bt.desc}
-                    className={`h-7 px-2.5 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors ${
-                      brainType === bt.id ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    <bt.icon className="h-3 w-3" />
-                    <span className="hidden lg:inline">{bt.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* Orchestrator mode */}
-          {brainMode === "orchestrator" && (
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              <OrchestratorDashboard />
-            </div>
-          )}
-
-          {/* Assistant mode */}
-          {brainMode === "assistant" && (
-            <div className="flex-1 flex flex-col min-w-0">
-              <div className="px-4 py-2.5 bg-blue-500/5 border-b border-blue-400/20 flex items-center gap-2">
-                <Stars className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                <p className="text-[11px] text-blue-600/80">
-                  <strong>Assistente Starble</strong> — responde dúvidas sobre a plataforma.
-                </p>
-                {assistantMessages.length > 0 && (
-                  <button onClick={() => setAssistantMessages([])} className="ml-auto text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                    Limpar conversa
-                  </button>
-                )}
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4">
+            {displayConvos.length === 0 && !currentConvoId && (
+              <div className="text-center py-12 sm:py-20">
+                <BrainIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/20" />
+                <p className="font-medium mb-1">Inicie uma conversa</p>
+                <p className="text-sm text-muted-foreground mb-4">Envie uma mensagem e o Star AI processará via Lovable (sem créditos).</p>
+                <div className="flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
+                  {brainTypes.map(bt => (
+                    <span key={bt.id} className="px-3 py-1.5 rounded-2xl clf-liquid-glass">
+                      <bt.icon className="h-3 w-3 inline mr-1" />{bt.label}
+                    </span>
+                  ))}
+                </div>
               </div>
+            )}
 
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                {assistantMessages.length === 0 && (
-                  <div className="text-center py-16">
-                    <div className="h-16 w-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
-                      <Stars className="h-8 w-8 text-blue-500" />
-                    </div>
-                    <p className="font-medium mb-1">Como posso ajudar?</p>
-                    <p className="text-sm text-muted-foreground mb-6">Tire dúvidas sobre a plataforma Starble</p>
-                    <div className="flex flex-col gap-2 max-w-sm mx-auto">
-                      {["Como funciona o Orquestrador?", "O que é o StarCrawl?", "Como conectar minha conta Lovable?", "Diferença entre os planos?"].map(q => (
-                        <button key={q} onClick={() => setAssistantInput(q)} className="text-left px-4 py-2.5 rounded-xl bg-muted/40 hover:bg-muted/70 text-sm text-muted-foreground transition-colors border border-border/40">
-                          {q}
-                        </button>
-                      ))}
+            {(currentConvoId ? [allConversations.find(c => c.id === currentConvoId)].filter(Boolean) as Conversation[] : displayConvos).map((convo) => (
+              <div key={convo.id} className="space-y-3 max-w-4xl mx-auto">
+                {/* User message */}
+                <div className="flex justify-end">
+                  <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3">
+                    <p className="text-sm whitespace-pre-wrap">{convo.user_message}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] opacity-60">{brainTypes.find(b => b.id === convo.brain_type)?.label || convo.brain_type}</span>
+                      <span className="text-[10px] opacity-40">{new Date(convo.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
                   </div>
-                )}
-
-                {assistantMessages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    {msg.role === "ai" && (
-                      <div className="h-7 w-7 rounded-full bg-blue-500/15 flex items-center justify-center shrink-0 mr-2 mt-1">
-                        <Stars className="h-3.5 w-3.5 text-blue-500" />
+                </div>
+                {/* AI response */}
+                <div className="flex justify-start">
+                  <div className="max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-bl-md clf-liquid-glass px-4 sm:px-5 py-3 sm:py-4">
+                    {convo.status === "processing" && (
+                      <div className="flex items-center gap-3 text-primary">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm font-medium">Processando (até 90s)...</span>
                       </div>
                     )}
-                    <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "bg-muted/60 border border-border/40 rounded-bl-sm"
-                    }`}>
-                      {msg.loading ? (
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span className="text-xs text-muted-foreground">Pensando...</span>
+                    {convo.status === "timeout" && (
+                      <div className="flex items-center gap-2 text-amber-500">
+                        <AlertTriangle className="h-4 w-4" /><span className="text-sm">Tempo esgotado — tente novamente</span>
+                      </div>
+                    )}
+                    {convo.status === "failed" && (
+                      <div className="flex items-center gap-2 text-destructive">
+                        <XCircle className="h-4 w-4" /><span className="text-sm">Falha ao processar</span>
+                      </div>
+                    )}
+                    {convo.status === "completed" && convo.ai_response && (
+                      <>
+                        <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{convo.ai_response}</ReactMarkdown>
                         </div>
-                      ) : (
-                        <>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                          {msg.role === "ai" && msg.content && (
-                            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/30">
-                              <button onClick={() => playVoice(msg.content)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                                {playingAudio ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
-                                {playingAudio ? "Parar" : "Ouvir"}
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
+                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/30">
+                          <button onClick={() => copyResponse(convo.ai_response!)} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">📋 Copiar</button>
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                        </div>
+                      </>
+                    )}
                   </div>
-                ))}
-                <div ref={assistantEndRef} />
-              </div>
-
-              <div className="border-t border-border/60 px-4 py-3">
-                <div className="flex items-end gap-2">
-                  <textarea
-                    value={assistantInput}
-                    onChange={e => setAssistantInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAssistantMessage(); } }}
-                    placeholder="Pergunte sobre a plataforma..."
-                    rows={1}
-                    className="flex-1 resize-none bg-muted/40 border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[44px] max-h-[120px] focus:border-primary/50"
-                    style={{ scrollbarWidth: "none" }}
-                  />
-                  <button
-                    onClick={sendAssistantMessage}
-                    disabled={assistantLoading || !assistantInput.trim()}
-                    className="h-11 w-11 flex items-center justify-center rounded-xl bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 transition-colors shrink-0"
-                  >
-                    {assistantLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  </button>
                 </div>
               </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="border-t border-border/40 px-4 sm:px-6 py-3 shrink-0">
+            <div className="max-w-4xl mx-auto flex items-end gap-2 sm:gap-3">
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={`Pergunte ao Star AI (${brainTypes.find(b => b.id === brainType)?.label})...`}
+                rows={1}
+                disabled={sending}
+                className="flex-1 min-h-[44px] max-h-[160px] py-3 px-4 resize-none text-sm rounded-2xl clf-liquid-glass focus:outline-none focus:ring-2 focus:ring-primary/30"
+                style={{ height: "auto", overflow: "hidden" }}
+                onInput={(e) => {
+                  const t = e.currentTarget;
+                  t.style.height = "auto";
+                  t.style.height = Math.min(t.scrollHeight, 160) + "px";
+                }}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!message.trim() || sending}
+                className="h-11 w-11 flex items-center justify-center shrink-0 rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </button>
             </div>
-          )}
-
-          {/* Chat mode */}
-          {brainMode === "chat" && (
-            <>
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                {displayConvos.length === 0 && !currentConvoId && (
-                  <div className="text-center py-20">
-                    <BrainIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground/20" />
-                    <p className="font-medium mb-1">Inicie uma conversa</p>
-                    <p className="text-sm text-muted-foreground mb-4">Envie uma mensagem e o Star AI processará via Lovable (sem créditos).</p>
-                    <div className="flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
-                      <span className="px-2 py-1 rounded-md bg-muted/50">🧠 Geral</span>
-                      <span className="px-2 py-1 rounded-md bg-muted/50">🎨 Design</span>
-                      <span className="px-2 py-1 rounded-md bg-muted/50">💻 Code</span>
-                      <span className="px-2 py-1 rounded-md bg-muted/50">🔍 Scraper</span>
-                      <span className="px-2 py-1 rounded-md bg-muted/50">📦 Migration</span>
-                    </div>
-                  </div>
-                )}
-
-                {(currentConvoId ? [allConversations.find(c => c.id === currentConvoId)].filter(Boolean) as Conversation[] : displayConvos).map((convo) => (
-                  <div key={convo.id} className="space-y-3">
-                    <div className="flex justify-end">
-                      <div className="max-w-[75%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3">
-                        <p className="text-sm whitespace-pre-wrap">{convo.user_message}</p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-[10px] opacity-60">{brainTypes.find(b => b.id === convo.brain_type)?.label || convo.brain_type}</span>
-                          <span className="text-[10px] opacity-40">{new Date(convo.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-start">
-                      <div className="max-w-[85%] rounded-[22px] rounded-bl-md clf-liquid-glass px-5 py-4 shadow-sm border-black/[0.03] dark:border-white/[0.03]">
-                        {convo.status === "processing" && (
-                          <div className="flex items-center gap-3 text-primary">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="text-sm font-medium tracking-tight">Processando (até 90s)...</span>
-                          </div>
-                        )}
-                        {convo.status === "timeout" && (
-                          <div className="flex items-center gap-2 text-amber-500">
-                            <AlertTriangle className="h-4 w-4" /><span className="text-sm">Tempo esgotado — tente novamente</span>
-                          </div>
-                        )}
-                        {convo.status === "failed" && (
-                          <div className="flex items-center gap-2 text-destructive">
-                            <XCircle className="h-4 w-4" /><span className="text-sm">Falha ao processar</span>
-                          </div>
-                        )}
-                        {convo.status === "completed" && convo.ai_response && (
-                          <>
-                            <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{convo.ai_response}</ReactMarkdown>
-                            </div>
-                            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/40">
-                              <button onClick={() => copyResponse(convo.ai_response!)} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">📋 Copiar</button>
-                              <CheckCircle className="h-3 w-3 text-green-500" />
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input */}
-              <div className="border-t border-border/60 px-6 py-3 shrink-0">
-                <div className="max-w-4xl mx-auto flex items-end gap-3">
-                  <div className="flex-1 relative">
-                    <textarea
-                      value={message}
-                      onChange={e => setMessage(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={`Pergunte ao Star AI (${brainTypes.find(b => b.id === brainType)?.label})...`}
-                      rows={1}
-                      disabled={sending}
-                      className="w-full min-h-[44px] max-h-[160px] py-3 px-4 pr-12 resize-none text-sm rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      style={{ height: "auto", overflow: "hidden" }}
-                      onInput={(e) => {
-                        const t = e.currentTarget;
-                        t.style.height = "auto";
-                        t.style.height = Math.min(t.scrollHeight, 160) + "px";
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={sendMessage}
-                    disabled={!message.trim() || sending}
-                    className="h-11 w-11 flex items-center justify-center shrink-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                  >
-                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  </button>
-                </div>
-                {sending && (
-                  <p className="text-center text-xs text-muted-foreground mt-2 animate-pulse">
-                    ⏳ Processando no Star AI (até 90s)...
-                  </p>
-                )}
-              </div>
-            </>
-          )}
+            {sending && (
+              <p className="text-center text-xs text-muted-foreground mt-2 animate-pulse">
+                ⏳ Processando no Star AI (até 90s)...
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </AppLayout>
