@@ -1,5 +1,7 @@
-// send-message — alias for lovable-proxy v4.0.0
-// Exact copy: security_fix_v2, chat_only=false
+// send-message v4.1.0 — compat proxy (security_fix_v2, chat_only=false)
+// Aceita formato legado e resolve token via JWT/CLF1/admin account quando não enviado.
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const LOVABLE_API = "https://api.lovable.dev";
 const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
@@ -27,6 +29,85 @@ function json(body: Record<string, unknown>, status = 200) {
   });
 }
 
+async function getUserTokenFromAccount(adminClient: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
+  const { data } = await adminClient
+    .from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .limit(1);
+
+  return data?.[0]?.token_encrypted?.trim() || null;
+}
+
+async function resolveLovableToken(req: Request, body: Record<string, unknown>): Promise<string | null> {
+  const explicit = (
+    (body.lovable_token as string) ||
+    (body.lovableToken as string) ||
+    (body.token as string) ||
+    ""
+  ).trim();
+  if (explicit.length >= 10) return explicit;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) return null;
+
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || "";
+  if (authHeader.startsWith("Bearer ")) {
+    try {
+      const jwt = authHeader.replace("Bearer ", "");
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(jwt);
+      if (!claimsError && claimsData?.claims?.sub) {
+        const userId = String(claimsData.claims.sub);
+        const byUser = await getUserTokenFromAccount(adminClient, userId);
+        if (byUser) return byUser;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const headerClf = (req.headers.get("x-clf-token") || "").trim();
+  const bodyClf = (
+    (body.licenseKey as string) ||
+    (body.clf_license as string) ||
+    (body.clfToken as string) ||
+    ""
+  ).trim();
+  const clf = headerClf.startsWith("CLF1.") ? headerClf : bodyClf.startsWith("CLF1.") ? bodyClf : "";
+
+  if (clf) {
+    const { data: licenseRows } = await adminClient
+      .from("licenses")
+      .select("user_id")
+      .eq("key", clf)
+      .eq("active", true)
+      .limit(1);
+
+    const licenseUserId = licenseRows?.[0]?.user_id;
+    if (licenseUserId) {
+      const byLicenseUser = await getUserTokenFromAccount(adminClient, String(licenseUserId));
+      if (byLicenseUser) return byLicenseUser;
+    }
+  }
+
+  const { data: adminRows } = await adminClient
+    .from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("is_admin_account", true)
+    .eq("status", "active")
+    .limit(1);
+
+  return adminRows?.[0]?.token_encrypted?.trim() || null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
@@ -34,25 +115,25 @@ Deno.serve(async (req: Request) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
-  // Accept both lovable-proxy format and legacy send-message format
-  const task = (body.task as string) || (body.message as string) || "";
-  const lovableToken = (body.lovable_token as string) || (body.lovableToken as string) || "";
-  const projectId = (body.project_id as string) || (body.projectId as string) || "";
+  const task = ((body.task as string) || (body.message as string) || "").trim();
+  const projectId = ((body.project_id as string) || (body.projectId as string) || "").trim();
   const runtimeErrors = Array.isArray(body.runtime_errors) ? body.runtime_errors : [];
   const view = body.view ?? null;
   const viewDescription = body.view_description ?? null;
 
-  if (!task.trim()) return json({ ok: false, error: "task/message is required" }, 400);
-  if (!lovableToken || lovableToken.length < 10) return json({ ok: false, error: "lovable_token is required" }, 400);
+  if (!task) return json({ ok: false, error: "task/message is required" }, 400);
   if (!projectId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId))
     return json({ ok: false, error: "project_id invalid (UUID expected)" }, 400);
+
+  const lovableToken = await resolveLovableToken(req, body);
+  if (!lovableToken) return json({ ok: false, error: "lovable_token is required (not resolved from JWT/CLF1/admin)" }, 401);
 
   const msgId = crypto.randomUUID();
   const aiMsgId = makeAiMsgId();
 
   const payload = {
     id: msgId,
-    message: ANTI_QUESTION_PREFIX + task.trim(),
+    message: ANTI_QUESTION_PREFIX + task,
     intent: "security_fix_v2",
     chat_only: false,
     ai_message_id: aiMsgId,
