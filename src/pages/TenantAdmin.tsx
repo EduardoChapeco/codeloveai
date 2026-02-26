@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
+import ActivityDashboard from "@/components/admin/ActivityDashboard";
 
 // ── Types ──
 interface TenantMember {
@@ -29,7 +30,7 @@ interface TenantLicense {
 interface WalletInfo { balance: number; total_credited: number; total_debited: number; }
 interface WalletTransaction { id: string; amount: number; type: string; description: string; created_at: string; }
 
-type Tab = "editor" | "users" | "licenses" | "finances";
+type Tab = "editor" | "users" | "licenses" | "finances" | "activity";
 
 const THEME_PRESETS = TENANT_THEME_PRESETS.map((preset) => ({
   id: preset.id,
@@ -1008,6 +1009,11 @@ export default function TenantAdmin() {
                 </div>
               </GlassCard>
             </div>
+          )}
+
+          {/* ═══════════════ ACTIVITY TAB ═══════════════ */}
+          {tab === "activity" && (
+            <ActivityDashboard isGlobalAdmin={isGlobalAdmin} tenantId={tenant?.id} />
           )}
         </div>
       </div>

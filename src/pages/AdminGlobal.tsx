@@ -21,6 +21,7 @@ import LovableCloudTab from "@/components/admin/LovableCloudTab";
 import ModulesManagementTab from "@/components/admin/ModulesManagementTab";
 import ApiKeysManagementTab from "@/components/admin/ApiKeysManagementTab";
 import ExtensionsManagementTab from "@/components/admin/ExtensionsManagementTab";
+import ActivityDashboard from "@/components/admin/ActivityDashboard";
 
 interface TenantRow {
   id: string;
@@ -137,7 +138,7 @@ interface FeatureFlag {
   updated_at: string;
 }
 
-type Tab = "tenants" | "plans" | "extensions" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules" | "api_keys";
+type Tab = "tenants" | "plans" | "extensions" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules" | "api_keys" | "activity";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -851,6 +852,9 @@ export default function AdminGlobal() {
 
           {/* ─── API KEYS TAB ─── */}
           {tab === "api_keys" && <ApiKeysManagementTab />}
+
+          {/* ─── ACTIVITY DASHBOARD TAB ─── */}
+          {tab === "activity" && <ActivityDashboard isGlobalAdmin={true} />}
 
           {/* ─── OPERATIONS TAB ─── */}
           {tab === "operations" && (

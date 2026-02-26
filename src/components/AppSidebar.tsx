@@ -11,7 +11,7 @@ import {
   Zap, CreditCard, BookOpen, LifeBuoy, Workflow, Scale,
   Rocket, Globe, Handshake, Puzzle, Key, Wallet, Palette,
   DollarSign, Package, Sliders, UserPlus, BarChart3, MessageSquare,
-  CloudLightning,
+  CloudLightning, Activity,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -61,6 +61,7 @@ const adminGlobalTabs = [
   { id: "wallets", label: "Wallets", icon: Wallet, desc: "Saldos por tenant" },
   { id: "ledger", label: "Ledger", icon: BookOpen, desc: "Extrato contábil" },
   { id: "api_keys", label: "API Keys", icon: Key, desc: "Chaves de acesso" },
+  { id: "activity", label: "Atividade", icon: Activity, desc: "Dashboard de uso" },
   { id: "operations", label: "Operações", icon: Shield, desc: "Ações globais" },
 ];
 
@@ -69,6 +70,7 @@ const adminTenantTabs = [
   { id: "users", label: "Usuários", icon: Users, desc: "Membros do tenant" },
   { id: "licenses", label: "Licenças", icon: Key, desc: "Tokens ativos" },
   { id: "finances", label: "Financeiro", icon: Wallet, desc: "Saldo & extrato" },
+  { id: "activity", label: "Atividade", icon: Activity, desc: "Dashboard de uso" },
 ];
 
 // ── Liquid Glass Tab Button ──
