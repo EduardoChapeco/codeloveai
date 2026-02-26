@@ -38,29 +38,32 @@ Deno.serve(async (req) => {
   const action = (body.action as string) || "send";
 
   try {
-    // ── Get Resend API key from api_keys table ──
+    // ── Get Resend API key from api_key_vault table or env ──
     async function getResendKey(): Promise<string> {
       const { data } = await sc
-        .from("api_keys")
-        .select("key_encrypted, extra_config")
+        .from("api_key_vault")
+        .select("api_key_encrypted, extra_config")
         .eq("provider", "resend")
         .eq("is_active", true)
-        .order("requests_today", { ascending: true })
+        .order("requests_count", { ascending: true })
         .limit(1)
-        .single();
-      if (!data?.key_encrypted) throw new Error("Nenhuma chave Resend configurada. Vá em Admin > Integrações.");
-      return data.key_encrypted;
+        .maybeSingle();
+      if (data?.api_key_encrypted) return data.api_key_encrypted;
+      // Fallback to env variable
+      const envKey = Deno.env.get("RESEND_API_KEY");
+      if (envKey) return envKey;
+      throw new Error("Nenhuma chave Resend configurada. Vá em Admin > Integrações ou configure RESEND_API_KEY.");
     }
 
     // ── Get from_email from api_keys extra_config or default ──
     async function getFromEmail(): Promise<string> {
       const { data } = await sc
-        .from("api_keys")
+        .from("api_key_vault")
         .select("extra_config")
         .eq("provider", "resend")
         .eq("is_active", true)
         .limit(1)
-        .single();
+        .maybeSingle();
       const cfg = data?.extra_config as Record<string, string> | null;
       return cfg?.from_email || "noreply@resend.dev";
     }
@@ -197,19 +200,19 @@ Deno.serve(async (req) => {
       sent_by: (body.sent_by as string) || null,
     });
 
-    // Update usage counter
+    // Update usage counter (best effort)
     const { data: keyData } = await sc
-      .from("api_keys")
-      .select("id")
+      .from("api_key_vault")
+      .select("id, requests_count")
       .eq("provider", "resend")
       .eq("is_active", true)
-      .order("requests_today", { ascending: true })
       .limit(1)
-      .single();
+      .maybeSingle();
     if (keyData) {
-      await sc.from("api_keys").rpc("", {}).catch(() => null);
-      // Simple increment
-      await sc.rpc("increment_api_key_usage", { key_id: keyData.id }).catch(() => null);
+      await sc.from("api_key_vault").update({ 
+        requests_count: (keyData.requests_count || 0) + 1,
+        last_used_at: new Date().toISOString()
+      }).eq("id", keyData.id).then(() => {}).catch(() => {});
     }
 
     if (!resendRes.ok) {
