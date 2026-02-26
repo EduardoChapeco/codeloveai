@@ -1,12 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { generateTypeId } from "../_shared/crypto.ts";
 
 /**
- * brain-capture-cron — Polls Lovable projects for Brain responses
+ * brain-capture-cron v3 — Response Miner
  * 
- * Runs every 30s via pg_cron. Finds all "processing" conversations,
- * polls their Lovable project source-code for brain-output.json / latest-message,
- * and updates the conversation with the captured response.
+ * Polls Lovable projects for Brain responses using src/brain-output.md (primary)
+ * with fallbacks to .json and latest-message.
+ * Runs every 30s via pg_cron.
  */
 
 const CORS = {
@@ -25,125 +24,112 @@ function json(data: unknown, status = 200) {
 }
 
 function lovFetch(url: string, token: string, opts: RequestInit = {}) {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    Origin: "https://lovable.dev",
-    Referer: "https://lovable.dev/",
-    "X-Client-Git-SHA": GIT_SHA,
-    ...(opts.headers as Record<string, string> || {}),
-  };
-  if (opts.method === "POST" && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-  return fetch(url, { ...opts, headers });
+  return fetch(url, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Origin: "https://lovable.dev",
+      Referer: "https://lovable.dev/",
+      "X-Client-Git-SHA": GIT_SHA,
+      ...(opts.headers as Record<string, string> || {}),
+    },
+  });
 }
 
-async function extractResponseFromProject(
-  projectId: string,
-  token: string,
-): Promise<string | null> {
-  // Strategy 1: latest-message
+// ── Mining strategies ──────────────────────────────────────────
+
+function extractFromMd(content: string): string | null {
+  if (!content || !/status:\s*done/i.test(content)) return null;
+  const parts = content.split("---");
+  if (parts.length >= 3) {
+    const body = parts.slice(2).join("---").trim();
+    if (body.length > 10) return body;
+  }
+  // Fallback: strip frontmatter
+  const afterFm = content.replace(/^---[\s\S]*?---\s*/m, "").trim();
+  return afterFm.length > 10 ? afterFm : null;
+}
+
+function extractFromJson(content: string): string | null {
+  if (!content) return null;
+  let clean = content.trim();
+  if (clean.startsWith("```")) {
+    clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  }
+  try {
+    const out = JSON.parse(clean);
+    if (out?.status === "done" && typeof out?.response === "string" && out.response.length > 0) {
+      return out.response;
+    }
+  } catch { /* not valid */ }
+  return null;
+}
+
+async function mineProjectResponse(projectId: string, token: string): Promise<string | null> {
+  // Strategy 1: Mine source-code files
+  try {
+    const res = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
+    if (res.ok) {
+      const raw = await res.text();
+      let parsed: any = {};
+      try { parsed = JSON.parse(raw); } catch { return null; }
+
+      const files = parsed?.files || parsed?.data?.files || parsed?.source?.files || parsed;
+
+      const getContent = (path: string): string | null => {
+        if (Array.isArray(files)) {
+          const f = files.find((f: any) => f.path === path);
+          return f?.content || f?.source || null;
+        }
+        if (files && typeof files === "object") return files[path] || null;
+        return null;
+      };
+
+      // Primary: src/brain-output.md
+      const mdResult = extractFromMd(getContent("src/brain-output.md") || "");
+      if (mdResult) return mdResult;
+
+      // Fallback: src/brain-output.json (legacy)
+      const jsonResult = extractFromJson(getContent("src/brain-output.json") || "");
+      if (jsonResult) return jsonResult;
+
+      // Fallback: .lovable/tasks/brain-response.md
+      const taskResult = extractFromMd(getContent(".lovable/tasks/brain-response.md") || "");
+      if (taskResult) return taskResult;
+
+      // Fallback: any task .md with status: done
+      if (Array.isArray(files)) {
+        const taskFiles = files
+          .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
+          .sort((a: any, b: any) => (b.path || "").localeCompare(a.path || ""));
+
+        for (const tf of taskFiles) {
+          const content = tf.content || tf.source || "";
+          const result = extractFromMd(content);
+          if (result) return result;
+        }
+      }
+    }
+  } catch { /* continue */ }
+
+  // Strategy 2: latest-message (last resort)
   try {
     const res = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
     if (res.ok) {
       const msg = await res.json();
       if (msg && !msg.is_streaming && msg.role !== "user") {
         const content = msg.content || msg.message || msg.text || "";
-        if (typeof content === "string" && content.trim().length > 20) {
+        if (typeof content === "string" && content.trim().length > 30) {
           return content.trim();
         }
       }
     }
   } catch { /* continue */ }
 
-  // Strategy 2: source-code files
-  try {
-    const res = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
-    if (!res.ok) return null;
-
-    const rawText = await res.text();
-    let parsed: any = {};
-    try { parsed = JSON.parse(rawText); } catch { return null; }
-
-    const files = parsed?.files || parsed?.data?.files || parsed?.source?.files || parsed;
-
-    const getContent = (path: string): string | null => {
-      if (Array.isArray(files)) {
-        const f = files.find((f: any) => f.path === path);
-        return f?.content || f?.source || null;
-      }
-      if (files && typeof files === "object") return files[path] || null;
-      return null;
-    };
-
-    // Check brain-output.json
-    const jsonContent = getContent("src/brain-output.json");
-    if (jsonContent) {
-      let clean = jsonContent.trim();
-      if (clean.startsWith("```")) {
-        clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-      }
-      try {
-        const out = JSON.parse(clean);
-        if (out?.status === "done" && typeof out?.response === "string" && out.response.length > 0) {
-          return out.response;
-        }
-      } catch { /* not ready */ }
-    }
-
-    // Check .lovable/tasks/brain-response.md
-    const mdContent = getContent(".lovable/tasks/brain-response.md");
-    if (mdContent && /status:\s*done/i.test(mdContent)) {
-      const parts = mdContent.split("---");
-      if (parts.length >= 3) {
-        const body = parts.slice(2).join("---").trim();
-        if (body.length > 5) return body;
-      }
-    }
-
-    // Strategy 3: Check any .md file in .lovable/tasks/ that has content
-    if (Array.isArray(files)) {
-      const taskFiles = files
-        .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
-        .sort((a: any, b: any) => (b.path || "").localeCompare(a.path || ""));
-      
-      for (const tf of taskFiles) {
-        const content = tf.content || tf.source || "";
-        if (content.length > 50 && /status:\s*(done|completed)/i.test(content)) {
-          const parts = content.split("---");
-          if (parts.length >= 3) {
-            const body = parts.slice(2).join("---").trim();
-            if (body.length > 10) return body;
-          }
-        }
-      }
-    }
-
-    // Strategy 4: Check if any new edge function or SQL file was created (skill output)
-    if (Array.isArray(files)) {
-      const newFiles = files.filter((f: any) => {
-        const p = f.path || "";
-        return (
-          (p.startsWith("supabase/functions/") && p.endsWith("/index.ts") && !p.includes("_shared")) ||
-          (p.startsWith("supabase/migrations/") && p.endsWith(".sql")) ||
-          (p === "src/brain-output.json")
-        );
-      });
-      
-      // If we find new edge functions or migrations, compile them as the response
-      if (newFiles.length > 0) {
-        const summary = newFiles.map((f: any) => {
-          const content = (f.content || f.source || "").slice(0, 2000);
-          return `### ${f.path}\n\`\`\`\n${content}\n\`\`\``;
-        }).join("\n\n");
-        
-        if (summary.length > 50) return summary;
-      }
-    }
-  } catch { /* continue */ }
-
   return null;
 }
+
+// ── Main handler ───────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -153,7 +139,7 @@ Deno.serve(async (req) => {
   const sc = createClient(supabaseUrl, serviceKey);
 
   try {
-    // Find all conversations in "processing" status (max 10 at a time)
+    // Find all "processing" conversations (max 10)
     const { data: pending } = await sc
       .from("loveai_conversations")
       .select("id, user_id, target_project_id, created_at")
@@ -171,7 +157,7 @@ Deno.serve(async (req) => {
     for (const convo of pending) {
       if (!convo.target_project_id) continue;
 
-      // Check if conversation is too old (> 5 min = timeout)
+      // Timeout after 5 min
       const age = Date.now() - new Date(convo.created_at).getTime();
       if (age > 300_000) {
         await sc.from("loveai_conversations")
@@ -191,7 +177,7 @@ Deno.serve(async (req) => {
 
       if (!account?.token_encrypted) continue;
 
-      const response = await extractResponseFromProject(
+      const response = await mineProjectResponse(
         convo.target_project_id,
         account.token_encrypted,
       );
