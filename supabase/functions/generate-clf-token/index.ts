@@ -31,12 +31,11 @@ async function hmacSign(payload: string, secret: string): Promise<string> {
 
 // Plan config — server-side only, never trust client
 const PLAN_DEFAULTS: Record<string, { expiresMs: number; dailyMessages: number | null; type: string }> = {
-  free:    { expiresMs: 24 * 60 * 60 * 1000,       dailyMessages: 10,   type: "trial" },
-  trial:   { expiresMs: 24 * 60 * 60 * 1000,       dailyMessages: 10,   type: "trial" },
   speed:   { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: 50,   type: "monthly" },
   booster: { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: 100,  type: "monthly" },
   labs:    { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: null,  type: "monthly" },
   pro:     { expiresMs: 30 * 24 * 60 * 60 * 1000,  dailyMessages: null,  type: "monthly" },
+  admin:   { expiresMs: 365 * 24 * 60 * 60 * 1000, dailyMessages: null,  type: "custom" },
 };
 
 Deno.serve(async (req) => {
@@ -93,32 +92,63 @@ Deno.serve(async (req) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // ── SERVER-SIDE PLAN RESOLUTION ──
-    // NEVER trust client-provided plan or expiresIn
-    let resolvedPlan = "free";
+    // NEVER trust client-provided plan. Only paid plans or admin get tokens.
+    let resolvedPlan: string | null = null;
 
-    // 1. Check if user has an active paid subscription
-    const { data: activeSub } = await adminClient
-      .from("subscriptions")
-      .select("plan, status, expires_at")
+    // 0. Check if user is a global admin
+    const { data: adminRole } = await adminClient
+      .from("user_roles")
+      .select("role")
       .eq("user_id", userId)
-      .eq("status", "active")
-      .order("created_at", { ascending: false })
-      .limit(1)
+      .eq("role", "admin")
       .maybeSingle();
 
-    if (activeSub && activeSub.plan) {
-      const subPlan = (activeSub.plan as string).toLowerCase();
-      // Only accept known paid plans
-      if (["speed", "booster", "labs", "pro"].includes(subPlan)) {
-        resolvedPlan = subPlan;
+    if (adminRole) {
+      resolvedPlan = "admin";
+    }
+
+    // 1. Check if user is a tenant_owner (White Label owner gets admin-level access)
+    if (!resolvedPlan) {
+      const { data: tenantOwner } = await adminClient
+        .from("tenant_users")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "tenant_owner")
+        .limit(1)
+        .maybeSingle();
+
+      if (tenantOwner) {
+        resolvedPlan = "admin";
       }
     }
 
-    // 2. Check if user has an active plan from the plans table via licenses
-    if (resolvedPlan === "free") {
+    // 2. Check if user has an active paid subscription
+    if (!resolvedPlan) {
+      const { data: activeSub } = await adminClient
+        .from("subscriptions")
+        .select("plan, status, expires_at")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeSub && activeSub.plan) {
+        const subPlan = (activeSub.plan as string).toLowerCase();
+        if (["speed", "booster", "labs", "pro"].includes(subPlan)) {
+          // Check not expired
+          if (!activeSub.expires_at || new Date(activeSub.expires_at) > new Date()) {
+            resolvedPlan = subPlan;
+          }
+        }
+      }
+    }
+
+    // 3. Check if user has an active license with a valid plan_id (tenant-generated)
+    if (!resolvedPlan) {
       const { data: existingLicense } = await adminClient
         .from("licenses")
-        .select("plan, plan_id, type, daily_messages")
+        .select("plan, plan_id, type, daily_messages, expires_at")
         .eq("user_id", userId)
         .eq("active", true)
         .order("created_at", { ascending: false })
@@ -136,13 +166,31 @@ Deno.serve(async (req) => {
         if (planData) {
           const planName = (planData.name as string).toLowerCase();
           if (["speed", "booster", "labs", "pro"].includes(planName)) {
-            resolvedPlan = planName;
+            // Check not expired
+            if (!existingLicense.expires_at || new Date(existingLicense.expires_at) > new Date()) {
+              resolvedPlan = planName;
+            }
           }
         }
       }
     }
 
-    const planConfig = PLAN_DEFAULTS[resolvedPlan] || PLAN_DEFAULTS.free;
+    // ── NO PLAN = NO TOKEN ──
+    // Free/trial users CANNOT generate CLF1 tokens. They must purchase a plan first.
+    if (!resolvedPlan) {
+      return new Response(
+        JSON.stringify({
+          error: "no_active_plan",
+          message: "Você precisa de um plano ativo para gerar um token. Acesse a página de planos para adquirir.",
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const planConfig = PLAN_DEFAULTS[resolvedPlan] || PLAN_DEFAULTS.speed;
 
     // Verify user exists in profiles
     const { data: profile, error: profileError } = await adminClient
