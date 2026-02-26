@@ -98,26 +98,13 @@ export async function createFreshBrain(
 
     console.log(`[Brain] Ghost Create in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
 
-    // ── STEP 1: Create project with proper payload structure ──
-    const msgId = crypto.randomUUID();
-    const aiMsgId = generateTypeId("aimsg");
-
+    // ── STEP 1: Create project — simple payload per API spec ──
     const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
       method: "POST",
       body: JSON.stringify({
-        description: `Star AI Brain - ${new Date().toISOString().slice(0, 10)}`,
+        name: `project-${Date.now()}`,
+        initial_message: "setup",
         visibility: "private",
-        env_vars: {},
-        metadata: { chat_mode_enabled: false },
-        initial_message: {
-          id: msgId,
-          message: "setup",
-          files: [],
-          optimisticImageUrls: [],
-          chat_only: false,
-          agent_mode_enabled: false,
-          ai_message_id: aiMsgId,
-        },
       }),
     });
 
@@ -129,11 +116,11 @@ export async function createFreshBrain(
     }
 
     const project = await createRes.json();
-    const projectId = project?.id || project?.project_id;
-    // msgId already defined above — use it for cancel
+    const projectId = project?.id;
+    const msgId = project?.message_id;
 
     if (!projectId) {
-      console.error(`[Brain] No project ID in response`);
+      console.error(`[Brain] No project ID in response:`, JSON.stringify(project).slice(0, 200));
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: "ID do projeto não retornado pela API" };
     }
@@ -150,6 +137,8 @@ export async function createFreshBrain(
       } catch (e) {
         console.warn(`[Brain] Cancel failed (non-critical):`, e);
       }
+    } else {
+      console.warn(`[Brain] No message_id returned — cancel skipped`);
     }
 
     // ── STEP 3: Inject brain config files via edit-code ──
