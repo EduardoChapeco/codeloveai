@@ -61,13 +61,14 @@ Deno.serve(async (req) => {
       errors: [] as string[],
     };
 
-    // ── 1. Deactivate expired licenses (not admin_master) + revoke in workers ──
+    // ── 1. Deactivate expired licenses (not admin_master, not free) + revoke in workers ──
     const { data: expiredLicenses } = await adminClient
       .from("licenses")
       .select("id, key, user_id, expires_at, plan")
       .eq("active", true)
       .lt("expires_at", now.toISOString())
-      .neq("plan", "admin_master");
+      .neq("plan", "admin_master")
+      .neq("plan", "free");
 
     if (expiredLicenses && expiredLicenses.length > 0) {
       const ids = expiredLicenses.map((l: any) => l.id);
@@ -100,6 +101,7 @@ Deno.serve(async (req) => {
       const dupeIds: string[] = [];
       for (const lic of allActive) {
         if (lic.user_id === ADMIN_USER_ID) continue; // skip admin
+        if (lic.plan === "free") continue; // never dedup free licenses
         if (seenUsers.has(lic.user_id)) {
           dupeIds.push(lic.id);
         } else {
@@ -169,6 +171,7 @@ Deno.serve(async (req) => {
       .select("id, key, active, plan")
       .eq("active", false)
       .neq("plan", "admin_master")
+      .neq("plan", "free")
       .not("key", "is", null);
 
     if (inactiveLicenses && inactiveLicenses.length > 0) {

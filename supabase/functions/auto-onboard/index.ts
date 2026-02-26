@@ -97,18 +97,22 @@ Deno.serve(async (req) => {
     // Idempotent: check if user already has any active license
     const { data: existing } = await serviceClient
       .from("licenses")
-      .select("id")
+      .select("id, key")
       .eq("user_id", userId)
       .eq("active", true)
       .limit(1)
       .maybeSingle();
 
-    if (existing) {
+    // If license exists with proper key, skip
+    if (existing && existing.key && existing.key.startsWith("CLF1.")) {
       return new Response(
         JSON.stringify({ already_exists: true, license_id: existing.id }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // If license exists but needs signing (backfilled), sign it now
+    const needsSign = existing && existing.key && existing.key.startsWith("PENDING_SIGN_");
 
     // Find the "Grátis" plan in DB to get plan_id and daily_message_limit
     const { data: freePlan } = await serviceClient
@@ -142,36 +146,56 @@ Deno.serve(async (req) => {
     const signature = await hmacSign(encodedPayload, clfSecret);
     const licenseKey = `CLF1.${encodedPayload}.${signature}`;
 
-    const { data: newLicense, error: insertError } = await serviceClient
-      .from("licenses")
-      .insert({
-        user_id: userId,
-        tenant_id: tenantId,
-        key: licenseKey,
-        active: true,
-        plan: "free",
-        plan_id: planId,
-        plan_type: "messages",
-        type: "daily_token",
-        status: "active",
-        daily_messages: dailyMessages,
-        expires_at: expiresAt,
-      })
-      .select("id")
-      .single();
+    let finalLicenseId: string;
 
-    if (insertError) {
-      console.error("auto-onboard insert error:", insertError);
-      return new Response(JSON.stringify({ error: "Failed to create license" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (needsSign) {
+      // Update the backfilled license with proper signed key
+      const { error: updateError } = await serviceClient
+        .from("licenses")
+        .update({ key: licenseKey })
+        .eq("id", existing.id);
+      if (updateError) {
+        console.error("auto-onboard sign error:", updateError);
+        return new Response(JSON.stringify({ error: "Failed to sign license" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      finalLicenseId = existing.id;
+    } else {
+      // Insert new license
+      const { data: newLicense, error: insertError } = await serviceClient
+        .from("licenses")
+        .insert({
+          user_id: userId,
+          tenant_id: tenantId,
+          key: licenseKey,
+          active: true,
+          plan: "free",
+          plan_id: planId,
+          plan_type: "messages",
+          type: "daily_token",
+          status: "active",
+          daily_messages: dailyMessages,
+          expires_at: expiresAt,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        console.error("auto-onboard insert error:", insertError);
+        return new Response(JSON.stringify({ error: "Failed to create license" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      finalLicenseId = newLicense.id;
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        license_id: newLicense.id,
+        license_id: finalLicenseId,
         token: licenseKey,
         plan: "free",
         daily_messages: dailyMessages,
