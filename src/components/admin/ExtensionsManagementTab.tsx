@@ -45,7 +45,7 @@ interface ExtensionFile {
   extension_id: string | null;
 }
 
-const tierOptions = ["free", "pro", "enterprise"];
+const tierOptions = ["free", "pro", "enterprise", "white_label_only"];
 
 const emptyForm = {
   slug: "", name: "", tagline: "", description: "", icon: "Puzzle",

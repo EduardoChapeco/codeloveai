@@ -251,6 +251,61 @@ Enquanto o cliente indicado mantiver a assinatura ativa.
 
 Para dúvidas específicas, consulte os Termos de Uso em **/termos** ou abra um ticket.`,
   },
+  "labs-acesso": {
+    title: "Starble Labs — Acesso e Restrições",
+    category: "Labs",
+    content: `## Starble Labs — Quem pode acessar?
+
+### O que é o Starble Labs?
+O Starble Labs reúne funcionalidades experimentais avançadas como **Orchestrator Engine** (criação autônoma de projetos) e **StarCrawl** (extração inteligente de conteúdo web).
+
+### Acesso Exclusivo para White Label
+As funcionalidades do Labs são **exclusivas para proprietários de White Label** (role: \`tenant_owner\`). Isso significa:
+
+- **Proprietários White Label**: Acesso total a todas as funcionalidades Labs
+- **Usuários comuns**: Podem visualizar as páginas informativas, mas **não podem utilizar** as funcionalidades, independente do plano contratado
+- **Admins de tenant**: Não têm acesso — apenas o proprietário do tenant
+
+### Por que essa restrição?
+As funcionalidades Labs consomem recursos significativos de infraestrutura e são projetadas para operadores que gerenciam múltiplos usuários e projetos.
+
+### Como obter acesso?
+1. Contrate um plano White Label em **/whitelabel/onboarding**
+2. Complete a configuração do seu tenant
+3. As funcionalidades Labs serão desbloqueadas automaticamente
+
+### Extensões e Planos
+Cada extensão é vinculada a planos específicos pelo administrador master. A permissão de acesso é controlada pela tabela \`plan_extensions\` — nenhum tenant pode publicar extensões, apenas o admin master faz upload das extensões pelo painel administrativo.`,
+  },
+  "modulos-extras": {
+    title: "Módulos Extras e Cobrança",
+    category: "Planos",
+    content: `## Módulos Extras — Como funciona?
+
+### O que são módulos?
+O sistema Starble é composto por módulos que podem ser ativados ou desativados pelo administrador master: Chat AI, Deploy, Preview, Notas, Split View, Automação, White Label, Afiliados e Comunidade.
+
+### Controle hierárquico
+Os módulos seguem uma hierarquia de controle:
+1. **Admin Global (Master)** — Define quais módulos existem e seus preços base
+2. **Tenant** — O admin master pode habilitar/desabilitar módulos por tenant
+3. **Plano** — Os planos determinam quais módulos o usuário final acessa
+
+### Modelos de cobrança
+O admin master pode configurar diferentes modelos por módulo:
+- **Gratuito** — Incluído sem custo adicional
+- **Por usuário** — Cobrado por cada usuário ativo no tenant
+- **Por mensagem** — Cobrado por mensagem enviada
+- **Taxa fixa** — Valor fixo mensal por tenant
+
+### Quem pode gerenciar?
+Apenas o **admin master** pode:
+- Criar e editar módulos no catálogo
+- Definir preços e modelos de cobrança
+- Ativar/desativar módulos por tenant
+
+Tenants **não podem** criar ou modificar módulos — apenas utilizar os que foram habilitados para eles.`,
+  },
 };
 
 export default function HelpArticle() {

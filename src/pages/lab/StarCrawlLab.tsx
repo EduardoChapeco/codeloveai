@@ -83,7 +83,11 @@ export default function StarCrawlLab() {
             Inteligência web que transforma qualquer site em conhecimento estruturado.<br />
             <span className="text-white/80">Pesquisa que escala. Contexto que constrói.</span>
           </p>
-          <p className="text-sm text-white/30 mb-10 max-w-xl mx-auto">Acesso antecipado para fundadores, agências e construtores digitais de alto volume.</p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold mb-6">
+            <Lock className="h-3.5 w-3.5" />
+            Acesso exclusivo para proprietários de White Label
+          </div>
+          <p className="text-sm text-white/30 mb-10 max-w-xl mx-auto">Exclusivo para operadores White Label. Usuários comuns podem visualizar, mas não utilizar esta funcionalidade.</p>
           {joined ? (
             <div className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold">
               <CheckCircle2 className="h-5 w-5" />
