@@ -98,21 +98,61 @@ export async function createFreshBrain(
 
     console.log(`[Brain] Ghost Create in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
 
-    // ── STEP 1: Create project — simple payload per API spec ──
-    const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
-      method: "POST",
-      body: JSON.stringify({
-        name: `project-${Date.now()}`,
-        initial_message: "setup",
-        visibility: "private",
-      }),
-    });
+    // ── STEP 1: Create project via Ghost Create ──
+    // Try multiple payload formats to find what the API accepts
+    const msgId = crypto.randomUUID();
+    const aiMsgId = generateTypeId("aimsg");
+    const projectName = `project-${Date.now()}`;
 
-    if (!createRes.ok) {
-      const errText = await createRes.text().catch(() => "");
-      console.error(`[Brain] Ghost Create failed: ${createRes.status} ${errText.slice(0, 300)}`);
+    const payloads = [
+      // Format A: simple string initial_message (per user docs)
+      { name: projectName, initial_message: "setup", visibility: "private" },
+      // Format B: object initial_message with full fields
+      {
+        description: projectName,
+        visibility: "private",
+        env_vars: {},
+        initial_message: {
+          id: msgId,
+          message: "setup",
+          files: [],
+          optimisticImageUrls: [],
+          chat_only: false,
+          agent_mode_enabled: false,
+          ai_message_id: aiMsgId,
+        },
+      },
+      // Format C: minimal with description
+      { description: projectName, initial_message: "setup", visibility: "private" },
+    ];
+
+    let createRes: Response | null = null;
+    let usedFormat = "";
+
+    for (let i = 0; i < payloads.length; i++) {
+      const payload = payloads[i];
+      const bodyStr = JSON.stringify(payload);
+      console.log(`[Brain] Trying format ${String.fromCharCode(65 + i)}: ${bodyStr.slice(0, 200)}`);
+      
+      const res = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
+        method: "POST",
+        body: bodyStr,
+      });
+
+      if (res.ok) {
+        createRes = res;
+        usedFormat = String.fromCharCode(65 + i);
+        console.log(`[Brain] ✅ Format ${usedFormat} succeeded!`);
+        break;
+      } else {
+        const errText = await res.text().catch(() => "");
+        console.error(`[Brain] Format ${String.fromCharCode(65 + i)} failed: ${res.status} ${errText.slice(0, 200)}`);
+      }
+    }
+
+    if (!createRes || !createRes.ok) {
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
-      return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
+      return { error: "Falha ao criar projeto Brain — nenhum formato aceito pela API" };
     }
 
     const project = await createRes.json();
