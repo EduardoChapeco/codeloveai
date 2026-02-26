@@ -108,7 +108,7 @@ export default function ExtensionsManagementTab() {
       const ext = extensions.find(e => e.id === selectedExtensionId);
       const slug = ext?.slug || "unknown";
       const path = `${slug}/v${extVersion}/${extFile.name}`;
-      const { error: upErr } = await supabase.storage.from("extensions").upload(path, extFile);
+      const { error: upErr } = await supabase.storage.from("extensions").upload(path, extFile, { upsert: true });
       if (upErr) throw upErr;
       // Only archive previous versions of THIS specific extension
       await supabase.from("extension_files")
