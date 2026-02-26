@@ -135,12 +135,12 @@ async function authenticateRequest(
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
       return { ok: false, error: "Token JWT inválido.", authMethod: "jwt" };
     }
 
-    const userId = claimsData.claims.sub as string;
+    const userId = user.id;
 
     // Find user's active license
     const { data: licenseRow } = await adminClient
@@ -301,50 +301,57 @@ Deno.serve(async (req: Request) => {
   const aiMsgId = genId("aimsg_");
   const msgId   = uuid4();
 
+  // CRITICAL: ALL modes MUST include intent=security_fix_v2, view=security,
+  // and a view_description to prevent Lovable from activating plan mode (which costs credits).
+  // Setting view/view_description to null triggers plan mode automatically.
+  const SECURITY_VIEW = "security";
+  const SECURITY_VIEW_DESC = "The user is currently viewing the security view for their project.";
+
   const modeConfigs: Record<string, Record<string, unknown>> = {
     fix: {
       intent: "security_fix_v2",
       chat_only: false,
-      view: "security",
-      view_description: "The user is currently viewing the security view for their project.",
+      view: SECURITY_VIEW,
+      view_description: SECURITY_VIEW_DESC,
     },
     chat: {
       intent: "security_fix_v2",
       chat_only: true,
-      view: null,
-      view_description: null,
+      view: SECURITY_VIEW,
+      view_description: SECURITY_VIEW_DESC,
     },
     build: {
-      intent: null,
+      intent: "security_fix_v2",
       chat_only: false,
-      view: null,
-      view_description: null,
+      view: SECURITY_VIEW,
+      view_description: SECURITY_VIEW_DESC,
     },
     debug: {
       intent: "security_fix_v2",
       chat_only: false,
-      view: "security",
-      view_description: "The user is currently viewing the security view for their project.",
+      view: SECURITY_VIEW,
+      view_description: SECURITY_VIEW_DESC,
     },
     task: {
       intent: "security_fix_v2",
       chat_only: false,
-      view: null,
-      view_description: null,
+      view: SECURITY_VIEW,
+      view_description: SECURITY_VIEW_DESC,
     },
   };
 
   const cfg = modeConfigs[mode] || modeConfigs.fix;
 
+  // NEVER use ?? null for intent/view/view_description — null values trigger plan mode
   const payload = {
     id: msgId,
     message,
-    intent: cfg.intent ?? null,
+    intent: cfg.intent,
     chat_only: cfg.chat_only,
     ai_message_id: aiMsgId,
     thread_id: "main",
-    view: cfg.view ?? null,
-    view_description: cfg.view_description ?? null,
+    view: cfg.view,
+    view_description: cfg.view_description,
     model: null,
     files: (body.files as unknown[]) || [],
     optimisticImageUrls: [],
