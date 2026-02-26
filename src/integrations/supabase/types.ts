@@ -1561,6 +1561,48 @@ export type Database = {
           },
         ]
       }
+      extension_usage_logs: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          function_name: string
+          id: string
+          ip_address: string | null
+          license_key_hash: string | null
+          metadata: Json | null
+          project_id: string | null
+          response_status: number | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          function_name: string
+          id?: string
+          ip_address?: string | null
+          license_key_hash?: string | null
+          metadata?: Json | null
+          project_id?: string | null
+          response_status?: number | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          function_name?: string
+          id?: string
+          ip_address?: string | null
+          license_key_hash?: string | null
+          metadata?: Json | null
+          project_id?: string | null
+          response_status?: number | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       hashtags: {
         Row: {
           created_at: string
@@ -4709,6 +4751,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_activity_summary: {
+        Row: {
+          active_days: number | null
+          calls_today: number | null
+          calls_week: number | null
+          first_seen: string | null
+          last_seen: string | null
+          total_calls: number | null
+          user_id: string | null
+        }
+        Relationships: []
       }
     }
     Functions: {

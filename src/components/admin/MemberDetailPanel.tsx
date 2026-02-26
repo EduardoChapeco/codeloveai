@@ -14,7 +14,7 @@ interface MemberDetailPanelProps {
   currentAdminId: string;
 }
 
-type SubTab = "profile" | "licenses" | "usage" | "projects" | "activations" | "messages";
+type SubTab = "profile" | "licenses" | "usage" | "projects" | "activations" | "messages" | "activity";
 
 interface Profile { user_id: string; name: string; email: string; created_at: string; tenant_id: string | null; }
 interface License {
@@ -42,6 +42,10 @@ interface Subscription {
 }
 interface UserRole { role: string; }
 interface DbPlan { id: string; name: string; price: number; billing_cycle: string; }
+interface ExtUsageLog {
+  id: string; function_name: string; project_id: string | null; response_status: number | null;
+  duration_ms: number | null; created_at: string; ip_address: string | null; user_agent: string | null;
+}
 
 export default function MemberDetailPanel({ userId, onBack, currentAdminId }: MemberDetailPanelProps) {
   const [subTab, setSubTab] = useState<SubTab>("profile");
@@ -57,6 +61,7 @@ export default function MemberDetailPanel({ userId, onBack, currentAdminId }: Me
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [dbPlans, setDbPlans] = useState<DbPlan[]>([]);
+  const [extUsage, setExtUsage] = useState<ExtUsageLog[]>([]);
   const [newMessage, setNewMessage] = useState("");
 
   // Edit states
@@ -66,7 +71,7 @@ export default function MemberDetailPanel({ userId, onBack, currentAdminId }: Me
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [profileRes, rolesRes, licensesRes, usageRes, projectsRes, activationsRes, messagesRes, subsRes, plansRes] = await Promise.all([
+    const [profileRes, rolesRes, licensesRes, usageRes, projectsRes, activationsRes, messagesRes, subsRes, plansRes, extUsageRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).single(),
       supabase.from("user_roles").select("role").eq("user_id", userId),
       supabase.from("licenses").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
@@ -76,6 +81,7 @@ export default function MemberDetailPanel({ userId, onBack, currentAdminId }: Me
       supabase.from("messages").select("*").or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order("created_at", { ascending: false }).limit(50),
       supabase.from("subscriptions").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
       supabase.from("plans").select("id, name, price, billing_cycle").eq("is_active", true).order("display_order"),
+      (supabase as any).from("extension_usage_logs").select("id, function_name, project_id, response_status, duration_ms, created_at, ip_address, user_agent").eq("user_id", userId).order("created_at", { ascending: false }).limit(100),
     ]);
 
     if (profileRes.data) {
@@ -90,6 +96,7 @@ export default function MemberDetailPanel({ userId, onBack, currentAdminId }: Me
     setMessages((messagesRes.data as DirectMessage[]) || []);
     setSubscriptions((subsRes.data as Subscription[]) || []);
     setDbPlans((plansRes.data as DbPlan[]) || []);
+    setExtUsage((extUsageRes.data as ExtUsageLog[]) || []);
     setLoading(false);
   }, [userId]);
 
@@ -185,6 +192,7 @@ export default function MemberDetailPanel({ userId, onBack, currentAdminId }: Me
   const tabs: { id: SubTab; label: string; icon: any }[] = [
     { id: "profile", label: "Perfil", icon: User },
     { id: "licenses", label: "Licenças", icon: Key },
+    { id: "activity", label: "Atividade", icon: Activity },
     { id: "usage", label: "Uso", icon: BarChart3 },
     { id: "projects", label: "Projetos", icon: FolderOpen },
     { id: "activations", label: "Ativações", icon: Monitor },
@@ -444,6 +452,93 @@ export default function MemberDetailPanel({ userId, onBack, currentAdminId }: Me
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══ ACTIVITY TAB ═══ */}
+      {subTab === "activity" && (
+        <div className="space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="clf-liquid-glass p-5 text-center">
+              <p className="lv-stat text-2xl">{extUsage.length}</p>
+              <p className="lv-caption text-[9px]">Total Chamadas</p>
+            </div>
+            <div className="clf-liquid-glass p-5 text-center">
+              <p className="lv-stat text-2xl">
+                {extUsage.filter(u => {
+                  const d = new Date(u.created_at);
+                  const now = new Date();
+                  return d.toDateString() === now.toDateString();
+                }).length}
+              </p>
+              <p className="lv-caption text-[9px]">Hoje</p>
+            </div>
+            <div className="clf-liquid-glass p-5 text-center">
+              <p className="lv-stat text-2xl">
+                {extUsage.filter(u => new Date(u.created_at) > new Date(Date.now() - 7 * 86400000)).length}
+              </p>
+              <p className="lv-caption text-[9px]">Últimos 7 dias</p>
+            </div>
+            <div className="clf-liquid-glass p-5 text-center">
+              <p className="lv-stat text-2xl">
+                {extUsage.length > 0 ? format(new Date(extUsage[0].created_at), "dd/MM HH:mm") : "—"}
+              </p>
+              <p className="lv-caption text-[9px]">Último Acesso</p>
+            </div>
+          </div>
+
+          {/* By Function */}
+          <div className="clf-liquid-glass p-6">
+            <p className="lv-overline mb-4">Chamadas por Endpoint</p>
+            <div className="space-y-2">
+              {Object.entries(
+                extUsage.reduce((acc, u) => {
+                  acc[u.function_name] = (acc[u.function_name] || 0) + 1;
+                  return acc;
+                }, {} as Record<string, number>)
+              ).sort((a, b) => b[1] - a[1]).map(([fn, count]) => {
+                const maxCount = Math.max(...Object.values(
+                  extUsage.reduce((acc, u) => { acc[u.function_name] = (acc[u.function_name] || 0) + 1; return acc; }, {} as Record<string, number>)
+                ), 1);
+                return (
+                  <div key={fn} className="flex items-center gap-3">
+                    <span className="text-[11px] font-mono text-muted-foreground w-32 shrink-0 truncate">{fn}</span>
+                    <div className="flex-1 h-5 bg-muted/30 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary/60 rounded-full transition-all" style={{ width: `${(count / maxCount) * 100}%` }} />
+                    </div>
+                    <span className="text-[11px] font-bold w-10 text-right">{count}</span>
+                  </div>
+                );
+              })}
+              {extUsage.length === 0 && <p className="lv-caption text-center py-8 opacity-40">Sem dados de atividade</p>}
+            </div>
+          </div>
+
+          {/* Recent Calls Log */}
+          <div className="clf-liquid-glass p-6">
+            <p className="lv-overline mb-4">Log de Chamadas Recentes</p>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {extUsage.slice(0, 50).map(u => (
+                <div key={u.id} className="flex items-center gap-3 py-2 border-b border-border/20 last:border-0">
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${
+                    u.response_status && u.response_status < 300 ? "bg-green-500" :
+                    u.response_status && u.response_status < 500 ? "bg-yellow-500" : "bg-red-500"
+                  }`} />
+                  <span className="text-[10px] font-mono text-muted-foreground w-28 shrink-0">
+                    {format(new Date(u.created_at), "dd/MM HH:mm:ss")}
+                  </span>
+                  <span className="text-[11px] font-bold truncate flex-1">{u.function_name}</span>
+                  {u.project_id && <span className="text-[9px] font-mono text-muted-foreground truncate max-w-[120px]">{u.project_id.substring(0, 8)}…</span>}
+                  {u.duration_ms && <span className="text-[10px] text-muted-foreground">{u.duration_ms}ms</span>}
+                  <span className={`text-[10px] font-bold ${
+                    u.response_status && u.response_status < 300 ? "text-green-500" : "text-destructive"
+                  }`}>{u.response_status || "—"}</span>
+                </div>
+              ))}
+              {extUsage.length === 0 && <p className="lv-caption text-center py-8 opacity-40">Nenhuma chamada registrada</p>}
+            </div>
+          </div>
         </div>
       )}
 

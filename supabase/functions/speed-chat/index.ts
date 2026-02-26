@@ -3,6 +3,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateTypeId } from "../_shared/crypto.ts";
+import { logExtensionUsage, hashLicenseKey } from "../_shared/usage-logger.ts";
 
 const LOVABLE_API = "https://api.lovable.dev";
 const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
@@ -99,6 +100,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
 
+  const startTime = Date.now();
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
@@ -155,6 +157,16 @@ Deno.serve(async (req: Request) => {
   try { lovableJson = JSON.parse(lovableBody); } catch { lovableJson = lovableBody; }
 
   if (lovableRes.ok) {
+    // Log usage
+    logExtensionUsage({
+      userId: "speed-user",
+      functionName: "speed-chat",
+      projectId: projectId,
+      ipAddress: req.headers.get("x-forwarded-for") || "",
+      userAgent: req.headers.get("user-agent") || "",
+      responseStatus: lovableRes.status,
+      durationMs: Date.now() - startTime,
+    });
     return json({ ok: true, status: lovableRes.status, lovable_response: lovableJson, messageId: msgId, aiMessageId: aiMsgId });
   }
   return json({ ok: false, error: `Lovable API returned ${lovableRes.status}`, lovable_status: lovableRes.status, details: lovableJson },
