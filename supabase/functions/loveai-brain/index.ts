@@ -1,16 +1,16 @@
 /**
- * Star AI Brain v7.0 — Always-fresh project creation
+ * Star AI Brain v8.0 — Fixed ID formats + robust project creation
  * 
  * Actions:
  *   status   — Check if brain is active + connected
- *   setup    — ALWAYS creates a fresh brain project (deletes old one)
+ *   setup    — Creates a fresh brain project (deletes old one)
  *   send     — Send message via security_fix_v2 (free), poll for response
  *   history  — List past conversations
- *   reset    — Delete brain project record
+ *   reset    — Delete brain project record + conversations
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { generateTypeId, obfuscate } from "../_shared/crypto.ts";
+import { obfuscate } from "../_shared/crypto.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -26,6 +26,17 @@ function json(data: unknown, status = 200) {
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
+}
+
+// ─── Correct ID generators (compatible with Lovable API) ───
+function makeUUID(): string {
+  return crypto.randomUUID();
+}
+
+function makeAiMsgId(): string {
+  const C = "01PDx4Vtw4YF6XfduRwwS6nKZ6sPAC9nCeR";
+  const first = "01234567"[Math.floor(Math.random() * 8)];
+  return "aimsg_" + first + Array.from({ length: 25 }, () => C[Math.floor(Math.random() * C.length)]).join("");
 }
 
 function lovFetch(url: string, token: string, opts: RequestInit = {}) {
@@ -95,14 +106,12 @@ async function getValidToken(sc: ReturnType<typeof createClient>, userId: string
   let token = await getUserToken(sc, userId);
   if (!token) return null;
 
-  // Quick validation: hit /user/workspaces
   const check = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
   if (check.ok) return token;
 
   if (check.status === 401 || check.status === 403) {
     console.warn(`[Brain] Token expired (${check.status}), refreshing...`);
-    const refreshed = await refreshToken(sc, userId);
-    return refreshed;
+    return await refreshToken(sc, userId);
   }
   return token;
 }
@@ -110,7 +119,10 @@ async function getValidToken(sc: ReturnType<typeof createClient>, userId: string
 // ─── Get workspace ID ───
 async function getWorkspaceId(token: string): Promise<string | null> {
   const res = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`[Brain] Workspaces fetch failed: ${res.status}`);
+    return null;
+  }
   const body = await res.json();
   const list: any[] = Array.isArray(body) ? body : (body?.workspaces || body?.data || []);
   if (list.length === 0 && body?.id) return body.id;
@@ -127,7 +139,17 @@ async function getBrain(sc: ReturnType<typeof createClient>, userId: string) {
   return data;
 }
 
-// ─── Create a FRESH brain project (always new) ───
+// ─── Verify brain project is accessible ───
+async function verifyProject(projectId: string, token: string): Promise<boolean> {
+  try {
+    const res = await lovFetch(`${API}/projects/${projectId}`, token, { method: "GET" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Create a FRESH brain project ───
 async function createFreshBrain(
   sc: ReturnType<typeof createClient>,
   userId: string,
@@ -140,9 +162,11 @@ async function createFreshBrain(
   const workspaceId = await getWorkspaceId(token);
   if (!workspaceId) return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
 
-  // 3. Create project
-  const msgId = generateTypeId("umsg");
-  const aiMsgId = generateTypeId("aimsg");
+  // 3. Create project with CORRECT ID formats
+  const msgId = makeUUID();
+  const aiMsgId = makeAiMsgId();
+
+  console.log(`[Brain] Creating project in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
 
   const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
     method: "POST",
@@ -153,7 +177,7 @@ async function createFreshBrain(
       metadata: { chat_mode_enabled: false },
       initial_message: {
         id: msgId,
-        message: "Crie um arquivo src/brain-output.json com o conteúdo: {\"response\":\"\",\"timestamp\":0,\"status\":\"idle\"}",
+        message: "Create a file src/brain-output.json with content: {\"response\":\"\",\"timestamp\":0,\"status\":\"idle\"}",
         files: [],
         optimisticImageUrls: [],
         chat_only: false,
@@ -165,22 +189,28 @@ async function createFreshBrain(
 
   if (!createRes.ok) {
     const errText = await createRes.text().catch(() => "");
-    console.error(`[Brain] Create failed: ${createRes.status} ${errText.slice(0, 200)}`);
-    return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
+    console.error(`[Brain] Create failed: ${createRes.status} ${errText.slice(0, 300)}`);
+    return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status}). ${errText.slice(0, 100)}` };
   }
 
   const project = await createRes.json();
   const projectId = project?.id || project?.project_id;
-  if (!projectId) return { error: "ID do projeto não retornado" };
+  if (!projectId) {
+    console.error(`[Brain] No project ID in response:`, JSON.stringify(project).slice(0, 300));
+    return { error: "ID do projeto não retornado pela API" };
+  }
 
-  // 4. Cancel initial message
+  console.log(`[Brain] ✅ Project created: ${projectId}`);
+
+  // 4. Cancel initial message (don't waste credits)
   try {
     await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, {
       method: "POST", body: "{}",
     });
+    console.log(`[Brain] Initial message cancelled`);
   } catch { /* ok */ }
 
-  // 5. Inject brain config
+  // 5. Inject brain config via edit-code
   try {
     await lovFetch(`${API}/projects/${projectId}/edit-code`, token, {
       method: "POST",
@@ -208,18 +238,18 @@ async function createFreshBrain(
     brain_owner: "user",
   });
 
-  console.log(`[Brain] ✅ Fresh project ${projectId} for ${obfuscate(userId)}`);
+  console.log(`[Brain] ✅ Fresh project ${projectId} saved for ${obfuscate(userId)}`);
   return { projectId, workspaceId };
 }
 
-// ─── Build payload ───
-function buildPayload(prompt: string, msgId: string, aiMsgId: string) {
+// ─── Build payload with CORRECT IDs ───
+function buildPayload(prompt: string) {
   return {
-    id: msgId,
+    id: makeUUID(),
     message: prompt,
     intent: "security_fix_v2",
     chat_only: false,
-    ai_message_id: aiMsgId,
+    ai_message_id: makeAiMsgId(),
     thread_id: "main",
     view: "security",
     view_description: "The user is currently viewing the security view for their project.",
@@ -231,6 +261,7 @@ function buildPayload(prompt: string, msgId: string, aiMsgId: string) {
     files: [],
     selected_elements: [],
     optimisticImageUrls: [],
+    debug_mode: false,
     integration_metadata: { browser: { preview_viewport_width: 1280, preview_viewport_height: 854 } },
   };
 }
@@ -420,6 +451,16 @@ Deno.serve(async (req) => {
 
       let brain = await getBrain(sc, userId);
 
+      // If brain exists, verify it's still accessible
+      if (brain) {
+        const accessible = await verifyProject(brain.lovable_project_id, lovableToken);
+        if (!accessible) {
+          console.warn(`[Brain] Project ${brain.lovable_project_id} not accessible, recreating...`);
+          await sc.from("user_brain_projects").delete().eq("user_id", userId);
+          brain = null;
+        }
+      }
+
       // Auto-setup if no brain exists
       if (!brain) {
         console.log(`[Brain] No brain found, auto-creating for ${obfuscate(userId)}`);
@@ -429,10 +470,8 @@ Deno.serve(async (req) => {
       }
 
       const projectId = brain.lovable_project_id;
-      const msgId = generateTypeId("umsg");
-      const aiMsgId = generateTypeId("aimsg");
       const prompt = buildBrainPrompt(brain_type, message);
-      const payload = buildPayload(prompt, msgId, aiMsgId);
+      const payload = buildPayload(prompt);
 
       // Save conversation
       const { data: convoRow } = await sc.from("loveai_conversations").insert({
@@ -446,38 +485,61 @@ Deno.serve(async (req) => {
       const convoId = convoRow?.id;
 
       // Send to Lovable
-      const chatRes = await lovFetch(
+      let chatRes = await lovFetch(
         `${API}/projects/${projectId}/chat`,
         lovableToken,
         { method: "POST", body: JSON.stringify(payload) }
       );
 
-      if (!chatRes.ok) {
-        // If 401/403, try refresh + retry once
-        if (chatRes.status === 401 || chatRes.status === 403) {
-          const newToken = await refreshToken(sc, userId);
-          if (newToken) {
-            const retry = await lovFetch(
+      // If 401/403, try refresh + retry once
+      if (!chatRes.ok && (chatRes.status === 401 || chatRes.status === 403)) {
+        console.warn(`[Brain] Chat failed ${chatRes.status}, trying token refresh...`);
+        const newToken = await refreshToken(sc, userId);
+        if (newToken) {
+          // Also check if project is accessible with new token
+          const accessible = await verifyProject(projectId, newToken);
+          if (accessible) {
+            chatRes = await lovFetch(
               `${API}/projects/${projectId}/chat`,
               newToken,
               { method: "POST", body: JSON.stringify(payload) }
             );
-            if (!retry.ok) {
-              if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
-              return json({ error: `Falha no envio (HTTP ${retry.status}). Reconecte /lovable/connect.` }, 502);
-            }
           } else {
-            if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
-            return json({ error: "Token expirado. Reconecte /lovable/connect.", code: "no_token" }, 503);
+            // Project not accessible even with new token — recreate
+            console.warn(`[Brain] Project inaccessible with new token, recreating...`);
+            const newBrain = await createFreshBrain(sc, userId, newToken);
+            if ("error" in newBrain) {
+              if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+              return json({ error: newBrain.error }, 502);
+            }
+            const newPayload = buildPayload(prompt);
+            chatRes = await lovFetch(
+              `${API}/projects/${newBrain.projectId}/chat`,
+              newToken,
+              { method: "POST", body: JSON.stringify(newPayload) }
+            );
+            // Update convo with new project
+            if (convoId) await sc.from("loveai_conversations").update({ target_project_id: newBrain.projectId }).eq("id", convoId);
           }
         } else {
           if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
-          return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
+          return json({ error: "Token expirado. Reconecte via /lovable/connect.", code: "no_token" }, 503);
         }
       }
 
+      if (!chatRes.ok) {
+        const errBody = await chatRes.text().catch(() => "");
+        console.error(`[Brain] Chat send failed: ${chatRes.status} ${errBody.slice(0, 200)}`);
+        if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+        return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
+      }
+
+      // Get the token that was actually used for polling
+      const activeToken = await getUserToken(sc, userId) || lovableToken;
+      const activeProjectId = (await getBrain(sc, userId))?.lovable_project_id || projectId;
+
       // Poll for response
-      const capture = await captureResponse(projectId, lovableToken, 90000, 4000, 8000);
+      const capture = await captureResponse(activeProjectId, activeToken, 90000, 4000, 8000);
 
       // Clean system prefixes
       let finalResponse = capture.response;
