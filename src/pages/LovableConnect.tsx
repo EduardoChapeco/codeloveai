@@ -55,7 +55,7 @@ export default function LovableConnect() {
     load();
   }, [user, checkConnection]);
 
-  // Load existing CLF1 token
+  // Load existing CLF1 token (only if not expired)
   useEffect(() => {
     if (!user) return;
     const loadClfToken = async () => {
@@ -69,8 +69,11 @@ export default function LovableConnect() {
         .maybeSingle();
       if (data) {
         const row = data as unknown as { key: string; expires_at: string | null };
-        setClfToken(row.key);
-        setClfExpiresAt(row.expires_at);
+        // Only use token if not expired
+        if (!row.expires_at || new Date(row.expires_at) > new Date()) {
+          setClfToken(row.key);
+          setClfExpiresAt(row.expires_at);
+        }
       }
     };
     loadClfToken();
@@ -133,7 +136,7 @@ export default function LovableConnect() {
   const loadOrGenerateClf1 = useCallback(async (): Promise<string | null> => {
     // If we already have a token in state, return it
     if (clfTokenRef.current) return clfTokenRef.current;
-    // Try to load from DB
+    // Try to load from DB (only non-expired)
     if (user) {
       const { data } = await (supabase
         .from("licenses")
@@ -145,10 +148,13 @@ export default function LovableConnect() {
         .maybeSingle() as any);
       if (data) {
         const row = data as unknown as { key: string; expires_at: string | null };
-        setClfToken(row.key);
-        setClfExpiresAt(row.expires_at);
-        clfTokenRef.current = row.key;
-        return row.key;
+        // Only use if not expired
+        if (!row.expires_at || new Date(row.expires_at) > new Date()) {
+          setClfToken(row.key);
+          setClfExpiresAt(row.expires_at);
+          clfTokenRef.current = row.key;
+          return row.key;
+        }
       }
     }
     // No existing token — generate a new one
