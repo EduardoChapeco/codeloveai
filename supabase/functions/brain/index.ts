@@ -315,6 +315,7 @@ async function createFreshBrain(
 
   try {
     const workspaceId = await getWorkspaceId(token);
+    console.log(`[Brain] WorkspaceId resolved: ${workspaceId}`);
     if (!workspaceId) {
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
       return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
@@ -322,7 +323,7 @@ async function createFreshBrain(
 
     const payload = {
       name: `project-${Date.now()}`,
-      initial_message: "setup",
+      initial_message: { message: "setup" },
       visibility: "private",
     };
 
