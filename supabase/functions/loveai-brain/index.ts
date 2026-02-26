@@ -10,7 +10,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { obfuscate } from "../_shared/crypto.ts";
+import { generateTypeId, obfuscate } from "../_shared/crypto.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -34,9 +34,7 @@ function makeUUID(): string {
 }
 
 function makeAiMsgId(): string {
-  const C = "01PDx4Vtw4YF6XfduRwwS6nKZ6sPAC9nCeR";
-  const first = "01234567"[Math.floor(Math.random() * 8)];
-  return "aimsg_" + first + Array.from({ length: 25 }, () => C[Math.floor(Math.random() * C.length)]).join("");
+  return generateTypeId("aimsg");
 }
 
 function lovFetch(url: string, token: string, opts: RequestInit = {}) {
