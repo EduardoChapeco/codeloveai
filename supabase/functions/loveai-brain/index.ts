@@ -93,10 +93,20 @@ function buildBrainPrompt(brainType: string, message: string): string {
   const ts = Date.now();
   const outputInstruction = `
 
-IMPORTANTE: Escreva sua resposta COMPLETA no arquivo src/brain-output.json no formato EXATO:
+IMPORTANTE: Escreva sua resposta COMPLETA em DOIS arquivos:
+
+1. src/brain-output.json no formato EXATO:
 {"response": "SUA_RESPOSTA_AQUI", "timestamp": ${ts}, "status": "done"}
 
-NÃO crie componentes React, páginas ou rotas. APENAS escreva o arquivo brain-output.json.`;
+2. .lovable/tasks/brain-response.md no formato:
+---
+status: done
+timestamp: ${ts}
+---
+
+SUA_RESPOSTA_COMPLETA_AQUI
+
+NÃO crie componentes React, páginas ou rotas. APENAS escreva esses dois arquivos.`;
 
   const prefixes: Record<string, string> = {
     general: `Analise e corrija os seguintes problemas de segurança encontrados:
@@ -251,7 +261,7 @@ async function captureResponse(
     } catch { /* continue */ }
 
     try {
-      // Strategy 2: source-code → brain-output.json
+      // Strategy 2 & 3: source-code → brain-output.json OR brain-response.md
       const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
       if (srcRes.ok) {
         const rawText = await srcRes.text();
@@ -259,25 +269,40 @@ async function captureResponse(
         try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
 
         const files = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
-        let outputContent: string | null = null;
 
-        if (Array.isArray(files)) {
-          const f = files.find((f: any) => f.path === "src/brain-output.json" || f.name === "brain-output.json");
-          outputContent = f?.content || f?.source || null;
-        } else if (files && typeof files === "object") {
-          outputContent = files["src/brain-output.json"] || null;
-        }
+        // Helper to find file content
+        const getFileContent = (filePath: string, fileName: string): string | null => {
+          if (Array.isArray(files)) {
+            const f = files.find((f: any) => f.path === filePath || f.name === fileName);
+            return f?.content || f?.source || null;
+          } else if (files && typeof files === "object") {
+            return files[filePath] || null;
+          }
+          return null;
+        };
 
-        if (outputContent) {
-          let clean = outputContent.trim();
+        // Strategy 2: brain-output.json
+        const jsonContent = getFileContent("src/brain-output.json", "brain-output.json");
+        if (jsonContent) {
+          let clean = jsonContent.trim();
           if (clean.startsWith("```")) clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
           try {
             const parsed = JSON.parse(clean);
             if (parsed.response && parsed.response.length > 0 && parsed.status === "done") {
               return { response: parsed.response, status: "completed" };
             }
-          } catch {
-            // Not valid JSON yet, still processing
+          } catch { /* not ready */ }
+        }
+
+        // Strategy 3: brain-response.md
+        const mdContent = getFileContent(".lovable/tasks/brain-response.md", "brain-response.md");
+        if (mdContent && mdContent.length > 30) {
+          let clean = mdContent.trim();
+          // Extract content after frontmatter
+          const fmMatch = clean.match(/^---[\s\S]*?status:\s*done[\s\S]*?---\s*([\s\S]+)$/);
+          if (fmMatch && fmMatch[1]?.trim().length > 5) {
+            console.log(`[Brain] ✅ Captured via .md strategy, len=${fmMatch[1].trim().length}`);
+            return { response: fmMatch[1].trim(), status: "completed" };
           }
         }
       }
