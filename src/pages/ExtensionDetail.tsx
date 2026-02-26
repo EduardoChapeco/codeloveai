@@ -113,15 +113,17 @@ export default function ExtensionDetail() {
       navigate("/login");
       return;
     }
+    if (!ext) return;
     if (!userHasAccess) {
       toast.error("Faça upgrade do seu plano para acessar esta extensão.");
       navigate("/checkout");
       return;
     }
-    // Get latest extension file
+    // Get latest extension file FOR THIS SPECIFIC EXTENSION
     const { data: extFile } = await supabase
       .from("extension_files")
       .select("file_url, version, instructions")
+      .eq("extension_id", ext.id)
       .eq("is_latest", true)
       .maybeSingle();
 
@@ -221,10 +223,6 @@ export default function ExtensionDetail() {
                 <button onClick={handleDownload} className="lv-btn-primary h-11 px-6 text-sm flex items-center gap-2">
                   <Download className="h-4 w-4" /> Baixar Extensão
                 </button>
-              ) : ext.tier === "free" ? (
-                <button onClick={handleDownload} className="lv-btn-primary h-11 px-6 text-sm flex items-center gap-2">
-                  <Download className="h-4 w-4" /> Instalar Grátis
-                </button>
               ) : (
                 <Link to="/checkout" className="lv-btn-primary h-11 px-6 text-sm flex items-center gap-2">
                   <Lock className="h-4 w-4" /> Fazer Upgrade
@@ -248,92 +246,58 @@ export default function ExtensionDetail() {
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Status</p>
-              {userHasAccess ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-600">
-                  <Check className="h-3.5 w-3.5" /> Desbloqueado
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                  <Lock className="h-3.5 w-3.5" /> Bloqueado
-                </span>
-              )}
+              <p className="text-sm font-bold text-foreground">{userHasAccess ? "✓ Incluído no seu plano" : "Upgrade necessário"}</p>
             </div>
-            {plans.length > 0 && (
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Disponível nos planos</p>
-                <div className="space-y-1.5">
-                  {plans.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between text-xs">
-                      <span className="text-foreground font-medium">{p.name}</span>
-                      <span className="text-muted-foreground">
-                        {p.price === 0 ? "Grátis" : `R$${(p.price / 100).toFixed(2).replace(".", ",")}${billingLabel[p.billing_cycle] || ""}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </section>
 
       {/* Features */}
-      <section className="max-w-4xl mx-auto px-6 pb-16">
-        <h2 className="text-lg font-bold text-foreground mb-6">Recursos</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {ext.features.map((f, i) => (
-            <div key={i} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <Check className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground mb-1">{f.title}</h3>
-                  <p className="text-xs text-muted-foreground">{f.description}</p>
+      {ext.features.length > 0 && (
+        <section className="max-w-4xl mx-auto px-6 pb-12">
+          <h2 className="text-lg font-bold text-foreground mb-6">Recursos</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {ext.features.map((feat, i) => (
+              <div key={i} className="rounded-2xl border border-border bg-card p-5">
+                <div className="flex items-start gap-3">
+                  <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: ext.hero_color + "20" }}>
+                    <Check className="h-4 w-4" style={{ color: ext.hero_color }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-1">{feat.title}</p>
+                    <p className="text-xs text-muted-foreground">{feat.description}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Requirements */}
-      {ext.requirements.length > 0 && (
-        <section className="max-w-4xl mx-auto px-6 pb-16">
-          <h2 className="text-lg font-bold text-foreground mb-4">Requisitos</h2>
-          <ul className="space-y-2">
-            {ext.requirements.map((r, i) => (
-              <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Check className="h-3.5 w-3.5 text-primary shrink-0" /> {r}
-              </li>
             ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Upgrade CTA */}
-      {!userHasAccess && ext.tier !== "free" && (
-        <section className="max-w-4xl mx-auto px-6 pb-20">
-          <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-8 text-center">
-            <h2 className="text-xl font-bold text-foreground mb-3">
-              Desbloqueie o {ext.name}
-            </h2>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
-              Faça upgrade para ter acesso a todas as ferramentas profissionais incluídas nesta extensão.
-            </p>
-            <Link to="/checkout" className="lv-btn-primary h-11 px-8 text-sm inline-flex items-center gap-2">
-              Ver Planos <ArrowRight className="h-4 w-4" />
-            </Link>
           </div>
         </section>
       )}
 
-      <footer className="border-t border-border/60 px-6 py-6 text-center">
-        <p className="text-[10px] text-muted-foreground/60">© 2025 {brandName} — Todos os direitos reservados</p>
-      </footer>
+      {/* Plans */}
+      {plans.length > 0 && (
+        <section className="max-w-4xl mx-auto px-6 pb-16">
+          <h2 className="text-lg font-bold text-foreground mb-6">Disponível nos planos</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {plans.map(plan => (
+              <div key={plan.id} className="rounded-2xl border border-border bg-card p-5 text-center">
+                <p className="text-sm font-bold text-foreground mb-2">{plan.name}</p>
+                <p className="text-2xl font-black text-foreground">
+                  R${(plan.price / 100).toFixed(2).replace(".", ",")}
+                  <span className="text-xs font-normal text-muted-foreground">{billingLabel[plan.billing_cycle] || ""}</span>
+                </p>
+                {!userHasAccess && (
+                  <Link to="/checkout" className="lv-btn-primary h-9 px-4 text-xs mt-4 inline-flex items-center gap-1">
+                    <ArrowRight className="h-3.5 w-3.5" /> Assinar
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 
-  if (user) return <AppLayout>{pageContent}</AppLayout>;
-  return pageContent;
+  return user ? <AppLayout>{pageContent}</AppLayout> : pageContent;
 }

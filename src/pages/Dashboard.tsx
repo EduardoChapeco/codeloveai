@@ -47,7 +47,7 @@ export default function Dashboard() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [license, setLicense] = useState<MemberLicense | null>(null);
   const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
-  const [latestExt, setLatestExt] = useState<{ file_url: string; version: string; instructions: string } | null>(null);
+  const [latestExt, setLatestExt] = useState<{ file_url: string; version: string; instructions: string; ext_name?: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
@@ -65,7 +65,56 @@ export default function Dashboard() {
           .eq("user_id", user.id).eq("active", true)
           .order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("tokens").select("*").eq("user_id", user.id),
-        supabase.from("extension_files").select("file_url, version, instructions").eq("is_latest", true).maybeSingle(),
+        // Fetch the best extension file for the user's plan
+        (async () => {
+          // Get user's active license to find plan_id
+          const { data: lic } = await supabase
+            .from("licenses")
+            .select("plan_id, plan")
+            .eq("user_id", user.id)
+            .eq("active", true)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          // Find extensions linked to user's plan
+          let targetExtId: string | null = null;
+          let extName = "";
+          if (lic?.plan_id) {
+            // Get plan_extensions sorted by catalog display_order desc (highest tier first)
+            const { data: pe } = await supabase
+              .from("plan_extensions")
+              .select("extension_id, extension_catalog(id, name, display_order)")
+              .eq("plan_id", lic.plan_id);
+            if (pe && pe.length > 0) {
+              // Pick the highest-tier extension (highest display_order = most premium)
+              const sorted = pe.sort((a: any, b: any) =>
+                (b.extension_catalog?.display_order || 0) - (a.extension_catalog?.display_order || 0)
+              );
+              targetExtId = sorted[0].extension_id;
+              extName = (sorted[0] as any).extension_catalog?.name || "";
+            }
+          }
+
+          if (targetExtId) {
+            const { data: ef } = await supabase
+              .from("extension_files")
+              .select("file_url, version, instructions")
+              .eq("extension_id", targetExtId)
+              .eq("is_latest", true)
+              .maybeSingle();
+            return ef ? { ...ef, ext_name: extName } : null;
+          }
+
+          // Fallback: get any latest file
+          const { data: ef } = await supabase
+            .from("extension_files")
+            .select("file_url, version, instructions")
+            .eq("is_latest", true)
+            .limit(1)
+            .maybeSingle();
+          return ef;
+        })(),
         supabase.from("lovable_accounts").select("status").eq("user_id", user.id).maybeSingle(),
       ]);
 
@@ -92,7 +141,7 @@ export default function Dashboard() {
         });
       }
 
-      setLatestExt(extRes.data);
+      setLatestExt(extRes as any);
 
       if (lovableRes.data?.status === "active") setLovableStatus("active");
       else if (lovableRes.data?.status === "expired" || lovableRes.data?.status === "error") setLovableStatus("expired");
@@ -339,7 +388,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="lv-body-strong text-base">
-                    Extensão{latestExt ? ` v${latestExt.version}` : ""}
+                    {latestExt?.ext_name || "Extensão"}{latestExt ? ` v${latestExt.version}` : ""}
                   </p>
                   <p className="lv-caption">
                     {extensionDetected ? 'Conectada e ativa' : 'Não detectada'}

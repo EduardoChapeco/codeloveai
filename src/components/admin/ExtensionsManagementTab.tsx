@@ -42,6 +42,7 @@ interface ExtensionFile {
   is_latest: boolean;
   created_at: string;
   uploaded_by: string;
+  extension_id: string | null;
 }
 
 const tierOptions = ["free", "pro", "enterprise"];
@@ -71,6 +72,8 @@ export default function ExtensionsManagementTab() {
   const [extInstructions, setExtInstructions] = useState("");
   const [uploading, setUploading] = useState(false);
   const [activeSection, setActiveSection] = useState<"catalog" | "files">("files");
+  // NEW: which catalog extension this file belongs to
+  const [selectedExtensionId, setSelectedExtensionId] = useState<string>("");
 
   const fetchAll = async () => {
     setLoading(true);
@@ -80,30 +83,47 @@ export default function ExtensionsManagementTab() {
       supabase.from("plan_extensions").select("*"),
       supabase.from("extension_files").select("*").order("created_at", { ascending: false }),
     ]);
-    setExtensions((extRes.data || []).map((e: any) => ({
+    const exts = (extRes.data || []).map((e: any) => ({
       ...e,
       features: Array.isArray(e.features) ? e.features : [],
-    })));
+    }));
+    setExtensions(exts);
     setPlans((plansRes.data || []) as PlanOption[]);
     setPlanLinks((linksRes.data || []) as PlanExtensionLink[]);
     setExtFiles((filesRes.data as ExtensionFile[]) || []);
+    // Auto-select first extension if none selected
+    if (!selectedExtensionId && exts.length > 0) {
+      setSelectedExtensionId(exts[0].id);
+    }
     setLoading(false);
   };
 
   const uploadExtension = async () => {
     if (!extFile || !extVersion) return toast.error("Selecione arquivo e versão.");
     if (!user) return toast.error("Não autenticado.");
+    if (!selectedExtensionId) return toast.error("Selecione a extensão de destino.");
     setUploading(true);
     try {
-      const path = `extensions/v${extVersion}/${extFile.name}`;
+      // Find the extension slug for the path
+      const ext = extensions.find(e => e.id === selectedExtensionId);
+      const slug = ext?.slug || "unknown";
+      const path = `${slug}/v${extVersion}/${extFile.name}`;
       const { error: upErr } = await supabase.storage.from("extensions").upload(path, extFile);
       if (upErr) throw upErr;
-      await supabase.from("extension_files").update({ is_latest: false } as any).eq("is_latest", true);
+      // Only archive previous versions of THIS specific extension
+      await supabase.from("extension_files")
+        .update({ is_latest: false } as any)
+        .eq("is_latest", true)
+        .eq("extension_id", selectedExtensionId);
       await supabase.from("extension_files").insert({
-        file_url: path, version: extVersion, uploaded_by: user.id, is_latest: true,
+        file_url: path,
+        version: extVersion,
+        uploaded_by: user.id,
+        is_latest: true,
         instructions: extInstructions,
+        extension_id: selectedExtensionId,
       } as any);
-      toast.success("Extensão publicada!");
+      toast.success(`Extensão ${ext?.name || slug} v${extVersion} publicada!`);
       setExtVersion(""); setExtFile(null); setExtInstructions("");
       fetchAll();
     } catch (err: any) {
@@ -213,6 +233,10 @@ export default function ExtensionsManagementTab() {
   const getLinkedPlans = (extId: string) =>
     planLinks.filter(l => l.extension_id === extId);
 
+  // Get files for a specific extension
+  const getFilesForExtension = (extId: string) =>
+    extFiles.filter(f => f.extension_id === extId);
+
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
@@ -294,13 +318,27 @@ export default function ExtensionsManagementTab() {
       <div className="lv-card p-6 space-y-4">
         <p className="lv-body-strong flex items-center gap-2"><Upload className="h-4 w-4 text-primary" /> Upload de Nova Versão</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Extension selector */}
           <div className="space-y-1.5">
-            <label className="lv-caption block">Versão</label>
+            <label className="lv-caption block">Extensão *</label>
+            <select
+              className="lv-input w-full"
+              value={selectedExtensionId}
+              onChange={e => setSelectedExtensionId(e.target.value)}
+            >
+              <option value="">Selecione a extensão...</option>
+              {extensions.map(ext => (
+                <option key={ext.id} value={ext.id}>{ext.name} ({ext.slug})</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="lv-caption block">Versão *</label>
             <input placeholder="ex: 2.1.0" value={extVersion}
               onChange={e => setExtVersion(e.target.value)}
               className="lv-input w-full" />
           </div>
-          <div className="space-y-1.5 md:col-span-2">
+          <div className="space-y-1.5">
             <label className="lv-caption block">Arquivo (.zip / .crx)</label>
             <input type="file" accept=".zip,.crx,.xpi,.txt"
               onChange={e => setExtFile(e.target.files?.[0] || null)}
@@ -317,33 +355,70 @@ export default function ExtensionsManagementTab() {
             className="lv-input w-full"
           />
         </div>
-        <button onClick={uploadExtension} disabled={uploading} className="lv-btn-primary h-9 px-6 text-xs flex items-center gap-2">
+        <button onClick={uploadExtension} disabled={uploading || !selectedExtensionId} className="lv-btn-primary h-9 px-6 text-xs flex items-center gap-2">
           {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
           PUBLICAR VERSÃO
         </button>
       </div>
 
-      {/* Files list */}
-      <div className="space-y-3">
-        <p className="lv-body-strong">{extFiles.length} arquivo(s) publicado(s)</p>
-        {extFiles.map(ef => (
-          <div key={ef.id} className="lv-card p-4 flex items-center gap-4">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <Puzzle className="h-5 w-5 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="lv-body-strong">v{ef.version}</span>
-                <span className={`lv-badge text-[10px] ${ef.is_latest ? 'lv-badge-success' : 'lv-badge-muted'}`}>
-                  {ef.is_latest ? 'PRODUÇÃO' : 'ARQUIVADA'}
-                </span>
+      {/* Files grouped by extension */}
+      {extensions.map(ext => {
+        const files = getFilesForExtension(ext.id);
+        if (files.length === 0) return null;
+        return (
+          <div key={ext.id} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: ext.hero_color }}>
+                <Puzzle className="h-3.5 w-3.5 text-white" />
               </div>
-              <p className="lv-caption text-muted-foreground">{format(new Date(ef.created_at), "dd/MM/yyyy HH:mm")}</p>
-              {ef.instructions && <p className="lv-caption text-muted-foreground/60 mt-1 line-clamp-2">{ef.instructions}</p>}
+              <p className="lv-body-strong">{ext.name} — {files.length} arquivo(s)</p>
             </div>
+            {files.map(ef => (
+              <div key={ef.id} className="lv-card p-4 flex items-center gap-4">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Puzzle className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="lv-body-strong">v{ef.version}</span>
+                    <span className={`lv-badge text-[10px] ${ef.is_latest ? 'lv-badge-success' : 'lv-badge-muted'}`}>
+                      {ef.is_latest ? 'PRODUÇÃO' : 'ARQUIVADA'}
+                    </span>
+                  </div>
+                  <p className="lv-caption text-muted-foreground">{format(new Date(ef.created_at), "dd/MM/yyyy HH:mm")}</p>
+                  {ef.instructions && <p className="lv-caption text-muted-foreground/60 mt-1 line-clamp-2">{ef.instructions}</p>}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        );
+      })}
+
+      {/* Orphan files (no extension_id) */}
+      {(() => {
+        const orphans = extFiles.filter(f => !f.extension_id);
+        if (orphans.length === 0) return null;
+        return (
+          <div className="space-y-3">
+            <p className="lv-body-strong text-yellow-600">⚠️ Arquivos sem extensão vinculada ({orphans.length})</p>
+            <p className="lv-caption text-muted-foreground">Estes arquivos foram enviados antes do sistema de vinculação. Re-envie-os selecionando a extensão correta.</p>
+            {orphans.map(ef => (
+              <div key={ef.id} className="lv-card p-4 flex items-center gap-4 border-yellow-500/20">
+                <div className="h-10 w-10 rounded-xl bg-yellow-500/10 flex items-center justify-center shrink-0">
+                  <Puzzle className="h-5 w-5 text-yellow-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="lv-body-strong">v{ef.version}</span>
+                    <span className="lv-badge lv-badge-muted text-[10px]">SEM VÍNCULO</span>
+                  </div>
+                  <p className="lv-caption text-muted-foreground">{ef.file_url}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 
@@ -387,6 +462,8 @@ export default function ExtensionsManagementTab() {
           <div className="space-y-3">
             {extensions.map(ext => {
               const linked = getLinkedPlans(ext.id);
+              const files = getFilesForExtension(ext.id);
+              const latestFile = files.find(f => f.is_latest);
               return (
                 <div key={ext.id} className="lv-card p-4">
                   <div className="flex items-start gap-4">
@@ -404,10 +481,16 @@ export default function ExtensionsManagementTab() {
                         </span>
                         <span className="lv-badge lv-badge-muted text-[10px]">{ext.tier}</span>
                         <span className="lv-badge lv-badge-muted text-[10px]">v{ext.version}</span>
+                        {latestFile && (
+                          <span className="lv-badge lv-badge-success text-[10px]">Arquivo: v{latestFile.version}</span>
+                        )}
+                        {!latestFile && (
+                          <span className="lv-badge text-[10px] bg-yellow-500/10 text-yellow-600">Sem arquivo</span>
+                        )}
                         {ext.is_featured && <span className="lv-badge text-[10px]" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}>Destaque</span>}
                       </div>
                       <p className="lv-caption text-muted-foreground">{ext.tagline}</p>
-                      <p className="lv-caption text-muted-foreground/60 mt-0.5">slug: <code className="text-xs bg-muted px-1 rounded">{ext.slug}</code> · {ext.features.length} features</p>
+                      <p className="lv-caption text-muted-foreground/60 mt-0.5">slug: <code className="text-xs bg-muted px-1 rounded">{ext.slug}</code> · {ext.features.length} features · {files.length} arquivo(s)</p>
 
                       {/* Plan links */}
                       <div className="mt-3">
