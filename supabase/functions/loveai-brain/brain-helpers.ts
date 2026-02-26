@@ -23,89 +23,150 @@ export async function verifyProject(projectId: string, token: string): Promise<b
   }
 }
 
+/**
+ * Acquires a lock for brain creation using an upsert with a "creating" status.
+ * Returns true if lock acquired, false if another process is already creating.
+ */
+async function acquireBrainLock(sc: SupabaseClient, userId: string): Promise<boolean> {
+  // Try to insert a "creating" placeholder — if one already exists, skip
+  const { data, error } = await sc.from("user_brain_projects")
+    .upsert(
+      {
+        user_id: userId,
+        lovable_project_id: "creating",
+        lovable_workspace_id: "pending",
+        status: "creating",
+        brain_owner: "user",
+      },
+      { onConflict: "user_id", ignoreDuplicates: false }
+    )
+    .select("status")
+    .single();
+
+  if (error) {
+    // If there's a conflict with an existing active/creating record, check status
+    const { data: existing } = await sc.from("user_brain_projects")
+      .select("status, lovable_project_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    
+    if (existing?.status === "creating") {
+      console.log(`[Brain] Lock already held for ${obfuscate(userId)}, skipping creation`);
+      return false;
+    }
+    // If active, no need to create
+    if (existing?.status === "active" && existing.lovable_project_id !== "creating") {
+      console.log(`[Brain] Active brain already exists for ${obfuscate(userId)}`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export async function createFreshBrain(
   sc: SupabaseClient,
   userId: string,
   token: string
 ): Promise<{ projectId: string; workspaceId: string } | { error: string }> {
-  await sc.from("user_brain_projects").delete().eq("user_id", userId);
-
-  const workspaceId = await getWorkspaceId(token);
-  if (!workspaceId) return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
-
-  const msgId = crypto.randomUUID();
-  const aiMsgId = generateTypeId("aimsg");
-
-  console.log(`[Brain] Creating project in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
-
-  const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
-    method: "POST",
-    body: JSON.stringify({
-      description: `Star AI Brain - ${new Date().toISOString().slice(0, 10)}`,
-      visibility: "private",
-      env_vars: {},
-      metadata: { chat_mode_enabled: false },
-      initial_message: {
-        id: msgId,
-        message: "Create a file src/brain-output.json with content: {\"response\":\"\",\"timestamp\":0,\"status\":\"idle\"}",
-        files: [],
-        optimisticImageUrls: [],
-        chat_only: false,
-        agent_mode_enabled: false,
-        ai_message_id: aiMsgId,
-      },
-    }),
-  });
-
-  if (!createRes.ok) {
-    const errText = await createRes.text().catch(() => "");
-    console.error(`[Brain] Create failed: ${createRes.status} ${errText.slice(0, 300)}`);
-    return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status}). ${errText.slice(0, 100)}` };
+  // Acquire lock to prevent concurrent creation
+  const locked = await acquireBrainLock(sc, userId);
+  if (!locked) {
+    // Wait briefly and check if a brain became available
+    await new Promise(r => setTimeout(r, 3000));
+    const existing = await getBrain(sc, userId);
+    if (existing) return { projectId: existing.lovable_project_id, workspaceId: existing.lovable_workspace_id };
+    return { error: "Brain creation already in progress. Tente novamente em alguns segundos." };
   }
 
-  const project = await createRes.json();
-  const projectId = project?.id || project?.project_id;
-  if (!projectId) {
-    console.error(`[Brain] No project ID in response:`, JSON.stringify(project).slice(0, 300));
-    return { error: "ID do projeto não retornado pela API" };
-  }
-
-  console.log(`[Brain] ✅ Project created: ${projectId}`);
-
   try {
-    await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, {
-      method: "POST", body: "{}",
-    });
-  } catch { /* ok */ }
+    const workspaceId = await getWorkspaceId(token);
+    if (!workspaceId) {
+      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
+    }
 
-  try {
-    await lovFetch(`${API}/projects/${projectId}/edit-code`, token, {
+    const msgId = crypto.randomUUID();
+    const aiMsgId = generateTypeId("aimsg");
+
+    console.log(`[Brain] Creating project in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
+
+    const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
       method: "POST",
       body: JSON.stringify({
-        changes: [
-          {
-            path: "src/brain-config.md",
-            content: "# Star AI Brain\n\nRESPONDA sempre escrevendo src/brain-output.json.\nFormato: {\"response\":\"...\",\"timestamp\":...,\"status\":\"done\"}\nNÃO crie páginas ou componentes. RESPONDA EM PORTUGUÊS (Brasil).",
-          },
-          {
-            path: "src/brain-output.json",
-            content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }),
-          },
-        ],
+        description: `Star AI Brain - ${new Date().toISOString().slice(0, 10)}`,
+        visibility: "private",
+        env_vars: {},
+        metadata: { chat_mode_enabled: false },
+        initial_message: {
+          id: msgId,
+          message: "Create a file src/brain-output.json with content: {\"response\":\"\",\"timestamp\":0,\"status\":\"idle\"}",
+          files: [],
+          optimisticImageUrls: [],
+          chat_only: false,
+          agent_mode_enabled: false,
+          ai_message_id: aiMsgId,
+        },
       }),
     });
-  } catch { /* ok */ }
 
-  await sc.from("user_brain_projects").insert({
-    user_id: userId,
-    lovable_project_id: projectId,
-    lovable_workspace_id: workspaceId,
-    status: "active",
-    brain_owner: "user",
-  });
+    if (!createRes.ok) {
+      const errText = await createRes.text().catch(() => "");
+      console.error(`[Brain] Create failed: ${createRes.status} ${errText.slice(0, 300)}`);
+      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status}). ${errText.slice(0, 100)}` };
+    }
 
-  console.log(`[Brain] ✅ Fresh project ${projectId} saved for ${obfuscate(userId)}`);
-  return { projectId, workspaceId };
+    const project = await createRes.json();
+    const projectId = project?.id || project?.project_id;
+    if (!projectId) {
+      console.error(`[Brain] No project ID in response:`, JSON.stringify(project).slice(0, 300));
+      await sc.from("user_brain_projects").delete().eq("user_id", userId);
+      return { error: "ID do projeto não retornado pela API" };
+    }
+
+    console.log(`[Brain] ✅ Project created: ${projectId}`);
+
+    try {
+      await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, {
+        method: "POST", body: "{}",
+      });
+    } catch { /* ok */ }
+
+    try {
+      await lovFetch(`${API}/projects/${projectId}/edit-code`, token, {
+        method: "POST",
+        body: JSON.stringify({
+          changes: [
+            {
+              path: "src/brain-config.md",
+              content: "# Star AI Brain\n\nRESPONDA sempre escrevendo src/brain-output.json.\nFormato: {\"response\":\"...\",\"timestamp\":...,\"status\":\"done\"}\nNÃO crie páginas ou componentes. RESPONDA EM PORTUGUÊS (Brasil).",
+            },
+            {
+              path: "src/brain-output.json",
+              content: JSON.stringify({ response: "", timestamp: 0, status: "idle" }),
+            },
+          ],
+        }),
+      });
+    } catch { /* ok */ }
+
+    // Promote lock to active with real project data
+    await sc.from("user_brain_projects")
+      .update({
+        lovable_project_id: projectId,
+        lovable_workspace_id: workspaceId,
+        status: "active",
+      })
+      .eq("user_id", userId);
+
+    console.log(`[Brain] ✅ Fresh project ${projectId} saved for ${obfuscate(userId)}`);
+    return { projectId, workspaceId };
+  } catch (err) {
+    // Release lock on failure
+    await sc.from("user_brain_projects").delete().eq("user_id", userId);
+    throw err;
+  }
 }
 
 export function buildPayload(prompt: string) {
