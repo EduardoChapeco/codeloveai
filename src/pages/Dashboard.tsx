@@ -334,6 +334,17 @@ export default function Dashboard() {
             );
           })()}
 
+          {/* ⚠️ Aviso sobre créditos do Lovable */}
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-3.5 flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Aviso sobre créditos</p>
+              <p className="text-[11px] text-amber-600/70 dark:text-amber-400/70 mt-0.5 leading-relaxed">
+                O Lovable pode cobrar créditos em alguns casos durante o uso da extensão. Recomendamos monitorar seu saldo de créditos na plataforma Lovable.
+              </p>
+            </div>
+          </div>
+
           {/* ━━━ BENTO GRID ━━━ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 

@@ -9,7 +9,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Send, Loader2, ExternalLink, RefreshCw, BrainCircuit, X,
-  Sparkles, Code2, Palette, Search, Copy, ArrowRight, Link2,
+  Sparkles, Code2, Palette, Search, Copy, ArrowRight, Link2, AlertTriangle,
 } from "lucide-react";
 
 type BrainType = "design" | "code" | "scraper" | "custom";
@@ -252,7 +252,11 @@ export default function ProjectEditor() {
             <div ref={chatEndRef} />
           </div>
 
-          <div className="border-t border-border/60 p-3 shrink-0">
+          <div className="border-t border-border/60 p-3 shrink-0 space-y-2">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-amber-500/8 border border-amber-500/15">
+              <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+              <p className="text-[10px] text-amber-500/90 leading-tight">O Lovable pode cobrar créditos em alguns casos. Use com moderação.</p>
+            </div>
             <div className="flex items-end gap-2">
               <textarea
                 value={message}
