@@ -155,8 +155,8 @@ async function adminFetch(url: string, opts: RequestInit, sc: any): Promise<Resp
 
   let res = await fetch(url, { ...opts, headers: h });
 
-  if (res.status === 401) {
-    // Invalidate cache and try refresh
+  // Treat both 401 and 403 as potential token issues — refresh and retry
+  if (res.status === 401 || res.status === 403) {
     _cachedAdminToken = null;
     const nt = await tryRefreshAdminToken(sc);
     if (nt) {
@@ -424,6 +424,15 @@ Deno.serve(async (req) => {
       const existing = await getBrainProject(userId);
       if (existing) return json({ success: true, already_exists: true });
 
+      // Check if there's an errored brain project — delete it so we can recreate
+      const { data: erroredBrain } = await sc.from("user_brain_projects")
+        .select("id, lovable_project_id")
+        .eq("user_id", userId).eq("status", "error").maybeSingle();
+      if (erroredBrain) {
+        console.log(`[Brain] Removing errored brain project ${erroredBrain.lovable_project_id} for user ${obfuscate(userId)}`);
+        await sc.from("user_brain_projects").delete().eq("id", erroredBrain.id);
+      }
+
       // Get admin's workspace
       const wsRes = await adminFetch(`${TARGET_API}/user/workspaces`, { method: "GET" }, sc);
       if (!wsRes.ok) {
@@ -613,6 +622,16 @@ Deno.serve(async (req) => {
       if (!chatRes.ok) {
         const errText = await chatRes.text().catch(() => "");
         console.error(`[Brain] Chat failed (${chatMode}):`, chatRes.status, errText.substring(0, 500));
+
+        // If 403 persists after token refresh, the brain project is inaccessible — mark as error
+        if (chatRes.status === 403) {
+          await sc.from("user_brain_projects")
+            .update({ status: "error" })
+            .eq("user_id", userId).eq("lovable_project_id", brainProjectId);
+          console.warn(`[Brain] Project ${brainProjectId} marked as error (403 persistent)`);
+          return json({ error: "Projeto Brain inacessível. Execute setup novamente para recriar.", code: "brain_project_inaccessible" }, 403);
+        }
+
         return json({ error: "Falha ao enviar para Star AI." }, 502);
       }
 
