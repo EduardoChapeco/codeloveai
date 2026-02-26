@@ -66,11 +66,6 @@ verify_jwt = false
 [functions.send-message]
 verify_jwt = false
 
-[functions.send-security-fix]
-verify_jwt = false
-
-[functions.send-seo-fix]
-verify_jwt = false
 
 [functions.download-project]
 verify_jwt = false
