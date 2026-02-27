@@ -147,3 +147,6 @@ verify_jwt = false
 
 [functions.support-brain-chat]
 verify_jwt = false
+
+[functions.venus-chat]
+verify_jwt = false

@@ -263,7 +263,13 @@ export default function ProjectEditor() {
       const { data: venusData, error: venusError } = await supabase.functions.invoke("venus-chat", {
         body: { task: userMsg, project_id: id, mode: chatMode },
       });
-      if (venusError || !venusData?.ok) throw new Error(venusData?.error || venusError?.message || "Erro ao enviar");
+      if (venusError || !venusData?.ok) {
+        const errMsg = venusData?.error || venusError?.message || "Erro ao enviar";
+        if (errMsg.includes("Token") || errMsg.includes("token") || errMsg.includes("401")) {
+          throw new Error("Token Lovable não encontrado. Conecte sua conta Lovable em Configurações > Integrações.");
+        }
+        throw new Error(errMsg);
+      }
 
       setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "sent" } : m));
       usage.increment();
