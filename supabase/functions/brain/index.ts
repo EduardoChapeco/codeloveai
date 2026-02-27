@@ -1333,10 +1333,33 @@ Deno.serve(async (req) => {
       const activeBrains = brains.filter(b => b.status === "active" && b.lovable_project_id !== "creating");
       const currentWorkspaceId = await getWorkspaceId(token);
 
+      // Check accessibility: only show brains whose workspace matches or are verified accessible
+      const accessibleBrains: typeof activeBrains = [];
+      for (const b of activeBrains) {
+        if (currentWorkspaceId && b.lovable_workspace_id === currentWorkspaceId) {
+          accessibleBrains.push(b);
+        } else {
+          // Workspace mismatch — verify if project is still accessible from current token
+          try {
+            const check = await verifyProjectState(b.lovable_project_id, token);
+            if (check.state === "accessible") {
+              // Update workspace if it changed
+              if (currentWorkspaceId && b.lovable_workspace_id !== currentWorkspaceId) {
+                await sc.from("user_brain_projects").update({ lovable_workspace_id: currentWorkspaceId }).eq("id", b.id);
+              }
+              accessibleBrains.push(b);
+            }
+            // else: inaccessible — hide from UI (not deleted, just hidden)
+          } catch {
+            // On error, hide to be safe
+          }
+        }
+      }
+
       return json({
-        active: activeBrains.length > 0,
+        active: accessibleBrains.length > 0,
         connected: true,
-        brains: activeBrains.map(b => ({
+        brains: accessibleBrains.map(b => ({
           id: b.id,
           name: b.name,
           project_id: b.lovable_project_id,
@@ -1348,6 +1371,8 @@ Deno.serve(async (req) => {
         })),
         creating: brains.some(b => b.status === "creating"),
         current_workspace_id: currentWorkspaceId || null,
+        total_brains: activeBrains.length,
+        hidden_brains: activeBrains.length - accessibleBrains.length,
       });
     }
 
