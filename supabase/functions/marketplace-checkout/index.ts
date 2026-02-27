@@ -8,6 +8,42 @@ const corsHeaders = {
 
 const PLATFORM_COMMISSION = 0.30; // 30% platform fee
 
+const ONBOARDING_STEPS = [
+  { step_number: 1, title: "Início do Onboarding", description: "Vendedor inicia a apresentação guiada." },
+  { step_number: 2, title: "Demonstração & Dúvidas", description: "Vendedor demonstra funcionalidades." },
+  { step_number: 3, title: "Acesso como Visualizador", description: "Vendedor adiciona comprador como Viewer." },
+  { step_number: 4, title: "Confirmação do Projeto", description: "Comprador confirma que é o projeto anunciado." },
+  { step_number: 5, title: "Liberação do Pagamento", description: "Comprador libera valor ao vendedor." },
+];
+
+async function createOnboardingAndInvoice(
+  client: any,
+  { purchaseId, listingId, buyerId, sellerId, grossAmount, commissionAmount, netAmount }: {
+    purchaseId: string; listingId: string; buyerId: string; sellerId: string;
+    grossAmount: number; commissionAmount: number; netAmount: number;
+  }
+) {
+  // Create onboarding session
+  const { data: ob } = await client.from("marketplace_onboarding").insert({
+    purchase_id: purchaseId, listing_id: listingId, buyer_id: buyerId,
+    seller_id: sellerId, status: "pending", current_step: 1, total_steps: 5,
+  }).select("id").single();
+
+  if (ob) {
+    // Create steps
+    await client.from("marketplace_onboarding_steps").insert(
+      ONBOARDING_STEPS.map(s => ({ onboarding_id: ob.id, ...s }))
+    );
+  }
+
+  // Create seller invoice with 7-day hold
+  await client.from("marketplace_seller_invoices").insert({
+    seller_id: sellerId, purchase_id: purchaseId, listing_id: listingId,
+    buyer_id: buyerId, gross_amount: grossAmount, commission_amount: commissionAmount,
+    net_amount: netAmount, status: "held",
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -61,7 +97,7 @@ Deno.serve(async (req) => {
 
     if (listing.price === 0) {
       // Free listing — auto-complete purchase
-      const { error: insertErr } = await serviceClient.from("marketplace_purchases").insert({
+      const { data: freePurchase, error: insertErr } = await serviceClient.from("marketplace_purchases").insert({
         listing_id: listing.id,
         buyer_id: user.id,
         seller_id: listing.seller_id,
@@ -69,9 +105,17 @@ Deno.serve(async (req) => {
         commission_amount: 0,
         seller_amount: 0,
         status: "paid",
-      });
+      }).select("id").single();
       if (insertErr) throw insertErr;
-      return new Response(JSON.stringify({ success: true, free: true }), {
+
+      // Create onboarding + steps + invoice for free purchases too
+      await createOnboardingAndInvoice(serviceClient, {
+        purchaseId: freePurchase.id, listingId: listing.id,
+        buyerId: user.id, sellerId: listing.seller_id,
+        grossAmount: 0, commissionAmount: 0, netAmount: 0,
+      });
+
+      return new Response(JSON.stringify({ success: true, free: true, purchase_id: freePurchase.id }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -141,6 +185,13 @@ Deno.serve(async (req) => {
       .single();
 
     if (purchaseErr) throw purchaseErr;
+
+    // Create onboarding + invoice for the purchase
+    await createOnboardingAndInvoice(serviceClient, {
+      purchaseId: purchase.id, listingId: listing.id,
+      buyerId: user.id, sellerId: listing.seller_id,
+      grossAmount: listing.price, commissionAmount, netAmount: sellerAmount,
+    });
 
     // ===== PIX PAYMENT =====
     if (payment_method === "pix") {

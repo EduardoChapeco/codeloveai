@@ -78,13 +78,13 @@ export default function MarketplaceDetail() {
       if (error) throw error;
 
       if (data?.free) {
-        toast.success("Projeto adquirido! Você pode acessá-lo nos seus projetos.");
+        toast.success("Projeto adquirido! Iniciando onboarding...");
         setAlreadyPurchased(true);
+        if (data.purchase_id) navigate(`/marketplace/onboarding/${data.purchase_id}`);
       } else if (data?.pix_code) {
-        // Show PIX payment info
         toast.success("PIX gerado! Copie o código para pagar.");
-        // Could open a modal with QR code here
         navigator.clipboard?.writeText(data.pix_code);
+        if (data.purchase_id) navigate(`/marketplace/onboarding/${data.purchase_id}`);
       } else if (data?.init_point) {
         window.open(data.init_point, "_blank");
       }

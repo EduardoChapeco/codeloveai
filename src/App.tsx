@@ -133,6 +133,7 @@ const Marketplace = lazyRetry(() => import("./pages/Marketplace"));
 const MarketplaceDetail = lazyRetry(() => import("./pages/MarketplaceDetail"));
 const MarketplaceSell = lazyRetry(() => import("./pages/MarketplaceSell"));
 const MarketplaceLanding = lazyRetry(() => import("./pages/MarketplaceLanding"));
+const MarketplaceOnboarding = lazyRetry(() => import("./pages/MarketplaceOnboarding"));
 const CommunityTestList = lazyRetry(() => import("./pages/CommunityTestList"));
 const CommunityTestSession = lazyRetry(() => import("./pages/CommunityTestSession"));
 
@@ -216,6 +217,7 @@ const App = () => (
                 <Route path="/marketplace" element={<Marketplace />} />
                 <Route path="/marketplace/vender" element={<MarketplaceSell />} />
                 <Route path="/marketplace/:slug" element={<MarketplaceDetail />} />
+                <Route path="/marketplace/onboarding/:purchaseId" element={<MarketplaceOnboarding />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
