@@ -714,7 +714,15 @@ REGRAS ABSOLUTAS:
 - Você PODE e DEVE criar Edge Functions, arquivos SQL, scripts e código backend
 - Seja técnico, detalhado e acionável
 
-OBRIGATÓRIO — Ao finalizar, crie/atualize o arquivo src/brain-output.md com:
+REGRA DE RESPOSTA — INVISIBILIDADE DE ARQUIVOS:
+- Na sua resposta ao usuário, NUNCA mencione nomes de arquivos internos (brain-output.md, config.json, INSTRUCTIONS.md, etc.)
+- NUNCA diga "atualizei o arquivo X" ou "criei o arquivo Y" na conversa
+- A resposta visível deve conter APENAS o conteúdo útil para o usuário
+- O arquivo src/brain-output.md deve ser atualizado SILENCIOSAMENTE — é um mecanismo interno, o usuário não precisa saber que existe
+- NÃO inclua referências como "conforme solicitado, atualizei src/brain-output.md" — isso é transparente ao usuário
+
+OBRIGATÓRIO (SILENCIOSO — não mencione isso na resposta):
+Ao finalizar, atualize silenciosamente o arquivo src/brain-output.md com:
 
 \`\`\`markdown
 ---
@@ -724,15 +732,14 @@ timestamp: ${now}
 request: "${message.slice(0, 100)}"
 ---
 
-# Resposta do ${p.title}
-
 [SUA RESPOSTA COMPLETA AQUI — detalhada, em Markdown, com código se necessário]
 \`\`\`
 
 IMPORTANTE: O timestamp DEVE ser exatamente ${now} — isso é usado para sincronização.
 Se criar tabelas SQL, crie em supabase/migrations/.
 Se criar funções, crie em supabase/functions/<nome>/index.ts.
-SEMPRE finalize atualizando src/brain-output.md com status: done e timestamp: ${now}.`;
+Atualize src/brain-output.md silenciosamente com status: done e timestamp: ${now}.
+Na conversa do chat, responda APENAS o conteúdo útil sem mencionar arquivos internos.`;
 }
 
 // ── Code Review prompt builder ─────────────────────────────────
@@ -1422,6 +1429,38 @@ Deno.serve(async (req) => {
         : [((rawSkill || "general") as BrainSkill)];
       const name = typeof body?.name === "string" && body.name.trim() ? body.name.trim().slice(0, 60) : `Star AI — ${skills.join(", ")}`;
 
+      // ── REUSE CHECK: Try to find an existing brain accessible from current account ──
+      const currentWorkspaceId = await getWorkspaceId(lovableToken);
+      const existingBrains = await listBrains(sc, userId);
+      
+      for (const existing of existingBrains) {
+        if (existing.lovable_project_id === "creating") continue;
+        if (existing.status !== "active") continue;
+        
+        // Check if this brain's project is accessible with current token
+        const check = await verifyProjectState(existing.lovable_project_id, lovableToken);
+        if (check.state === "accessible") {
+          // Update workspace_id if it changed
+          if (currentWorkspaceId && existing.lovable_workspace_id !== currentWorkspaceId) {
+            await sc.from("user_brain_projects")
+              .update({ lovable_workspace_id: currentWorkspaceId })
+              .eq("id", existing.id);
+          }
+          console.log(`[Brain] ♻️ Reusing existing brain ${existing.id.slice(0,8)} project=${existing.lovable_project_id.slice(0,8)}`);
+          return json({
+            success: true,
+            brain_id: existing.id,
+            project_id: existing.lovable_project_id,
+            project_url: `https://lovable.dev/projects/${existing.lovable_project_id}`,
+            skills: existing.brain_skills || [existing.brain_skill],
+            name: existing.name || name,
+            stored_workspace_id: currentWorkspaceId || existing.lovable_workspace_id,
+            reused: true,
+          });
+        }
+      }
+
+      // No reusable brain found — create fresh
       const result = await createFreshBrain(sc, userId, lovableToken, skills, name);
       if ("error" in result) return json({ error: result.error }, 502);
       return json({
@@ -1527,13 +1566,39 @@ Deno.serve(async (req) => {
 
       const access = await verifyProjectState(brainProjectId, lovableToken);
       if (access.state === "not_found") {
-        const currentWorkspaceId = await getWorkspaceId(lovableToken);
-        return json({
-          error: "Projeto Brain não encontrado no workspace atual.",
-          code: "project_not_found_in_workspace",
-          stored_workspace_id: brain.lovable_workspace_id || null,
-          current_workspace_id: currentWorkspaceId || null,
-        }, 409);
+        // ── AUTO-REACTIVATE: Search for another brain accessible from current account ──
+        const allBrains = await listBrains(sc, userId);
+        for (const candidate of allBrains) {
+          if (candidate.id === brain.id) continue; // skip current (already failed)
+          if (candidate.lovable_project_id === "creating") continue;
+          if (candidate.status !== "active") continue;
+          
+          const candidateAccess = await verifyProjectState(candidate.lovable_project_id, lovableToken);
+          if (candidateAccess.state === "accessible") {
+            // Found a reusable brain! Update workspace and use it
+            const currentWorkspaceId = await getWorkspaceId(lovableToken);
+            if (currentWorkspaceId) {
+              await sc.from("user_brain_projects")
+                .update({ lovable_workspace_id: currentWorkspaceId })
+                .eq("id", candidate.id);
+            }
+            console.log(`[Brain:send] ♻️ Auto-reactivated brain ${candidate.id.slice(0,8)} project=${candidate.lovable_project_id.slice(0,8)}`);
+            // Redirect to the reactivated brain
+            brain = candidate;
+            break;
+          }
+        }
+
+        // If still not found after checking all brains
+        if (brain.lovable_project_id === brainProjectId) {
+          const currentWorkspaceId = await getWorkspaceId(lovableToken);
+          return json({
+            error: "Projeto Brain não encontrado no workspace atual. Crie um novo Brain.",
+            code: "project_not_found_in_workspace",
+            stored_workspace_id: brain.lovable_workspace_id || null,
+            current_workspace_id: currentWorkspaceId || null,
+          }, 409);
+        }
       }
 
       const skill: BrainSkill = (VALID_SKILLS.has(rawSkill) ? rawSkill : (brain.brain_skill || "general")) as BrainSkill;

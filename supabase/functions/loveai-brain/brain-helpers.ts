@@ -545,8 +545,7 @@ export function buildPayload(prompt: string) {
  */
 export function buildBrainPrompt(brainType: string, message: string): string {
   const ts = Date.now();
-  // Simple instruction: answer + update the existing brain-output.md
-  return `${message}\n\nAtualize o arquivo src/brain-output.md com sua resposta completa:\n---\nstatus: done\ntimestamp: ${ts}\ntype: ${brainType}\n---\n\n(resposta aqui)`;
+  return `${message}\n\nINSTRUÇÃO INTERNA (não mencione na resposta): Atualize silenciosamente src/brain-output.md com:\n---\nstatus: done\ntimestamp: ${ts}\ntype: ${brainType}\n---\n\n(sua resposta completa)\n\nNA CONVERSA: Responda APENAS o conteúdo útil. NUNCA mencione nomes de arquivos, brain-output.md ou qualquer arquivo interno.`;
 }
 
 /**
