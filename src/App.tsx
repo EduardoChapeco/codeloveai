@@ -132,6 +132,8 @@ const EditorLanding = lazyRetry(() => import("./pages/EditorLanding"));
 const Marketplace = lazyRetry(() => import("./pages/Marketplace"));
 const MarketplaceDetail = lazyRetry(() => import("./pages/MarketplaceDetail"));
 const MarketplaceSell = lazyRetry(() => import("./pages/MarketplaceSell"));
+const CommunityTestList = lazyRetry(() => import("./pages/CommunityTestList"));
+const CommunityTestSession = lazyRetry(() => import("./pages/CommunityTestSession"));
 
 const queryClient = new QueryClient();
 
@@ -160,6 +162,8 @@ const App = () => (
                 <Route path="/admin/integrations" element={<AdminIntegrations />} />
                 <Route path="/admin/tenant" element={<TenantAdmin />} />
                 <Route path="/community" element={<Community />} />
+                <Route path="/community/tests" element={<CommunityTestList />} />
+                <Route path="/community/test/:id" element={<CommunityTestSession />} />
                 <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/notes" element={<Notes />} />
                 <Route path="/install" element={<Install />} />
