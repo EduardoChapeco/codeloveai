@@ -296,6 +296,8 @@ async function injectSkills(
   startPhase: number = 0
 ): Promise<boolean> {
   const prompts = buildSkillPrompts(ctx);
+  const supabaseUrl = ctx.supabaseUrl;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
   for (let i = startPhase; i < prompts.length; i++) {
     const phase = i + 1;
@@ -305,23 +307,17 @@ async function injectSkills(
       .update({ skill_phase: phase, status: "injecting" })
       .eq("user_id", userId);
 
-    const payload = buildTaskPayload(prompts[i]);
-
     try {
-      const res = await lovFetch(
-        `${API}/projects/${projectId}/chat`,
-        token,
-        { method: "POST", body: JSON.stringify(payload) }
-      );
+      // Route skill injection through venus-chat (task mode)
+      const result = await sendViaBrain(projectId, token, prompts[i], supabaseUrl, serviceKey);
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        console.error(`[Brain] Skill phase ${phase} failed: ${res.status} ${errText.slice(0, 200)}`);
-        if (res.status === 401 || res.status === 403) return false;
+      if (!result.ok) {
+        console.error(`[Brain] Skill phase ${phase} failed: ${result.status} ${result.error || ""}`);
+        if (result.status === 401 || result.status === 403) return false;
         continue;
       }
 
-      console.log(`[Brain] ✅ Skill phase ${phase} sent`);
+      console.log(`[Brain] ✅ Skill phase ${phase} sent via venus-chat`);
 
       // Wait for Lovable to process (40s between phases for commit cooldown)
       const waitMs = i < prompts.length - 1 ? 40000 : 15000;
@@ -485,8 +481,37 @@ export async function createFreshBrain(
 }
 
 /**
- * Build payload in TASK mode — subtle, natural task request.
- * Uses security_fix_v2 intent for free channel but with code view.
+ * Send a message to a Brain project via venus-chat edge function (centralized proxy).
+ * This avoids duplicating payload logic — venus-chat handles intent, view, ANTI_Q prefix, etc.
+ */
+export async function sendViaBrain(
+  projectId: string,
+  token: string,
+  message: string,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<{ ok: boolean; status?: number; error?: string }> {
+  const url = `${supabaseUrl}/functions/v1/venus-chat`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({
+      task: message,
+      project_id: projectId,
+      mode: "task",
+      lovable_token: token,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok && data?.ok !== false, status: res.status, error: data?.error };
+}
+
+/**
+ * Build payload in TASK mode — used ONLY for skill injection during ghost create.
+ * For normal user messages, use sendViaBrain() which routes through venus-chat.
  */
 function buildTaskPayload(prompt: string) {
   return {
@@ -512,8 +537,7 @@ function buildTaskPayload(prompt: string) {
 }
 
 /**
- * Public payload builder — used by loveai-brain/index.ts for user messages.
- * Same task mode structure.
+ * @deprecated Use sendViaBrain() for user messages. This is kept for skill injection only.
  */
 export function buildPayload(prompt: string) {
   return buildTaskPayload(prompt);
