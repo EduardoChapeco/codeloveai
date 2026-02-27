@@ -286,6 +286,8 @@ export default function BrainPage() {
   const [lovableConnected, setLovableConnected] = useState<boolean | null>(null);
   const [creating, setCreating] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const hasEverLoadedBrains = useRef(false);
+  const statusRetryCount = useRef(0);
   const [allConversations, setAllConversations] = useState<Conversation[]>([]);
   const [message, setMessage] = useState("");
   const [brainType, setBrainType] = useState<BrainSkill>("general");
@@ -323,18 +325,37 @@ export default function BrainPage() {
   const loadStatus = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke("brain", { body: { action: "status" } });
-      if (error || !data) { setLovableConnected(false); return; }
+      if (error || !data) {
+        // Only set disconnected on first load or after multiple consecutive failures
+        statusRetryCount.current += 1;
+        if (statusRetryCount.current >= 3 && !hasEverLoadedBrains.current) {
+          setLovableConnected(false);
+        }
+        return;
+      }
+      statusRetryCount.current = 0;
       setLovableConnected(data.connected !== false);
       setCreating(!!data.creating);
       const brainList = (data.brains || []) as BrainEntry[];
       setBrains(brainList);
-      if (brainList.length > 0 && !activeBrainId) {
-        setActiveBrainId(brainList[0].id);
-        const primarySkill = brainList[0].skill as BrainSkill;
-        if (ALL_SKILLS.some(s => s.id === primarySkill)) setBrainType(primarySkill);
+      if (brainList.length > 0) {
+        hasEverLoadedBrains.current = true;
+        if (!activeBrainId) {
+          setActiveBrainId(brainList[0].id);
+          const primarySkill = brainList[0].skill as BrainSkill;
+          if (ALL_SKILLS.some(s => s.id === primarySkill)) setBrainType(primarySkill);
+        }
+        setShowOnboarding(false);
+      } else if (!data.creating && !hasEverLoadedBrains.current) {
+        // Only show onboarding if we've NEVER seen brains before
+        setShowOnboarding(true);
       }
-      setShowOnboarding(brainList.length === 0 && !data.creating);
-    } catch { setLovableConnected(false); }
+    } catch {
+      statusRetryCount.current += 1;
+      if (statusRetryCount.current >= 3 && !hasEverLoadedBrains.current) {
+        setLovableConnected(false);
+      }
+    }
   }, [activeBrainId]);
 
   const loadHistory = useCallback(async () => {
@@ -408,8 +429,8 @@ export default function BrainPage() {
         body: { action: "send", message: userMsg, brain_type: brainType, brain_id: activeBrainId },
       });
       if (error || data?.error) {
-        if (data?.code === "no_token") setLovableConnected(false);
-        if (data?.code === "brain_inactive") setShowOnboarding(true);
+        if (data?.code === "no_token" && !hasEverLoadedBrains.current) setLovableConnected(false);
+        // Do NOT reset to onboarding on send errors — user is mid-conversation
         throw new Error(data?.error || error?.message);
       }
       
@@ -438,6 +459,11 @@ export default function BrainPage() {
     return <AppLayout><div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
 
+  // Show loading spinner while initial status is unknown
+  if (lovableConnected === null) {
+    return <AppLayout><div className="flex items-center justify-center h-full"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></AppLayout>;
+  }
+
   if (lovableConnected === false) {
     return (
       <AppLayout>
@@ -457,19 +483,15 @@ export default function BrainPage() {
     );
   }
 
-  if (showOnboarding || (brains.length === 0 && !creating)) {
+  if (showOnboarding && !hasEverLoadedBrains.current) {
     return (
       <AppLayout>
         <BrainOnboarding
           creating={creating}
-          onCreated={() => { setShowOnboarding(false); loadStatus(); }}
+          onCreated={() => { setShowOnboarding(false); hasEverLoadedBrains.current = false; loadStatus(); }}
         />
       </AppLayout>
     );
-  }
-
-  if (lovableConnected === null) {
-    return <AppLayout><div className="flex items-center justify-center h-full"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
 
   const activeBrain = brains.find(b => b.id === activeBrainId);
