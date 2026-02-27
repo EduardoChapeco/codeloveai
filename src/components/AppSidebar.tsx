@@ -146,7 +146,7 @@ function GlassNavButton({
   isActive,
   collapsed,
 }: {
-  item: { to: string; label: string; icon: React.ElementType; desc?: string };
+  item: { to: string; label: string; icon: React.ElementType; desc?: string; badge?: string };
   isActive: boolean;
   collapsed: boolean;
 }) {
@@ -157,7 +157,12 @@ function GlassNavButton({
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
           <NavLink to={item.to}>
-            <Icon className="h-4 w-4" />
+            <span className="relative">
+              <Icon className="h-4 w-4" />
+              {item.badge && (
+                <span className="absolute -top-1.5 -right-2 h-2 w-2 rounded-full bg-primary animate-pulse" />
+              )}
+            </span>
             <span>{item.label}</span>
           </NavLink>
         </SidebarMenuButton>
@@ -196,7 +201,14 @@ function GlassNavButton({
         />
       </div>
       <div className="min-w-0 flex-1">
-        <p className={`text-xs font-semibold truncate ${isActive ? "text-primary" : ""}`}>{item.label}</p>
+        <div className="flex items-center gap-2">
+          <p className={`text-xs font-semibold truncate ${isActive ? "text-primary" : ""}`}>{item.label}</p>
+          {item.badge && (
+            <span className="px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[9px] font-bold uppercase tracking-wider shrink-0">
+              {item.badge}
+            </span>
+          )}
+        </div>
         {item.desc && <p className="text-[10px] opacity-50 truncate">{item.desc}</p>}
       </div>
     </NavLink>
@@ -410,7 +422,7 @@ export default function AppSidebar() {
 
   const lovableItems = [
     { to: "/lovable/connect", label: "Conectar", icon: Link2, desc: "Vincular conta" },
-    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos" },
+    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos", badge: "Novo" },
   ];
 
   const accountItems = [
