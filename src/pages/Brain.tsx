@@ -384,6 +384,35 @@ export default function BrainPage() {
     } catch (e: any) { toast.error(e.message); }
   };
 
+  // Realtime polling — when a conversation is processing, poll for completion via cron capture
+  useEffect(() => {
+    const processingConvo = allConversations.find(c => c.status === "processing" && c.id !== "temp");
+    if (!processingConvo || !sending) return;
+    
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from("loveai_conversations")
+          .select("ai_response, status")
+          .eq("id", processingConvo.id)
+          .single();
+        
+        if (data && data.status !== "processing" && data.ai_response) {
+          setAllConversations(prev =>
+            prev.map(c => c.id === processingConvo.id
+              ? { ...c, ai_response: data.ai_response, status: data.status as ConvoStatus }
+              : c
+            )
+          );
+          setSending(false);
+          setSendStartTime(null);
+        }
+      } catch { /* ignore */ }
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [allConversations, sending]);
+
   const sendMsg = async () => {
     if (!message.trim() || sending || !activeBrainId) return;
     const userMsg = message.trim();
