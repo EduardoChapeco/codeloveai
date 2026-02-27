@@ -144,3 +144,6 @@ verify_jwt = false
 
 [functions.brain-api]
 verify_jwt = false
+
+[functions.support-brain-chat]
+verify_jwt = false

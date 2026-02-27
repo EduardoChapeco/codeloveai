@@ -543,6 +543,36 @@ export type Database = {
         }
         Relationships: []
       }
+      assistant_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          model_used: string | null
+          response: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          model_used?: string | null
+          response?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          model_used?: string | null
+          response?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       automation_rules: {
         Row: {
           action_type: string
@@ -3144,6 +3174,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      support_brain_config: {
+        Row: {
+          admin_user_id: string
+          brain_project_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          knowledge_version: number
+          updated_at: string
+        }
+        Insert: {
+          admin_user_id: string
+          brain_project_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          knowledge_version?: number
+          updated_at?: string
+        }
+        Update: {
+          admin_user_id?: string
+          brain_project_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          knowledge_version?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       support_tickets: {
         Row: {
