@@ -201,23 +201,35 @@
     letter-spacing: -0.01em;
   }
 
-  /* ── Global custom scrollbar ── */
+  /* ── Global custom scrollbar — invisible by default ── */
   ::-webkit-scrollbar {
-    width: 3px;
-    height: 3px;
+    width: 0px;
+    height: 0px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+  * {
+    scrollbar-width: none;
+    scrollbar-color: transparent transparent;
+  }
+
+  /* Show thin scrollbar on hover for elements that opt-in */
+  .scroll-on-hover::-webkit-scrollbar {
+    width: 3px;
+  }
+  .scroll-on-hover:hover::-webkit-scrollbar-thumb {
     background: var(--clf-muted2);
     border-radius: 2px;
   }
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--clf-muted-fg);
-  }
-  * {
+  .scroll-on-hover {
     scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .scroll-on-hover:hover {
     scrollbar-color: var(--clf-muted2) transparent;
   }
 }
@@ -424,16 +436,12 @@
   }
 
   .clf-glass-sidebar {
-    background: rgba(255, 255, 255, 0.4);
-    backdrop-filter: blur(32px) saturate(200%) brightness(1.02);
-    -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.02);
-    border-right: 0.5px solid rgba(0, 0, 0, 0.06);
+    background: transparent;
+    border-right: none !important;
   }
   .dark .clf-glass-sidebar {
-    background: rgba(8, 8, 12, 0.5);
-    backdrop-filter: blur(32px) saturate(200%);
-    -webkit-backdrop-filter: blur(32px) saturate(200%);
-    border-right: 0.5px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
+    border-right: none !important;
   }
 
   /* ─────────────────────────────────

@@ -477,14 +477,11 @@ export default function BrainPage() {
           flex flex-col shrink-0 transition-all duration-300
         `}
           style={{
-            background: 'var(--liquid-glass-bg)',
-            backdropFilter: 'blur(30px) saturate(200%)',
-            WebkitBackdropFilter: 'blur(30px) saturate(200%)',
-            borderRight: '0.5px solid var(--clf-border)',
+            background: 'transparent',
           }}
         >
           {/* Sidebar header */}
-          <div className="p-3 shrink-0" style={{ borderBottom: '0.5px solid var(--clf-border)' }}>
+          <div className="p-3 shrink-0">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
@@ -539,12 +536,6 @@ export default function BrainPage() {
           {/* Header */}
           <div
             className="px-4 py-3 flex items-center gap-3 shrink-0"
-            style={{
-              background: 'var(--liquid-glass-bg)',
-              backdropFilter: 'blur(30px) saturate(200%)',
-              WebkitBackdropFilter: 'blur(30px) saturate(200%)',
-              borderBottom: '0.5px solid var(--clf-border)',
-            }}
           >
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-muted/50 transition-colors shrink-0">
               {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <Clock className="h-4 w-4 text-muted-foreground" />}
@@ -597,7 +588,7 @@ export default function BrainPage() {
           </div>
 
           {/* Mobile skill selector */}
-          <div className="sm:hidden flex items-center gap-1 px-3 py-2 overflow-x-auto shrink-0 no-scrollbar" style={{ borderBottom: '0.5px solid var(--clf-border)' }}>
+          <div className="sm:hidden flex items-center gap-1 px-3 py-2 overflow-x-auto shrink-0 no-scrollbar">
             {activeSkills.map(s => {
               const meta = ALL_SKILLS.find(sk => sk.id === s);
               if (!meta) return null;
@@ -670,7 +661,7 @@ export default function BrainPage() {
                             <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed break-words [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_pre]:rounded-xl [&_pre]:bg-muted/50 [&_pre]:p-3 [&_pre]:text-xs [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm">
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>{convo.ai_response}</ReactMarkdown>
                             </div>
-                            <div className="flex items-center gap-3 mt-3 pt-2.5" style={{ borderTop: '0.5px solid var(--clf-border)' }}>
+                            <div className="flex items-center gap-3 mt-3 pt-2.5">
                               <button
                                 onClick={() => { navigator.clipboard.writeText(convo.ai_response!); toast.success("Copiado!"); }}
                                 className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 hover:bg-muted/30 px-2 py-1 rounded-lg"
@@ -710,12 +701,6 @@ export default function BrainPage() {
           {activeBrainId && (
             <div
               className="px-4 sm:px-6 py-3 shrink-0"
-              style={{
-                background: 'var(--liquid-glass-bg)',
-                backdropFilter: 'blur(30px) saturate(200%)',
-                WebkitBackdropFilter: 'blur(30px) saturate(200%)',
-                borderTop: '0.5px solid var(--clf-border)',
-              }}
             >
               <div className="max-w-3xl mx-auto flex items-end gap-2.5">
                 <div

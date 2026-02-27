@@ -294,7 +294,7 @@ function AdminContextualSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border">
+      <SidebarFooter className="border-none">
         <SidebarMenu>
           {collapsed && (
             <SidebarMenuItem>
@@ -609,7 +609,7 @@ export default function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border">
+      <SidebarFooter className="border-none">
         <SidebarMenu>
           {collapsed && (
             <SidebarMenuItem>
