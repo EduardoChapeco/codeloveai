@@ -1078,6 +1078,19 @@ Deno.serve(async (req) => {
           ai_response: quickResponse,
           status: "completed",
         }).eq("id", convoId);
+
+        // Persist to brain_outputs table for API access
+        await sc.from("brain_outputs").insert({
+          user_id: userId,
+          conversation_id: convoId,
+          skill,
+          request: message,
+          response: quickResponse,
+          status: "done",
+          brain_project_id: activeProjectId,
+        }).then(({ error }) => {
+          if (error) console.warn(`[Brain] brain_outputs insert err: ${error.message}`);
+        });
       }
 
       await sc.from("user_brain_projects")
@@ -1120,6 +1133,17 @@ Deno.serve(async (req) => {
           ai_response: capture.response,
           status: capture.status === "completed" ? "completed" : convo.status,
         }).eq("id", conversationId);
+
+        // Persist to brain_outputs
+        await sc.from("brain_outputs").insert({
+          user_id: userId,
+          conversation_id: conversationId,
+          skill: "general",
+          request: "",
+          response: capture.response,
+          status: "done",
+          brain_project_id: projectId,
+        }).catch(() => {});
       }
 
       return json({ response: capture.response, status: capture.status });
