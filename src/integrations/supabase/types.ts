@@ -2446,6 +2446,8 @@ export type Database = {
       orchestrator_projects: {
         Row: {
           audit_required: boolean
+          brain_id: string | null
+          brain_skill_profile: string[] | null
           client_prompt: string
           created_at: string
           current_phase: number | null
@@ -2466,6 +2468,8 @@ export type Database = {
         }
         Insert: {
           audit_required?: boolean
+          brain_id?: string | null
+          brain_skill_profile?: string[] | null
           client_prompt?: string
           created_at?: string
           current_phase?: number | null
@@ -2486,6 +2490,8 @@ export type Database = {
         }
         Update: {
           audit_required?: boolean
+          brain_id?: string | null
+          brain_skill_profile?: string[] | null
           client_prompt?: string
           created_at?: string
           current_phase?: number | null
@@ -2504,10 +2510,19 @@ export type Database = {
           user_id?: string
           workspace_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orchestrator_projects_brain_id_fkey"
+            columns: ["brain_id"]
+            isOneToOne: false
+            referencedRelation: "user_brain_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       orchestrator_tasks: {
         Row: {
+          brain_skill: string | null
           completed_at: string | null
           created_at: string
           id: string
@@ -2525,6 +2540,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          brain_skill?: string | null
           completed_at?: string | null
           created_at?: string
           id?: string
@@ -2542,6 +2558,7 @@ export type Database = {
           title?: string
         }
         Update: {
+          brain_skill?: string | null
           completed_at?: string | null
           created_at?: string
           id?: string

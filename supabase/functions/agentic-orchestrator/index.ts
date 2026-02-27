@@ -98,9 +98,14 @@ async function generatePRD(
   sc: SupabaseClient,
   userId: string,
   clientPrompt: string,
-  _adminToken: string
-): Promise<{ tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string }> } | null> {
-  const architectPrompt = `You are a senior software architect. A client wants to build: "${clientPrompt}"
+  _adminToken: string,
+  brainSkills: string[] = []
+): Promise<{ tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string; brain_skill?: string }> } | null> {
+  const skillContext = brainSkills.length > 0
+    ? `\n\nThe project has these specialized Brain skills available: ${brainSkills.join(", ")}. Assign the most appropriate brain_skill to each task from this list.`
+    : "";
+
+  const architectPrompt = `You are a senior software architect. A client wants to build: "${clientPrompt}"${skillContext}
 
 Break this into 3–7 sequential implementation tasks. Return ONLY valid JSON — no explanation, no markdown, no comments:
 
@@ -461,11 +466,27 @@ Deno.serve(async (req: Request) => {
 
     // ─── ACTION: start ────────────────────────────────────────
     if (action === "start") {
-      const { client_prompt, workspace_id } = body as { client_prompt: string; workspace_id?: string };
+      const { client_prompt, workspace_id, brain_id } = body as { client_prompt: string; workspace_id?: string; brain_id?: string };
       if (!client_prompt?.trim()) return json({ error: "client_prompt required" }, 400);
 
       const adminToken = await getUserToken(sc, userId);
       if (!adminToken) return json({ error: "Nenhum token Lovable vinculado. Reconecte via /lovable/connect." }, 503);
+
+      // Resolve Brain skills if brain_id provided
+      let brainSkills: string[] = [];
+      let brainName = "";
+      if (brain_id) {
+        const { data: brainRow } = await sc
+          .from("user_brain_projects")
+          .select("brain_skills, name")
+          .eq("id", brain_id)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (brainRow) {
+          brainSkills = (brainRow.brain_skills as string[]) || [];
+          brainName = (brainRow.name as string) || "";
+        }
+      }
 
       const { data: project, error: projErr } = await sc
         .from("orchestrator_projects")
@@ -473,6 +494,8 @@ Deno.serve(async (req: Request) => {
           user_id: userId,
           client_prompt: client_prompt.trim(),
           workspace_id: workspace_id || null,
+          brain_id: brain_id || null,
+          brain_skill_profile: brainSkills,
           status: "planning",
         })
         .select("id")
@@ -481,12 +504,13 @@ Deno.serve(async (req: Request) => {
       if (projErr || !project) return json({ error: "Failed to create project" }, 500);
       const projectId = project.id as string;
 
-      await addLog(sc, projectId, `🚀 Orchestrator started: "${client_prompt.slice(0, 80)}…"`, "info");
+      const brainLabel = brainName ? ` (Brain: ${brainName})` : "";
+      await addLog(sc, projectId, `🚀 Orchestrator started${brainLabel}: "${client_prompt.slice(0, 80)}…"`, "info");
 
       (async () => {
         try {
           await addLog(sc, projectId, "🧠 Brain generating PRD…", "info");
-          const prd = await generatePRD(sc, userId, client_prompt, adminToken);
+          const prd = await generatePRD(sc, userId, client_prompt, adminToken, brainSkills);
 
           if (!prd || !prd.tasks?.length) {
             const fallback = [{ title: "Implementar projeto completo", intent: "chat", prompt: client_prompt }];
