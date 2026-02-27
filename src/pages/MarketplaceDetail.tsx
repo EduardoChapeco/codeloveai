@@ -5,9 +5,27 @@ import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import {
   Star, Eye, ShoppingCart, ArrowLeft, Loader2, Code2, Sparkles,
-  ExternalLink, Check, Package, Shield, MessageCircle,
+  ExternalLink, Check, Package, Shield, MessageCircle, Play, Key,
+  Copy, Monitor, ChevronLeft, ChevronRight, Image as ImageIcon,
+  Video, FileText, Zap, Download,
 } from "lucide-react";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+const glassCard = {
+  background: "var(--liquid-glass-bg, rgba(255,255,255,0.04))",
+  backdropFilter: "blur(40px) saturate(200%)",
+  WebkitBackdropFilter: "blur(40px) saturate(200%)",
+  border: "0.5px solid var(--clf-border)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 12px rgba(0,0,0,0.08)",
+} as const;
+
+interface DemoCredential {
+  label: string;
+  email: string;
+  password: string;
+}
 
 export default function MarketplaceDetail() {
   const { slug } = useParams();
@@ -19,6 +37,9 @@ export default function MarketplaceDetail() {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [alreadyPurchased, setAlreadyPurchased] = useState(false);
+  const [activeTab, setActiveTab] = useState<"preview" | "screenshots" | "video">("preview");
+  const [activeScreenshot, setActiveScreenshot] = useState(0);
+  const [showLivePreview, setShowLivePreview] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -33,7 +54,6 @@ export default function MarketplaceDetail() {
       setListing(data);
       setSeller((data as any).seller_profiles);
 
-      // Load reviews
       const { data: revs } = await supabase
         .from("marketplace_reviews")
         .select("*")
@@ -42,7 +62,6 @@ export default function MarketplaceDetail() {
         .limit(20);
       setReviews(revs || []);
 
-      // Check if already purchased
       if (user) {
         const { data: purchase } = await supabase
           .from("marketplace_purchases")
@@ -54,7 +73,6 @@ export default function MarketplaceDetail() {
         setAlreadyPurchased(!!purchase);
       }
 
-      // Increment views (best effort)
       supabase.from("marketplace_listings")
         .update({ views_count: (data.views_count || 0) + 1 } as any)
         .eq("id", data.id)
@@ -70,11 +88,9 @@ export default function MarketplaceDetail() {
     if (!listing) return;
     setPurchasing(true);
     try {
-      // Use marketplace-checkout edge function for Mercado Pago payment
       const { data, error } = await supabase.functions.invoke("marketplace-checkout", {
         body: { listing_id: listing.id, payment_method: "pix" },
       });
-
       if (error) throw error;
 
       if (data?.free) {
@@ -95,6 +111,11 @@ export default function MarketplaceDetail() {
     }
   };
 
+  const copyCredential = (text: string) => {
+    navigator.clipboard?.writeText(text);
+    toast.success("Copiado!");
+  };
+
   if (loading) {
     return (
       <AppLayout>
@@ -107,12 +128,18 @@ export default function MarketplaceDetail() {
 
   if (!listing) return null;
 
-  const screenshots = listing.screenshots || [];
-  const features = Array.isArray(listing.features) ? listing.features : [];
+  const screenshots: string[] = listing.screenshots || [];
+  const mediaUrls: string[] = listing.media_urls || [];
+  const features: any[] = Array.isArray(listing.features) ? listing.features : [];
+  const highlights: string[] = listing.highlights || [];
+  const demoCredentials: DemoCredential[] = Array.isArray(listing.demo_credentials) ? listing.demo_credentials : [];
+  const hasLivePreview = !!listing.lovable_project_id;
+  const hasVideo = !!listing.video_url;
+  const allMedia = [...screenshots, ...mediaUrls];
 
   return (
     <AppLayout>
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Back */}
         <button onClick={() => navigate("/marketplace")} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-6 transition-colors">
           <ArrowLeft className="h-3.5 w-3.5" /> Voltar para a Loja
@@ -121,40 +148,177 @@ export default function MarketplaceDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left: Preview + Details */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Main preview */}
-            <div className="rounded-2xl overflow-hidden border border-border/30 bg-muted/10">
-              {listing.preview_image_url ? (
-                <img src={listing.preview_image_url} alt={listing.title} className="w-full aspect-[16/9] object-cover" />
-              ) : (
-                <div className="w-full aspect-[16/9] flex items-center justify-center">
-                  <Code2 className="h-16 w-16 text-muted-foreground/10" />
-                </div>
-              )}
+
+            {/* ── Media Tabs ── */}
+            <div className="rounded-2xl overflow-hidden" style={glassCard}>
+              {/* Tab bar */}
+              <div className="flex items-center gap-1 px-4 pt-3 pb-2" style={{ borderBottom: "0.5px solid var(--clf-border)" }}>
+                <button onClick={() => { setActiveTab("preview"); setShowLivePreview(false); }}
+                  className={`h-8 px-4 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all ${activeTab === "preview" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                  <ImageIcon className="h-3 w-3" /> Preview
+                </button>
+                {hasLivePreview && (
+                  <button onClick={() => { setActiveTab("preview"); setShowLivePreview(true); }}
+                    className={`h-8 px-4 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all ${showLivePreview ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                    <Monitor className="h-3 w-3" /> Live Demo
+                  </button>
+                )}
+                {allMedia.length > 0 && (
+                  <button onClick={() => { setActiveTab("screenshots"); setShowLivePreview(false); }}
+                    className={`h-8 px-4 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all ${activeTab === "screenshots" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                    <ImageIcon className="h-3 w-3" /> Galeria ({allMedia.length})
+                  </button>
+                )}
+                {hasVideo && (
+                  <button onClick={() => { setActiveTab("video"); setShowLivePreview(false); }}
+                    className={`h-8 px-4 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all ${activeTab === "video" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                    <Video className="h-3 w-3" /> Vídeo
+                  </button>
+                )}
+              </div>
+
+              {/* Content area */}
+              <div className="relative">
+                {/* Live Preview — sandboxed iframe, no URL visible */}
+                {showLivePreview && hasLivePreview ? (
+                  <div className="relative w-full" style={{ height: "520px" }}>
+                    <iframe
+                      src={`https://id-preview--${listing.lovable_project_id}.lovable.app`}
+                      className="w-full h-full border-0"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                      style={{ pointerEvents: "auto" }}
+                      title="Live Preview"
+                    />
+                    <div className="absolute bottom-3 right-3 px-3 py-1.5 rounded-xl bg-black/60 text-white text-[10px] font-bold flex items-center gap-1.5 backdrop-blur-sm">
+                      <Monitor className="h-3 w-3" /> Preview ao Vivo
+                    </div>
+                  </div>
+                ) : activeTab === "video" && hasVideo ? (
+                  <div className="w-full aspect-video bg-black">
+                    {listing.video_url.includes("youtube.com") || listing.video_url.includes("youtu.be") ? (
+                      <iframe
+                        src={listing.video_url.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")}
+                        className="w-full h-full border-0"
+                        allowFullScreen
+                        title="Video"
+                      />
+                    ) : (
+                      <video src={listing.video_url} controls className="w-full h-full" />
+                    )}
+                  </div>
+                ) : activeTab === "screenshots" && allMedia.length > 0 ? (
+                  <div className="relative">
+                    <div className="w-full aspect-[16/9] bg-muted/10 overflow-hidden">
+                      {allMedia[activeScreenshot]?.match(/\.(mp4|webm|mov)$/i) ? (
+                        <video src={allMedia[activeScreenshot]} controls className="w-full h-full object-contain" />
+                      ) : (
+                        <img src={allMedia[activeScreenshot]} alt="" className="w-full h-full object-contain" />
+                      )}
+                    </div>
+                    {allMedia.length > 1 && (
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <button onClick={() => setActiveScreenshot(p => Math.max(0, p - 1))}
+                          disabled={activeScreenshot === 0}
+                          className="h-8 w-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30">
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <div className="flex gap-1.5">
+                          {allMedia.map((url, i) => (
+                            <button key={i} onClick={() => setActiveScreenshot(i)}
+                              className={`h-12 w-20 rounded-lg overflow-hidden border-2 transition-all ${i === activeScreenshot ? "border-primary" : "border-transparent opacity-60 hover:opacity-100"}`}>
+                              {url.match(/\.(mp4|webm|mov)$/i) ? (
+                                <div className="h-full w-full bg-muted/30 flex items-center justify-center"><Play className="h-3 w-3" /></div>
+                              ) : (
+                                <img src={url} alt="" className="h-full w-full object-cover" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        <button onClick={() => setActiveScreenshot(p => Math.min(allMedia.length - 1, p + 1))}
+                          disabled={activeScreenshot === allMedia.length - 1}
+                          className="h-8 w-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30">
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Default: cover image */
+                  <div className="w-full aspect-[16/9] bg-muted/10 overflow-hidden">
+                    {listing.preview_image_url ? (
+                      <img src={listing.preview_image_url} alt={listing.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Code2 className="h-16 w-16 text-muted-foreground/10" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Screenshots */}
-            {screenshots.length > 0 && (
-              <div className="grid grid-cols-3 gap-3">
-                {screenshots.map((url: string, i: number) => (
-                  <div key={i} className="rounded-xl overflow-hidden border border-border/20 aspect-video">
-                    <img src={url} alt="" className="h-full w-full object-cover" />
-                  </div>
+            {/* Highlights */}
+            {highlights.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {highlights.map((h, i) => (
+                  <span key={i} className="px-4 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5" style={glassCard}>
+                    <Zap className="h-3 w-3 text-primary" /> {h}
+                  </span>
                 ))}
               </div>
             )}
 
+            {/* Demo Credentials */}
+            {demoCredentials.length > 0 && (
+              <div className="rounded-2xl p-6" style={glassCard}>
+                <h2 className="text-sm font-black mb-4 flex items-center gap-2">
+                  <Key className="h-4 w-4 text-primary" /> Acessos Demo
+                </h2>
+                <p className="text-[11px] text-muted-foreground/60 mb-4">Use estas credenciais para testar o projeto antes de comprar.</p>
+                <div className="space-y-3">
+                  {demoCredentials.map((cred, i) => (
+                    <div key={i} className="rounded-xl p-4 flex items-center gap-4" style={{ ...glassCard, background: "rgba(255,255,255,0.02)" }}>
+                      <div className="shrink-0">
+                        <span className="px-3 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-bold">{cred.label}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] text-muted-foreground/60">Email:</span>
+                          <span className="text-xs font-mono font-semibold truncate">{cred.email}</span>
+                          <button onClick={() => copyCredential(cred.email)} className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:text-primary">
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground/60">Senha:</span>
+                          <span className="text-xs font-mono font-semibold">{cred.password}</span>
+                          <button onClick={() => copyCredential(cred.password)} className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:text-primary">
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Description */}
-            <div className="clf-liquid-glass rounded-2xl p-6">
-              <h2 className="text-sm font-bold mb-3">Descrição</h2>
-              <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {listing.long_description || listing.description}
+            <div className="rounded-2xl p-6" style={glassCard}>
+              <h2 className="text-sm font-black mb-4 flex items-center gap-2">
+                <FileText className="h-4 w-4" /> Descrição
+              </h2>
+              <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {listing.long_description || listing.description}
+                </ReactMarkdown>
               </div>
             </div>
 
             {/* Features */}
             {features.length > 0 && (
-              <div className="clf-liquid-glass rounded-2xl p-6">
-                <h2 className="text-sm font-bold mb-3">Funcionalidades</h2>
+              <div className="rounded-2xl p-6" style={glassCard}>
+                <h2 className="text-sm font-black mb-3">Funcionalidades</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {features.map((f: any, i: number) => (
                     <div key={i} className="flex items-center gap-2">
@@ -166,9 +330,21 @@ export default function MarketplaceDetail() {
               </div>
             )}
 
+            {/* Setup Instructions */}
+            {listing.setup_instructions && (
+              <div className="rounded-2xl p-6" style={glassCard}>
+                <h2 className="text-sm font-black mb-3 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" /> Instruções de Setup
+                </h2>
+                <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{listing.setup_instructions}</ReactMarkdown>
+                </div>
+              </div>
+            )}
+
             {/* Reviews */}
-            <div className="clf-liquid-glass rounded-2xl p-6">
-              <h2 className="text-sm font-bold mb-3 flex items-center gap-2">
+            <div className="rounded-2xl p-6" style={glassCard}>
+              <h2 className="text-sm font-black mb-3 flex items-center gap-2">
                 <MessageCircle className="h-4 w-4" /> Avaliações ({listing.rating_count})
               </h2>
               {reviews.length === 0 ? (
@@ -196,41 +372,52 @@ export default function MarketplaceDetail() {
           {/* Right: Purchase card + Seller */}
           <div className="space-y-4">
             {/* Purchase card */}
-            <div className="clf-liquid-glass rounded-2xl p-6 sticky top-20">
-              <h1 className="text-lg font-bold text-foreground mb-1">{listing.title}</h1>
+            <div className="rounded-2xl p-6 sticky top-20" style={glassCard}>
+              <h1 className="text-lg font-black text-foreground mb-1">{listing.title}</h1>
               <p className="text-xs text-muted-foreground mb-4">{listing.description}</p>
 
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {listing.price === 0 ? "Grátis" : `R$ ${listing.price.toFixed(2)}`}
+              <div className="text-3xl font-black text-foreground mb-1">
+                {listing.price === 0 ? (
+                  <span className="text-emerald-500 flex items-center gap-2"><Zap className="h-6 w-6" /> Grátis</span>
+                ) : (
+                  `R$ ${listing.price.toFixed(2)}`
+                )}
               </div>
-              <p className="text-[10px] text-muted-foreground/60 mb-4">Comissão da plataforma: 30% • Vendedor recebe 70%</p>
+              <p className="text-[10px] text-muted-foreground/60 mb-5">Comissão: 30% • Vendedor recebe 70%</p>
 
               {alreadyPurchased ? (
-                <div className="h-11 rounded-xl bg-green-500/10 text-green-600 text-sm font-semibold flex items-center justify-center gap-2">
+                <div className="h-12 rounded-2xl bg-green-500/10 text-green-600 text-sm font-bold flex items-center justify-center gap-2">
                   <Check className="h-4 w-4" /> Você já possui este projeto
                 </div>
               ) : (
                 <button
                   onClick={handlePurchase}
                   disabled={purchasing}
-                  className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50"
+                  className="w-full h-12 rounded-2xl bg-primary text-primary-foreground text-sm font-black flex items-center justify-center gap-2 hover:shadow-xl hover:shadow-primary/25 transition-all disabled:opacity-50"
                 >
                   {purchasing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
                   {listing.price === 0 ? "Obter Grátis" : "Comprar Agora"}
                 </button>
               )}
 
-              {listing.demo_url && (
+              {hasLivePreview && (
+                <button onClick={() => { setActiveTab("preview"); setShowLivePreview(true); }}
+                  className="w-full h-10 mt-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all" style={glassCard}>
+                  <Monitor className="h-3.5 w-3.5 text-primary" /> Testar Live Demo
+                </button>
+              )}
+
+              {listing.demo_url && !hasLivePreview && (
                 <a href={listing.demo_url} target="_blank" rel="noopener noreferrer"
-                  className="w-full h-9 mt-3 rounded-xl border border-border/40 text-xs font-medium flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                  className="w-full h-10 mt-3 rounded-2xl text-xs font-medium flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors" style={glassCard}>
                   <ExternalLink className="h-3.5 w-3.5" /> Ver Demo
                 </a>
               )}
 
               {/* Stats */}
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/20">
+              <div className="flex items-center justify-between mt-5 pt-4 border-t border-border/20">
                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Eye className="h-3 w-3" /> {listing.views_count}</span>
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><ShoppingCart className="h-3 w-3" /> {listing.sales_count} vendas</span>
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Download className="h-3 w-3" /> {listing.sales_count} vendas</span>
                 {listing.rating > 0 && (
                   <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Star className="h-3 w-3 text-amber-400" /> {listing.rating.toFixed(1)}</span>
                 )}
@@ -238,9 +425,9 @@ export default function MarketplaceDetail() {
 
               {/* Tech stack */}
               {listing.tech_stack?.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-4">
+                <div className="flex flex-wrap gap-1.5 mt-4">
                   {listing.tech_stack.map((t: string) => (
-                    <span key={t} className="px-2 py-0.5 rounded-full bg-muted/40 text-[9px] text-muted-foreground">{t}</span>
+                    <span key={t} className="px-2.5 py-1 rounded-xl bg-muted/30 text-[9px] font-semibold text-muted-foreground border border-border/20">{t}</span>
                   ))}
                 </div>
               )}
@@ -248,7 +435,7 @@ export default function MarketplaceDetail() {
 
             {/* Seller card */}
             {seller && (
-              <div className="clf-liquid-glass rounded-2xl p-5">
+              <div className="rounded-2xl p-5" style={glassCard}>
                 <div className="flex items-center gap-3 mb-3">
                   {seller.avatar_url ? (
                     <img src={seller.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />

@@ -2392,14 +2392,17 @@ export type Database = {
           commission_rate: number
           created_at: string
           currency: string
+          demo_credentials: Json | null
           demo_url: string | null
           description: string
           documentation_url: string | null
           features: Json | null
+          highlights: string[] | null
           id: string
           is_featured: boolean
           long_description: string | null
           lovable_project_id: string | null
+          media_urls: string[] | null
           preview_image_url: string | null
           preview_url: string | null
           price: number
@@ -2408,6 +2411,7 @@ export type Database = {
           sales_count: number
           screenshots: string[] | null
           seller_id: string
+          setup_instructions: string | null
           slug: string
           status: string
           tags: string[] | null
@@ -2415,6 +2419,7 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
+          video_url: string | null
           views_count: number
         }
         Insert: {
@@ -2422,14 +2427,17 @@ export type Database = {
           commission_rate?: number
           created_at?: string
           currency?: string
+          demo_credentials?: Json | null
           demo_url?: string | null
           description?: string
           documentation_url?: string | null
           features?: Json | null
+          highlights?: string[] | null
           id?: string
           is_featured?: boolean
           long_description?: string | null
           lovable_project_id?: string | null
+          media_urls?: string[] | null
           preview_image_url?: string | null
           preview_url?: string | null
           price?: number
@@ -2438,6 +2446,7 @@ export type Database = {
           sales_count?: number
           screenshots?: string[] | null
           seller_id: string
+          setup_instructions?: string | null
           slug: string
           status?: string
           tags?: string[] | null
@@ -2445,6 +2454,7 @@ export type Database = {
           title: string
           updated_at?: string
           user_id: string
+          video_url?: string | null
           views_count?: number
         }
         Update: {
@@ -2452,14 +2462,17 @@ export type Database = {
           commission_rate?: number
           created_at?: string
           currency?: string
+          demo_credentials?: Json | null
           demo_url?: string | null
           description?: string
           documentation_url?: string | null
           features?: Json | null
+          highlights?: string[] | null
           id?: string
           is_featured?: boolean
           long_description?: string | null
           lovable_project_id?: string | null
+          media_urls?: string[] | null
           preview_image_url?: string | null
           preview_url?: string | null
           price?: number
@@ -2468,6 +2481,7 @@ export type Database = {
           sales_count?: number
           screenshots?: string[] | null
           seller_id?: string
+          setup_instructions?: string | null
           slug?: string
           status?: string
           tags?: string[] | null
@@ -2475,6 +2489,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+          video_url?: string | null
           views_count?: number
         }
         Relationships: [
