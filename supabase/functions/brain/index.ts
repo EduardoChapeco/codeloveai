@@ -475,25 +475,36 @@ async function sendViaVenus(
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 
-  const res = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${serviceKey}`,
-    },
-    body: JSON.stringify({
-      task: prompt,
-      project_id: projectId,
-      mode: "task",
-      lovable_token: token,
-    }),
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({
+        task: prompt,
+        project_id: projectId,
+        mode: "task",
+        lovable_token: token,
+      }),
+    });
+    clearTimeout(timer);
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data?.ok) {
-    return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    const text = await res.text().catch(() => "{}");
+    let data: any = {};
+    try { data = JSON.parse(text); } catch { data = {}; }
+    if (!res.ok || !data?.ok) {
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, msgId: data.msgId };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, error: `venus-chat timeout/error: ${String(e).slice(0, 80)}` };
   }
-  return { ok: true, msgId: data.msgId };
 }
 
 // ── Response mining (scraper) ──────────────────────────────────
@@ -605,11 +616,24 @@ async function mineResponse(
       }
     } catch (e) { console.log(`[Mine] source-code error: ${String(e).slice(0,100)}`); }
 
-    // Strategy 2: latest-message as last resort
+    // Strategy 2: latest-message as last resort (with timeout protection)
     try {
-      const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
+      const ctrl = new AbortController();
+      const lmTimer = setTimeout(() => ctrl.abort(), 8_000);
+      const latestRes = await fetch(`${API}/projects/${projectId}/latest-message`, {
+        signal: ctrl.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Origin: "https://lovable.dev",
+          Referer: "https://lovable.dev/",
+          "X-Client-Git-SHA": GIT_SHA,
+        },
+      });
+      clearTimeout(lmTimer);
       if (latestRes.ok) {
-        const msg = await latestRes.json();
+        const rawText = await latestRes.text().catch(() => "");
+        let msg: any = {};
+        try { msg = JSON.parse(rawText); } catch { msg = {}; }
         if (msg && !msg.is_streaming && msg.role !== "user") {
           const content = msg.content || msg.message || msg.text || "";
           if (typeof content === "string" && content.trim().length > 30) {
@@ -617,7 +641,7 @@ async function mineResponse(
           }
         }
       }
-    } catch { /* continue */ }
+    } catch { /* continue — timeout or network error */ }
 
     await new Promise((r) => setTimeout(r, intervalMs));
   }
@@ -783,28 +807,8 @@ async function createFreshBrain(
       
       console.log(`[Brain] Bootstrap via venus ok=${bootstrapResult.ok} project=${projectId}`);
 
-      // Step 5: Background audit prompts (5 sequential at ~60s intervals)
-      // Run in background — don't block the response
-      (async () => {
-        try {
-          const auditPrompts = buildAuditPrompts(primarySkill);
-          // Wait 60s for bootstrap to complete before starting audits
-          await new Promise((r) => setTimeout(r, 60_000));
-          
-          for (let i = 0; i < auditPrompts.length; i++) {
-            console.log(`[Brain] Audit ${i + 1}/5 for project=${projectId}`);
-            const result = await sendViaVenus(projectId, auditPrompts[i], token);
-            console.log(`[Brain] Audit ${i + 1}/5 ok=${result.ok}`);
-            // Wait 60s between each audit for task completion
-            if (i < auditPrompts.length - 1) {
-              await new Promise((r) => setTimeout(r, 60_000));
-            }
-          }
-          console.log(`[Brain] All 5 audits complete for project=${projectId}`);
-        } catch (e) {
-          console.error(`[Brain] Audit background error:`, e);
-        }
-      })();
+      // NOTE: Background audit prompts removed — edge functions get killed after response.
+      // Audits should be triggered separately via cron or explicit user action.
     }
 
     console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")}`);
@@ -934,7 +938,7 @@ Deno.serve(async (req) => {
       if (!brainId) return json({ error: "brain_id obrigatório" }, 400);
 
       const brain = await getBrainRaw(sc, userId, brainId);
-      if (!brain) return json({ error: "Brain não encontrado" }, 404);
+      if (!brain) return json({ success: true, message: "Brain já foi removido anteriormente." });
 
       await sc.from("user_brain_projects").delete().eq("id", brainId).eq("user_id", userId);
       return json({ success: true, message: "Brain removido com sucesso." });
