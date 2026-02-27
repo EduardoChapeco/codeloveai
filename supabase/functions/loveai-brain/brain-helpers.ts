@@ -554,79 +554,85 @@ export function buildBrainPrompt(brainType: string, message: string): string {
 }
 
 /**
- * Captures Brain response by polling source-code for brain-output.md
+ * Captures Brain response using multi-strategy polling:
+ * 1. source-code → brain-output.md (PRIMARY — file exists in project)
+ * 2. source-code → .lovable/tasks/*.md with status:done
+ * 3. latest-message API (FALLBACK — chat response)
  */
 export async function captureResponse(
   projectId: string,
   token: string,
   maxWaitMs = 90000,
-  intervalMs = 4000,
-  initialDelayMs = 8000
+  intervalMs = 5000,
+  initialDelayMs = 10000
 ): Promise<{ response: string | null; status: "completed" | "processing" | "timeout" }> {
+
+  // Capture initial fingerprint of brain-output.md to detect changes
+  let initialMdContent: string | null = null;
+  let initialMsgId: string | null = null;
+
+  try {
+    const initRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
+    if (initRes.ok) {
+      const raw = await initRes.text();
+      try {
+        const parsed = JSON.parse(raw);
+        initialMdContent = extractFileContent(parsed, "src/brain-output.md");
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+
+  // Also capture current latest-message ID to detect new messages
+  try {
+    const msgRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
+    if (msgRes.ok) {
+      const msg = await msgRes.json();
+      initialMsgId = msg?.id || msg?.message_id || null;
+    }
+  } catch { /* ignore */ }
+
   await new Promise(r => setTimeout(r, initialDelayMs));
   const deadline = Date.now() + maxWaitMs;
-  let lastSeenMsgId: string | null = null;
 
   while (Date.now() < deadline) {
-    // ── Strategy 1 (PRIMARY): latest-message API — this is what Lovable actually produces ──
-    try {
-      const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
-      if (latestRes.ok) {
-        const msg = await latestRes.json();
-        if (msg && msg.role !== "user" && !msg.is_streaming) {
-          const content = msg.content || msg.message || msg.text || "";
-          const msgId = msg.id || msg.message_id || "";
-          // Only accept if it's a new message with meaningful content
-          if (typeof content === "string" && content.trim().length > 20) {
-            // Skip if we already saw this exact message (avoid returning stale)
-            if (msgId && msgId === lastSeenMsgId) {
-              // Same message — still processing, continue polling
-            } else {
-              return { response: content.trim(), status: "completed" };
-            }
-          }
-          if (msgId) lastSeenMsgId = msgId;
-        }
-      }
-    } catch { /* continue */ }
-
-    // ── Strategy 2: Check .lovable/tasks/*.md with status: done (Lovable creates these) ──
+    // ── Strategy 1 (PRIMARY): Poll source-code for brain-output.md ──
     try {
       const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
       if (srcRes.ok) {
         const rawText = await srcRes.text();
         let srcData: any;
         try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
-        const files = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
 
-        // Check brain-output.md (if Lovable happened to create it)
-        if (Array.isArray(files)) {
-          const brainMd = files.find((f: any) => f.path === "src/brain-output.md");
-          if (brainMd) {
-            const mdContent = brainMd.content || brainMd.source || "";
-            if (/status:\s*done/i.test(mdContent)) {
-              const parts = mdContent.split("---");
-              if (parts.length >= 3) {
-                let body = parts.slice(2).join("---").trim();
-                body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
-                if (body.length > 5) return { response: body, status: "completed" };
-              }
-            }
+        // Check brain-output.md — handles both array and object formats
+        const mdContent = extractFileContent(srcData, "src/brain-output.md");
+        if (mdContent && mdContent !== initialMdContent && /status:\s*done/i.test(mdContent)) {
+          const extracted = extractMdBody(mdContent);
+          if (extracted && extracted.length > 5) {
+            console.log(`[capture] ✅ Got response from brain-output.md (${extracted.length} chars)`);
+            return { response: extracted, status: "completed" };
           }
+        }
 
-          // Check task files (newest first)
-          const taskFiles = files
-            .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
-            .sort((a: any, b: any) => (b.path || "").localeCompare(a.path || ""));
-          for (const tf of taskFiles) {
-            const content = tf.content || tf.source || "";
-            if (/status:\s*done/i.test(content)) {
-              const parts = content.split("---");
-              if (parts.length >= 3) {
-                const body = parts.slice(2).join("---").trim();
-                if (body.length > 10) return { response: body, status: "completed" };
-              }
-            }
+        // Check .lovable/tasks/*.md (newest first)
+        const taskResult = extractFromTasks(srcData);
+        if (taskResult) {
+          console.log(`[capture] ✅ Got response from task file (${taskResult.length} chars)`);
+          return { response: taskResult, status: "completed" };
+        }
+      }
+    } catch { /* continue */ }
+
+    // ── Strategy 2 (FALLBACK): latest-message API ──
+    try {
+      const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
+      if (latestRes.ok) {
+        const msg = await latestRes.json();
+        const msgId = msg?.id || msg?.message_id || "";
+        if (msg && msg.role !== "user" && !msg.is_streaming && msgId !== initialMsgId) {
+          const content = msg.content || msg.message || msg.text || "";
+          if (typeof content === "string" && content.trim().length > 30) {
+            console.log(`[capture] ✅ Got response from latest-message (${content.trim().length} chars)`);
+            return { response: content.trim(), status: "completed" };
           }
         }
       }
@@ -636,4 +642,71 @@ export async function captureResponse(
   }
 
   return { response: null, status: "timeout" };
+}
+
+/** Extract file content from source-code response (handles array and object formats) */
+function extractFileContent(srcData: any, filePath: string): string | null {
+  const files = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
+
+  // Object format: { "src/brain-output.md": "content..." }
+  if (files && typeof files === "object" && !Array.isArray(files)) {
+    if (typeof files[filePath] === "string") return files[filePath];
+    // Also try nested: { "src/brain-output.md": { content: "..." } }
+    if (files[filePath]?.content) return files[filePath].content;
+  }
+
+  // Array format: [{ path: "src/brain-output.md", content: "..." }]
+  if (Array.isArray(files)) {
+    const f = files.find((f: any) => f.path === filePath || f.name === filePath.split("/").pop());
+    return f?.content || f?.source || null;
+  }
+
+  return null;
+}
+
+/** Extract body from frontmatter .md (after second ---) */
+function extractMdBody(mdContent: string): string | null {
+  const parts = mdContent.split("---");
+  if (parts.length >= 3) {
+    let body = parts.slice(2).join("---").trim();
+    body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+    return body.length > 5 ? body : null;
+  }
+  // Fallback: strip frontmatter block
+  const afterFm = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
+  return afterFm.length > 5 ? afterFm : null;
+}
+
+/** Extract response from .lovable/tasks/*.md files with status:done */
+function extractFromTasks(srcData: any): string | null {
+  const files = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
+
+  if (Array.isArray(files)) {
+    const taskFiles = files
+      .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
+      .sort((a: any, b: any) => (b.path || "").localeCompare(a.path || ""));
+    for (const tf of taskFiles) {
+      const content = tf.content || tf.source || "";
+      if (/status:\s*done/i.test(content)) {
+        const body = extractMdBody(content);
+        if (body && body.length > 10) return body;
+      }
+    }
+  }
+
+  // Object format: iterate keys
+  if (files && typeof files === "object" && !Array.isArray(files)) {
+    const taskPaths = Object.keys(files)
+      .filter(k => k.startsWith(".lovable/tasks/") && k.endsWith(".md"))
+      .sort().reverse();
+    for (const tp of taskPaths) {
+      const content = typeof files[tp] === "string" ? files[tp] : files[tp]?.content || "";
+      if (/status:\s*done/i.test(content)) {
+        const body = extractMdBody(content);
+        if (body && body.length > 10) return body;
+      }
+    }
+  }
+
+  return null;
 }

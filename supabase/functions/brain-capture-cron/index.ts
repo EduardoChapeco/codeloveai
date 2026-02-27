@@ -120,26 +120,11 @@ interface MineResult {
 async function mineProjectResponse(projectId: string, token: string, prevFingerprint?: string | null): Promise<MineResult> {
   const noResult: MineResult = { response: null, fingerprint: prevFingerprint || null, source: "none" };
 
-  // Strategy 1 (PRIMARY): latest-message API — most reliable
-  try {
-    const res = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
-    if (res.ok) {
-      const msg = await res.json();
-      if (msg && !msg.is_streaming && msg.role !== "user") {
-        const content = msg.content || msg.message || msg.text || "";
-        if (typeof content === "string" && content.trim().length > 30) {
-          return { response: content.trim(), fingerprint: null, source: "latest-message" };
-        }
-      }
-    }
-  } catch { /* continue to fallback */ }
-
-  // Strategy 2: Mine source-code files (secondary — brain-output.md + tasks)
+  // Strategy 1 (PRIMARY): Mine source-code for brain-output.md + tasks
   try {
     const res = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
     if (res.ok) {
       const raw = await res.text();
-      
       const currentFp = simpleHash(raw);
       if (prevFingerprint && currentFp === prevFingerprint) {
         return { ...noResult, fingerprint: currentFp, source: "unchanged" };
@@ -150,33 +135,62 @@ async function mineProjectResponse(projectId: string, token: string, prevFingerp
 
       const files = parsed?.files || parsed?.data?.files || parsed?.source?.files || parsed;
 
+      // Helper: get file content from both object and array formats
       const getContent = (path: string): string | null => {
+        if (files && typeof files === "object" && !Array.isArray(files)) {
+          if (typeof files[path] === "string") return files[path];
+          if (files[path]?.content) return files[path].content;
+        }
         if (Array.isArray(files)) {
           const f = files.find((f: any) => f.path === path);
           return f?.content || f?.source || null;
         }
-        if (files && typeof files === "object") return files[path] || null;
         return null;
       };
 
-      // Check brain-output.md
-      const mdResult = extractFromMd(getContent("src/brain-output.md") || "");
-      if (mdResult) return { response: mdResult, fingerprint: currentFp, source: "brain-output.md" };
+      // Priority 1: brain-output.md
+      const mdContent = getContent("src/brain-output.md");
+      if (mdContent) {
+        const mdResult = extractFromMd(mdContent);
+        if (mdResult) return { response: mdResult, fingerprint: currentFp, source: "brain-output.md" };
+      }
 
-      // Check task files with status: done (newest first)
+      // Priority 2: task files (both formats)
       if (Array.isArray(files)) {
         const taskFiles = files
           .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
           .sort((a: any, b: any) => (b.path || "").localeCompare(a.path || ""));
-
         for (const tf of taskFiles) {
           const content = tf.content || tf.source || "";
           const result = extractFromMd(content);
           if (result) return { response: result, fingerprint: currentFp, source: `tasks/${tf.path}` };
         }
+      } else if (files && typeof files === "object") {
+        const taskPaths = Object.keys(files)
+          .filter(k => k.startsWith(".lovable/tasks/") && k.endsWith(".md"))
+          .sort().reverse();
+        for (const tp of taskPaths) {
+          const content = typeof files[tp] === "string" ? files[tp] : files[tp]?.content || "";
+          const result = extractFromMd(content);
+          if (result) return { response: result, fingerprint: currentFp, source: `tasks/${tp}` };
+        }
       }
 
       return { ...noResult, fingerprint: currentFp, source: "no-match" };
+    }
+  } catch { /* continue to fallback */ }
+
+  // Strategy 2 (FALLBACK): latest-message API
+  try {
+    const res = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
+    if (res.ok) {
+      const msg = await res.json();
+      if (msg && !msg.is_streaming && msg.role !== "user") {
+        const content = msg.content || msg.message || msg.text || "";
+        if (typeof content === "string" && content.trim().length > 30) {
+          return { response: content.trim(), fingerprint: null, source: "latest-message" };
+        }
+      }
     }
   } catch { /* continue */ }
 
