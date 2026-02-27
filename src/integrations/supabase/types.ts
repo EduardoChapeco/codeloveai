@@ -2171,6 +2171,218 @@ export type Database = {
           },
         ]
       }
+      marketplace_listings: {
+        Row: {
+          category: string
+          commission_rate: number
+          created_at: string
+          currency: string
+          demo_url: string | null
+          description: string
+          documentation_url: string | null
+          features: Json | null
+          id: string
+          is_featured: boolean
+          long_description: string | null
+          lovable_project_id: string | null
+          preview_image_url: string | null
+          preview_url: string | null
+          price: number
+          rating: number
+          rating_count: number
+          sales_count: number
+          screenshots: string[] | null
+          seller_id: string
+          slug: string
+          status: string
+          tags: string[] | null
+          tech_stack: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+          views_count: number
+        }
+        Insert: {
+          category?: string
+          commission_rate?: number
+          created_at?: string
+          currency?: string
+          demo_url?: string | null
+          description?: string
+          documentation_url?: string | null
+          features?: Json | null
+          id?: string
+          is_featured?: boolean
+          long_description?: string | null
+          lovable_project_id?: string | null
+          preview_image_url?: string | null
+          preview_url?: string | null
+          price?: number
+          rating?: number
+          rating_count?: number
+          sales_count?: number
+          screenshots?: string[] | null
+          seller_id: string
+          slug: string
+          status?: string
+          tags?: string[] | null
+          tech_stack?: string[] | null
+          title: string
+          updated_at?: string
+          user_id: string
+          views_count?: number
+        }
+        Update: {
+          category?: string
+          commission_rate?: number
+          created_at?: string
+          currency?: string
+          demo_url?: string | null
+          description?: string
+          documentation_url?: string | null
+          features?: Json | null
+          id?: string
+          is_featured?: boolean
+          long_description?: string | null
+          lovable_project_id?: string | null
+          preview_image_url?: string | null
+          preview_url?: string | null
+          price?: number
+          rating?: number
+          rating_count?: number
+          sales_count?: number
+          screenshots?: string[] | null
+          seller_id?: string
+          slug?: string
+          status?: string
+          tags?: string[] | null
+          tech_stack?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          views_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_listings_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "seller_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketplace_purchases: {
+        Row: {
+          buyer_id: string
+          commission_amount: number
+          created_at: string
+          id: string
+          listing_id: string
+          payment_id: string | null
+          payment_method: string | null
+          price: number
+          remixed_project_id: string | null
+          seller_amount: number
+          seller_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          buyer_id: string
+          commission_amount: number
+          created_at?: string
+          id?: string
+          listing_id: string
+          payment_id?: string | null
+          payment_method?: string | null
+          price: number
+          remixed_project_id?: string | null
+          seller_amount: number
+          seller_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          buyer_id?: string
+          commission_amount?: number
+          created_at?: string
+          id?: string
+          listing_id?: string
+          payment_id?: string | null
+          payment_method?: string | null
+          price?: number
+          remixed_project_id?: string | null
+          seller_amount?: number
+          seller_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_purchases_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_purchases_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "seller_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketplace_reviews: {
+        Row: {
+          comment: string | null
+          created_at: string
+          id: string
+          is_verified_purchase: boolean
+          listing_id: string
+          purchase_id: string | null
+          rating: number
+          user_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          is_verified_purchase?: boolean
+          listing_id: string
+          purchase_id?: string | null
+          rating: number
+          user_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          is_verified_purchase?: boolean
+          listing_id?: string
+          purchase_id?: string | null
+          rating?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_reviews_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_reviews_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
@@ -3072,6 +3284,63 @@ export type Database = {
           count?: number
           key?: string
           window_start?: string
+        }
+        Relationships: []
+      }
+      seller_profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          display_name: string
+          github_url: string | null
+          id: string
+          is_active: boolean
+          is_verified: boolean
+          rating: number
+          rating_count: number
+          skills: string[] | null
+          total_revenue: number
+          total_sales: number
+          updated_at: string
+          user_id: string
+          website_url: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name?: string
+          github_url?: string | null
+          id?: string
+          is_active?: boolean
+          is_verified?: boolean
+          rating?: number
+          rating_count?: number
+          skills?: string[] | null
+          total_revenue?: number
+          total_sales?: number
+          updated_at?: string
+          user_id: string
+          website_url?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name?: string
+          github_url?: string | null
+          id?: string
+          is_active?: boolean
+          is_verified?: boolean
+          rating?: number
+          rating_count?: number
+          skills?: string[] | null
+          total_revenue?: number
+          total_sales?: number
+          updated_at?: string
+          user_id?: string
+          website_url?: string | null
         }
         Relationships: []
       }

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import {
   Loader2, ExternalLink, Rocket, Eye, BarChart3, RefreshCw,
   Copy, Globe, Pencil, Check, X, ChevronDown, Link2, AlertTriangle,
-  FolderOpen, Brain,
+  FolderOpen, Brain, Plus,
 } from "lucide-react";
 
 interface LovableProject {
@@ -41,6 +41,37 @@ export default function LovableProjects() {
   const [deploying, setDeploying] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [ghostCreating, setGhostCreating] = useState(false);
+
+  // Ghost Create: creates a project and immediately cancels the initial prompt (no credits used)
+  const handleGhostCreate = async () => {
+    if (!selectedWs) { toast.error("Selecione um workspace"); return; }
+    setGhostCreating(true);
+    try {
+      // Create project
+      const project = await invoke({
+        route: `/workspaces/${selectedWs}/projects`,
+        method: "POST",
+        payload: { name: `project-${Date.now().toString(36)}`, initial_message: { message: "setup" } },
+      }) as any;
+
+      if (!project?.id) throw new Error("Falha ao criar projeto");
+
+      // Cancel immediately (< 500ms) to avoid credit consumption
+      setTimeout(async () => {
+        try {
+          await invoke({ route: `/projects/${project.id}/chat/cancel`, method: "POST" });
+        } catch { /* best effort cancel */ }
+      }, 300);
+
+      toast.success("Projeto criado sem gastar créditos! 🚀");
+      await loadProjects();
+    } catch (err: any) {
+      toast.error("Erro: " + (err.message || "tente novamente"));
+    } finally {
+      setGhostCreating(false);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login?returnTo=/lovable/projects");
@@ -181,6 +212,15 @@ export default function LovableProjects() {
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Projetos</span>
               <div className="flex items-center gap-0.5">
+                <button
+                  onClick={handleGhostCreate}
+                  disabled={ghostCreating}
+                  className="h-6 px-2 flex items-center gap-1 rounded-md bg-primary/10 text-primary text-[9px] font-semibold hover:bg-primary/20 transition-colors disabled:opacity-50"
+                  title="Criar projeto sem gastar créditos"
+                >
+                  {ghostCreating ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Plus className="h-2.5 w-2.5" />}
+                  Novo
+                </button>
                 {workspaces.length > 1 && (
                   <select value={selectedWs} onChange={e => setSelectedWs(e.target.value)}
                     className="h-6 px-1.5 text-[9px] rounded-md bg-muted/30 border-none focus:outline-none text-muted-foreground">
