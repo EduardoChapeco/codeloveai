@@ -138,7 +138,22 @@ function EvolutionInstancePanel({ serviceUrl, apiKey, instanceName }: {
     const { data, error } = await supabase.functions.invoke("evolution-proxy", {
       body: { action, serviceUrl, apiKey, instanceName },
     });
-    if (error) throw new Error(error.message);
+
+    if (error) {
+      const maybeHttpError = error as unknown as { context?: Response; message?: string };
+      if (maybeHttpError.context) {
+        const details = await maybeHttpError.context.json().catch(() => null);
+        if (details?.error) {
+          const firstAttempt = Array.isArray(details.attempts) ? details.attempts[0] : null;
+          const attemptMsg = firstAttempt?.endpoint
+            ? ` Endpoint testado: ${firstAttempt.endpoint} (status ${firstAttempt.status}).`
+            : "";
+          throw new Error(`${details.error}${attemptMsg}`);
+        }
+      }
+      throw new Error(error.message || "Falha ao chamar evolution-proxy");
+    }
+
     return data;
   };
 
