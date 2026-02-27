@@ -418,6 +418,15 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 const SUPABASE = 'https://qlhhmmboxlufvdtpbrsm.supabase.co';
 const LOVABLE  = 'https://api.lovable.dev';
 
+const _SIG_KEY = 'stbl_c8f2a91d4e7b3c6a0f5e8d2b1a9c7f4e';
+async function _genSig(appId) {
+  const ts = Date.now().toString();
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(_SIG_KEY), {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(appId+'.'+ts));
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');
+  return appId+'.'+ts+'.'+b64;
+}
+
 const GIT_SHA = '9810ecd6b501b23b14c5d4ee731d8cda244d003b';
 
 // ── State ──
@@ -562,17 +571,20 @@ async function sendChat() {
 
   try {
     const { clf_license } = await cget(['clf_license']);
+    const starbleSig = await _genSig('spd');
     const res = await fetch(SUPABASE + '/functions/v1/send-message', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-clf-token': clf_license,
         'x-clf-extension': 'speed',
+        'x-starble-sig': starbleSig,
       },
       body: JSON.stringify({
-        task: text,
-        lovable_token: S.idToken,
-        project_id: S.projectId,
+        message: text,
+        token: S.idToken,
+        projectId: S.projectId,
+        licenseKey: clf_license,
       }),
     });
     removeTyping(typingEl);
