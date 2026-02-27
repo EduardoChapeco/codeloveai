@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { useCallback, useState } from "react";
+import { generateClientSig } from "@/lib/client-sig";
 
 interface ProxyOptions {
   route: string;
@@ -19,9 +20,12 @@ export function useLovableProxy() {
 
   const getAuthHeaders = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token
-      ? { Authorization: `Bearer ${session.access_token}` }
-      : {};
+    const sig = await generateClientSig("web");
+    const headers: Record<string, string> = { "x-starble-sig": sig };
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+    return headers;
   }, []);
 
   const invoke = useCallback(async <T = unknown>(options: ProxyOptions): Promise<T> => {

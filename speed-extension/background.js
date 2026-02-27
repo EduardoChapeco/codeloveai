@@ -4,6 +4,19 @@
 const SB = 'https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1';
 const FIREBASE_KEY = 'AIzaSyBQNjlw9Vp4tP4VVeANzyPJnqbG2wLbYPw';
 const FIREBASE_REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_KEY}`;
+const CLIENT_SIG_KEY = "stbl_c8f2a91d4e7b3c6a0f5e8d2b1a9c7f4e";
+
+async function generateStarbleSig(appId = "spd") {
+  const ts = Date.now().toString();
+  const k = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(CLIENT_SIG_KEY),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`${appId}.${ts}`));
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return `${appId}.${ts}.${b64}`;
+}
 
 // ── Side panel behavior ──────────────────────────────────────────────
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -40,12 +53,14 @@ function decodeCLF1(licenseKey) {
 async function validateLicense(licenseKey) {
   try {
     const hwid = await getDeviceId();
+    const sig = await generateStarbleSig("spd");
     const res = await fetch(`${SB}/validate-plan`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-clf-token': licenseKey,
         'x-clf-hwid': hwid,
+        'x-starble-sig': sig,
       },
       body: JSON.stringify({}),
     });
