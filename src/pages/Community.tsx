@@ -13,9 +13,30 @@ import {
   ChevronLeft, ChevronRight, Play, Gift, Copy, FileText,
   Code, Layout, Square, RectangleHorizontal, Columns, Check,
   MoreHorizontal, Pencil, Archive, Trash2, Lock, Search,
-  EyeOff, Maximize2, Volume2, VolumeX
+  EyeOff, Maximize2, Volume2, VolumeX, Plus, Shield, Globe,
+  Settings, UserPlus, Crown, ArrowLeft
 } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
+
+/* ─── Group Interfaces ─── */
+interface CommunityGroup {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  rules: string;
+  cover_url: string | null;
+  icon_url: string | null;
+  is_private: boolean;
+  is_archived: boolean;
+  created_by: string;
+  members_count: number;
+  posts_count: number;
+  created_at: string;
+  isMember?: boolean;
+  isCreator?: boolean;
+  memberRole?: string;
+}
 
 interface Post {
   id: string;
@@ -677,7 +698,230 @@ function PostComposer({
   );
 }
 
-/* ─── View Tracker Hook ─── */
+/* ─── Create Group Modal ─── */
+function CreateGroupModal({ user, onClose, onCreated }: { user: any; onClose: () => void; onCreated: (g: CommunityGroup) => void }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [rules, setRules] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState("");
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [iconPreview, setIconPreview] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    setCoverFile(f);
+    const reader = new FileReader(); reader.onload = () => setCoverPreview(reader.result as string); reader.readAsDataURL(f);
+  };
+  const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    setIconFile(f);
+    const reader = new FileReader(); reader.onload = () => setIconPreview(reader.result as string); reader.readAsDataURL(f);
+  };
+
+  const handleCreate = async () => {
+    if (!name.trim()) return toast.error("Nome do grupo é obrigatório.");
+    setCreating(true);
+    try {
+      const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now().toString(36);
+      let coverUrl: string | null = null;
+      let iconUrl: string | null = null;
+
+      if (coverFile) {
+        const ext = coverFile.name.split(".").pop();
+        const path = `groups/${slug}/cover.${ext}`;
+        const { error } = await supabase.storage.from("community").upload(path, coverFile);
+        if (!error) { const { data } = supabase.storage.from("community").getPublicUrl(path); coverUrl = data.publicUrl; }
+      }
+      if (iconFile) {
+        const ext = iconFile.name.split(".").pop();
+        const path = `groups/${slug}/icon.${ext}`;
+        const { error } = await supabase.storage.from("community").upload(path, iconFile);
+        if (!error) { const { data } = supabase.storage.from("community").getPublicUrl(path); iconUrl = data.publicUrl; }
+      }
+
+      const { data: group, error } = await supabase.from("community_groups").insert({
+        name: name.trim(),
+        slug,
+        description: description.trim(),
+        rules: rules.trim(),
+        is_private: isPrivate,
+        cover_url: coverUrl,
+        icon_url: iconUrl,
+        created_by: user.id,
+      } as any).select("*").single();
+
+      if (error) throw error;
+
+      // Auto-join as admin
+      await supabase.from("community_group_members").insert({ group_id: group.id, user_id: user.id, role: "admin" } as any);
+
+      toast.success("Grupo criado! 🎉");
+      onCreated({ ...group, isMember: true, isCreator: true, memberRole: "admin" } as CommunityGroup);
+      onClose();
+    } catch (err: any) {
+      toast.error("Erro ao criar grupo: " + (err.message || ""));
+    } finally { setCreating(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="clf-liquid-glass w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="lv-heading-md">Criar Grupo</h2>
+            <button onClick={onClose} className="h-8 w-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80"><X className="h-4 w-4" /></button>
+          </div>
+
+          {/* Cover */}
+          <div>
+            <label className="lv-caption block mb-1.5">CAPA DO GRUPO</label>
+            <label className="block relative rounded-xl overflow-hidden border border-border cursor-pointer hover:border-primary/30 transition-colors" style={{ height: "140px" }}>
+              {coverPreview ? (
+                <img src={coverPreview} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-muted flex items-center justify-center">
+                  <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                </div>
+              )}
+              <input type="file" accept="image/*" className="hidden" onChange={handleCoverChange} />
+              <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center">
+                <span className="text-[10px] font-bold text-white opacity-0 hover:opacity-100 bg-black/50 px-3 py-1 rounded-full">ALTERAR CAPA</span>
+              </div>
+            </label>
+          </div>
+
+          {/* Icon */}
+          <div className="flex items-end gap-4 -mt-10 relative z-10 pl-4">
+            <label className="h-16 w-16 rounded-2xl border-2 border-background overflow-hidden cursor-pointer shrink-0 bg-muted flex items-center justify-center">
+              {iconPreview ? (
+                <img src={iconPreview} className="w-full h-full object-cover" />
+              ) : (
+                <Users className="h-6 w-6 text-muted-foreground" />
+              )}
+              <input type="file" accept="image/*" className="hidden" onChange={handleIconChange} />
+            </label>
+          </div>
+
+          {/* Name */}
+          <div>
+            <label className="lv-caption block mb-1.5">NOME DO GRUPO *</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: React Developers Brasil"
+              className="lv-input w-full h-10" maxLength={80} />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="lv-caption block mb-1.5">DESCRIÇÃO</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Sobre o que é este grupo?"
+              rows={3} className="lv-input w-full resize-none" maxLength={500} />
+          </div>
+
+          {/* Rules */}
+          <div>
+            <label className="lv-caption block mb-1.5">REGRAS DO GRUPO</label>
+            <textarea value={rules} onChange={e => setRules(e.target.value)} placeholder="Regras e diretrizes para membros..."
+              rows={3} className="lv-input w-full resize-none" maxLength={1000} />
+          </div>
+
+          {/* Privacy */}
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsPrivate(!isPrivate)}
+              className={`h-9 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                isPrivate ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-muted text-muted-foreground border border-border"
+              }`}>
+              {isPrivate ? <Lock className="h-3.5 w-3.5" /> : <Globe className="h-3.5 w-3.5" />}
+              {isPrivate ? "PRIVADO" : "PÚBLICO"}
+            </button>
+            <span className="lv-caption">{isPrivate ? "Somente membros aprovados podem ver" : "Qualquer pessoa pode ver e participar"}</span>
+          </div>
+
+          {/* Submit */}
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={onClose} className="lv-btn-secondary h-10 px-5 text-xs">CANCELAR</button>
+            <button onClick={handleCreate} disabled={creating || !name.trim()} className="lv-btn-primary h-10 px-5 text-xs disabled:opacity-40">
+              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "CRIAR GRUPO"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Group Detail Header ─── */
+function GroupDetailHeader({ group, user, onJoin, onLeave, onBack, onEdit }: {
+  group: CommunityGroup; user: any;
+  onJoin: () => void; onLeave: () => void; onBack: () => void; onEdit: () => void;
+}) {
+  return (
+    <div className="clf-liquid-glass overflow-hidden mb-4">
+      {/* Cover */}
+      <div className="relative h-40 md:h-52 bg-muted">
+        {group.cover_url ? (
+          <img src={group.cover_url} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-primary/20 via-transparent to-primary/5" />
+        )}
+        <button onClick={onBack} className="absolute top-3 left-3 h-9 w-9 rounded-full bg-background/80 backdrop-blur flex items-center justify-center hover:bg-background/95 transition-colors">
+          <ArrowLeft className="h-4 w-4 text-foreground" />
+        </button>
+      </div>
+      {/* Info */}
+      <div className="px-5 pb-5">
+        <div className="flex items-end gap-4 -mt-8 relative z-10">
+          <div className="h-16 w-16 rounded-2xl border-2 border-background overflow-hidden bg-muted flex items-center justify-center shrink-0">
+            {group.icon_url ? (
+              <img src={group.icon_url} className="w-full h-full object-cover" />
+            ) : (
+              <Users className="h-7 w-7 text-muted-foreground" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0 pt-8">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="lv-heading-md truncate flex items-center gap-2">
+                  {group.name}
+                  {group.is_private && <Lock className="h-4 w-4 text-amber-400 shrink-0" />}
+                </h2>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="lv-caption flex items-center gap-1"><Users className="h-3 w-3" /> {group.members_count} membros</span>
+                  <span className="lv-caption">{group.posts_count} posts</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {group.isCreator && (
+                  <button onClick={onEdit} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+                    <Settings className="h-3.5 w-3.5" /> EDITAR
+                  </button>
+                )}
+                {group.isMember ? (
+                  <button onClick={onLeave} className="lv-btn-secondary h-9 px-3 text-xs text-destructive border-destructive/30 hover:bg-destructive/10">SAIR</button>
+                ) : (
+                  <button onClick={onJoin} className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-1.5">
+                    <UserPlus className="h-3.5 w-3.5" /> PARTICIPAR
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        {group.description && <p className="lv-body mt-3">{group.description}</p>}
+        {group.rules && (
+          <details className="mt-3">
+            <summary className="lv-caption cursor-pointer hover:text-foreground transition-colors flex items-center gap-1.5">
+              <Shield className="h-3 w-3" /> REGRAS DO GRUPO
+            </summary>
+            <p className="lv-caption mt-2 pl-4 border-l-2 border-border whitespace-pre-wrap">{group.rules}</p>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function useViewTracker(userId: string | undefined) {
   const trackedRef = useRef<Set<string>>(new Set());
   const trackView = useCallback(async (postId: string) => {
@@ -741,6 +985,12 @@ export default function Community() {
   // Fullscreen media state
   const [fullscreenMedia, setFullscreenMedia] = useState<{ urls: string[]; index: number } | null>(null);
 
+  // Groups state
+  const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const [activeGroup, setActiveGroup] = useState<CommunityGroup | null>(null);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+
   // User search
   const [userSearch, setUserSearch] = useState("");
   const [userResults, setUserResults] = useState<{ user_id: string; display_name: string; username: string; avatar_url: string }[]>([]);
@@ -790,6 +1040,8 @@ export default function Community() {
       let query = supabase.from("community_posts").select("*").eq("is_deleted", false).eq("is_archived", false)
         .order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).range(from, to);
       if (filterType !== "all") query = query.eq("post_type", filterType);
+      if (activeGroup) query = query.eq("group_id", activeGroup.id);
+      else query = query.is("group_id", null);
       const { data, error } = await query;
 
       if (error) {
@@ -836,13 +1088,13 @@ export default function Community() {
       setLoadingMore(false);
       fetchingRef.current = false;
     }
-  }, [filterType]);
+  }, [filterType, activeGroup?.id]);
 
-  // Reset on filter or user change — use stable user.id
+  // Reset on filter, group, or user change
   const userId = user?.id;
   useEffect(() => {
     if (userId) fetchPosts(true);
-  }, [fetchPosts, userId]);
+  }, [fetchPosts, userId, activeGroup?.id]);
 
   // Stable refs for intersection observer
   const fetchPostsRef = useRef(fetchPosts);
@@ -867,6 +1119,48 @@ export default function Community() {
   }, []);
 
   useEffect(() => { supabase.from("hashtags").select("*").order("posts_count", { ascending: false }).limit(20).then(({ data }) => setHashtags(data || [])); }, []);
+
+  // Fetch groups
+  const fetchGroups = useCallback(async () => {
+    if (!user) return;
+    setLoadingGroups(true);
+    try {
+      const { data: allGroups } = await supabase.from("community_groups").select("*").eq("is_archived", false).order("members_count", { ascending: false }).limit(50);
+      const { data: myMemberships } = await supabase.from("community_group_members").select("group_id, role").eq("user_id", user.id);
+      const memberMap = new Map((myMemberships || []).map(m => [m.group_id, m.role]));
+      const enriched = (allGroups || []).map((g: any) => ({
+        ...g,
+        isMember: memberMap.has(g.id),
+        isCreator: g.created_by === user.id,
+        memberRole: memberMap.get(g.id) || null,
+      }));
+      setGroups(enriched);
+      // Update active group if viewing one
+      if (activeGroup) {
+        const updated = enriched.find(g => g.id === activeGroup.id);
+        if (updated) setActiveGroup(updated);
+      }
+    } catch {} finally { setLoadingGroups(false); }
+  }, [user, activeGroup?.id]);
+
+  useEffect(() => { if (user) fetchGroups(); }, [user]);
+
+  const joinGroup = async (groupId: string) => {
+    if (!user) return;
+    await supabase.from("community_group_members").insert({ group_id: groupId, user_id: user.id } as any);
+    await supabase.from("community_groups").update({ members_count: (groups.find(g => g.id === groupId)?.members_count || 0) + 1 } as any).eq("id", groupId);
+    toast.success("Você entrou no grupo! 🎉");
+    fetchGroups();
+  };
+
+  const leaveGroup = async (groupId: string) => {
+    if (!user) return;
+    await supabase.from("community_group_members").delete().eq("group_id", groupId).eq("user_id", user.id);
+    await supabase.from("community_groups").update({ members_count: Math.max(0, (groups.find(g => g.id === groupId)?.members_count || 1) - 1) } as any).eq("id", groupId);
+    toast.success("Você saiu do grupo.");
+    if (activeGroup?.id === groupId) setActiveGroup(null);
+    fetchGroups();
+  };
 
   if (authLoading) return (<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>);
   if (!user) return null;
@@ -1018,6 +1312,7 @@ export default function Community() {
         link_preview_image: linkPreview.image,
         prompt_text: data.promptText.trim(),
         is_blurred: data.isBlurred,
+        group_id: activeGroup?.id || null,
       } as any).select("id").single();
 
       if (postError) throw postError;
@@ -1072,6 +1367,78 @@ export default function Community() {
       <div className="max-w-6xl mx-auto px-8 py-8 flex gap-8">
         {/* Sidebar */}
         <aside className="hidden lg:block w-64 shrink-0 space-y-6">
+          {/* Groups section */}
+          <div className="clf-liquid-glass p-4 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <p className="ep-subtitle">GRUPOS</p>
+              <button onClick={() => setShowCreateGroup(true)} className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors" title="Criar grupo">
+                <Plus className="h-3.5 w-3.5 text-primary" />
+              </button>
+            </div>
+            {/* Feed button */}
+            <button onClick={() => setActiveGroup(null)}
+              className={`w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-[10px] text-xs font-bold transition-colors ${
+                !activeGroup ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
+              }`}>
+              <TrendingUp className="h-3.5 w-3.5" /> FEED GERAL
+            </button>
+            {loadingGroups ? (
+              <Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" />
+            ) : (
+              <>
+                {/* My groups */}
+                {groups.filter(g => g.isMember).length > 0 && (
+                  <>
+                    <p className="text-[9px] font-bold text-muted-foreground/50 tracking-widest mt-3 mb-1 px-1">MEUS GRUPOS</p>
+                    {groups.filter(g => g.isMember).map(g => (
+                      <button key={g.id} onClick={() => setActiveGroup(g)}
+                        className={`w-full flex items-center gap-2.5 text-left px-2.5 py-2 rounded-[10px] text-xs transition-colors group ${
+                          activeGroup?.id === g.id ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
+                        }`}>
+                        <div className="h-7 w-7 rounded-lg overflow-hidden bg-muted shrink-0 flex items-center justify-center">
+                          {g.icon_url ? <img src={g.icon_url} className="w-full h-full object-cover" /> : <Users className="h-3.5 w-3.5" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-bold text-[11px]">{g.name}</p>
+                          <p className={`text-[9px] ${activeGroup?.id === g.id ? "opacity-60" : "text-muted-foreground/50"}`}>{g.members_count} membros</p>
+                        </div>
+                        {g.isCreator && <Crown className={`h-3 w-3 shrink-0 ${activeGroup?.id === g.id ? "text-background/60" : "text-amber-400/60"}`} />}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {/* Discover groups */}
+                {groups.filter(g => !g.isMember).length > 0 && (
+                  <>
+                    <p className="text-[9px] font-bold text-muted-foreground/50 tracking-widest mt-3 mb-1 px-1">DESCOBRIR</p>
+                    {groups.filter(g => !g.isMember).slice(0, 5).map(g => (
+                      <div key={g.id} className="flex items-center gap-2 px-2.5 py-2 rounded-[10px] hover:bg-muted transition-colors">
+                        <button onClick={() => setActiveGroup(g)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                          <div className="h-7 w-7 rounded-lg overflow-hidden bg-muted shrink-0 flex items-center justify-center">
+                            {g.icon_url ? <img src={g.icon_url} className="w-full h-full object-cover" /> : <Users className="h-3.5 w-3.5 text-muted-foreground" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-bold text-foreground truncate">{g.name}</p>
+                            <p className="text-[9px] text-muted-foreground/50">{g.members_count} membros</p>
+                          </div>
+                        </button>
+                        <button onClick={() => joinGroup(g.id)} className="h-6 px-2 rounded-md bg-primary/10 text-primary text-[9px] font-bold hover:bg-primary/20 shrink-0">
+                          <UserPlus className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {groups.length === 0 && (
+                  <div className="text-center py-3">
+                    <p className="lv-caption">Nenhum grupo ainda.</p>
+                    <button onClick={() => setShowCreateGroup(true)} className="lv-caption text-primary hover:underline mt-1">Crie o primeiro!</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
           <div className="ep-card space-y-1">
             <p className="ep-subtitle mb-3">FILTRAR</p>
             {POST_TYPES.map(t => (
@@ -1137,14 +1504,41 @@ export default function Community() {
 
         {/* Main feed */}
         <main className="flex-1 space-y-4 min-w-0">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <p className="ep-subtitle mb-1">COMUNIDADE</p>
-              <h1 className="ep-section-title text-2xl">FEED</h1>
+          {/* Group Header (when viewing a group) */}
+          {activeGroup ? (
+            <GroupDetailHeader
+              group={activeGroup}
+              user={user}
+              onJoin={() => joinGroup(activeGroup.id)}
+              onLeave={() => leaveGroup(activeGroup.id)}
+              onBack={() => setActiveGroup(null)}
+              onEdit={() => {/* TODO: edit modal */}}
+            />
+          ) : (
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="ep-subtitle mb-1">COMUNIDADE</p>
+                <h1 className="ep-section-title text-2xl">FEED</h1>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Mobile filters */}
+          {/* Mobile groups + filters */}
+          <div className="flex gap-2 flex-wrap lg:hidden">
+            <button onClick={() => setActiveGroup(null)}
+              className={`ep-btn-secondary h-8 px-3 text-[8px] ${!activeGroup ? "bg-foreground text-background" : ""}`}>
+              FEED
+            </button>
+            {groups.filter(g => g.isMember).slice(0, 4).map(g => (
+              <button key={g.id} onClick={() => setActiveGroup(g)}
+                className={`ep-btn-secondary h-8 px-3 text-[8px] flex items-center gap-1 ${activeGroup?.id === g.id ? "bg-foreground text-background" : ""}`}>
+                {g.name.slice(0, 12)}{g.name.length > 12 ? "…" : ""}
+              </button>
+            ))}
+            <button onClick={() => setShowCreateGroup(true)} className="ep-btn-secondary h-8 w-8 text-[8px] flex items-center justify-center">
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
           <div className="flex gap-2 flex-wrap lg:hidden">
             {POST_TYPES.map(t => (
               <button key={t.id} onClick={() => setSearchParams(t.id === "all" ? {} : { type: t.id })}
@@ -1154,7 +1548,10 @@ export default function Community() {
             ))}
           </div>
 
-          <PostComposer user={user} profile={myProfile} onSubmit={submitPost} posting={posting} />
+          {/* Only show composer if viewing general feed or if member of group */}
+          {(!activeGroup || activeGroup.isMember) && (
+            <PostComposer user={user} profile={myProfile} onSubmit={submitPost} posting={posting} />
+          )}
 
           {/* Posts */}
           {loading ? (
@@ -1407,6 +1804,14 @@ export default function Community() {
           urls={fullscreenMedia.urls}
           initialIndex={fullscreenMedia.index}
           onClose={() => setFullscreenMedia(null)}
+        />
+      )}
+      {/* Create Group Modal */}
+      {showCreateGroup && (
+        <CreateGroupModal
+          user={user}
+          onClose={() => setShowCreateGroup(false)}
+          onCreated={(g) => { setGroups(prev => [g, ...prev]); setActiveGroup(g); }}
         />
       )}
     </div>
