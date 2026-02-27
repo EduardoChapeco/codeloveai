@@ -354,47 +354,23 @@ export async function createFreshBrain(
       return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
     }
 
-    console.log(`[Brain] Ghost Create in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
+    console.log(`[Brain] Creating Core Brain in workspace ${obfuscate(workspaceId)} for ${obfuscate(userId)}`);
 
-    // ── STEP 1: Ghost Create ──
-    const payloads = [
-      { name: "Star AI Brain", initial_message: "setup", visibility: "private" },
-      {
-        description: "Star AI Brain",
+    // ── STEP 1: Create project with meaningful initial message ──
+    const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
+      method: "POST",
+      body: JSON.stringify({
+        name: `core-brain-${Date.now()}`,
+        initial_message: { message: "Crie um projeto Core Brain — sistema headless de IA especializada para processamento de prompts e geração de respostas técnicas." },
         visibility: "private",
-        env_vars: {},
-        initial_message: {
-          id: crypto.randomUUID(),
-          message: "setup",
-          files: [],
-          optimisticImageUrls: [],
-          chat_only: false,
-          agent_mode_enabled: false,
-          ai_message_id: generateTypeId("aimsg"),
-        },
-      },
-      { description: "Star AI Brain", initial_message: "setup", visibility: "private" },
-    ];
+      }),
+    });
 
-    let createRes: Response | null = null;
-    for (let i = 0; i < payloads.length; i++) {
-      const res = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
-        method: "POST",
-        body: JSON.stringify(payloads[i]),
-      });
-      if (res.ok) {
-        createRes = res;
-        console.log(`[Brain] ✅ Format ${String.fromCharCode(65 + i)} succeeded`);
-        break;
-      } else {
-        const errText = await res.text().catch(() => "");
-        console.error(`[Brain] Format ${String.fromCharCode(65 + i)} failed: ${res.status} ${errText.slice(0, 200)}`);
-      }
-    }
-
-    if (!createRes || !createRes.ok) {
+    if (!createRes.ok) {
+      const errText = await createRes.text().catch(() => "");
+      console.error(`[Brain] Create failed: ${createRes.status} ${errText.slice(0, 200)}`);
       await sc.from("user_brain_projects").delete().eq("user_id", userId);
-      return { error: "Falha ao criar projeto Brain — nenhum formato aceito pela API" };
+      return { error: `Falha ao criar projeto Brain (HTTP ${createRes.status})` };
     }
 
     const project = await createRes.json();
@@ -408,7 +384,7 @@ export async function createFreshBrain(
 
     console.log(`[Brain] ✅ Project created: ${projectId}, msgId: ${msgId || "unknown"}`);
 
-    // ── STEP 2: Cancel immediately ──
+    // ── STEP 2: Cancel initial creation immediately ──
     if (msgId) {
       try {
         await lovFetch(`${API}/projects/${projectId}/chat/${msgId}/cancel`, token, { method: "POST" });
@@ -416,9 +392,26 @@ export async function createFreshBrain(
       } catch (e) {
         console.warn(`[Brain] Cancel failed (non-critical):`, e);
       }
+    } else {
+      // Try to find the message ID via latest message
+      await new Promise(r => setTimeout(r, 1_000));
+      try {
+        const latestRes = await lovFetch(`${API}/projects/${projectId}/chat/latest-message`, token, { method: "GET" });
+        if (latestRes.ok) {
+          const latest = await latestRes.json();
+          const latestMsgId = latest?.id || latest?.message_id;
+          if (latestMsgId) {
+            await lovFetch(`${API}/projects/${projectId}/chat/${latestMsgId}/cancel`, token, { method: "POST" });
+            console.log(`[Brain] ✅ Initial message cancelled via latest-message`);
+          }
+        }
+      } catch { /* best effort */ }
     }
 
-    // ── STEP 3: Update record with real project ID ──
+    // ── STEP 3: Wait 5 seconds for project to stabilize ──
+    await new Promise(r => setTimeout(r, 5_000));
+
+    // ── STEP 4: Update record ──
     await sc.from("user_brain_projects")
       .update({
         lovable_project_id: projectId,
@@ -428,7 +421,7 @@ export async function createFreshBrain(
       })
       .eq("user_id", userId);
 
-    // ── STEP 4: Wait for project readiness then inject skills ──
+    // ── STEP 5: Verify project is accessible ──
     const brainCtx: BrainContext = {
       supabaseUrl: Deno.env.get("SUPABASE_URL") || "",
       anonKey: Deno.env.get("SUPABASE_ANON_KEY") || "",
@@ -436,20 +429,24 @@ export async function createFreshBrain(
       projectId,
     };
 
-    // Run in background — don't block the response
+    // Run skill injection in background — don't block the response
     (async () => {
       try {
-        // Wait for project to be fully ready before injecting
-        await new Promise(r => setTimeout(r, 8000));
-        
         // Verify project is accessible
-        for (let attempt = 0; attempt < 3; attempt++) {
+        let projectReady = false;
+        for (let attempt = 0; attempt < 5; attempt++) {
           const ready = await verifyProject(projectId, token);
-          if (ready) break;
-          console.warn(`[Brain] Project not ready for injection (attempt ${attempt + 1}/3)`);
-          await new Promise(r => setTimeout(r, 5000));
+          if (ready) { projectReady = true; break; }
+          console.warn(`[Brain] Project not ready (attempt ${attempt + 1}/5)`);
+          await new Promise(r => setTimeout(r, 3_000));
         }
-        
+
+        if (!projectReady) {
+          console.warn(`[Brain] Project ${projectId} not accessible, marking active anyway`);
+          await sc.from("user_brain_projects").update({ status: "active" }).eq("user_id", userId);
+          return;
+        }
+
         const success = await injectSkills(sc, userId, projectId, token, brainCtx);
         if (success) {
           await sc.from("user_brain_projects")
@@ -457,7 +454,6 @@ export async function createFreshBrain(
             .eq("user_id", userId);
           console.log(`[Brain] ✅ All skills injected for ${obfuscate(userId)}`);
         } else {
-          // Auth failure during injection — still mark as active, skills can be retried
           await sc.from("user_brain_projects")
             .update({ status: "active" })
             .eq("user_id", userId);
@@ -471,7 +467,7 @@ export async function createFreshBrain(
       }
     })();
 
-    console.log(`[Brain] ✅ Ghost Create complete, skill injection started for ${obfuscate(userId)} → ${projectId}`);
+    console.log(`[Brain] ✅ Core Brain created, skill injection started for ${obfuscate(userId)} → ${projectId}`);
     return { projectId, workspaceId };
   } catch (err) {
     console.error(`[Brain] createFreshBrain error:`, err);

@@ -843,14 +843,15 @@ async function createFreshBrain(
     }
 
     const skillLabel = SKILL_PROFILES[primarySkill].title.replace(/Star AI — /, "").toLowerCase().replace(/\s+/g, "-");
-    const projectName = `star-${skillLabel}-${Date.now()}`;
+    const projectName = `core-brain-${skillLabel}-${Date.now()}`;
 
+    // ── Phase 1: Create project with meaningful initial message ──
     console.log(`[Brain] Creating project=${projectName} skills=${skills.join(",")}`);
     const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
       method: "POST",
       body: JSON.stringify({
         name: projectName,
-        initial_message: { message: "setup" },
+        initial_message: { message: "Crie um projeto Core Brain — sistema headless de IA especializada para processamento de prompts e geração de respostas técnicas." },
         visibility: "private",
       }),
     });
@@ -873,11 +874,19 @@ async function createFreshBrain(
       return { error: "ID do projeto não retornado pela API" };
     }
 
+    // ── Phase 2: Cancel initial creation immediately ──
+    const cancelResult = await cancelInitialCreation(projectId, token, created);
+    console.log(`[Brain] Ghost cancel result=${cancelResult.cancelled} project=${projectId}`);
+
+    // ── Phase 3: Wait 5 seconds for project to stabilize ──
+    await new Promise((r) => setTimeout(r, 5_000));
+
+    // Update DB with project info
     await sc.from("user_brain_projects")
       .update({
         lovable_project_id: projectId,
         lovable_workspace_id: workspaceId,
-        status: "active",
+        status: "bootstrapping",
         brain_skill: primarySkill,
         brain_skills: skills,
         name,
@@ -885,34 +894,63 @@ async function createFreshBrain(
       })
       .eq("id", lockId);
 
-    const cancelResult = await cancelInitialCreation(projectId, token, created);
-    console.log(`[Brain] Ghost cancel result=${cancelResult.cancelled} project=${projectId}`);
-
-    await new Promise((r) => setTimeout(r, 8_000));
-
+    // ── Phase 4: Verify project is accessible ──
     let projectReady = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       const check = await lovFetch(`${API}/projects/${projectId}`, token, { method: "GET" });
       if (check.ok) {
         projectReady = true;
         break;
       }
-      await new Promise((r) => setTimeout(r, 5_000));
+      console.log(`[Brain] Project not ready yet, attempt ${attempt + 1}/5`);
+      await new Promise((r) => setTimeout(r, 3_000));
     }
 
-    if (projectReady) {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-      const bootstrapPrompt = buildBootstrapPrompt(primarySkill, { supabaseUrl, anonKey, userId });
-      let bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
-      
-      if (!bootstrapResult.ok && bootstrapResult.error?.includes("404")) {
-        await new Promise((r) => setTimeout(r, 5_000));
-        bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
-      }
-      
-      console.log(`[Brain] Bootstrap via venus ok=${bootstrapResult.ok} project=${projectId}`);
+    if (!projectReady) {
+      console.warn(`[Brain] Project ${projectId} not accessible after retries, marking active anyway`);
+      await sc.from("user_brain_projects").update({ status: "active" }).eq("id", lockId);
+      return { projectId, workspaceId, brainId: lockId };
     }
+
+    // ── Phase 5: Send bootstrap prompt (main structure) ──
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    const bootstrapPrompt = buildBootstrapPrompt(primarySkill, { supabaseUrl, anonKey, userId });
+
+    console.log(`[Brain] Sending bootstrap prompt to project=${projectId}`);
+    let bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
+
+    if (!bootstrapResult.ok) {
+      console.warn(`[Brain] Bootstrap attempt 1 failed: ${bootstrapResult.error}`);
+      await new Promise((r) => setTimeout(r, 5_000));
+      bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
+    }
+
+    console.log(`[Brain] Bootstrap result ok=${bootstrapResult.ok} project=${projectId}`);
+
+    // ── Phase 6: Send audit prompts sequentially with delays ──
+    if (bootstrapResult.ok) {
+      const auditPrompts = buildAuditPrompts(primarySkill);
+      for (let i = 0; i < auditPrompts.length; i++) {
+        // Wait 5 seconds between each audit prompt
+        await new Promise((r) => setTimeout(r, 5_000));
+        console.log(`[Brain] Sending audit prompt ${i + 1}/${auditPrompts.length} project=${projectId}`);
+        const auditResult = await sendViaVenus(projectId, auditPrompts[i], token);
+        if (!auditResult.ok) {
+          console.warn(`[Brain] Audit prompt ${i + 1} failed: ${auditResult.error}, skipping rest`);
+          break;
+        }
+        // Update skill_phase for progress tracking
+        await sc.from("user_brain_projects")
+          .update({ skill_phase: i + 2 })
+          .eq("id", lockId);
+      }
+    }
+
+    // Mark as active
+    await sc.from("user_brain_projects")
+      .update({ status: "active", skill_phase: 6 })
+      .eq("id", lockId);
 
     console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")}`);
     return { projectId, workspaceId, brainId: lockId };
