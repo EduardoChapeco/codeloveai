@@ -526,8 +526,30 @@ export function buildPayload(prompt: string) {
 export function buildBrainPrompt(brainType: string, message: string): string {
   const ts = Date.now();
 
-  // Simple, subtle output instruction
-  const outputRule = `\n\nWrite your complete response in src/brain-output.md using this format:\n---\nstatus: done\ntimestamp: ${ts}\n---\n\n(your answer here)\n\nRespond in Brazilian Portuguese. Do not create React components or pages.`;
+  // Strong instruction to ALWAYS overwrite src/brain-output.md
+  const outputRule = `
+
+CRITICAL INSTRUCTION — OUTPUT FORMAT:
+You MUST overwrite the file src/brain-output.md with your COMPLETE response using EXACTLY this format:
+
+\`\`\`markdown
+---
+status: done
+timestamp: ${ts}
+type: ${brainType}
+---
+
+(your full answer here)
+\`\`\`
+
+Rules:
+1. ALWAYS overwrite src/brain-output.md — never create new files for the response
+2. The frontmatter MUST contain "status: done" — this triggers response capture
+3. Write your ENTIRE answer inside this single .md file
+4. Respond in Brazilian Portuguese
+5. Do NOT create React components, pages, routes or visual elements
+6. For code: embed code blocks inside the markdown response
+7. Also write the same response to src/brain-output.json in format: {"status":"done","timestamp":${ts},"response":"(your answer)"}`;
 
   const modes: Record<string, string> = {
     general: message + outputRule,
@@ -535,6 +557,9 @@ export function buildBrainPrompt(brainType: string, message: string): string {
     code: `Help me write this code: ${message}${outputRule}`,
     scraper: `Create a web scraper for: ${message}${outputRule}`,
     migration: `Generate SQL migration for: ${message}${outputRule}`,
+    data: `Help with this data/analytics task: ${message}${outputRule}`,
+    devops: `Help with this DevOps/infrastructure task: ${message}${outputRule}`,
+    security: `Help with this security task: ${message}${outputRule}`,
   };
 
   return modes[brainType] || modes.general;
@@ -547,26 +572,14 @@ export async function captureResponse(
   projectId: string,
   token: string,
   maxWaitMs = 90000,
-  intervalMs = 4000,
-  initialDelayMs = 6000
+  intervalMs = 3000,
+  initialDelayMs = 5000
 ): Promise<{ response: string | null; status: "completed" | "processing" | "timeout" }> {
   await new Promise(r => setTimeout(r, initialDelayMs));
   const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() < deadline) {
-    // Strategy 1: Check latest-message for direct AI response
-    try {
-      const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
-      if (latestRes.ok) {
-        const msg = await latestRes.json();
-        if (msg && !msg.is_streaming && msg.role !== "user") {
-          const content = msg.content || msg.message || msg.text || "";
-          if (content.length > 20) return { response: content, status: "completed" };
-        }
-      }
-    } catch { /* continue */ }
-
-    // Strategy 2: Poll source-code for brain-output.md
+    // Strategy 1: Poll source-code for brain-output.md (PRIMARY — most reliable)
     try {
       const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
       if (srcRes.ok) {
@@ -587,41 +600,71 @@ export async function captureResponse(
 
         // Check brain-output.md (primary)
         const mdContent = getContent("src/brain-output.md", "brain-output.md");
-        if (mdContent) {
-          const statusMatch = mdContent.match(/status:\s*done/i);
-          if (statusMatch) {
-            const parts = mdContent.split("---");
-            if (parts.length >= 3) {
-              const body = parts.slice(2).join("---").trim();
-              if (body.length > 5) return { response: body, status: "completed" };
-            }
+        if (mdContent && /status:\s*done/i.test(mdContent)) {
+          const parts = mdContent.split("---");
+          if (parts.length >= 3) {
+            let body = parts.slice(2).join("---").trim();
+            // Strip wrapping code fences
+            body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+            if (body.length > 5) return { response: body, status: "completed" };
           }
         }
 
-        // Check brain-output.json (legacy fallback)
+        // Check brain-output.json (secondary)
         const jsonContent = getContent("src/brain-output.json", "brain-output.json");
         if (jsonContent) {
           let clean = jsonContent.trim();
           if (clean.startsWith("```")) clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
           try {
             const parsed = JSON.parse(clean);
-            if (parsed.response && parsed.response.length > 0 && parsed.status === "done") {
+            if (parsed.status === "done" && typeof parsed.response === "string" && parsed.response.length > 0) {
               return { response: parsed.response, status: "completed" };
             }
           } catch { /* not ready */ }
         }
 
-        // Check .lovable/tasks/brain-response.md (fallback)
-        const taskMd = getContent(".lovable/tasks/brain-response.md", "brain-response.md");
-        if (taskMd) {
-          const statusMatch = taskMd.match(/status:\s*done/i);
-          if (statusMatch) {
-            const parts = taskMd.split("---");
-            if (parts.length >= 3) {
-              const body = parts.slice(2).join("---").trim();
-              if (body.length > 5) return { response: body, status: "completed" };
+        // Check brain-output.html (tertiary)
+        const htmlContent = getContent("src/brain-output.html", "brain-output.html");
+        if (htmlContent) {
+          const bodyMatch = htmlContent.match(/<(?:body|main)[^>]*>([\s\S]*?)<\/(?:body|main)>/i);
+          if (bodyMatch) {
+            const text = bodyMatch[1]
+              .replace(/<script[\s\S]*?<\/script>/gi, "")
+              .replace(/<style[\s\S]*?<\/style>/gi, "")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (text.length > 30) return { response: text, status: "completed" };
+          }
+        }
+
+        // Check .lovable/tasks/*.md with status: done
+        if (Array.isArray(files)) {
+          const taskFiles = files
+            .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
+            .sort((a: any, b: any) => (b.path || "").localeCompare(a.path || ""));
+          for (const tf of taskFiles) {
+            const content = tf.content || tf.source || "";
+            if (/status:\s*done/i.test(content)) {
+              const parts = content.split("---");
+              if (parts.length >= 3) {
+                const body = parts.slice(2).join("---").trim();
+                if (body.length > 10) return { response: body, status: "completed" };
+              }
             }
           }
+        }
+      }
+    } catch { /* continue */ }
+
+    // Strategy 2: Check latest-message API (fallback)
+    try {
+      const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
+      if (latestRes.ok) {
+        const msg = await latestRes.json();
+        if (msg && !msg.is_streaming && msg.role !== "user") {
+          const content = msg.content || msg.message || msg.text || "";
+          if (content.length > 20) return { response: content, status: "completed" };
         }
       }
     } catch { /* continue */ }
