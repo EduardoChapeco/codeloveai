@@ -109,8 +109,9 @@ export default function VenusPage() {
           <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
             <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
             <div className="flex items-center gap-3">
-              <Link to="/extensoes" className="text-xs text-muted-foreground hover:text-foreground">Extensões</Link>
+              <Link to="/community" className="text-xs text-muted-foreground hover:text-foreground">Comunidade</Link>
               <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+              <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Começar Grátis</Link>
             </div>
           </div>
         </nav>
@@ -118,8 +119,8 @@ export default function VenusPage() {
 
       {/* Breadcrumb */}
       <div className="max-w-5xl mx-auto px-6 pt-6">
-        <Link to="/extensoes" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="h-3.5 w-3.5" /> Voltar para Extensões
+        <Link to="/" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar ao início
         </Link>
       </div>
 
