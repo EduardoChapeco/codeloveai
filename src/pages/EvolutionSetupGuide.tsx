@@ -128,11 +128,12 @@ function PromptSuggestion({ prompt }: { prompt: string }) {
 function EvolutionInstancePanel({ serviceUrl, apiKey, instanceName }: {
   serviceUrl: string; apiKey: string; instanceName: string;
 }) {
-  const [status, setStatus] = useState<"idle" | "creating" | "created" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "checking" | "creating" | "created" | "error">("idle");
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [connState, setConnState] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [checkingState, setCheckingState] = useState(false);
+  const [healthResult, setHealthResult] = useState<{ ok: boolean; version?: string; hint?: string } | null>(null);
 
   const callProxy = async (action: string) => {
     const { data, error } = await supabase.functions.invoke("evolution-proxy", {
@@ -140,15 +141,16 @@ function EvolutionInstancePanel({ serviceUrl, apiKey, instanceName }: {
     });
 
     if (error) {
+      // Try to extract structured error from response
       const maybeHttpError = error as unknown as { context?: Response; message?: string };
       if (maybeHttpError.context) {
-        const details = await maybeHttpError.context.json().catch(() => null);
-        if (details?.error) {
-          const firstAttempt = Array.isArray(details.attempts) ? details.attempts[0] : null;
-          const attemptMsg = firstAttempt?.endpoint
-            ? ` Endpoint testado: ${firstAttempt.endpoint} (status ${firstAttempt.status}).`
-            : "";
-          throw new Error(`${details.error}${attemptMsg}`);
+        try {
+          const details = await maybeHttpError.context.json();
+          if (details?.error) {
+            throw new Error(`${details.error}${details.hint ? ` — ${details.hint}` : ""}`);
+          }
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
         }
       }
       throw new Error(error.message || "Falha ao chamar evolution-proxy");
@@ -162,14 +164,32 @@ function EvolutionInstancePanel({ serviceUrl, apiKey, instanceName }: {
       toast.error("Preencha o nome da instância e a API Key (etapa 4)");
       return;
     }
-    setStatus("creating");
+
+    // Step 1: Health check
+    setStatus("checking");
     setErrorMsg("");
     setQrCode(null);
     setConnState(null);
+    setHealthResult(null);
+
     try {
+      const health = await callProxy("healthCheck");
+      setHealthResult(health);
+
+      if (!health?.ok) {
+        setStatus("error");
+        setErrorMsg(
+          health?.hint ||
+          "A URL informada não responde como Evolution API. Verifique se o deploy no Render está concluído e se a imagem correta (atendai/evolution-api:latest) foi usada."
+        );
+        return;
+      }
+
+      // Step 2: Create instance
+      setStatus("creating");
       const data = await callProxy("create");
       if (data?.error) throw new Error(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
-      // Extract QR code — may come as base64 image
+
       const qr = data?.qrcode?.base64 || data?.qrcode?.pairingCode || data?.qrcode || null;
       setQrCode(typeof qr === "string" ? qr : null);
       setStatus("created");
@@ -214,26 +234,74 @@ function EvolutionInstancePanel({ serviceUrl, apiKey, instanceName }: {
       <div className="p-4 space-y-3 border-b border-primary/10">
         <p className="text-xs font-bold text-foreground flex items-center gap-2">
           <span className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-black">1</span>
-          Criar instância
+          Testar conexão e criar instância
         </p>
-        <p className="text-xs text-muted-foreground">Clique no botão abaixo para criar a instância automaticamente na sua Evolution API:</p>
+        <p className="text-xs text-muted-foreground">
+          Primeiro verificamos se a Evolution API está online, depois criamos a instância automaticamente:
+        </p>
         <button
           onClick={handleCreate}
-          disabled={status === "creating"}
+          disabled={status === "checking" || status === "creating"}
           className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2 disabled:opacity-50"
         >
-          {status === "creating" ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Criando...</>
+          {status === "checking" ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Verificando API...</>
+          ) : status === "creating" ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Criando instância...</>
           ) : status === "created" ? (
             <><CheckCircle2 className="h-4 w-4" /> Instância criada — Recriar</>
           ) : (
             <><Zap className="h-4 w-4" /> Criar instância "{instanceName}"</>
           )}
         </button>
-        {status === "error" && (
+
+        {/* Health check result */}
+        {healthResult && (
+          <div className={`flex items-start gap-2 p-3 rounded-xl border ${
+            healthResult.ok
+              ? "bg-emerald-500/10 border-emerald-500/20"
+              : "bg-red-500/10 border-red-500/20"
+          }`}>
+            {healthResult.ok ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+            )}
+            <div className="text-xs">
+              {healthResult.ok ? (
+                <span className="text-emerald-400 font-bold">
+                  ✅ Evolution API online{healthResult.version ? ` (v${healthResult.version})` : ""}
+                </span>
+              ) : (
+                <div className="space-y-1">
+                  <span className="text-red-400 font-bold">❌ API não está respondendo corretamente</span>
+                  {healthResult.hint && (
+                    <p className="text-muted-foreground">{healthResult.hint}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {status === "error" && !healthResult && (
           <InfoBox type="warn">
             <strong>Erro:</strong> {errorMsg}<br/>
             Verifique se a URL da API e a API Key estão corretas e se o serviço está rodando.
+          </InfoBox>
+        )}
+
+        {status === "error" && healthResult && !healthResult.ok && (
+          <InfoBox type="warn">
+            <strong>O serviço Render não está rodando a Evolution API corretamente.</strong><br/><br/>
+            <strong>Checklist de correção:</strong>
+            <ol className="list-decimal list-inside mt-2 space-y-1">
+              <li>No Render, abra o Web Service e veja se o status é <strong>"Live"</strong></li>
+              <li>Verifique se a imagem é <code>atendai/evolution-api:latest</code></li>
+              <li>Confirme que as variáveis de ambiente foram aplicadas (aba Environment)</li>
+              <li>Nos logs do Render, procure por <code>"Server is running on port 8080"</code></li>
+              <li>Se necessário, clique em <strong>"Manual Deploy" → "Deploy latest"</strong></li>
+            </ol>
           </InfoBox>
         )}
       </div>
@@ -345,8 +413,6 @@ export default function EvolutionSetupGuide() {
   const envContent = useMemo(() => {
     const lines = [
       `# === SERVER ===`,
-      `SERVER_TYPE=http`,
-      `SERVER_PORT=8080`,
       `SERVER_URL=${serviceUrl}`,
       ``,
       `# === AUTENTICAÇÃO ===`,
@@ -355,23 +421,13 @@ export default function EvolutionSetupGuide() {
       `# === BANCO DE DADOS ===`,
       `DATABASE_ENABLED=true`,
       `DATABASE_PROVIDER=postgresql`,
-      `DATABASE_CONNECTION_URI=${dbUrl || "[SUA_INTERNAL_DATABASE_URL]"}?schema=public`,
-      `DATABASE_CONNECTION_CLIENT_NAME=evolution_render`,
-      ``,
-      `# === PERSISTÊNCIA ===`,
-      `DATABASE_SAVE_DATA_INSTANCE=true`,
-      `DATABASE_SAVE_DATA_NEW_MESSAGE=true`,
-      `DATABASE_SAVE_MESSAGE_UPDATE=true`,
-      `DATABASE_SAVE_DATA_CONTACTS=true`,
-      `DATABASE_SAVE_DATA_CHATS=true`,
-      `DATABASE_SAVE_DATA_LABELS=true`,
-      `DATABASE_SAVE_DATA_HISTORIC=true`,
+      `DATABASE_CONNECTION_URL=${dbUrl || "[SUA_INTERNAL_DATABASE_URL]"}`,
+      `DATABASE_CONNECTION_CLIENT_NAME=evolution_client`,
       ``,
       `# === REDIS/CACHE ===`,
       `CACHE_REDIS_ENABLED=true`,
-      `CACHE_REDIS_URI=${redisUrl || "[SUA_INTERNAL_REDIS_URL]"}`,
+      `CACHE_REDIS_URL=${redisUrl || "[SUA_INTERNAL_REDIS_URL]"}`,
       `CACHE_REDIS_PREFIX_KEY=evolution`,
-      `CACHE_REDIS_SAVE_INSTANCES=false`,
       `CACHE_LOCAL_ENABLED=false`,
       ``,
       `# === CORS ===`,
@@ -596,8 +652,8 @@ export default function EvolutionSetupGuide() {
               <p className="text-xs font-bold text-foreground">Configuração do serviço:</p>
               <div className="space-y-2 text-xs text-muted-foreground">
                 <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Source:</span> Selecione <strong>"Deploy an existing image from a registry"</strong></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Image URL:</span> <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">atendai/evolution-api:v2.2.3</code></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Plan:</span> Starter ($7/mês) — Free hiberna a instância</div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Image URL:</span> <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">atendai/evolution-api:latest</code></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Plan:</span> Free (hiberna após inatividade) ou Starter ($7/mês) para 24/7</div>
               </div>
             </div>
 
