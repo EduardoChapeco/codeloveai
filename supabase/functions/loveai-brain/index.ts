@@ -201,6 +201,27 @@ Deno.serve(async (req) => {
       }
 
       if (!chatRes.ok) {
+        const errBody = await chatRes.text().catch(() => "");
+        // If 404 — brain project deleted, auto-recreate
+        if (chatRes.status === 404) {
+          console.warn(`[Brain] Project ${projectId} returned 404, recreating...`);
+          await sc.from("user_brain_projects").delete().eq("user_id", userId);
+          const newBrain = await createFreshBrain(sc, userId, lovableToken);
+          if ("error" in newBrain) {
+            if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+            return json({ error: `Brain recriado com falha: ${newBrain.error}` }, 502);
+          }
+          // Retry with new project
+          chatRes = await lovFetch(
+            `https://api.lovable.dev/projects/${newBrain.projectId}/chat`,
+            lovableToken,
+            { method: "POST", body: JSON.stringify(buildPayload(prompt)) }
+          );
+          if (convoId) await sc.from("loveai_conversations").update({ target_project_id: newBrain.projectId }).eq("id", convoId);
+        }
+      }
+
+      if (!chatRes.ok) {
         if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
         return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
       }
