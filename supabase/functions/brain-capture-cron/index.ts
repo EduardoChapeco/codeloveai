@@ -120,13 +120,26 @@ interface MineResult {
 async function mineProjectResponse(projectId: string, token: string, prevFingerprint?: string | null): Promise<MineResult> {
   const noResult: MineResult = { response: null, fingerprint: prevFingerprint || null, source: "none" };
 
-  // Strategy 1: Mine source-code files (primary)
+  // Strategy 1 (PRIMARY): latest-message API — most reliable
+  try {
+    const res = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
+    if (res.ok) {
+      const msg = await res.json();
+      if (msg && !msg.is_streaming && msg.role !== "user") {
+        const content = msg.content || msg.message || msg.text || "";
+        if (typeof content === "string" && content.trim().length > 30) {
+          return { response: content.trim(), fingerprint: null, source: "latest-message" };
+        }
+      }
+    }
+  } catch { /* continue to fallback */ }
+
+  // Strategy 2: Mine source-code files (secondary — brain-output.md + tasks)
   try {
     const res = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
     if (res.ok) {
       const raw = await res.text();
       
-      // Fingerprint check — skip if code hasn't changed
       const currentFp = simpleHash(raw);
       if (prevFingerprint && currentFp === prevFingerprint) {
         return { ...noResult, fingerprint: currentFp, source: "unchanged" };
@@ -146,23 +159,11 @@ async function mineProjectResponse(projectId: string, token: string, prevFingerp
         return null;
       };
 
-      // Priority 1: src/brain-output.md
+      // Check brain-output.md
       const mdResult = extractFromMd(getContent("src/brain-output.md") || "");
       if (mdResult) return { response: mdResult, fingerprint: currentFp, source: "brain-output.md" };
 
-      // Priority 2: src/brain-output.json
-      const jsonResult = extractFromJson(getContent("src/brain-output.json") || "");
-      if (jsonResult) return { response: jsonResult, fingerprint: currentFp, source: "brain-output.json" };
-
-      // Priority 3: src/brain-output.html
-      const htmlResult = extractFromHtml(getContent("src/brain-output.html") || "");
-      if (htmlResult) return { response: htmlResult, fingerprint: currentFp, source: "brain-output.html" };
-
-      // Priority 4: .lovable/tasks/brain-response.md
-      const taskResult = extractFromMd(getContent(".lovable/tasks/brain-response.md") || "");
-      if (taskResult) return { response: taskResult, fingerprint: currentFp, source: "tasks/brain-response.md" };
-
-      // Priority 5: Any task .md with status: done (newest first)
+      // Check task files with status: done (newest first)
       if (Array.isArray(files)) {
         const taskFiles = files
           .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
@@ -176,20 +177,6 @@ async function mineProjectResponse(projectId: string, token: string, prevFingerp
       }
 
       return { ...noResult, fingerprint: currentFp, source: "no-match" };
-    }
-  } catch { /* continue to fallback */ }
-
-  // Strategy 2: latest-message API (last resort)
-  try {
-    const res = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
-    if (res.ok) {
-      const msg = await res.json();
-      if (msg && !msg.is_streaming && msg.role !== "user") {
-        const content = msg.content || msg.message || msg.text || "";
-        if (typeof content === "string" && content.trim().length > 30) {
-          return { response: content.trim(), fingerprint: null, source: "latest-message" };
-        }
-      }
     }
   } catch { /* continue */ }
 
