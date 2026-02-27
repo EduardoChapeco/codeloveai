@@ -136,6 +136,7 @@ const MarketplaceLanding = lazyRetry(() => import("./pages/MarketplaceLanding"))
 const MarketplaceOnboarding = lazyRetry(() => import("./pages/MarketplaceOnboarding"));
 const CommunityTestList = lazyRetry(() => import("./pages/CommunityTestList"));
 const CommunityTestSession = lazyRetry(() => import("./pages/CommunityTestSession"));
+const EvolutionSetupGuide = lazyRetry(() => import("./pages/EvolutionSetupGuide"));
 
 const queryClient = new QueryClient();
 
@@ -218,6 +219,7 @@ const App = () => (
                 <Route path="/marketplace/vender" element={<MarketplaceSell />} />
                 <Route path="/marketplace/:slug" element={<MarketplaceDetail />} />
                 <Route path="/marketplace/onboarding/:purchaseId" element={<MarketplaceOnboarding />} />
+                <Route path="/setup/evolution" element={<EvolutionSetupGuide />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
