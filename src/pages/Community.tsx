@@ -525,16 +525,6 @@ function PostComposer({
 
   return (
     <div className="space-y-2">
-      {/* Reward + Spam Warning Badge */}
-      <div className="ep-card-sm bg-muted/30 flex items-start gap-3 py-3 px-4">
-        <Gift className="h-4 w-4 text-foreground shrink-0 mt-0.5" />
-        <div className="flex-1">
-          <p className="text-[10px] font-bold text-foreground tracking-widest">+1H DE TOKEN POR POST</p>
-          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
-            Cada publicação adiciona 1 hora ao seu plano (máx. 5/dia). Posts sem conteúdo real (spam, em branco, duplicados) podem resultar em <strong className="text-foreground">suspensão ou banimento</strong>. Identificamos seu dispositivo.
-          </p>
-        </div>
-      </div>
 
       <div className="ep-card border-border/50">
         <div className="flex gap-3">
@@ -963,10 +953,6 @@ export default function Community() {
 
   const deletePost = async (post: Post) => {
     setPostMenuOpen(null);
-    if (post.rewarded && !isAdmin) {
-      toast.error("Este post gerou recompensa de token e não pode ser excluído.");
-      return;
-    }
     if (!confirm("Excluir este post permanentemente?")) return;
     await supabase.from("community_posts").update({ is_deleted: true }).eq("id", post.id);
     toast.success("Post excluído!");
@@ -1065,23 +1051,7 @@ export default function Community() {
       const { data: currentProfile } = await supabase.from("user_profiles").select("posts_count").eq("user_id", user.id).maybeSingle();
       if (currentProfile) await supabase.from("user_profiles").update({ posts_count: (currentProfile.posts_count || 0) + 1 }).eq("user_id", user.id);
 
-      try {
-        const { data: rewardData, error: rewardError } = await supabase.functions.invoke("reward-post", { body: { post_id: postData!.id } });
-        console.log("[Community] reward-post response:", { rewardData, rewardError });
-        if (rewardError) {
-          console.error("[Community] reward-post error:", rewardError);
-          toast.success("Publicado!");
-        } else if (rewardData?.rewarded) {
-          toast.success("Publicado! 🎉 +1h de token adicionada ao seu plano!");
-        } else if (rewardData?.error) {
-          toast.success(`Publicado! (${rewardData.error})`);
-        } else {
-          toast.success("Publicado!");
-        }
-      } catch (rewardErr) {
-        console.error("[Community] reward-post catch:", rewardErr);
-        toast.success("Publicado!");
-      }
+      toast.success("Publicado! 🎉");
       await fetchPosts(true);
     } catch (err: any) {
       toast.error("Erro ao publicar: " + (err.message || ""));
@@ -1226,11 +1196,6 @@ export default function Community() {
                             <span className="text-[10px] text-muted-foreground">
                               {format(new Date(post.created_at), "dd MMM", { locale: ptBR })}
                             </span>
-                            {post.rewarded && (
-                              <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground/60" title="Post recompensado — não pode ser excluído">
-                                <Lock className="h-2.5 w-2.5" />
-                              </span>
-                            )}
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="ep-badge text-[7px] flex items-center gap-1">
