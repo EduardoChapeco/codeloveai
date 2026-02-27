@@ -109,11 +109,28 @@ function TypingDots() {
   );
 }
 
+/* ── Creation Steps Config ── */
+const CREATION_STEPS = [
+  { label: "Inicializando Brain", sub: "Preparando ambiente de execução...", icon: Power, duration: 3000 },
+  { label: "Criando Projeto", sub: "Provisionando projeto dedicado...", icon: Code2, duration: 5000 },
+  { label: "Injetando Memória", sub: "Carregando base de conhecimento...", icon: Database, duration: 4000 },
+  { label: "Configurando Skills", sub: "Ativando especializações selecionadas...", icon: Sparkles, duration: 4500 },
+  { label: "Melhorando Skills", sub: "Otimizando perfis PhD/Sênior...", icon: Zap, duration: 3500 },
+  { label: "Proteção & Regras", sub: "Injetando auto-proteção (Regra Zero)...", icon: Shield, duration: 3000 },
+  { label: "Templates de Resposta", sub: "Configurando formatos de output...", icon: FileText, duration: 3000 },
+  { label: "Calibrando Webhooks", sub: "Preparando captura de respostas...", icon: Server, duration: 2500 },
+  { label: "Gerando Update.md", sub: "Finalizando e notificando scraper...", icon: CheckCircle, duration: 2000 },
+];
+
 /* ── Onboarding Step ── */
 function BrainOnboarding({ onCreated, creating }: { onCreated: () => void; creating: boolean }) {
   const [selectedSkills, setSelectedSkills] = useState<BrainSkill[]>(["general"]);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [creationStarted, setCreationStarted] = useState(false);
+  const [currentStep, setCurrentStep] = useState(-1);
+  const [stepProgress, setStepProgress] = useState(0);
+  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const toggleSkill = (skill: BrainSkill) => {
     setSelectedSkills(prev =>
@@ -121,23 +138,173 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: () => void; creat
     );
   };
 
+  // Animated step progression
+  useEffect(() => {
+    if (!creationStarted || currentStep < 0) return;
+    if (currentStep >= CREATION_STEPS.length) return;
+
+    const step = CREATION_STEPS[currentStep];
+    const tick = 50;
+    let elapsed = 0;
+
+    const interval = setInterval(() => {
+      elapsed += tick;
+      setStepProgress(Math.min((elapsed / step.duration) * 100, 100));
+      if (elapsed >= step.duration) {
+        clearInterval(interval);
+        if (currentStep < CREATION_STEPS.length - 1) {
+          setCurrentStep(prev => prev + 1);
+          setStepProgress(0);
+        }
+      }
+    }, tick);
+
+    return () => clearInterval(interval);
+  }, [creationStarted, currentStep]);
+
   const handleCreate = async () => {
     if (selectedSkills.length === 0) { toast.error("Selecione ao menos uma skill."); return; }
     setLoading(true);
+    setCreationStarted(true);
+    setCurrentStep(0);
+    setStepProgress(0);
+
     try {
       const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "setup", skills: selectedSkills, name: name.trim() || undefined },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || "Erro ao criar Brain");
+
+      // Wait for animations to finish
+      const totalDuration = CREATION_STEPS.reduce((sum, s) => sum + s.duration, 0);
+      const elapsed = Date.now();
+      const remaining = Math.max(0, totalDuration - (Date.now() - elapsed));
+      
+      // Force final step completion
+      setCurrentStep(CREATION_STEPS.length - 1);
+      await new Promise(r => setTimeout(r, Math.max(remaining, 2000)));
+      setStepProgress(100);
+      await new Promise(r => setTimeout(r, 800));
+
       toast.success("Brain criado com sucesso! 🧠");
       onCreated();
     } catch (e: any) {
       toast.error(e.message);
+      setCreationStarted(false);
+      setCurrentStep(-1);
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Creation Steps UI ──
+  if (creationStarted) {
+    const totalProgress = currentStep >= 0
+      ? ((currentStep + stepProgress / 100) / CREATION_STEPS.length) * 100
+      : 0;
+
+    return (
+      <div className="h-full flex items-center justify-center p-4">
+        <div className="max-w-xl w-full animate-fade-in">
+          <div className="text-center mb-8">
+            <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent flex items-center justify-center mx-auto mb-5 shadow-xl shadow-primary/10 relative">
+              <BrainIcon className="h-10 w-10 text-primary animate-pulse" />
+            </div>
+            <h1 className="text-xl font-black tracking-tight mb-1">Criando Star AI Brain</h1>
+            <p className="text-xs text-muted-foreground">{name || "Novo Brain"} • {selectedSkills.length} skill(s)</p>
+          </div>
+
+          {/* Steps Grid */}
+          <div className="grid grid-cols-1 gap-3 mb-6">
+            {CREATION_STEPS.map((step, i) => {
+              const Icon = step.icon;
+              const isActive = i === currentStep;
+              const isDone = i < currentStep || (i === currentStep && stepProgress >= 100);
+              const isFuture = i > currentStep;
+
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center gap-4 px-5 py-4 rounded-3xl transition-all duration-500 ${
+                    isDone
+                      ? "bg-primary/8 border border-primary/20"
+                      : isActive
+                        ? "bg-primary/5 border border-primary/15 shadow-lg shadow-primary/5"
+                        : isFuture
+                          ? "opacity-30 border border-transparent"
+                          : "border border-transparent"
+                  }`}
+                  style={!isFuture ? {
+                    background: isDone ? 'hsl(var(--primary) / 0.06)' : isActive ? 'var(--liquid-glass-bg, rgba(255,255,255,0.04))' : undefined,
+                    backdropFilter: isActive ? 'blur(40px) saturate(200%)' : undefined,
+                  } : undefined}
+                >
+                  {/* Icon */}
+                  <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-500 ${
+                    isDone
+                      ? "bg-primary/15"
+                      : isActive
+                        ? "bg-primary/10"
+                        : "bg-muted/20"
+                  }`}>
+                    {isDone ? (
+                      <CheckCircle className="h-5 w-5 text-primary" />
+                    ) : isActive ? (
+                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                    ) : (
+                      <Icon className="h-5 w-5 text-muted-foreground/30" />
+                    )}
+                  </div>
+
+                  {/* Text */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold transition-colors duration-300 ${
+                      isDone || isActive ? "text-foreground" : "text-muted-foreground/40"
+                    }`}>{step.label}</p>
+                    <p className={`text-[11px] transition-colors duration-300 ${
+                      isActive ? "text-muted-foreground" : isDone ? "text-muted-foreground/60" : "text-muted-foreground/20"
+                    }`}>{step.sub}</p>
+                  </div>
+
+                  {/* Status */}
+                  {isDone && (
+                    <span className="text-[9px] font-bold text-primary/60 uppercase tracking-wider">OK</span>
+                  )}
+                  {isActive && !isDone && (
+                    <span className="flex items-center gap-1 text-[9px] font-bold text-primary uppercase tracking-wider">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                      Ativo
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Global progress bar */}
+          <div className="h-1.5 rounded-full bg-border/20 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{
+                width: `${totalProgress}%`,
+                background: totalProgress >= 100
+                  ? "hsl(var(--primary))"
+                  : "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.6))",
+                boxShadow: "0 0 8px hsl(var(--primary) / 0.3)",
+              }}
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
+            {currentStep >= CREATION_STEPS.length - 1 && stepProgress >= 100
+              ? "Concluído! Redirecionando..."
+              : `Etapa ${currentStep + 1} de ${CREATION_STEPS.length}`}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Normal Onboarding UI ──
   return (
     <div className="h-full flex items-center justify-center p-4">
       <div className="max-w-2xl w-full animate-fade-in">
@@ -205,12 +372,23 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: () => void; creat
           </p>
         )}
 
+        {/* Big square create button */}
         <button
           onClick={handleCreate}
           disabled={loading || creating || selectedSkills.length === 0}
-          className="w-full h-13 rounded-2xl bg-gradient-to-r from-primary to-primary/90 text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 hover:shadow-xl hover:shadow-primary/20 disabled:opacity-40 transition-all active:scale-[0.98]"
+          className="w-full aspect-[3/1] rounded-3xl bg-gradient-to-br from-primary via-primary/90 to-primary/70 text-primary-foreground font-black text-lg flex flex-col items-center justify-center gap-3 hover:shadow-2xl hover:shadow-primary/30 disabled:opacity-40 transition-all duration-300 active:scale-[0.97] group"
         >
-          {loading || creating ? <><Loader2 className="h-4 w-4 animate-spin" /> Criando Brain...</> : <><Sparkles className="h-4 w-4" /> Criar Brain</>}
+          {loading || creating ? (
+            <><Loader2 className="h-8 w-8 animate-spin" /><span className="text-sm font-semibold opacity-80">Iniciando...</span></>
+          ) : (
+            <>
+              <div className="h-16 w-16 rounded-2xl bg-white/15 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                <BrainIcon className="h-8 w-8" />
+              </div>
+              <span>Criar Brain</span>
+              <span className="text-xs font-semibold opacity-60">{selectedSkills.length} skill(s) selecionada(s)</span>
+            </>
+          )}
         </button>
       </div>
     </div>
