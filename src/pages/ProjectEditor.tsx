@@ -267,10 +267,10 @@ export default function ProjectEditor() {
         const errMsg = venusData?.error || venusError?.message || "Erro ao enviar";
         const status = venusData?.lovable_status || 0;
         if (status === 401 || errMsg.includes("expirado") || errMsg.includes("expired")) {
-          throw new Error("🔑 Token Lovable expirado. Abra o site lovable.dev no navegador para renovar a sessão, depois tente novamente.");
+          throw new Error("🔑 Token Lovable expirado. Abra lovable.dev para renovar a sessão, depois atualize esta página (Ctrl + Shift + R) e tente novamente.");
         }
         if (errMsg.includes("Token") || errMsg.includes("token") || errMsg.includes("não encontrado")) {
-          throw new Error("🔗 Token Lovable não encontrado. Conecte sua conta abrindo lovable.dev e depois acesse Integrações.");
+          throw new Error("🔗 Token não encontrado. Conecte sua conta em lovable.dev, depois atualize esta página (Ctrl + Shift + R).");
         }
         throw new Error(errMsg);
       }
