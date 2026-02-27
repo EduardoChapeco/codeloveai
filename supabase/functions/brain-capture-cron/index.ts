@@ -171,6 +171,16 @@ Deno.serve(async (req) => {
               const txt = msg?.content || msg?.message || msg?.text || "";
               if (msg?.role !== "user" && !msg?.is_streaming && txt.length > 30) {
                 await sc.from("loveai_conversations").update({ ai_response: txt.trim(), status: "completed" }).eq("id", convo.id);
+                // Persist to brain_outputs
+                await sc.from("brain_outputs").insert({
+                  user_id: userId,
+                  conversation_id: convo.id,
+                  skill: "general",
+                  request: "",
+                  response: txt.trim(),
+                  status: "done",
+                  brain_project_id: pid,
+                }).catch(() => {});
                 captured++; console.log(`[bc] ✅ ${cid} S1 ${txt.length}c`); continue;
               }
             } catch { /* S1 is SSE stream, expected */ }
@@ -196,6 +206,16 @@ Deno.serve(async (req) => {
                   const body = extractMdBody(md);
                   if (body && body.length > 20) {
                     await sc.from("loveai_conversations").update({ ai_response: body, status: "completed" }).eq("id", convo.id);
+                    // Persist to brain_outputs
+                    await sc.from("brain_outputs").insert({
+                      user_id: userId,
+                      conversation_id: convo.id,
+                      skill: "general",
+                      request: "",
+                      response: body,
+                      status: "done",
+                      brain_project_id: pid,
+                    }).catch(() => {});
                     captured++; console.log(`[bc] ✅ ${cid} S2 ${body.length}c`); continue;
                   }
                 }

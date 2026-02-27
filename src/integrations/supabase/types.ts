@@ -644,6 +644,50 @@ export type Database = {
           },
         ]
       }
+      brain_outputs: {
+        Row: {
+          brain_project_id: string | null
+          conversation_id: string | null
+          created_at: string
+          id: string
+          request: string
+          response: string
+          skill: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          brain_project_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          request: string
+          response: string
+          skill?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          brain_project_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          request?: string
+          response?: string
+          skill?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brain_outputs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "loveai_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           created_at: string
