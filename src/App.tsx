@@ -128,6 +128,7 @@ const SupportPage = lazyRetry(() => import("./pages/SupportPage"));
 const ExtensionStore = lazyRetry(() => import("./pages/ExtensionStore"));
 const ExtensionDetail = lazyRetry(() => import("./pages/ExtensionDetail"));
 const VenusPage = lazyRetry(() => import("./pages/VenusPage"));
+const EditorLanding = lazyRetry(() => import("./pages/EditorLanding"));
 
 const queryClient = new QueryClient();
 
@@ -201,6 +202,7 @@ const App = () => (
                 <Route path="/extensoes" element={<ExtensionStore />} />
                 <Route path="/extensoes/venus" element={<VenusPage />} />
                 <Route path="/extensoes/:slug" element={<ExtensionDetail />} />
+                <Route path="/editor" element={<EditorLanding />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
