@@ -324,7 +324,7 @@ export default function LovableProjects() {
                   </button>
                   <button onClick={() => navigate(`/projeto/${selectedProject.id}/editar`)}
                     className="lv-btn-secondary h-8 px-4 text-[10px] flex items-center gap-1.5">
-                    <Pencil className="h-3 w-3" /> Editar Projeto
+                    <Pencil className="h-3 w-3" /> Editar
                   </button>
                   {selectedProject.published_url && (
                     <a href={selectedProject.published_url} target="_blank" rel="noopener noreferrer"
