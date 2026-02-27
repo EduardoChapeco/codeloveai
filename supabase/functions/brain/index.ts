@@ -983,7 +983,17 @@ Deno.serve(async (req) => {
         return json({ error: "Star AI não está ativo. Crie um Brain primeiro.", code: "brain_inactive" }, 400);
       }
 
-      const access = await verifyProjectState(brain.lovable_project_id, lovableToken);
+      const brainProjectId = brain.lovable_project_id;
+
+      // Safeguard: brain project must NOT be "creating" placeholder
+      if (!brainProjectId || brainProjectId === "creating") {
+        return json({ error: "Brain ainda está sendo criado. Aguarde.", code: "brain_creating" }, 503);
+      }
+
+      // Log which project we're targeting
+      console.log(`[Brain:send] user=${userId.slice(0,8)} brain=${brain.id.slice(0,8)} project=${brainProjectId.slice(0,8)} skill=${brain.brain_skill}`);
+
+      const access = await verifyProjectState(brainProjectId, lovableToken);
       if (access.state === "not_found") {
         const currentWorkspaceId = await getWorkspaceId(lovableToken);
         return json({
@@ -997,29 +1007,30 @@ Deno.serve(async (req) => {
       const skill: BrainSkill = (VALID_SKILLS.has(rawSkill) ? rawSkill : (brain.brain_skill || "general")) as BrainSkill;
       const prompt = buildBrainPrompt(skill, message);
 
-      // Log conversation
+      // Log conversation — uses brain's lovable_project_id (NOT the main app)
       const { data: convoRow } = await sc.from("loveai_conversations")
         .insert({
           user_id: userId,
           user_message: message,
           brain_type: skill,
           status: "processing",
-          target_project_id: brain.lovable_project_id,
+          target_project_id: brainProjectId,
         })
         .select("id")
         .single();
 
       const convoId = convoRow?.id;
+      console.log(`[Brain:send] convo=${convoId?.slice(0,8)} target_project=${brainProjectId.slice(0,8)}`);
 
       // Send via venus-chat (task mode) — FREE
-      let venusResult = await sendViaVenus(brain.lovable_project_id, prompt, lovableToken);
-      let activeProjectId = brain.lovable_project_id;
+      let venusResult = await sendViaVenus(brainProjectId, prompt, lovableToken);
+      let activeProjectId = brainProjectId;
 
       if (!venusResult.ok) {
         // If 404 — brain project was deleted, auto-recreate
         const is404 = venusResult.error?.includes("404");
         if (is404) {
-          console.warn(`[Brain] Project ${brain.lovable_project_id} returned 404, recreating...`);
+          console.warn(`[Brain] Project ${brainProjectId} returned 404, recreating...`);
           await sc.from("user_brain_projects").delete().eq("id", brain.id);
           const newBrain = await createFreshBrain(sc, userId, lovableToken, [skill], brain.name || `Star AI — ${skill}`);
           if ("error" in newBrain) {
