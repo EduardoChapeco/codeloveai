@@ -5,7 +5,7 @@ import {
   Upload, Users, Search, Phone, Tag, Trash2, FileSpreadsheet,
   Send, MessageSquare, Loader2, Plus, Filter, CheckCircle2,
   AlertCircle, Clock, Globe, BarChart3, Zap, Pause, Play,
-  FileText, X, ChevronRight
+  FileText, X, ChevronRight, RefreshCw, Wifi, WifiOff, RotateCcw
 } from "lucide-react";
 
 interface CrmPanelProps {
@@ -52,6 +52,16 @@ interface Campaign {
   created_at: string;
 }
 
+interface QueueMessage {
+  id: string;
+  phone: string;
+  message: string;
+  status: string;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
 type CrmTab = "contacts" | "lists" | "campaigns" | "whatsapp";
 
 function normalizePhone(raw: string): string {
@@ -80,8 +90,15 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
 
   // WhatsApp session
   const [waSession, setWaSession] = useState({ webhook_url: "", api_key: "", instance_name: "" });
+  const [waConnected, setWaConnected] = useState<boolean | null>(null);
   const [waSaving, setWaSaving] = useState(false);
+  const [waTesting, setWaTesting] = useState(false);
   const [dispatching, setDispatching] = useState<string | null>(null);
+
+  // Queue view
+  const [selectedCampaignQueue, setSelectedCampaignQueue] = useState<string | null>(null);
+  const [queueMessages, setQueueMessages] = useState<QueueMessage[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
 
   const fetchContacts = useCallback(async () => {
     const { data } = await supabase.from("crm_contacts")
@@ -107,13 +124,32 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
   const fetchWaSession = useCallback(async () => {
     const { data } = await supabase.from("crm_whatsapp_sessions")
       .select("*").eq("tenant_id", tenantId).maybeSingle();
-    if (data) setWaSession({ webhook_url: (data as any).webhook_url || "", api_key: (data as any).api_key_encrypted || "", instance_name: (data as any).instance_name || "" });
+    if (data) {
+      const d = data as any;
+      setWaSession({ webhook_url: d.webhook_url || "", api_key: d.api_key_encrypted || "", instance_name: d.instance_name || "" });
+      setWaConnected(d.is_connected ?? null);
+    }
   }, [tenantId]);
+
+  const fetchQueue = useCallback(async (campaignId: string) => {
+    setQueueLoading(true);
+    const { data } = await supabase.from("crm_message_queue")
+      .select("id, phone, message, status, error_message, sent_at, created_at")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: true })
+      .limit(200);
+    setQueueMessages((data || []) as QueueMessage[]);
+    setQueueLoading(false);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([fetchContacts(), fetchLists(), fetchCampaigns(), fetchWaSession()]).finally(() => setLoading(false));
   }, [fetchContacts, fetchLists, fetchCampaigns, fetchWaSession]);
+
+  useEffect(() => {
+    if (selectedCampaignQueue) fetchQueue(selectedCampaignQueue);
+  }, [selectedCampaignQueue, fetchQueue]);
 
   // ═══ CSV Upload & Parse ═══
   const handleFileUpload = async (files: FileList) => {
@@ -126,14 +162,12 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
         const lines = text.split(/\r?\n/).filter(l => l.trim());
         if (lines.length < 1) continue;
 
-        // Create list record
         const { data: list, error: listErr } = await supabase.from("crm_contact_lists").insert({
           tenant_id: tenantId, user_id: userId, name: file.name.replace(/\.(csv|xlsx|xls|txt)$/i, ""),
           file_name: file.name, total_rows: lines.length, status: "processing"
         } as any).select("id").single();
         if (listErr || !list) { toast.error(`Erro ao criar lista: ${listErr?.message}`); continue; }
 
-        // Parse contacts - detect phone numbers in each line
         const phoneRegex = /(\+?\d[\d\s\-().]{7,}\d)/g;
         const parsed: { phone: string; phone_normalized: string; name: string; is_international: boolean }[] = [];
         const seen = new Set<string>();
@@ -155,7 +189,6 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
           }
         }
 
-        // Batch upsert with dedup
         let imported = 0;
         let duplicates = 0;
         const BATCH_SIZE = 100;
@@ -176,7 +209,6 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
           duplicates += batch.length - (result?.length || 0);
         }
 
-        // Update list record
         await supabase.from("crm_contact_lists").update({
           status: "completed", imported_count: imported, duplicates_found: duplicates, total_rows: parsed.length
         } as any).eq("id", list.id);
@@ -229,54 +261,95 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
     toast.success("Configuração salva!");
   };
 
+  const testConnection = async () => {
+    setWaTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("crm-dispatch", {
+        body: { tenant_id: tenantId, mode: "test" },
+      });
+      if (error) throw error;
+      if (data?.connected) {
+        setWaConnected(true);
+        toast.success("✅ WhatsApp conectado e pronto para envio!");
+      } else {
+        setWaConnected(false);
+        toast.error(`WhatsApp não conectado: ${data?.state || "desconhecido"}`);
+      }
+    } catch (err: any) {
+      setWaConnected(false);
+      toast.error(err.message || "Falha ao testar conexão");
+    }
+    setWaTesting(false);
+  };
+
   const dispatchCampaign = async (campaign: Campaign) => {
     if (dispatching) return;
     setDispatching(campaign.id);
     try {
-      // 1. Populate queue from contacts matching tags
-      const { data: allContacts } = await supabase.from("crm_contacts")
-        .select("id, phone_normalized, name, tags")
-        .eq("tenant_id", tenantId).eq("is_active", true);
+      // 1. Populate queue from contacts matching tags (only if draft)
+      if (campaign.status === "draft") {
+        const { data: allContacts } = await supabase.from("crm_contacts")
+          .select("id, phone_normalized, name, tags")
+          .eq("tenant_id", tenantId).eq("is_active", true);
 
-      if (!allContacts?.length) { toast.error("Nenhum contato encontrado"); return; }
+        if (!allContacts?.length) { toast.error("Nenhum contato encontrado"); return; }
 
-      // Filter by campaign target_tags if any
-      const campaignTags = (campaign.target_tags || []).map(t => t.toLowerCase().trim()).filter(Boolean);
-      const targetContacts = campaignTags.length > 0
-        ? allContacts.filter(c => (c.tags || []).some((t: string) => campaignTags.includes(t.toLowerCase())))
-        : allContacts;
+        const campaignTags = (campaign.target_tags || []).map(t => t.toLowerCase().trim()).filter(Boolean);
+        const targetContacts = campaignTags.length > 0
+          ? allContacts.filter(c => (c.tags || []).some((t: string) => campaignTags.includes(t.toLowerCase())))
+          : allContacts;
 
-      if (!targetContacts.length) { toast.error("Nenhum contato encontrado com as tags selecionadas"); return; }
+        if (!targetContacts.length) { toast.error("Nenhum contato encontrado com as tags selecionadas"); return; }
 
-      const queue = targetContacts.map(c => ({
-        tenant_id: tenantId, campaign_id: campaign.id,
-        contact_id: c.id, phone: c.phone_normalized,
-        message: campaign.message_template.replace(/\{name\}/g, c.name || ""),
-        media_url: campaign.media_url || null, status: "pending",
-      }));
+        const queue = targetContacts.map(c => ({
+          tenant_id: tenantId, campaign_id: campaign.id,
+          contact_id: c.id, phone: c.phone_normalized,
+          message: campaign.message_template.replace(/\{name\}/g, c.name || ""),
+          media_url: campaign.media_url || null, status: "pending",
+        }));
 
-      // Batch insert queue
-      const BATCH = 100;
-      for (let i = 0; i < queue.length; i += BATCH) {
-        await supabase.from("crm_message_queue").insert(queue.slice(i, i + BATCH) as any[]);
+        const BATCH = 100;
+        for (let i = 0; i < queue.length; i += BATCH) {
+          await supabase.from("crm_message_queue").insert(queue.slice(i, i + BATCH) as any[]);
+        }
+
+        await supabase.from("crm_campaigns").update({
+          status: "running", total_recipients: queue.length,
+        } as any).eq("id", campaign.id);
+
+        toast.success(`${queue.length} mensagens enfileiradas`);
       }
 
-      // Update campaign
-      await supabase.from("crm_campaigns").update({
-        status: "running", total_recipients: queue.length,
-      } as any).eq("id", campaign.id);
-
-      // 2. Trigger dispatch function
-      await supabase.functions.invoke("crm-dispatch", {
+      // 2. Trigger dispatch
+      const { data } = await supabase.functions.invoke("crm-dispatch", {
         body: { tenant_id: tenantId, campaign_id: campaign.id, batch_size: 10 },
       });
 
-      toast.success(`Campanha iniciada! ${queue.length} mensagens na fila`);
+      const remaining = data?.remaining || 0;
+      toast.success(`Lote enviado! ${data?.sent || 0} enviadas, ${data?.failed || 0} falharam. ${remaining} restantes.`);
+
+      if (remaining > 0) {
+        toast.info(`Ainda há ${remaining} mensagens pendentes. Clique "Continuar" para enviar o próximo lote.`);
+      }
+
       fetchCampaigns();
     } catch (err: any) {
       toast.error(err.message || "Erro ao disparar campanha");
     } finally {
       setDispatching(null);
+    }
+  };
+
+  const retryFailed = async (campaignId: string) => {
+    try {
+      const { data } = await supabase.functions.invoke("crm-dispatch", {
+        body: { tenant_id: tenantId, campaign_id: campaignId, mode: "retry" },
+      });
+      toast.success(data?.message || "Mensagens resetadas para reenvio");
+      if (selectedCampaignQueue === campaignId) fetchQueue(campaignId);
+      fetchCampaigns();
+    } catch (err: any) {
+      toast.error(err.message);
     }
   };
 
@@ -306,6 +379,11 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
       paused: { bg: "bg-amber-500/10", text: "text-amber-400" },
       completed: { bg: "bg-primary/10", text: "text-primary" },
       cancelled: { bg: "bg-destructive/10", text: "text-destructive" },
+      pending: { bg: "bg-amber-500/10", text: "text-amber-400" },
+      sending: { bg: "bg-blue-500/10", text: "text-blue-400" },
+      sent: { bg: "bg-emerald-500/10", text: "text-emerald-400" },
+      failed: { bg: "bg-destructive/10", text: "text-destructive" },
+      processing: { bg: "bg-blue-500/10", text: "text-blue-400" },
     };
     const s = map[status] || map.draft;
     return <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${s.bg} ${s.text}`}>{status}</span>;
@@ -328,6 +406,14 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
           <p className="text-xs text-muted-foreground">Gerencie contatos, importe listas e dispare campanhas via WhatsApp</p>
         </div>
         <div className="flex items-center gap-2">
+          {waConnected !== null && (
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold ${
+              waConnected ? "bg-emerald-500/10 text-emerald-400" : "bg-destructive/10 text-destructive"
+            }`}>
+              {waConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {waConnected ? "WhatsApp Online" : "WhatsApp Offline"}
+            </div>
+          )}
           <input type="file" ref={fileRef} accept=".csv,.txt,.xls,.xlsx" multiple className="hidden"
             onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <button onClick={() => fileRef.current?.click()} disabled={uploading}
@@ -359,7 +445,7 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-white/[0.06] pb-0">
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => { setTab(t.id); setSelectedCampaignQueue(null); }}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-colors ${
               tab === t.id ? "bg-white/[0.04] text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
             }`}>
@@ -532,37 +618,103 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
             </GlassCard>
           )}
 
-          {campaigns.map(c => (
-            <GlassCard key={c.id} className="!p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
-                    c.status === "running" ? "bg-emerald-500/10" : c.status === "completed" ? "bg-primary/10" : "bg-muted/50"
-                  }`}>
-                    {c.status === "running" ? <Zap className="h-5 w-5 text-emerald-400" /> : <Send className="h-5 w-5 text-muted-foreground" />}
+          {campaigns.map(c => {
+            const progress = c.total_recipients > 0 ? Math.round(((c.sent_count || 0) + (c.failed_count || 0)) / c.total_recipients * 100) : 0;
+            const hasFailures = (c.failed_count || 0) > 0;
+            const isRunning = c.status === "running";
+            const isViewingQueue = selectedCampaignQueue === c.id;
+
+            return (
+              <GlassCard key={c.id} className="!p-0 overflow-hidden">
+                <div className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      isRunning ? "bg-emerald-500/10" : c.status === "completed" ? "bg-primary/10" : "bg-muted/50"
+                    }`}>
+                      {isRunning ? <Zap className="h-5 w-5 text-emerald-400" /> : <Send className="h-5 w-5 text-muted-foreground" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
+                      <p className="text-[10px] text-muted-foreground line-clamp-1">{c.message_template.substring(0, 80)}...</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{c.name}</p>
-                    <p className="text-[10px] text-muted-foreground line-clamp-1">{c.message_template.substring(0, 80)}...</p>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right text-xs">
+                      <span className="text-emerald-400 font-bold tabular-nums">{c.sent_count || 0}</span>
+                      {hasFailures && <span className="text-destructive font-bold tabular-nums">/{c.failed_count}</span>}
+                      <span className="text-muted-foreground">/{c.total_recipients || 0}</span>
+                    </div>
+                    {statusBadge(c.status)}
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1.5">
+                      {(c.status === "draft" || isRunning) && (
+                        <button onClick={() => dispatchCampaign(c)} disabled={!!dispatching}
+                          className="h-8 px-3 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold flex items-center gap-1.5 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
+                          {dispatching === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                          {c.status === "draft" ? "Disparar" : "Continuar"}
+                        </button>
+                      )}
+                      {hasFailures && (
+                        <button onClick={() => retryFailed(c.id)}
+                          className="h-8 px-3 rounded-lg bg-amber-500/10 text-amber-400 text-[10px] font-semibold flex items-center gap-1.5 hover:bg-amber-500/20 transition-colors">
+                          <RotateCcw className="h-3 w-3" /> Reenviar falhas
+                        </button>
+                      )}
+                      <button onClick={() => setSelectedCampaignQueue(isViewingQueue ? null : c.id)}
+                        className="h-8 px-3 rounded-lg bg-white/[0.04] text-muted-foreground text-[10px] font-semibold flex items-center gap-1.5 hover:bg-white/[0.08] transition-colors">
+                        <BarChart3 className="h-3 w-3" /> Fila
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right text-xs">
-                    <span className="text-emerald-400 font-bold tabular-nums">{c.sent_count}</span>
-                    <span className="text-muted-foreground">/{c.total_recipients}</span>
+
+                {/* Progress bar */}
+                {c.total_recipients > 0 && (
+                  <div className="h-1 bg-white/[0.03]">
+                    <div className="h-full bg-gradient-to-r from-primary to-emerald-400 transition-all duration-500" style={{ width: `${progress}%` }} />
                   </div>
-                  {statusBadge(c.status)}
-                  {c.status === "draft" && (
-                    <button onClick={() => dispatchCampaign(c)} disabled={!!dispatching}
-                      className="h-8 px-3 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold flex items-center gap-1.5 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
-                      {dispatching === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                      Disparar
-                    </button>
-                  )}
-                </div>
-              </div>
-            </GlassCard>
-          ))}
+                )}
+
+                {/* Queue detail view */}
+                {isViewingQueue && (
+                  <div className="border-t border-white/[0.06] p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-bold text-foreground">Fila de Mensagens</h4>
+                      <button onClick={() => fetchQueue(c.id)} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1">
+                        <RefreshCw className="h-3 w-3" /> Atualizar
+                      </button>
+                    </div>
+                    {queueLoading ? (
+                      <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+                    ) : queueMessages.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">Nenhuma mensagem na fila</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                        {queueMessages.map(m => (
+                          <div key={m.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Phone className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="text-[11px] font-mono text-foreground truncate">{m.phone}</span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {m.error_message && (
+                                <span className="text-[9px] text-destructive max-w-[200px] truncate" title={m.error_message}>
+                                  {m.error_message.substring(0, 40)}
+                                </span>
+                              )}
+                              {m.sent_at && <span className="text-[9px] text-muted-foreground">{new Date(m.sent_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
+                              {statusBadge(m.status)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </GlassCard>
+            );
+          })}
 
           {campaigns.length === 0 && !showNewCampaign && (
             <div className="text-center py-16">
@@ -578,28 +730,43 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
       {tab === "whatsapp" && (
         <div className="space-y-4">
           <GlassCard>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                <MessageSquare className="h-5 w-5 text-emerald-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Integração WhatsApp</h3>
-                <p className="text-[10px] text-muted-foreground">Conecte sua instância para envio automatizado</p>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-amber-500/5 border border-amber-500/10 p-4 mb-4">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`h-11 w-11 rounded-2xl flex items-center justify-center border ${
+                  waConnected ? "bg-emerald-500/10 border-emerald-500/20" : "bg-muted/30 border-white/[0.06]"
+                }`}>
+                  <MessageSquare className={`h-5 w-5 ${waConnected ? "text-emerald-400" : "text-muted-foreground"}`} />
+                </div>
                 <div>
-                  <p className="text-xs font-semibold text-amber-400">Configuração Necessária</p>
-                  <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
-                    Para envio automático, configure uma API de WhatsApp (Evolution API, Z-API ou similar).
-                    Insira a URL do webhook e a chave de API abaixo.
+                  <h3 className="text-sm font-bold text-foreground">Integração WhatsApp</h3>
+                  <p className="text-[10px] text-muted-foreground">
+                    {waConnected ? "✅ Conectado e pronto para envio" : "Configure sua instância para envio automatizado"}
                   </p>
                 </div>
               </div>
+              {waSession.webhook_url && (
+                <button onClick={testConnection} disabled={waTesting}
+                  className="h-9 px-4 rounded-xl bg-emerald-500/10 text-emerald-400 text-xs font-semibold flex items-center gap-2 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
+                  {waTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wifi className="h-3.5 w-3.5" />}
+                  Testar Conexão
+                </button>
+              )}
             </div>
+
+            {!waConnected && (
+              <div className="rounded-xl bg-amber-500/5 border border-amber-500/10 p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-400">Configuração Necessária</p>
+                    <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
+                      Para envio automático, configure uma API de WhatsApp (Evolution API, Z-API ou similar).
+                      Insira a URL do webhook e a chave de API abaixo.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4">
               <div>
@@ -621,9 +788,9 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
                   placeholder="minha-instancia" />
               </div>
               <button onClick={saveWaSession} disabled={waSaving}
-                className="h-10 px-6 rounded-xl bg-emerald-500 text-white text-sm font-semibold flex items-center gap-2 hover:bg-emerald-600 transition-colors disabled:opacity-50">
-                {waSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                Salvar e Testar Conexão
+                className="h-10 px-6 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-primary/25 transition-colors disabled:opacity-50">
+                {waSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Salvar Configuração
               </button>
             </div>
           </GlassCard>
@@ -634,8 +801,8 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
               {[
                 { step: "1", title: "Importe seus contatos", desc: "Faça upload de arquivos CSV com números de WhatsApp" },
                 { step: "2", title: "Crie uma campanha", desc: "Defina a mensagem, mídia e tags de segmentação" },
-                { step: "3", title: "Configure a API", desc: "Conecte sua instância do WhatsApp Web via API" },
-                { step: "4", title: "Agende ou dispare", desc: "O sistema envia automaticamente via cron jobs" },
+                { step: "3", title: "Configure a API", desc: "Conecte sua instância do WhatsApp Web via Evolution API" },
+                { step: "4", title: "Dispare e acompanhe", desc: "O sistema envia 1 msg a cada 5-15s para evitar bloqueio" },
               ].map(s => (
                 <div key={s.step} className="flex items-start gap-3">
                   <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
