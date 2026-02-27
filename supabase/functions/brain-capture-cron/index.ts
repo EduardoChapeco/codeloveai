@@ -111,7 +111,9 @@ function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
 }
 
 // ── Bootstrap phase prompts ──────────────────────────────────────
-// These are sent sequentially by the cron to build the brain project
+// Phase 1: Bootstrap (PRD + structure)
+// Phase 2-6: Audit prompts (verify, templates, capabilities, self-test, readiness)
+// Must match brain/index.ts buildBootstrapPrompt + buildAuditPrompts
 
 type SkillProfile = { title: string; credentials: string; focus: string };
 
@@ -136,6 +138,21 @@ const SKILL_PROFILES: Record<string, SkillProfile> = {
     credentials: "PhD em Data Engineering (CMU), 30 anos em web scraping.",
     focus: "crawlers, parsing, Firecrawl, APIs de dados, ETL",
   },
+  migration: {
+    title: "Star AI — Arquiteto de Dados & Migrações",
+    credentials: "PhD em Database Systems (UC Berkeley), 40 anos em PostgreSQL.",
+    focus: "migrações SQL, modelagem relacional, performance tuning, índices, RLS policies",
+  },
+  data: {
+    title: "Star AI — Cientista de Dados Sênior",
+    credentials: "PhD em Machine Learning (Stanford), PhD em Estatística (MIT).",
+    focus: "análise de dados, visualização, modelagem preditiva, ETL, dashboards",
+  },
+  devops: {
+    title: "Star AI — Engenheiro DevOps/SRE Principal",
+    credentials: "PhD em Sistemas Distribuídos (MIT), 40 anos em infraestrutura cloud.",
+    focus: "CI/CD, Edge Functions, Supabase, monitoramento, cron jobs",
+  },
   security: {
     title: "Star AI — Engenheiro de Segurança Principal",
     credentials: "PhD em Cybersecurity (MIT), CISSP, OSCP.",
@@ -152,12 +169,38 @@ function buildPhasePrompt(phase: number, skill: string, ctx: { supabaseUrl: stri
 
   switch (phase) {
     case 1:
-      // Phase 1: Create core structure + webhook system
+      // Phase 1: Bootstrap PRD (matches brain/index.ts buildBootstrapPrompt)
       return `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
 
-Crie a estrutura completa do sistema Brain especializado. Este é um sistema HEADLESS de IA — NÃO crie componentes React visuais.
+Criar Projeto (Brain Specialist — ${p.title}):
 
-## 1. Arquivo src/brain-output.md
+Este projeto é um sistema headless de IA especializada onde todas as perguntas serão respondidas de forma coerente e profissional como um especialista ${p.credentials}.
+
+## PRD — Product Requirements Document
+
+### Objetivo
+Sistema de resposta especializada com persona PhD/Sênior. O corpo da resposta deve ser anexado sempre em .md.
+
+### Requisitos Funcionais
+1. Todas as respostas devem ser escritas em \`src/brain-output.md\` com frontmatter \`status: done\`
+2. NÃO criar componentes React, páginas ou rotas visuais — este é um backend de IA headless
+
+### Estrutura Inicial
+
+1. Crie o arquivo \`.lovable/plan.md\` com:
+\`\`\`markdown
+---
+title: ${p.title}
+skill: ${skill}
+status: ready
+credentials: ${p.credentials}
+---
+# ${p.title}
+Sistema especializado em ${p.focus}.
+Protocolo: todas as respostas em \`src/brain-output.md\` com status: done.
+\`\`\`
+
+2. Crie o arquivo \`src/brain-output.md\` com:
 \`\`\`markdown
 ---
 status: ready
@@ -165,10 +208,12 @@ skill: ${skill}
 timestamp: ${Date.now()}
 ---
 # ${p.title}
-Brain ativado. Aguardando instruções.
+Brain ativado. Credenciais: ${p.credentials}
+Foco: ${p.focus}
+Aguardando instruções.
 \`\`\`
 
-## 2. Arquivo src/INSTRUCTIONS.md
+3. Crie o arquivo \`src/INSTRUCTIONS.md\` com:
 \`\`\`markdown
 # ${p.title} — Protocolo de Resposta
 
@@ -176,28 +221,15 @@ Brain ativado. Aguardando instruções.
 ${p.credentials}
 
 ## Regras
-1. SEMPRE escreva respostas em src/brain-output.md com frontmatter status: done
+1. SEMPRE escreva respostas em \`src/brain-output.md\` com frontmatter \`status: done\`
 2. Responda em Português (Brasil)
 3. Seja técnico, detalhado e acionável
 4. NÃO crie componentes React ou páginas visuais
 5. Pode criar Edge Functions, SQL, scripts backend
 6. Use formato Markdown com código quando necessário
-7. Ao gerar imagens, salve a URL/path no brain-output.md
 \`\`\`
 
-## 3. Arquivo .lovable/plan.md
-\`\`\`markdown
----
-title: ${p.title}
-skill: ${skill}
-status: ready
----
-# ${p.title}
-Sistema especializado em ${p.focus}.
-Protocolo: todas as respostas em src/brain-output.md com status: done.
-\`\`\`
-
-## 4. Arquivo src/config.json
+4. Crie o arquivo \`src/config.json\` com:
 \`\`\`json
 {
   "brain_title": "${p.title}",
@@ -213,12 +245,21 @@ Protocolo: todas as respostas em src/brain-output.md com status: done.
 NÃO crie componentes React, páginas ou rotas. Este projeto serve APENAS como backend de IA especializada.`;
 
     case 2:
-      // Phase 2: Create response templates + capabilities manifest
+      // Audit 1: Verify structure
       return `IMPORTANTE: Não faça perguntas, execute diretamente.
 
-Crie os seguintes arquivos no projeto:
+Verifique se todos os arquivos do sistema foram criados corretamente:
+- .lovable/plan.md (deve existir com skill: ${skill})
+- src/brain-output.md (deve existir com status: ready)
+- src/INSTRUCTIONS.md (deve existir com protocolo de resposta)
+Se algum arquivo estiver faltando, crie-o agora. Atualize src/brain-output.md com status: done e uma confirmação de que a estrutura está completa.`;
 
-## 1. src/response-templates.md
+    case 3:
+      // Audit 2: Response templates
+      return `IMPORTANTE: Não faça perguntas, execute diretamente.
+
+Crie o arquivo src/response-templates.md com templates de resposta para diferentes tipos de consulta:
+
 \`\`\`markdown
 ---
 status: done
@@ -227,52 +268,70 @@ timestamp: ${Date.now()}
 # Templates de Resposta — ${p.title}
 
 ## Template: Análise Técnica
-- Diagnóstico detalhado
-- Causa raiz identificada
-- Solução com código
-- Considerações de performance
+- Diagnóstico
+- Causa raiz
+- Solução recomendada
+- Código (se aplicável)
 
 ## Template: Arquitetura
-- Visão geral do sistema
-- Componentes e suas responsabilidades
+- Visão geral
+- Componentes
 - Fluxo de dados
-- Segurança e escalabilidade
+- Considerações de segurança
 
 ## Template: Code Review
-- Problemas encontrados (severidade)
-- Correções com diff
-- Boas práticas aplicáveis
-- Métricas de qualidade
+- Problemas encontrados
+- Severidade
+- Correções sugeridas
+- Boas práticas
 \`\`\`
 
-## 2. src/capabilities.json
+Atualize src/brain-output.md com status: done confirmando a criação dos templates.`;
+
+    case 4:
+      // Audit 3: Capabilities manifest
+      return `IMPORTANTE: Não faça perguntas, execute diretamente.
+
+Crie o arquivo src/capabilities.json com o manifesto de capacidades deste Brain:
+
 \`\`\`json
 {
   "brain": "${p.title}",
   "skill": "${skill}",
   "capabilities": [
     "análise técnica avançada",
-    "geração de código TypeScript/React",
-    "criação de Edge Functions",
+    "geração de código",
     "revisão de arquitetura",
-    "criação de SQL/migrações",
-    "geração de documentação",
-    "análise de segurança"
+    "criação de documentação",
+    "resolução de problemas complexos"
   ],
-  "response_formats": ["markdown", "json", "code"],
+  "response_formats": ["markdown", "json", "html"],
   "output_file": "src/brain-output.md",
   "version": "5.0",
   "status": "operational"
 }
 \`\`\`
 
-Atualize src/brain-output.md com status: done confirmando a criação.`;
+Atualize src/brain-output.md com status: done.`;
 
-    case 3:
-      // Phase 3: Self-test + readiness
+    case 5:
+      // Audit 4: Self-test
       return `IMPORTANTE: Não faça perguntas, execute diretamente.
 
-Realize um auto-teste completo do sistema ${p.title}. Atualize src/brain-output.md com:
+Realize um auto-teste do sistema. Escreva em src/brain-output.md uma resposta de teste demonstrando suas capacidades como ${p.title}:
+
+1. Apresente-se com suas credenciais
+2. Liste suas áreas de especialização
+3. Demonstre conhecimento técnico em ${p.focus}
+4. Confirme que o protocolo de resposta está funcionando
+
+Use o formato correto com frontmatter status: done.`;
+
+    case 6:
+      // Audit 5: Final readiness
+      return `IMPORTANTE: Não faça perguntas, execute diretamente.
+
+Verificação final de prontidão. Atualize src/brain-output.md com:
 
 \`\`\`markdown
 ---
@@ -284,23 +343,13 @@ readiness: complete
 
 # ${p.title} — Sistema Operacional ✅
 
-## Auto-Teste Concluído
+## Status: Totalmente operacional
+- Estrutura de arquivos: ✅
+- Templates de resposta: ✅
+- Manifesto de capacidades: ✅
+- Auto-teste: ✅
+- Protocolo de resposta: ✅
 
-### Identidade
-${p.credentials}
-
-### Especialização
-${p.focus}
-
-### Verificações
-- ✅ Estrutura de arquivos criada
-- ✅ Templates de resposta configurados
-- ✅ Manifesto de capacidades definido
-- ✅ Protocolo de resposta em .md funcional
-- ✅ Sistema headless (sem UI React)
-
-### Protocolo Ativo
-Todas as respostas serão escritas em \`src/brain-output.md\` com frontmatter \`status: done\`.
 Aguardando instruções do usuário.
 \`\`\``;
 
@@ -369,7 +418,7 @@ Deno.serve(async (req) => {
       .select("id, user_id, lovable_project_id, skill_phase, brain_skill, created_at")
       .eq("status", "active")
       .gt("skill_phase", 0)
-      .lte("skill_phase", 3)
+      .lte("skill_phase", 6)
       .order("created_at", { ascending: true })
       .limit(2); // Process max 2 per cycle
 
@@ -412,8 +461,8 @@ Deno.serve(async (req) => {
         const ok = await sendViaVenus(brain.lovable_project_id, prompt, acct.token_encrypted, supabaseUrl, serviceKey);
 
         if (ok) {
-          // Advance to next phase (or 0 if done)
-          const nextPhase = phase >= 3 ? 0 : phase + 1;
+          // Advance to next phase (or 0 if done with all 6 phases)
+          const nextPhase = phase >= 6 ? 0 : phase + 1;
           await sc.from("user_brain_projects").update({ skill_phase: nextPhase }).eq("id", brain.id);
           bootstrapProcessed++;
           console.log(`[bc] ✅ brain=${brain.id.slice(0,8)} phase=${phase}→${nextPhase}`);

@@ -430,9 +430,8 @@ Aguardando instruções do usuário.
 function buildBrainPrompt(skill: BrainSkill, message: string): string {
   const p = SKILL_PROFILES[skill];
 
-  return `Analise e corrija os seguintes problemas de segurança encontrados:
-
-=== ${p.title} ===
+  return `Você é o ${p.title}.
+Credenciais: ${p.credentials}
 Foco: ${p.focus}
 
 O usuário solicitou: "${message}"
