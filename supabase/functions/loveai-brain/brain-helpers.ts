@@ -594,7 +594,9 @@ export async function captureResponse(
   await new Promise(r => setTimeout(r, initialDelayMs));
   const deadline = Date.now() + maxWaitMs;
 
+  let elapsed = 0;
   while (Date.now() < deadline) {
+    elapsed = Date.now() - (deadline - maxWaitMs);
     // ── Strategy 1 (PRIMARY): Poll source-code for brain-output.md ──
     try {
       const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
@@ -605,11 +607,18 @@ export async function captureResponse(
 
         // Check brain-output.md — handles both array and object formats
         const mdContent = extractFileContent(srcData, "src/brain-output.md");
-        if (mdContent && mdContent !== initialMdContent && /status:\s*done/i.test(mdContent)) {
-          const extracted = extractMdBody(mdContent);
-          if (extracted && extracted.length > 5) {
-            console.log(`[capture] ✅ Got response from brain-output.md (${extracted.length} chars)`);
-            return { response: extracted, status: "completed" };
+        if (mdContent && mdContent !== initialMdContent) {
+          // Accept if status:done OR if content changed significantly after 60s
+          const hasDone = /status:\s*done/i.test(mdContent);
+          const hasReady = /status:\s*ready/i.test(mdContent);
+          const contentChanged = mdContent.length > 200 && !hasReady;
+          
+          if (hasDone || (elapsed > 60000 && contentChanged)) {
+            const extracted = extractMdBody(mdContent);
+            if (extracted && extracted.length > 5) {
+              console.log(`[capture] ✅ Got response from brain-output.md (${extracted.length} chars, done=${hasDone})`);
+              return { response: extracted, status: "completed" };
+            }
           }
         }
 
@@ -626,7 +635,16 @@ export async function captureResponse(
     try {
       const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
       if (latestRes.ok) {
-        const msg = await latestRes.json();
+        const rawText = await latestRes.text();
+        // Handle SSE format
+        let msgText = rawText;
+        if (rawText.includes("data:")) {
+          const lines = rawText.split("\n").filter((l: string) => l.startsWith("data:"));
+          if (lines.length > 0) {
+            msgText = lines[lines.length - 1].replace(/^data:\s*/, "");
+          }
+        }
+        const msg = JSON.parse(msgText);
         const msgId = msg?.id || msg?.message_id || "";
         if (msg && msg.role !== "user" && !msg.is_streaming && msgId !== initialMsgId) {
           const content = msg.content || msg.message || msg.text || "";
