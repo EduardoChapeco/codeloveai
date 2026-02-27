@@ -435,19 +435,47 @@ export default function Dashboard() {
 
           {/* Admin shortcuts */}
           {(isTenantAdmin || isAdmin) && (
-            <Link to="/admin/tenant" className="clf-liquid-glass p-5 flex items-center justify-between group hover:brightness-[1.03] transition-all">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Link to="/admin/tenant" className="clf-liquid-glass p-5 flex items-center justify-between group hover:brightness-[1.03] transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0 shadow-inner">
+                    <Building2 className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="lv-body-strong text-base">Administrar Tenant</p>
+                    <p className="lv-caption">Personalização, membros e licenças</p>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
+              <Link to="/admin/tenant?tab=crm" className="clf-liquid-glass p-5 flex items-center justify-between group hover:brightness-[1.03] transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0 shadow-inner">
+                    <Zap className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <p className="lv-body-strong text-base">CRM & WhatsApp</p>
+                    <p className="lv-caption">Contatos, campanhas e disparo automático</p>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
+            </div>
+          )}
+
+          {/* White Label promotion for non-admins */}
+          {!isTenantAdmin && !isAdmin && (
+            <Link to="/whitelabel" className="clf-liquid-glass p-5 flex items-center justify-between group hover:brightness-[1.03] transition-all">
               <div className="flex items-center gap-4">
-                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0 shadow-inner">
+                <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center shrink-0">
                   <Building2 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="lv-body-strong text-base">Administrar Tenant</p>
-                  <p className="lv-caption">Gerencie membros, tokens e configurações</p>
+                  <p className="lv-body-strong text-base">Crie seu White Label</p>
+                  <p className="lv-caption">Lance sua plataforma de IA com sua marca. Comunidade unificada.</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all">
-                Abrir <ChevronRight className="h-4 w-4" />
-              </div>
+              <ChevronRight className="h-4 w-4 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
             </Link>
           )}
 
