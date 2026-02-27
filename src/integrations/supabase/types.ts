@@ -1455,6 +1455,336 @@ export type Database = {
           },
         ]
       }
+      crm_campaigns: {
+        Row: {
+          created_at: string
+          cron_expression: string | null
+          failed_count: number | null
+          id: string
+          media_type: string | null
+          media_url: string | null
+          message_template: string
+          name: string
+          schedule_at: string | null
+          sent_count: number | null
+          status: string
+          target_list_id: string | null
+          target_tags: string[] | null
+          tenant_id: string
+          total_recipients: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          cron_expression?: string | null
+          failed_count?: number | null
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          message_template: string
+          name: string
+          schedule_at?: string | null
+          sent_count?: number | null
+          status?: string
+          target_list_id?: string | null
+          target_tags?: string[] | null
+          tenant_id: string
+          total_recipients?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          cron_expression?: string | null
+          failed_count?: number | null
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          message_template?: string
+          name?: string
+          schedule_at?: string | null
+          sent_count?: number | null
+          status?: string
+          target_list_id?: string | null
+          target_tags?: string[] | null
+          tenant_id?: string
+          total_recipients?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_campaigns_target_list_id_fkey"
+            columns: ["target_list_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contact_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_contact_lists: {
+        Row: {
+          created_at: string
+          duplicates_found: number | null
+          file_name: string | null
+          id: string
+          imported_count: number | null
+          name: string
+          status: string
+          tenant_id: string
+          total_rows: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duplicates_found?: number | null
+          file_name?: string | null
+          id?: string
+          imported_count?: number | null
+          name: string
+          status?: string
+          tenant_id: string
+          total_rows?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duplicates_found?: number | null
+          file_name?: string | null
+          id?: string
+          imported_count?: number | null
+          name?: string
+          status?: string
+          tenant_id?: string
+          total_rows?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_contact_lists_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contact_lists_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_contacts: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean | null
+          is_international: boolean | null
+          metadata: Json | null
+          name: string | null
+          phone: string
+          phone_normalized: string
+          source: string | null
+          tags: string[] | null
+          tenant_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_international?: boolean | null
+          metadata?: Json | null
+          name?: string | null
+          phone: string
+          phone_normalized: string
+          source?: string | null
+          tags?: string[] | null
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_international?: boolean | null
+          metadata?: Json | null
+          name?: string | null
+          phone?: string
+          phone_normalized?: string
+          source?: string | null
+          tags?: string[] | null
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_message_queue: {
+        Row: {
+          campaign_id: string | null
+          contact_id: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          media_url: string | null
+          message: string
+          phone: string
+          sent_at: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          media_url?: string | null
+          message: string
+          phone: string
+          sent_at?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          campaign_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          media_url?: string | null
+          message?: string
+          phone?: string
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_message_queue_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crm_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_message_queue_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_message_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_message_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_whatsapp_sessions: {
+        Row: {
+          api_key_encrypted: string | null
+          api_provider: string | null
+          created_at: string
+          id: string
+          instance_name: string | null
+          is_connected: boolean | null
+          last_ping_at: string | null
+          session_data: Json | null
+          tenant_id: string
+          updated_at: string
+          webhook_url: string | null
+        }
+        Insert: {
+          api_key_encrypted?: string | null
+          api_provider?: string | null
+          created_at?: string
+          id?: string
+          instance_name?: string | null
+          is_connected?: boolean | null
+          last_ping_at?: string | null
+          session_data?: Json | null
+          tenant_id: string
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Update: {
+          api_key_encrypted?: string | null
+          api_provider?: string | null
+          created_at?: string
+          id?: string
+          instance_name?: string | null
+          is_connected?: boolean | null
+          last_ping_at?: string | null
+          session_data?: Json | null
+          tenant_id?: string
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_whatsapp_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_whatsapp_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_usage: {
         Row: {
           date: string
@@ -4222,6 +4552,72 @@ export type Database = {
           },
         ]
       }
+      tenant_landing_sections: {
+        Row: {
+          config: Json | null
+          created_at: string
+          cta_link: string | null
+          cta_text: string | null
+          display_order: number | null
+          id: string
+          is_active: boolean | null
+          media_type: string | null
+          media_url: string | null
+          section_key: string
+          subtitle: string | null
+          tenant_id: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          config?: Json | null
+          created_at?: string
+          cta_link?: string | null
+          cta_text?: string | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          media_type?: string | null
+          media_url?: string | null
+          section_key?: string
+          subtitle?: string | null
+          tenant_id: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          config?: Json | null
+          created_at?: string
+          cta_link?: string | null
+          cta_text?: string | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          media_type?: string | null
+          media_url?: string | null
+          section_key?: string
+          subtitle?: string | null
+          tenant_id?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_landing_sections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_landing_sections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_modules: {
         Row: {
           billing_model_override: string | null
@@ -4463,7 +4859,10 @@ export type Database = {
           branding: Json
           commission_percent: number
           created_at: string
+          custom_ai_name: string | null
           custom_mode_prompt: string | null
+          custom_orchestrator_name: string | null
+          custom_venus_name: string | null
           domain: string | null
           domain_custom: string | null
           extension_mode: string | null
@@ -4474,6 +4873,7 @@ export type Database = {
           is_active: boolean
           is_domain_approved: boolean
           logo_url: string | null
+          marketplace_commission_percent: number | null
           meta_description: string | null
           meta_title: string | null
           modules: Json | null
@@ -4504,7 +4904,10 @@ export type Database = {
           branding?: Json
           commission_percent?: number
           created_at?: string
+          custom_ai_name?: string | null
           custom_mode_prompt?: string | null
+          custom_orchestrator_name?: string | null
+          custom_venus_name?: string | null
           domain?: string | null
           domain_custom?: string | null
           extension_mode?: string | null
@@ -4515,6 +4918,7 @@ export type Database = {
           is_active?: boolean
           is_domain_approved?: boolean
           logo_url?: string | null
+          marketplace_commission_percent?: number | null
           meta_description?: string | null
           meta_title?: string | null
           modules?: Json | null
@@ -4545,7 +4949,10 @@ export type Database = {
           branding?: Json
           commission_percent?: number
           created_at?: string
+          custom_ai_name?: string | null
           custom_mode_prompt?: string | null
+          custom_orchestrator_name?: string | null
+          custom_venus_name?: string | null
           domain?: string | null
           domain_custom?: string | null
           extension_mode?: string | null
@@ -4556,6 +4963,7 @@ export type Database = {
           is_active?: boolean
           is_domain_approved?: boolean
           logo_url?: string | null
+          marketplace_commission_percent?: number | null
           meta_description?: string | null
           meta_title?: string | null
           modules?: Json | null
