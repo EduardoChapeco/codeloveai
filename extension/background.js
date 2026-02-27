@@ -1,8 +1,21 @@
-﻿// Starble Extension — Background Service Worker
+// Starble Extension — Background Service Worker
 // Handles message routing, token relay, and auto-save
 
 // ✅ CORRECT Supabase project: qlhhmmboxlufvdtpbrsm (Starble)
 const DEFAULT_PLATFORM_URL = "https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1";
+const CLIENT_SIG_KEY = "stbl_c8f2a91d4e7b3c6a0f5e8d2b1a9c7f4e";
+
+async function generateStarbleSig(appId = "ext") {
+  const ts = Date.now().toString();
+  const k = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(CLIENT_SIG_KEY),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`${appId}.${ts}`));
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return `${appId}.${ts}.${b64}`;
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[Starble] Extension installed");
@@ -109,12 +122,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleProxyRequest({ route, method = "GET", body, supabaseJwt }) {
   const baseUrl = await getPlatformUrl();
+  const sig = await generateStarbleSig("ext");
 
   const res = await fetch(`${baseUrl}/lovable-proxy`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${supabaseJwt}`,
+      "x-starble-sig": sig,
     },
     body: JSON.stringify({ route, method, payload: body }),
   });
@@ -125,6 +140,7 @@ async function handleProxyRequest({ route, method = "GET", body, supabaseJwt }) 
 
 async function autoSaveLovableToken(lovableToken, refreshToken, supabaseJwt) {
   const baseUrl = await getPlatformUrl();
+  const sig = await generateStarbleSig("ext");
 
   try {
     const res = await fetch(`${baseUrl}/lovable-proxy`, {
@@ -132,6 +148,7 @@ async function autoSaveLovableToken(lovableToken, refreshToken, supabaseJwt) {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${supabaseJwt}`,
+        "x-starble-sig": sig,
       },
       body: JSON.stringify({
         action: "save-token",

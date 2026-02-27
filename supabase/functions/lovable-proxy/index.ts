@@ -2,10 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateTypeId } from "../_shared/crypto.ts";
 import { logExtensionUsage, hashLicenseKey } from "../_shared/usage-logger.ts";
+import { guardClient } from "../_shared/client-guard.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-clf-token",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-clf-token, x-starble-sig",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -220,6 +221,10 @@ async function handleManagementAction(body: Record<string, unknown>, userId: str
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+
+  // Validate client signature — block unauthorized extensions/tools
+  const clientBlock = await guardClient(req);
+  if (clientBlock) return clientBlock;
 
   const startTime = Date.now();
   try {
