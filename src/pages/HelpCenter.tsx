@@ -53,8 +53,8 @@ export default function HelpCenter() {
           <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
             <BookOpen className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-3">Central de Ajuda</h1>
-          <p className="text-sm text-muted-foreground max-w-md mx-auto">Artigos, guias e respostas para tudo sobre o Starble.</p>
+          <h1 className="lv-heading-xl mb-3">Central de Ajuda</h1>
+          <p className="lv-body-lg max-w-md mx-auto">Artigos, guias e respostas para tudo sobre o Starble.</p>
         </div>
 
         {/* Search */}
@@ -65,7 +65,7 @@ export default function HelpCenter() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar artigos..."
-            className="w-full h-11 rounded-xl border border-border bg-card pl-11 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="lv-input h-11 pl-11"
           />
         </div>
 
@@ -78,13 +78,13 @@ export default function HelpCenter() {
                 <button
                   key={c.id}
                   onClick={() => setActiveCategory(c.id)}
-                  className="group rounded-2xl border border-border/60 bg-card p-5 text-left hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200"
+                  className="clf-liquid-glass p-5 text-left hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 group"
                 >
                   <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-3 group-hover:bg-primary/15 transition-colors">
                     {c.icon}
                   </div>
-                  <p className="text-sm font-semibold text-foreground mb-1">{c.label}</p>
-                  <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{c.desc}</p>
+                  <p className="lv-body-strong mb-1">{c.label}</p>
+                  <p className="lv-caption mb-3 line-clamp-2">{c.desc}</p>
                   <p className="text-[10px] text-muted-foreground/60">{count} {count === 1 ? "artigo" : "artigos"}</p>
                 </button>
               );
@@ -147,16 +147,16 @@ export default function HelpCenter() {
                   <Link
                     key={a.slug}
                     to={`/ajuda/${a.slug}`}
-                    className="group rounded-2xl border border-border/60 bg-card p-5 hover:border-primary/30 hover:shadow-md transition-all duration-200 flex items-start gap-4"
+                    className="clf-liquid-glass p-5 hover:border-primary/30 hover:shadow-md transition-all duration-200 flex items-start gap-4 group"
                   >
                     <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 mt-0.5 group-hover:bg-primary/15 transition-colors">
                       {cat?.icon || <BookOpen className="h-4 w-4" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{a.title}</h3>
+                        <h3 className="lv-body-strong group-hover:text-primary transition-colors">{a.title}</h3>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{a.summary}</p>
+                      <p className="lv-caption line-clamp-2">{a.summary}</p>
                       <p className="text-[10px] text-muted-foreground/50 mt-2">{cat?.label}</p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary shrink-0 mt-1 transition-colors" />
@@ -168,14 +168,14 @@ export default function HelpCenter() {
         )}
 
         {/* Support CTA */}
-        <div className="mt-16 rounded-2xl border border-border bg-card p-8 text-center">
-          <h2 className="text-lg font-bold text-foreground mb-2">Não encontrou o que procurava?</h2>
-          <p className="text-sm text-muted-foreground mb-6">Nossa equipe de suporte está pronta para ajudar você.</p>
+        <div className="mt-16 clf-liquid-glass p-8 text-center">
+          <h2 className="lv-heading-md mb-2">Não encontrou o que procurava?</h2>
+          <p className="lv-body mb-6">Nossa equipe de suporte está pronta para ajudar você.</p>
           <div className="flex gap-3 justify-center flex-wrap">
-            <Link to="/suporte" className="inline-flex items-center gap-2 h-10 px-6 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">
+            <Link to="/suporte" className="lv-btn-primary h-10 px-6 text-sm inline-flex items-center gap-2">
               Abrir Ticket de Suporte
             </Link>
-            <Link to="/termos" className="inline-flex items-center gap-2 h-10 px-6 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-colors">
+            <Link to="/termos" className="lv-btn-secondary h-10 px-6 text-sm inline-flex items-center gap-2">
               <ExternalLink className="h-4 w-4" /> Termos de Uso
             </Link>
           </div>

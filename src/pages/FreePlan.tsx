@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { Loader2, CheckCircle, XCircle, Gift } from "lucide-react";
+import MeshBackground from "@/components/MeshBackground";
 import { toast } from "sonner";
 
 export default function FreePlan() {
@@ -61,15 +62,17 @@ export default function FreePlan() {
 
   return (
     <div className="min-h-screen relative">
+      <MeshBackground />
       <nav className="sticky top-0 z-20 px-6 py-3">
         <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
           <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
+          <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
         </div>
       </nav>
 
       <div className="max-w-md mx-auto px-6 py-20 text-center">
         {status === "idle" && (
-          <div className="lv-card p-10">
+          <div className="clf-liquid-glass p-10">
             <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
               <Gift className="h-7 w-7 text-primary" />
             </div>
@@ -90,14 +93,14 @@ export default function FreePlan() {
         )}
 
         {status === "loading" && (
-          <div className="lv-card p-10">
+          <div className="clf-liquid-glass p-10">
             <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-6" />
             <p className="lv-overline">Ativando...</p>
           </div>
         )}
 
         {status === "success" && (
-          <div className="lv-card p-10">
+          <div className="clf-liquid-glass p-10">
             <div className="h-16 w-16 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto mb-6">
               <CheckCircle className="h-7 w-7 text-green-500" />
             </div>
@@ -113,7 +116,7 @@ export default function FreePlan() {
         )}
 
         {status === "error" && (
-          <div className="lv-card p-10">
+          <div className="clf-liquid-glass p-10">
             <div className="h-16 w-16 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-6">
               <XCircle className="h-7 w-7 text-destructive" />
             </div>

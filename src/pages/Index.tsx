@@ -306,12 +306,36 @@ export default function Index() {
         </div>
       </section>
 
+      {/* ━━━ DONATE ━━━ */}
+      {isDefaultTenant && (
+      <section className="px-6 pb-16 max-w-2xl mx-auto text-center">
+        <div className="clf-liquid-glass p-8 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-orange-500/5 pointer-events-none" />
+          <div className="relative z-10">
+            <span className="text-4xl mb-4 block">☕</span>
+            <h3 className="lv-heading-sm mb-2">Gostou do projeto?</h3>
+            <p className="lv-body mb-5">Doe um cafezinho via PIX pelo Mercado Pago e ajude a manter o projeto vivo!</p>
+            <a
+              href="https://link.mercadopago.com.br/starbleai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2"
+            >
+              ☕ Doe um cafezinho
+            </a>
+            <p className="lv-caption mt-3 opacity-60">Qualquer valor é bem-vindo 💛</p>
+          </div>
+        </div>
+      </section>
+      )}
+
       {/* ━━━ FOOTER ━━━ */}
       <footer className="border-t border-border/50 px-6 py-8">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="lv-caption">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap justify-center">
             <Link to="/community" className="lv-caption hover:text-foreground transition-colors">CodeLovers</Link>
+            <Link to="/marketplace" className="lv-caption hover:text-foreground transition-colors">Marketplace</Link>
             {isDefaultTenant && <Link to="/afiliados" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>}
             {isDefaultTenant && <Link to="/whitelabel" className="lv-caption hover:text-foreground transition-colors">White Label</Link>}
             <Link to="/termos" className="lv-caption hover:text-foreground transition-colors">Termos</Link>
