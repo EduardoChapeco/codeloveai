@@ -8,24 +8,17 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 
 const allItems = [
+  { to: "/community", icon: MessageCircle },
   { to: "/dashboard", icon: LayoutDashboard },
   { to: "/extensoes", icon: Puzzle },
   { to: "/brain", icon: Brain },
   { to: "/assistente", icon: Bot },
   { to: "/orquestrador", icon: Workflow },
-  { to: "/community", icon: MessageCircle },
   { to: "/notes", icon: StickyNote },
-  { to: "/install", icon: Download },
-  { to: "/lovable/connect", icon: Link2 },
   { to: "/lovable/projects", icon: FolderOpen },
   { to: "/plans", icon: CreditCard },
   { to: "/ajuda", icon: BookOpen },
   { to: "/suporte", icon: LifeBuoy },
-  { to: "/termos", icon: Scale },
-  { to: "/afiliados", icon: Users },
-  { to: "/whitelabel", icon: Globe },
-  { to: "/parceiros", icon: Handshake },
-  { to: "/extensoes/venus", icon: Sparkles },
 ];
 
 export default function MobileBottomNav() {

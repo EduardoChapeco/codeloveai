@@ -190,7 +190,7 @@ export default function Dashboard() {
               .select("id, key, active, plan, plan_type, status, expires_at, daily_messages, messages_used_today")
               .eq("id", data.license_id).maybeSingle();
             if (newLic) setLicense(newLic as unknown as MemberLicense);
-            toast.success("Plano Grátis ativado — 10 mensagens/dia! 🎉");
+            toast.success("Free Master ativado — 30 dias grátis, tudo liberado! 🚀");
           }
         }
         localStorage.setItem(tokenKey, "true");
@@ -291,42 +291,7 @@ export default function Dashboard() {
                 {license?.plan_type === 'custom' ? "Plano Profissional Ativo" : "Plataforma — Ferramentas de IA"}
               </p>
             </div>
-            {!license && !activeTokens.length && (
-              <Link to="/plans" className="lv-btn-primary h-11 px-6 flex items-center gap-2 shadow-lg shadow-primary/20">
-                <Zap className="h-4 w-4" /> Ver Planos
-              </Link>
-            )}
           </div>
-
-          {/* ⚠️ Alerta de baixo saldo de mensagens (free_trial ≤ 2 msgs restantes) */}
-          {(() => {
-            if (!license || license.plan_type !== 'messages' || !license.daily_messages) return null;
-            const remaining = license.daily_messages - (license.messages_used_today || 0);
-            if (remaining > 2) return null;
-            return (
-              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/8 p-4 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
-                    <AlertTriangle className="h-5 w-5 text-amber-500" />
-                  </div>
-                  <div>
-                    <p className="lv-body-strong text-amber-700 dark:text-amber-400 text-sm">
-                      {remaining <= 0 ? 'Você usou todas as suas mensagens gratuitas' : `Apenas ${remaining} mensagem${remaining > 1 ? 'ns' : ''} restante${remaining > 1 ? 's' : ''}`}
-                    </p>
-                    <p className="lv-caption text-amber-600/80 dark:text-amber-500/80">
-                      Faça upgrade para continuar usando sem interrupções
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  to="/plans"
-                  className="lv-btn-primary h-9 px-4 text-xs shrink-0 flex items-center gap-1.5 shadow-lg shadow-primary/20"
-                >
-                  <Zap className="h-3.5 w-3.5" /> Fazer Upgrade
-                </Link>
-              </div>
-            );
-          })()}
 
           {/* ⚠️ Aviso sobre créditos do Lovable */}
           <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-3.5 flex items-start gap-3">
@@ -369,15 +334,6 @@ export default function Dashboard() {
                   {(license?.status === 'suspended' || (license?.expires_at && new Date(license.expires_at) < new Date())) && (
                     <Link to="/plans" className="lv-btn-primary h-10 px-6 text-[11px] font-bold uppercase tracking-widest shadow-xl">
                       Renovar Agora
-                    </Link>
-                  )}
-                  {/* Botão Upgrade para usuários no plano de trial com mensagens limitadas */}
-                  {license?.plan_type === 'messages' && license.daily_messages && (
-                    <Link
-                      to="/plans"
-                      className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-1.5"
-                    >
-                      <Zap className="h-3.5 w-3.5" /> Fazer Upgrade
                     </Link>
                   )}
                 </div>

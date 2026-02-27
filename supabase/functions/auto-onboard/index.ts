@@ -32,11 +32,11 @@ async function hmacSign(payload: string, secret: string): Promise<string> {
 }
 
 /**
- * auto-onboard: Auto-provisions a free 10msg/day license for new users.
+ * auto-onboard: Auto-provisions "Free Master" (30 days, unlimited) for new users.
  * - Idempotent: skips if user already has any active license
- * - Generates proper CLF1.eyJ... HMAC-signed tokens (same format as generate-clf-token)
- * - Links to the "Grátis" plan in DB for proper extension access (allowedExtensions)
- * - Perpetual free tier (no expiration)
+ * - Generates proper CLF1.eyJ... HMAC-signed tokens
+ * - Links to "Free Master" plan (is_promotional=true, 30 days)
+ * - Admin can kill this plan globally via AdminGlobal operations tab
  */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -77,7 +77,6 @@ Deno.serve(async (req) => {
     const userId = user.id;
     const userEmail = user.email;
 
-    // Block disposable emails
     if (userEmail && isDisposableEmail(userEmail)) {
       return new Response(JSON.stringify({ error: "Emails temporários não são permitidos" }), {
         status: 400,
@@ -90,7 +89,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Resolve tenant
     const tenantInfo = await resolveTenant(serviceClient, req, userId);
     const tenantId = tenantInfo.id || tenantInfo.tenant_id;
 
@@ -103,7 +101,6 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    // If license exists with proper key, skip
     if (existing && existing.key && existing.key.startsWith("CLF1.")) {
       return new Response(
         JSON.stringify({ already_exists: true, license_id: existing.id }),
@@ -111,32 +108,43 @@ Deno.serve(async (req) => {
       );
     }
 
-    // If license exists but needs signing (backfilled), sign it now
     const needsSign = existing && existing.key && existing.key.startsWith("PENDING_SIGN_");
 
-    // Find the "Grátis" plan in DB to get plan_id and daily_message_limit
-    const { data: freePlan } = await serviceClient
+    // Use "Free Master" promotional plan (30 days, unlimited)
+    const { data: freeMasterPlan } = await serviceClient
+      .from("plans")
+      .select("id, daily_message_limit")
+      .eq("name", "Free Master")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    // Fallback to old "Grátis" if Free Master doesn't exist or is deactivated
+    const { data: fallbackPlan } = !freeMasterPlan ? await serviceClient
       .from("plans")
       .select("id, daily_message_limit")
       .eq("name", "Grátis")
       .eq("is_active", true)
-      .maybeSingle();
+      .maybeSingle() : { data: null };
 
-    const planId = freePlan?.id || null;
-    const dailyMessages = freePlan?.daily_message_limit || 10;
+    const activePlan = freeMasterPlan || fallbackPlan;
+    const planId = activePlan?.id || null;
+    const dailyMessages = activePlan?.daily_message_limit || null; // NULL = unlimited
+    const planName = freeMasterPlan ? "free_master" : "free";
+    const isUnlimited = dailyMessages === null;
 
-    // Perpetual free license (100 years)
+    // 30 days for Free Master, 100 years for old free
     const now = Date.now();
-    const expiresMs = 100 * 365.25 * 24 * 60 * 60 * 1000;
+    const expiresMs = freeMasterPlan
+      ? 30 * 24 * 60 * 60 * 1000       // 30 days
+      : 100 * 365.25 * 24 * 60 * 60 * 1000; // 100 years (legacy)
     const exp = now + expiresMs;
     const expiresAt = new Date(exp).toISOString();
 
-    // Build proper CLF1.eyJ... HMAC-signed token
     const payload = JSON.stringify({
       uid: userId,
       email: userEmail || "",
-      plan: "free",
-      dailyMessages,
+      plan: planName,
+      dailyMessages: dailyMessages ?? -1, // -1 = unlimited
       exp,
       iat: now,
       v: 1,
@@ -149,7 +157,6 @@ Deno.serve(async (req) => {
     let finalLicenseId: string;
 
     if (needsSign) {
-      // Update the backfilled license with proper signed key
       const { error: updateError } = await serviceClient
         .from("licenses")
         .update({ key: licenseKey })
@@ -163,7 +170,6 @@ Deno.serve(async (req) => {
       }
       finalLicenseId = existing.id;
     } else {
-      // Insert new license
       const { data: newLicense, error: insertError } = await serviceClient
         .from("licenses")
         .insert({
@@ -171,12 +177,12 @@ Deno.serve(async (req) => {
           tenant_id: tenantId,
           key: licenseKey,
           active: true,
-          plan: "free",
+          plan: planName,
           plan_id: planId,
           plan_type: "messages",
           type: "daily_token",
           status: "active",
-          daily_messages: dailyMessages,
+          daily_messages: isUnlimited ? null : dailyMessages,
           expires_at: expiresAt,
         })
         .select("id")
@@ -197,8 +203,10 @@ Deno.serve(async (req) => {
         success: true,
         license_id: finalLicenseId,
         token: licenseKey,
-        plan: "free",
+        plan: planName,
         daily_messages: dailyMessages,
+        unlimited: isUnlimited,
+        expires_at: expiresAt,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

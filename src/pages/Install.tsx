@@ -1,9 +1,8 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Download, Smartphone, Monitor, Check, Lock } from "lucide-react";
+import { Download, Smartphone, Monitor, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
-import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import AppLayout from "@/components/AppLayout";
 import MeshBackground from "@/components/MeshBackground";
 
@@ -18,7 +17,6 @@ export default function Install() {
   const [installing, setInstalling] = useState(false);
   const { user } = useAuth();
   const { tenant } = useTenant();
-  const { hasAccess, loading: accessLoading } = useHasActiveAccess();
   const brandName = tenant?.name || "Starble";
 
   useEffect(() => {
@@ -59,20 +57,6 @@ export default function Install() {
     <div className="min-h-screen relative">
       {!user && <MeshBackground />}
       {guestNav}
-
-      {/* Gate: user without active access */}
-      {user && !accessLoading && !hasAccess ? (
-        <section className="px-6 py-24 max-w-3xl mx-auto text-center">
-          <div className="h-20 w-20 rounded-2xl bg-muted/60 flex items-center justify-center mx-auto mb-6">
-            <Lock className="h-10 w-10 text-muted-foreground" />
-          </div>
-          <h1 className="lv-heading-xl mb-4">Acesso restrito</h1>
-          <p className="lv-body text-base max-w-lg mx-auto mb-8">
-            A extensão está disponível apenas para usuários com um plano ativo ou token válido.
-          </p>
-          <Link to="/checkout" className="lv-btn-primary lv-btn-lg">Ver Planos</Link>
-        </section>
-      ) : (
 
       <section className="px-6 py-24 max-w-3xl mx-auto">
         <div className="text-center mb-16">
@@ -191,7 +175,6 @@ export default function Install() {
           ))}
         </div>
       </section>
-      )}
 
 
       <footer className="border-t border-border/60 px-6 py-6 text-center">

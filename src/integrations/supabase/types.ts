@@ -2659,6 +2659,7 @@ export type Database = {
           hourly_limit: number | null
           id: string
           is_active: boolean
+          is_promotional: boolean
           is_public: boolean
           max_projects: number | null
           modules: Json | null
@@ -2683,6 +2684,7 @@ export type Database = {
           hourly_limit?: number | null
           id?: string
           is_active?: boolean
+          is_promotional?: boolean
           is_public?: boolean
           max_projects?: number | null
           modules?: Json | null
@@ -2707,6 +2709,7 @@ export type Database = {
           hourly_limit?: number | null
           id?: string
           is_active?: boolean
+          is_promotional?: boolean
           is_public?: boolean
           max_projects?: number | null
           modules?: Json | null

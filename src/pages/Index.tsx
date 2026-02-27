@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, Navigate } from "react-router-dom";
 import { Zap, Clock, MessageSquare, Shield, ChevronDown, Puzzle, Code2, Sparkles, Users, Building2, ArrowRight, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
@@ -132,7 +132,7 @@ export default function Index() {
           <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/community" className="lv-btn-ghost h-9 px-3 text-xs">Comunidade</Link>
+          <Link to="/community" className="lv-btn-ghost h-9 px-3 text-xs">CodeLovers</Link>
           <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
           <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Começar Grátis</Link>
         </div>
@@ -149,7 +149,7 @@ export default function Index() {
       <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center animate-fade-in">
         <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-primary">10 mensagens grátis por dia</span>
+          <span className="text-sm font-medium text-primary">🚀 30 dias grátis — tudo liberado!</span>
         </div>
         <h1 className="lv-heading-xl mb-6">
           {isDefaultTenant
@@ -311,7 +311,7 @@ export default function Index() {
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="lv-caption">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
           <div className="flex items-center gap-4">
-            <Link to="/community" className="lv-caption hover:text-foreground transition-colors">Comunidade</Link>
+            <Link to="/community" className="lv-caption hover:text-foreground transition-colors">CodeLovers</Link>
             {isDefaultTenant && <Link to="/afiliados" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>}
             {isDefaultTenant && <Link to="/whitelabel" className="lv-caption hover:text-foreground transition-colors">White Label</Link>}
             <Link to="/termos" className="lv-caption hover:text-foreground transition-colors">Termos</Link>
@@ -326,8 +326,9 @@ export default function Index() {
   if (isPreview) {
     return content;
   }
+  // Authenticated users go straight to CodeLovers community
   if (!authLoading && user) {
-    return <AppLayout>{content}</AppLayout>;
+    return <Navigate to="/community" replace />;
   }
   return content;
 }
