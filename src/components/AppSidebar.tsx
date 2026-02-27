@@ -67,6 +67,7 @@ const adminGlobalTabs = [
 
 const adminTenantTabs = [
   { id: "editor", label: "Editor Visual", icon: Palette, desc: "Personalização" },
+  { id: "crm", label: "CRM", icon: MessageCircle, desc: "Contatos & campanhas" },
   { id: "users", label: "Usuários", icon: Users, desc: "Membros do tenant" },
   { id: "licenses", label: "Licenças", icon: Key, desc: "Tokens ativos" },
   { id: "finances", label: "Financeiro", icon: Wallet, desc: "Saldo & extrato" },
