@@ -93,6 +93,7 @@ export default function ProjectEditor() {
   const [chatMode, setChatMode] = useState<ChatMode>("task");
   const [showStatusCard, setShowStatusCard] = useState(false);
   const [updatePolling, setUpdatePolling] = useState(false);
+  const [updateConfirmed, setUpdateConfirmed] = useState(false);
 
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiMode, setAiMode] = useState<BrainType>("design");
@@ -182,12 +183,11 @@ export default function ProjectEditor() {
     pollIntervalRef.current = setInterval(async () => {
       attempts++;
       if (attempts > maxAttempts) {
-        // Timeout — force complete
+        // Timeout — force confirm so animation finishes
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
         setUpdatePolling(false);
-        setShowStatusCard(false);
-        hardReloadPreview();
+        setUpdateConfirmed(true);
         return;
       }
 
@@ -216,14 +216,8 @@ export default function ProjectEditor() {
           pollIntervalRef.current = null;
           setUpdatePolling(false);
 
-          // Animate completion
-          setShowStatusCard(false);
-
-          // Wait a beat then hard reload
-          setTimeout(() => {
-            hardReloadPreview();
-            toast.success("Projeto atualizado!", { duration: 2000 });
-          }, 800);
+          // Signal confirmed — the status card will advance to "done"
+          setUpdateConfirmed(true);
         }
       } catch {
         // Network error — keep polling
@@ -239,12 +233,12 @@ export default function ProjectEditor() {
   }, []);
 
   const handleStatusComplete = useCallback(() => {
-    // Status card animation done — if not polling yet, trigger reload as fallback
-    if (!updatePolling) {
-      setShowStatusCard(false);
-      hardReloadPreview();
-    }
-  }, [updatePolling, hardReloadPreview]);
+    // Called when status card animation finishes (after confirmed)
+    setShowStatusCard(false);
+    setUpdateConfirmed(false);
+    hardReloadPreview();
+    toast.success("Projeto atualizado!", { duration: 2000 });
+  }, [hardReloadPreview]);
 
   const sendChatMessage = async () => {
     if (!message.trim() || sending || !id) return;
@@ -257,6 +251,7 @@ export default function ProjectEditor() {
     setMessage("");
     setSending(true);
     setShowStatusCard(true);
+    setUpdateConfirmed(false);
 
     const tempId = crypto.randomUUID();
     setChatMessages(prev => [...prev, {
@@ -442,7 +437,7 @@ export default function ProjectEditor() {
               </div>
             ))}
 
-            <EditorStatusCard active={showStatusCard} onComplete={handleStatusComplete} />
+            <EditorStatusCard active={showStatusCard} confirmed={updateConfirmed} onComplete={handleStatusComplete} />
             <div ref={chatEndRef} />
           </div>
 
