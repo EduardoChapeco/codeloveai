@@ -407,7 +407,7 @@ export async function createFreshBrain(
       })
       .eq("user_id", userId);
 
-    // ── STEP 4: Inject skills (5 phases) with real credentials ──
+    // ── STEP 4: Wait for project readiness then inject skills ──
     const brainCtx: BrainContext = {
       supabaseUrl: Deno.env.get("SUPABASE_URL") || "",
       anonKey: Deno.env.get("SUPABASE_ANON_KEY") || "",
@@ -418,6 +418,17 @@ export async function createFreshBrain(
     // Run in background — don't block the response
     (async () => {
       try {
+        // Wait for project to be fully ready before injecting
+        await new Promise(r => setTimeout(r, 8000));
+        
+        // Verify project is accessible
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const ready = await verifyProject(projectId, token);
+          if (ready) break;
+          console.warn(`[Brain] Project not ready for injection (attempt ${attempt + 1}/3)`);
+          await new Promise(r => setTimeout(r, 5000));
+        }
+        
         const success = await injectSkills(sc, userId, projectId, token, brainCtx);
         if (success) {
           await sc.from("user_brain_projects")

@@ -584,16 +584,41 @@ async function createFreshBrain(
     const cancelResult = await cancelInitialCreation(projectId, token, created);
     console.log(`[Brain] Ghost cancel result=${cancelResult.cancelled} project=${projectId}`);
 
-    // Step 3: Wait for project to stabilize
-    await new Promise((r) => setTimeout(r, 3_000));
+    // Step 3: Wait for project to stabilize (8s minimum after cancel)
+    await new Promise((r) => setTimeout(r, 8_000));
+
+    // Step 3b: Verify project is accessible before bootstrap
+    let projectReady = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const check = await lovFetch(`${API}/projects/${projectId}`, token, { method: "GET" });
+      if (check.ok) {
+        projectReady = true;
+        break;
+      }
+      console.warn(`[Brain] Project not ready yet (attempt ${attempt + 1}/3, status=${check.status})`);
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
+
+    if (!projectReady) {
+      console.warn(`[Brain] Project ${projectId} never became ready, skipping bootstrap`);
+    }
 
     // Step 4: Bootstrap — send via venus-chat (task mode) to set up response files
-    const bootstrapPrompt = buildBootstrapPrompt(primarySkill);
-    const bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
-    console.log(`[Brain] Bootstrap via venus ok=${bootstrapResult.ok} project=${projectId}`);
-
-    if (!bootstrapResult.ok) {
-      console.warn(`[Brain] Bootstrap failed (non-critical): ${bootstrapResult.error}`);
+    if (projectReady) {
+      const bootstrapPrompt = buildBootstrapPrompt(primarySkill);
+      let bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
+      
+      // Retry once if 404
+      if (!bootstrapResult.ok && bootstrapResult.error?.includes("404")) {
+        console.warn(`[Brain] Bootstrap got 404, retrying after 5s...`);
+        await new Promise((r) => setTimeout(r, 5_000));
+        bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
+      }
+      
+      console.log(`[Brain] Bootstrap via venus ok=${bootstrapResult.ok} project=${projectId}`);
+      if (!bootstrapResult.ok) {
+        console.warn(`[Brain] Bootstrap failed (non-critical): ${bootstrapResult.error}`);
+      }
     }
 
     console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")}`);
