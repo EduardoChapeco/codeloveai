@@ -410,6 +410,17 @@ export default function EvolutionSetupGuide() {
   const serviceUrl = `https://${serviceName || "[SEU-SERVICO]"}.onrender.com`;
 
   // Generate .env content dynamically
+  // Ensure ?schema=public suffix on database URL
+  const dbUrlFinal = useMemo(() => {
+    if (!dbUrl) return "[SUA_INTERNAL_DATABASE_URL]?schema=public";
+    const trimmed = dbUrl.trim().replace(/\/+$/, "");
+    // Convert postgres:// to postgresql:// for Prisma compatibility
+    const normalized = trimmed.startsWith("postgres://")
+      ? trimmed.replace(/^postgres:\/\//, "postgresql://")
+      : trimmed;
+    return normalized.includes("?schema=public") ? normalized : `${normalized}?schema=public`;
+  }, [dbUrl]);
+
   const envContent = useMemo(() => {
     const lines = [
       `# === SERVER ===`,
@@ -421,14 +432,15 @@ export default function EvolutionSetupGuide() {
       `# === BANCO DE DADOS ===`,
       `DATABASE_ENABLED=true`,
       `DATABASE_PROVIDER=postgresql`,
-      `DATABASE_CONNECTION_URL=${dbUrl || "[SUA_INTERNAL_DATABASE_URL]"}`,
+      `DATABASE_CONNECTION_URL=${dbUrlFinal}`,
+      `DATABASE_URL=${dbUrlFinal}`,
       `DATABASE_CONNECTION_CLIENT_NAME=evolution_client`,
       ``,
       `# === REDIS/CACHE ===`,
-      `CACHE_REDIS_ENABLED=true`,
-      `CACHE_REDIS_URL=${redisUrl || "[SUA_INTERNAL_REDIS_URL]"}`,
+      `CACHE_REDIS_ENABLED=${redisUrl ? "true" : "false"}`,
+      `CACHE_REDIS_URL=${redisUrl || ""}`,
       `CACHE_REDIS_PREFIX_KEY=evolution`,
-      `CACHE_LOCAL_ENABLED=false`,
+      `CACHE_LOCAL_ENABLED=${redisUrl ? "false" : "true"}`,
       ``,
       `# === CORS ===`,
       `CORS_ORIGIN=*`,
@@ -463,7 +475,7 @@ export default function EvolutionSetupGuide() {
       `S3_ENABLED=false`,
     ];
     return lines.join("\n");
-  }, [serviceUrl, apiKey, dbUrl, redisUrl]);
+  }, [serviceUrl, apiKey, dbUrlFinal, redisUrl]);
 
   const filledCount = [dbUrl, redisUrl, apiKey].filter(Boolean).length;
 
@@ -562,7 +574,7 @@ export default function EvolutionSetupGuide() {
 
             <InfoBox type="warn">
               Após criar, o Render mostrará uma <strong>"Internal Database URL"</strong>. 
-              <strong> Copie-a</strong> e cole no campo abaixo — ela será usada automaticamente no Passo 4.
+              <strong> Copie-a</strong> e cole no campo abaixo. O sistema adiciona automaticamente <code>?schema=public</code> e converte <code>postgres://</code> para <code>postgresql://</code> (exigido pelo Prisma).
             </InfoBox>
 
             <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
@@ -857,7 +869,7 @@ Conecte o CRM para enviar e receber mensagens WhatsApp automaticamente.`} />
               { q: "Erro 502 Bad Gateway", a: "O serviço ainda está iniciando. Aguarde 2-3 minutos." },
               { q: "QR Code não aparece", a: "Verifique se a API Key está correta e se a instância foi criada (Passo 6.1)." },
               { q: "WhatsApp desconecta", a: "Plano Free hiberna. Use Starter ($7/mês) para 24/7." },
-              { q: "Erro de banco de dados", a: "Certifique-se que adicionou ?schema=public na DATABASE_CONNECTION_URI." },
+              { q: "Erro de banco de dados (P1001)", a: "O .env gerado já inclui DATABASE_URL e DATABASE_CONNECTION_URL com ?schema=public. Verifique se ambas estão no Render. Se colou manualmente, garanta que o protocolo é postgresql:// (não postgres://)." },
               { q: "Mensagens não enviam", a: "Verifique se a instância está com state: 'open'." },
             ].map((item, i) => (
               <div key={i} className="rounded-xl border border-white/[0.04] p-3">
