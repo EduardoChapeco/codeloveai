@@ -8,7 +8,7 @@ import {
   Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
   Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon, ExternalLink,
   MessageSquare, ChevronLeft, RotateCcw, Trash2, Shield, Server, BarChart3,
-  Zap, Bot, ArrowDown,
+  Zap, Bot, ArrowDown, FileText, Layers, PenTool, Lightbulb, Workflow, GitBranch,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
@@ -49,6 +49,23 @@ const ALL_SKILLS: { id: BrainSkill; label: string; icon: typeof BrainIcon; desc:
   { id: "data", label: "Data", icon: BarChart3, desc: "ML, Estatística, ETL, Analytics", gradient: "from-cyan-500 to-teal-400", bg: "bg-cyan-500/10 text-cyan-500" },
   { id: "devops", label: "DevOps", icon: Server, desc: "CI/CD, Kubernetes, Infra", gradient: "from-orange-500 to-amber-400", bg: "bg-orange-500/10 text-orange-500" },
   { id: "security", label: "Security", icon: Shield, desc: "AppSec, Pentesting, RLS, OAuth", gradient: "from-red-500 to-rose-400", bg: "bg-red-500/10 text-red-500" },
+];
+
+/* ─── Generation Modes ─── */
+type GenMode = "chat" | "prompt" | "prd" | "blueprint" | "user_story" | "architecture";
+
+const GEN_MODES: { id: GenMode; label: string; icon: typeof BrainIcon; desc: string; template: string }[] = [
+  { id: "chat", label: "Chat", icon: MessageSquare, desc: "Conversa livre", template: "" },
+  { id: "prompt", label: "Gerar Prompt", icon: PenTool, desc: "Prompt otimizado para IA",
+    template: `Gere um prompt profissional e detalhado para o seguinte objetivo:\n\n[DESCREVA SEU OBJETIVO AQUI]\n\nO prompt deve ser:\n- Claro e específico\n- Com contexto e restrições\n- Pronto para usar em qualquer LLM\n- Em português` },
+  { id: "prd", label: "Gerar PRD", icon: FileText, desc: "Product Requirements Document",
+    template: `Crie um PRD (Product Requirements Document) completo para:\n\n[DESCREVA O PRODUTO/FEATURE AQUI]\n\nInclua:\n1. Visão geral e objetivo\n2. Personas e público-alvo\n3. Requisitos funcionais\n4. Requisitos não-funcionais\n5. User stories\n6. Critérios de aceite\n7. Métricas de sucesso\n8. Cronograma estimado` },
+  { id: "blueprint", label: "Blueprint", icon: Layers, desc: "Arquitetura técnica completa",
+    template: `Gere um Blueprint técnico completo para:\n\n[DESCREVA O SISTEMA/FEATURE AQUI]\n\nInclua:\n1. Diagrama de arquitetura (em texto/ASCII)\n2. Stack tecnológico recomendado\n3. Modelagem de dados (tabelas, relações)\n4. APIs e endpoints\n5. Fluxo de autenticação/autorização\n6. Estratégia de deploy\n7. Considerações de escalabilidade\n8. Estimativa de complexidade` },
+  { id: "user_story", label: "User Stories", icon: Lightbulb, desc: "Histórias de usuário",
+    template: `Gere User Stories completas no formato Agile para:\n\n[DESCREVA A FEATURE/ÉPICO AQUI]\n\nPara cada story inclua:\n- Título\n- Como [persona], eu quero [ação], para [benefício]\n- Critérios de aceite (Given/When/Then)\n- Pontos de complexidade (1-13)\n- Dependências` },
+  { id: "architecture", label: "Arquitetura", icon: GitBranch, desc: "Decision Record (ADR)",
+    template: `Crie um Architecture Decision Record (ADR) para:\n\n[DESCREVA A DECISÃO TÉCNICA AQUI]\n\nFormato:\n1. Título da decisão\n2. Status (proposta)\n3. Contexto e problema\n4. Opções consideradas (prós/contras)\n5. Decisão tomada\n6. Consequências\n7. Alternativas rejeitadas e motivos` },
 ];
 
 function ProcessingIndicator({ startTime }: { startTime: number }) {
@@ -294,6 +311,7 @@ export default function BrainPage() {
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [genMode, setGenMode] = useState<GenMode>("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -747,43 +765,78 @@ export default function BrainPage() {
             </div>
           )}
 
-          {/* ── Input bar — pinned to bottom ── */}
+          {/* ── Generation modes + Input bar — pinned to bottom ── */}
           {activeBrainId && (
-            <div
-              className="px-4 sm:px-6 py-3 shrink-0"
-            >
-              <div className="max-w-3xl mx-auto flex items-end gap-2.5">
-                <div
-                  className="flex-1 rounded-2xl overflow-hidden transition-shadow focus-within:shadow-lg focus-within:shadow-primary/5"
-                  style={{ border: '1px solid var(--clf-border)', background: 'hsl(var(--background) / 0.6)' }}
-                >
-                  <textarea
-                    ref={textareaRef}
-                    value={message}
-                    onChange={e => setMessage(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
-                    placeholder={`Mensagem para ${ALL_SKILLS.find(b => b.id === brainType)?.label || "Star AI"}...`}
-                    rows={1}
-                    disabled={false}
-                    className="w-full min-h-[44px] max-h-[140px] py-3 px-4 resize-none text-[13px] bg-transparent focus:outline-none placeholder:text-muted-foreground/40 disabled:opacity-50"
-                    onInput={e => {
-                      const t = e.currentTarget;
-                      t.style.height = "auto";
-                      t.style.height = Math.min(t.scrollHeight, 140) + "px";
-                    }}
-                  />
+            <div className="px-4 sm:px-6 py-3 shrink-0 space-y-2">
+              <div className="max-w-3xl mx-auto">
+                {/* Mode selector */}
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-2">
+                  {GEN_MODES.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setGenMode(m.id);
+                        if (m.id !== "chat" && m.template) {
+                          setMessage(m.template);
+                          setTimeout(() => {
+                            if (textareaRef.current) {
+                              textareaRef.current.style.height = "auto";
+                              textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + "px";
+                              textareaRef.current.focus();
+                            }
+                          }, 50);
+                        }
+                      }}
+                      className={`h-8 px-3 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shrink-0 transition-all ${
+                        genMode === m.id
+                          ? "bg-primary text-primary-foreground shadow-md"
+                          : "text-muted-foreground hover:bg-muted/50"
+                      }`}
+                      style={genMode !== m.id ? { border: '0.5px solid var(--clf-border)' } : undefined}
+                      title={m.desc}
+                    >
+                      <m.icon className="h-3 w-3" /> {m.label}
+                    </button>
+                  ))}
                 </div>
-                <button
-                  onClick={sendMsg}
-                  disabled={!message.trim()}
-                  className={`h-11 w-11 flex items-center justify-center shrink-0 rounded-full transition-all active:scale-90 ${
-                    message.trim()
-                      ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:scale-105"
-                      : "bg-muted/50 text-muted-foreground"
-                  }`}
-                >
-                  <Send className="h-4 w-4" />
-                </button>
+
+                {/* Input */}
+                <div className="flex items-end gap-2.5">
+                  <div
+                    className="flex-1 rounded-2xl overflow-hidden transition-shadow focus-within:shadow-lg focus-within:shadow-primary/5"
+                    style={{ border: '1px solid var(--clf-border)', background: 'hsl(var(--background) / 0.6)' }}
+                  >
+                    <textarea
+                      ref={textareaRef}
+                      value={message}
+                      onChange={e => setMessage(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
+                      placeholder={genMode === "chat"
+                        ? `Mensagem para ${ALL_SKILLS.find(b => b.id === brainType)?.label || "Star AI"}...`
+                        : `${GEN_MODES.find(m => m.id === genMode)?.desc} — edite o template e envie`
+                      }
+                      rows={1}
+                      disabled={false}
+                      className="w-full min-h-[44px] max-h-[140px] py-3 px-4 resize-none text-[13px] bg-transparent focus:outline-none placeholder:text-muted-foreground/40 disabled:opacity-50"
+                      onInput={e => {
+                        const t = e.currentTarget;
+                        t.style.height = "auto";
+                        t.style.height = Math.min(t.scrollHeight, 140) + "px";
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={sendMsg}
+                    disabled={!message.trim()}
+                    className={`h-11 w-11 flex items-center justify-center shrink-0 rounded-full transition-all active:scale-90 ${
+                      message.trim()
+                        ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:scale-105"
+                        : "bg-muted/50 text-muted-foreground"
+                    }`}
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
