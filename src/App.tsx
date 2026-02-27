@@ -132,6 +132,7 @@ const EditorLanding = lazyRetry(() => import("./pages/EditorLanding"));
 const Marketplace = lazyRetry(() => import("./pages/Marketplace"));
 const MarketplaceDetail = lazyRetry(() => import("./pages/MarketplaceDetail"));
 const MarketplaceSell = lazyRetry(() => import("./pages/MarketplaceSell"));
+const MarketplaceLanding = lazyRetry(() => import("./pages/MarketplaceLanding"));
 const CommunityTestList = lazyRetry(() => import("./pages/CommunityTestList"));
 const CommunityTestSession = lazyRetry(() => import("./pages/CommunityTestSession"));
 
@@ -211,6 +212,7 @@ const App = () => (
                 <Route path="/extensoes/:slug" element={<ExtensionDetail />} />
                 <Route path="/editor" element={<EditorLanding />} />
                 {/* Marketplace */}
+                <Route path="/store" element={<MarketplaceLanding />} />
                 <Route path="/marketplace" element={<Marketplace />} />
                 <Route path="/marketplace/vender" element={<MarketplaceSell />} />
                 <Route path="/marketplace/:slug" element={<MarketplaceDetail />} />

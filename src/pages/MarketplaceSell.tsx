@@ -170,7 +170,7 @@ export default function MarketplaceSell() {
           </div>
           <div>
             <h1 className="text-xl font-bold">Meu Catálogo</h1>
-            <p className="text-xs text-muted-foreground">Gerencie seus projetos à venda — comissão da plataforma: 40%</p>
+            <p className="text-xs text-muted-foreground">Gerencie seus projetos à venda — comissão da plataforma: 30% • Você recebe 70%</p>
           </div>
         </div>
 
