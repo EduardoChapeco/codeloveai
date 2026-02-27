@@ -548,9 +548,9 @@ export function buildPayload(prompt: string) {
  * No aggressive prefixes — just a clean task description.
  */
 export function buildBrainPrompt(brainType: string, message: string): string {
-  // Keep it simple — Lovable responds via chat, we capture via latest-message API
-  // No file creation demands — just answer naturally
-  return `Responda em Português Brasileiro de forma direta e completa.\n\n${message}`;
+  const ts = Date.now();
+  // Simple instruction: answer + update the existing brain-output.md
+  return `${message}\n\nAtualize o arquivo src/brain-output.md com sua resposta completa:\n---\nstatus: done\ntimestamp: ${ts}\ntype: ${brainType}\n---\n\n(resposta aqui)`;
 }
 
 /**
