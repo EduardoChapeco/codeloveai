@@ -160,8 +160,8 @@ export default function AffiliatesPage() {
             </thead>
             <tbody>
               {[
-                { plan: "Individual (1 dia)", price: 4.90 },
-                { plan: "White Label (mensal/usuário)", price: 29.90 },
+                { plan: "Diário Ilimitado", price: 19.90 },
+                { plan: "Mensal Ilimitado", price: 149.90 },
               ].map((row) => (
                 <tr key={row.plan} className="border-b border-border/40 last:border-0">
                   <td className="p-5 lv-body-strong">{row.plan}</td>
@@ -175,7 +175,7 @@ export default function AffiliatesPage() {
           </table>
         </div>
         <p className="text-center lv-caption mt-3 italic">
-          Exemplo: 10 vendas do plano Agência = R$149,70 em comissões por mês.
+          Exemplo: 10 vendas do plano Mensal = R$449,70 em comissões por mês.
         </p>
       </section>
 

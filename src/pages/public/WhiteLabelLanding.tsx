@@ -49,8 +49,8 @@ const features = [
 ];
 
 const plans = [
-  { name: "Diário", price: "R$3,90", period: "/usuário/dia", desc: "Pague apenas quando o usuário estiver ativo", cta: "Começar agora", features: ["Marca personalizada", "Domínio próprio", "5 planos customizáveis", "Suporte dedicado"] },
-  { name: "Mensal", price: "R$29,90", period: "/usuário/mês", desc: "Economia de até 74% vs diário", cta: "Começar agora", features: ["Tudo do Diário", "Desconto recorrente", "Relatórios avançados", "Suporte prioritário", "SLA 99.9%"], featured: true },
+  { name: "Diário", price: "R$7,96", period: "/usuário/dia", desc: "40% do preço final — pague apenas quando o usuário estiver ativo", cta: "Começar agora", features: ["Marca personalizada", "Domínio próprio", "Planos customizáveis", "Suporte dedicado"] },
+  { name: "Mensal", price: "R$59,96", period: "/usuário/mês", desc: "40% do preço final — economia vs diário", cta: "Começar agora", features: ["Tudo do Diário", "Desconto recorrente", "Relatórios avançados", "Suporte prioritário", "SLA 99.9%"], featured: true },
 ];
 
 const faqs = [
@@ -207,7 +207,7 @@ export default function WhiteLabelLanding() {
       <section className="py-12 border-y border-white/5">
         <div className="max-w-4xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           {[
-            { value: "R$3,90", label: "mínimo por usuário/dia" },
+            { value: "R$7,96", label: "custo por usuário/dia (40%)" },
             { value: "100%", label: "da margem é sua" },
             { value: "∞", label: "usuários por tenant" },
             { value: "0", label: "taxa de setup" },

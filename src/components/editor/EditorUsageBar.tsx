@@ -13,8 +13,8 @@ interface Props {
 
 const PLAN_LABELS: Record<EditorPlan, string> = {
   free: "Grátis",
-  daily: "Diário",
-  pro: "Pro",
+  daily: "Diário Ilimitado",
+  pro: "Mensal Ilimitado",
   venus: "Venus",
 };
 
@@ -63,8 +63,8 @@ export default function EditorUsageBar({ messagesUsed, messagesLimit, plan, perc
           <span className="text-[10px] text-muted-foreground/50">
             Plano {PLAN_LABELS[plan]}
             {plan === "free" && " • 10/dia"}
-            {plan === "daily" && " • 20/dia"}
-            {plan === "pro" && " • 50/mês"}
+            {plan === "daily" && " • Ilimitado/dia"}
+            {plan === "pro" && " • Ilimitado/mês"}
           </span>
           {isExhausted && (
             <span className="text-[10px] text-destructive font-semibold">Limite atingido</span>
@@ -92,7 +92,7 @@ export default function EditorUsageBar({ messagesUsed, messagesLimit, plan, perc
               {isExhausted ? "Desbloqueie mais edições" : "Quase no limite"}
             </p>
             <p className="text-[10px] text-muted-foreground/50 truncate">
-              Venus → Ilimitado • Pro → 50/mês • Diário → 20/dia
+              Diário → R$19,90 • Mensal → R$149,90
             </p>
           </div>
           <ArrowRight className="h-4 w-4 text-primary shrink-0" />

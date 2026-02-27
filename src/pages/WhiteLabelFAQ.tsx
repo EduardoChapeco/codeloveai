@@ -21,7 +21,7 @@ const faqs: FaqItem[] = [
     icon: CreditCard,
     question: "Quanto custa?",
     answer:
-      "O modelo é por usuário ativo: R$3,90/dia ou R$29,90/mês (mínimo). Você define os preços para seus clientes — a margem é sua. Sem taxa de setup.",
+      "O custo é de 40% do preço do plano: R$7,96/dia ou R$59,96/mês por usuário ativo. Você define os preços para seus clientes — a margem é sua. Sem taxa de setup.",
   },
   {
     icon: Palette,
