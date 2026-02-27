@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-27T20:52:10Z
+updated_at: 2026-02-27T21:15:00Z
 status: done
-task: corrigido setup Evolution API - adicionado DATABASE_URL, auto-suffix ?schema=public, normalização postgres->postgresql
+task: documentação completa do fluxo orchestrator/brain/ghost-create/edge-functions para recriação na extensão
 ---
