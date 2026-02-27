@@ -1455,6 +1455,61 @@ export type Database = {
           },
         ]
       }
+      crm_activities: {
+        Row: {
+          activity_type: string
+          contact_id: string
+          created_at: string
+          description: string
+          id: string
+          metadata: Json | null
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          activity_type?: string
+          contact_id: string
+          created_at?: string
+          description?: string
+          id?: string
+          metadata?: Json | null
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          activity_type?: string
+          contact_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          metadata?: Json | null
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_activities_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_campaigns: {
         Row: {
           created_at: string
@@ -1593,50 +1648,80 @@ export type Database = {
       }
       crm_contacts: {
         Row: {
+          avatar_url: string | null
+          city: string | null
+          company: string | null
+          conversion_value: number | null
           created_at: string
           email: string | null
           id: string
           is_active: boolean | null
           is_international: boolean | null
+          last_interaction_at: string | null
           metadata: Json | null
           name: string | null
+          notes: string | null
           phone: string
           phone_normalized: string
+          pipeline_moved_at: string | null
+          pipeline_stage: string
           source: string | null
           tags: string[] | null
           tenant_id: string
+          total_messages_received: number
+          total_messages_sent: number
           updated_at: string
           user_id: string
         }
         Insert: {
+          avatar_url?: string | null
+          city?: string | null
+          company?: string | null
+          conversion_value?: number | null
           created_at?: string
           email?: string | null
           id?: string
           is_active?: boolean | null
           is_international?: boolean | null
+          last_interaction_at?: string | null
           metadata?: Json | null
           name?: string | null
+          notes?: string | null
           phone: string
           phone_normalized: string
+          pipeline_moved_at?: string | null
+          pipeline_stage?: string
           source?: string | null
           tags?: string[] | null
           tenant_id: string
+          total_messages_received?: number
+          total_messages_sent?: number
           updated_at?: string
           user_id: string
         }
         Update: {
+          avatar_url?: string | null
+          city?: string | null
+          company?: string | null
+          conversion_value?: number | null
           created_at?: string
           email?: string | null
           id?: string
           is_active?: boolean | null
           is_international?: boolean | null
+          last_interaction_at?: string | null
           metadata?: Json | null
           name?: string | null
+          notes?: string | null
           phone?: string
           phone_normalized?: string
+          pipeline_moved_at?: string | null
+          pipeline_stage?: string
           source?: string | null
           tags?: string[] | null
           tenant_id?: string
+          total_messages_received?: number
+          total_messages_sent?: number
           updated_at?: string
           user_id?: string
         }
