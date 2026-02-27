@@ -51,44 +51,19 @@ const ALL_SKILLS: { id: BrainSkill; label: string; icon: typeof BrainIcon; desc:
   { id: "security", label: "Security", icon: Shield, desc: "AppSec, Pentesting, RLS, OAuth", gradient: "from-red-500 to-rose-400", bg: "bg-red-500/10 text-red-500" },
 ];
 
-const PROCESSING_PHASES = [
-  { text: "Conectando ao Star AI...", icon: "🔗", duration: 3000 },
-  { text: "Analisando sua pergunta...", icon: "🧠", duration: 5000 },
-  { text: "Processando com IA...", icon: "⚡", duration: 8000 },
-  { text: "Gerando resposta...", icon: "✍️", duration: 15000 },
-  { text: "Refinando resultado...", icon: "🔄", duration: 20000 },
-  { text: "Quase lá...", icon: "⏳", duration: 30000 },
-  { text: "Finalizando (pode demorar um pouco)...", icon: "🎯", duration: 60000 },
-];
-
 function ProcessingIndicator({ startTime }: { startTime: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => setElapsed(Date.now() - startTime), 500);
     return () => clearInterval(interval);
   }, [startTime]);
-  let phase = PROCESSING_PHASES[0];
-  for (let i = PROCESSING_PHASES.length - 1; i >= 0; i--) {
-    if (elapsed >= PROCESSING_PHASES[i].duration) { phase = PROCESSING_PHASES[i]; break; }
-  }
-  const progress = Math.min((elapsed / 90000) * 100, 95);
+  const dots = ".".repeat((Math.floor(elapsed / 600) % 3) + 1);
+  const phase = elapsed < 3000 ? "Pensando" : elapsed < 10000 ? "Gerando resposta" : elapsed < 30000 ? "Processando" : "Finalizando";
   return (
-    <div className="space-y-3 py-1">
-      <div className="flex items-center gap-3">
-        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        </div>
-        <div>
-          <span className="text-sm font-medium">{phase.icon} {phase.text}</span>
-          <span className="text-[10px] text-muted-foreground block mt-0.5">{Math.floor(elapsed / 1000)}s decorridos</span>
-        </div>
-      </div>
-      <div className="w-full h-1.5 bg-muted/50 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-1000 ease-out bg-gradient-to-r from-primary/60 via-primary to-primary/80"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+    <div className="flex items-center gap-2.5 py-1">
+      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary/60" />
+      <span className="text-xs text-muted-foreground">{phase}{dots}</span>
+      <span className="text-[10px] text-muted-foreground/40 ml-auto">{Math.floor(elapsed / 1000)}s</span>
     </div>
   );
 }
@@ -314,8 +289,7 @@ export default function BrainPage() {
   const [allConversations, setAllConversations] = useState<Conversation[]>([]);
   const [message, setMessage] = useState("");
   const [brainType, setBrainType] = useState<BrainSkill>("general");
-  const [sending, setSending] = useState(false);
-  const [sendStartTime, setSendStartTime] = useState<number | null>(null);
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -384,42 +358,41 @@ export default function BrainPage() {
     } catch (e: any) { toast.error(e.message); }
   };
 
-  // Realtime polling — when a conversation is processing, poll for completion via cron capture
+  // Realtime polling — poll for ALL processing conversations independently
   useEffect(() => {
-    const processingConvo = allConversations.find(c => c.status === "processing" && c.id !== "temp");
-    if (!processingConvo || !sending) return;
+    const processingConvos = allConversations.filter(c => c.status === "processing" && c.id !== "temp");
+    if (processingConvos.length === 0) return;
     
     const interval = setInterval(async () => {
-      try {
-        const { data } = await supabase
-          .from("loveai_conversations")
-          .select("ai_response, status")
-          .eq("id", processingConvo.id)
-          .single();
-        
-        if (data && data.status !== "processing" && data.ai_response) {
-          setAllConversations(prev =>
-            prev.map(c => c.id === processingConvo.id
-              ? { ...c, ai_response: data.ai_response, status: data.status as ConvoStatus }
-              : c
-            )
-          );
-          setSending(false);
-          setSendStartTime(null);
-        }
-      } catch { /* ignore */ }
+      for (const pc of processingConvos) {
+        try {
+          const { data } = await supabase
+            .from("loveai_conversations")
+            .select("ai_response, status")
+            .eq("id", pc.id)
+            .single();
+          
+          if (data && data.status !== "processing" && data.ai_response) {
+            setAllConversations(prev =>
+              prev.map(c => c.id === pc.id
+                ? { ...c, ai_response: data.ai_response, status: data.status as ConvoStatus }
+                : c
+              )
+            );
+            setProcessingIds(prev => { const n = new Set(prev); n.delete(pc.id); return n; });
+          }
+        } catch { /* ignore */ }
+      }
     }, 3000);
     
     return () => clearInterval(interval);
-  }, [allConversations, sending]);
+  }, [allConversations]);
 
   const sendMsg = async () => {
-    if (!message.trim() || sending || !activeBrainId) return;
+    if (!message.trim() || !activeBrainId) return;
     const userMsg = message.trim();
     setMessage("");
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
-    setSending(true);
-    setSendStartTime(Date.now());
 
     const tempId = crypto.randomUUID();
     const tempConvo: Conversation = {
@@ -428,6 +401,7 @@ export default function BrainPage() {
       created_at: new Date().toISOString(), target_project_id: null,
     };
     setAllConversations(prev => [...prev, tempConvo]);
+    setProcessingIds(prev => new Set(prev).add(tempId));
 
     try {
       const { data, error } = await supabase.functions.invoke("brain", {
@@ -438,16 +412,25 @@ export default function BrainPage() {
         if (data?.code === "brain_inactive") setShowOnboarding(true);
         throw new Error(data?.error || error?.message);
       }
-      const finalStatus = data.status === "completed" ? "completed" : data.status === "timeout" ? "timeout" : "failed";
+      
+      const realId = data.conversation_id || tempId;
+      const finalStatus = data.status === "completed" ? "completed" : data.status === "processing" ? "processing" : data.status === "timeout" ? "timeout" : "failed";
+      
       setAllConversations(prev =>
-        prev.map(c => c.id === tempId ? { ...c, id: data.conversation_id || tempId, ai_response: data.response, status: finalStatus as ConvoStatus } : c)
+        prev.map(c => c.id === tempId ? { ...c, id: realId, ai_response: data.response || null, status: finalStatus as ConvoStatus } : c)
       );
+      
+      // If still processing, keep tracking; if done, remove
+      setProcessingIds(prev => {
+        const n = new Set(prev);
+        n.delete(tempId);
+        if (finalStatus === "processing") n.add(realId);
+        return n;
+      });
     } catch (e: any) {
       setAllConversations(prev => prev.map(c => c.id === tempId ? { ...c, status: "failed", ai_response: e.message } : c));
+      setProcessingIds(prev => { const n = new Set(prev); n.delete(tempId); return n; });
       toast.error(e.message);
-    } finally {
-      setSending(false);
-      setSendStartTime(null);
     }
   };
 
@@ -634,7 +617,7 @@ export default function BrainPage() {
           </div>
 
           {/* ── Chat messages area — scrollable ── */}
-          {(!activeBrainId || (activeBrainId && allConversations.length === 0 && !sending)) ? (
+          {(!activeBrainId || (activeBrainId && allConversations.length === 0 && processingIds.size === 0)) ? (
             <EmptyChat hasActiveBrain={!!activeBrainId} />
           ) : (
             <div
@@ -677,8 +660,7 @@ export default function BrainPage() {
                           border: '0.5px solid var(--clf-border)',
                         }}
                       >
-                        {convo.status === "processing" && sendStartTime && <ProcessingIndicator startTime={sendStartTime} />}
-                        {convo.status === "processing" && !sendStartTime && <TypingDots />}
+                        {convo.status === "processing" && <ProcessingIndicator startTime={new Date(convo.created_at).getTime()} />}
                         {convo.status === "timeout" && (
                           <div className="flex items-center gap-2 text-amber-500"><AlertTriangle className="h-4 w-4" /><span className="text-sm">Tempo esgotado. Tente novamente.</span></div>
                         )}
@@ -743,7 +725,7 @@ export default function BrainPage() {
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
                     placeholder={`Mensagem para ${ALL_SKILLS.find(b => b.id === brainType)?.label || "Star AI"}...`}
                     rows={1}
-                    disabled={sending}
+                    disabled={false}
                     className="w-full min-h-[44px] max-h-[140px] py-3 px-4 resize-none text-[13px] bg-transparent focus:outline-none placeholder:text-muted-foreground/40 disabled:opacity-50"
                     onInput={e => {
                       const t = e.currentTarget;
@@ -754,14 +736,14 @@ export default function BrainPage() {
                 </div>
                 <button
                   onClick={sendMsg}
-                  disabled={!message.trim() || sending}
+                  disabled={!message.trim()}
                   className={`h-11 w-11 flex items-center justify-center shrink-0 rounded-full transition-all active:scale-90 ${
-                    message.trim() && !sending
+                    message.trim()
                       ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:scale-105"
                       : "bg-muted/50 text-muted-foreground"
                   }`}
                 >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  <Send className="h-4 w-4" />
                 </button>
               </div>
             </div>
