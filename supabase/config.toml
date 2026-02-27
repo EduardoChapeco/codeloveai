@@ -141,3 +141,6 @@ verify_jwt = false
 
 [functions.get-brain-output]
 verify_jwt = false
+
+[functions.brain-api]
+verify_jwt = false

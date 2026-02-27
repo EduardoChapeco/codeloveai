@@ -58,6 +58,14 @@ async function fetchText(url: string, token: string, connectMs = 5000, bodyMs = 
   }
 }
 
+// ── Timestamp extraction ──────────────────────────────────────
+function extractMdTimestamp(mdContent: string): number | null {
+  const match = mdContent.match(/timestamp:\s*(\d{10,15})/);
+  if (!match) return null;
+  const ts = parseInt(match[1], 10);
+  return ts < 1e12 ? ts * 1000 : ts;
+}
+
 // ── Bootstrap detection + cleaning ──────────────────────────────
 
 const BOOTSTRAP_MARKERS = [
@@ -81,7 +89,6 @@ const BOILERPLATE_LINES = [
   /^\|\s*Varredura de segurança\s*\|/i,
   /^\|\s*Vulnerabilidades\s*\|/i,
   /^\|\s*Ação necessária\s*\|/i,
-  // "Próximos Passos" and Lovable-related boilerplate
   /^##?\s*Próximos?\s*Passos?\s*$/i,
   /^[-*]\s*(Ativar|Executar|Configurar|Criar)\s*(Lovable|Cloud|migrations|RLS|Edge Functions)/i,
   /^[-*]\s*.*\(coisas relacionadas a\s*l[oa][vb]a[bl][el]\)/i,
@@ -105,7 +112,6 @@ function cleanBrainResponse(raw: string): string {
     return !BOILERPLATE_LINES.some(r => r.test(trimmed));
   });
   let result = cleaned.join("\n").trim();
-  // Remove entire "Próximos Passos" trailing section (header + bullets)
   result = result.replace(/\n##?\s*Próximos?\s*Passos?[\s\S]*$/im, "").trim();
   result = result.replace(/Sistema operacional\.\s*Aguardando instruções\.?\s*$/im, "").trim();
   result = result.replace(/Aguardando instruções do usuário\.?\s*$/im, "").trim();
@@ -126,12 +132,10 @@ function extractMdBody(c: string): string | null {
     raw = c.replace(/^---[\s\S]*?---\s*/m, "").trim();
   }
   if (raw.length < 5) return null;
-  // Skip bootstrap content
   if (isBootstrapResponse(raw)) return null;
   return cleanBrainResponse(raw);
 }
 
-/** Find brain-output.md in source-code response (supports {name, contents} format) */
 function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
   if (!obj || typeof obj !== "object") return null;
 
@@ -172,53 +176,19 @@ function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
 }
 
 // ── Bootstrap phase prompts ──────────────────────────────────────
-// Phase 1: Bootstrap (PRD + structure)
-// Phase 2-6: Audit prompts (verify, templates, capabilities, self-test, readiness)
-// Must match brain/index.ts buildBootstrapPrompt + buildAuditPrompts
 
 type SkillProfile = { title: string; credentials: string; focus: string };
 
 const SKILL_PROFILES: Record<string, SkillProfile> = {
-  general: {
-    title: "Star AI — Assistente Geral Sênior",
-    credentials: "PhD em Ciência da Computação (MIT), MBA (Harvard), 50 anos de experiência.",
-    focus: "análise geral, planejamento, arquitetura de software, resolução de problemas complexos",
-  },
-  design: {
-    title: "Star AI — Arquiteto de Design & UX",
-    credentials: "PhD em HCI (MIT Media Lab), Mestre em Design Visual (RISD).",
-    focus: "design systems, UX research, acessibilidade WCAG, Tailwind CSS, shadcn/ui",
-  },
-  code: {
-    title: "Star AI — Engenheiro de Software Principal",
-    credentials: "PhD em Engenharia de Software (Stanford), 50 anos como Staff Engineer.",
-    focus: "TypeScript, React, Node.js, Deno, PostgreSQL, Edge Functions",
-  },
-  scraper: {
-    title: "Star AI — Especialista em Extração de Dados",
-    credentials: "PhD em Data Engineering (CMU), 30 anos em web scraping.",
-    focus: "crawlers, parsing, Firecrawl, APIs de dados, ETL",
-  },
-  migration: {
-    title: "Star AI — Arquiteto de Dados & Migrações",
-    credentials: "PhD em Database Systems (UC Berkeley), 40 anos em PostgreSQL.",
-    focus: "migrações SQL, modelagem relacional, performance tuning, índices, RLS policies",
-  },
-  data: {
-    title: "Star AI — Cientista de Dados Sênior",
-    credentials: "PhD em Machine Learning (Stanford), PhD em Estatística (MIT).",
-    focus: "análise de dados, visualização, modelagem preditiva, ETL, dashboards",
-  },
-  devops: {
-    title: "Star AI — Engenheiro DevOps/SRE Principal",
-    credentials: "PhD em Sistemas Distribuídos (MIT), 40 anos em infraestrutura cloud.",
-    focus: "CI/CD, Edge Functions, Supabase, monitoramento, cron jobs",
-  },
-  security: {
-    title: "Star AI — Engenheiro de Segurança Principal",
-    credentials: "PhD em Cybersecurity (MIT), CISSP, OSCP.",
-    focus: "RLS policies, OAuth, criptografia, hardening, auditoria",
-  },
+  general: { title: "Star AI — Assistente Geral Sênior", credentials: "PhD em Ciência da Computação (MIT), MBA (Harvard), 50 anos de experiência.", focus: "análise geral, planejamento, arquitetura de software, resolução de problemas complexos" },
+  design: { title: "Star AI — Arquiteto de Design & UX", credentials: "PhD em HCI (MIT Media Lab), Mestre em Design Visual (RISD).", focus: "design systems, UX research, acessibilidade WCAG, Tailwind CSS, shadcn/ui" },
+  code: { title: "Star AI — Engenheiro de Software Principal", credentials: "PhD em Engenharia de Software (Stanford), 50 anos como Staff Engineer.", focus: "TypeScript, React, Node.js, Deno, PostgreSQL, Edge Functions" },
+  scraper: { title: "Star AI — Especialista em Extração de Dados", credentials: "PhD em Data Engineering (CMU), 30 anos em web scraping.", focus: "crawlers, parsing, Firecrawl, APIs de dados, ETL" },
+  migration: { title: "Star AI — Arquiteto de Dados & Migrações", credentials: "PhD em Database Systems (UC Berkeley), 40 anos em PostgreSQL.", focus: "migrações SQL, modelagem relacional, performance tuning, índices, RLS policies" },
+  data: { title: "Star AI — Cientista de Dados Sênior", credentials: "PhD em Machine Learning (Stanford), PhD em Estatística (MIT).", focus: "análise de dados, visualização, modelagem preditiva, ETL, dashboards" },
+  devops: { title: "Star AI — Engenheiro DevOps/SRE Principal", credentials: "PhD em Sistemas Distribuídos (MIT), 40 anos em infraestrutura cloud.", focus: "CI/CD, Edge Functions, Supabase, monitoramento, cron jobs" },
+  security: { title: "Star AI — Engenheiro de Segurança Principal", credentials: "PhD em Cybersecurity (MIT), CISSP, OSCP.", focus: "RLS policies, OAuth, criptografia, hardening, auditoria" },
+  code_review: { title: "Star AI — Code Reviewer & Auditor Principal", credentials: "PhD em Software Engineering (MIT), 40 anos em code review.", focus: "code review, auditoria, refactoring, clean architecture, performance" },
 };
 
 function getProfile(skill: string): SkillProfile {
@@ -227,192 +197,77 @@ function getProfile(skill: string): SkillProfile {
 
 function buildPhasePrompt(phase: number, skill: string, ctx: { supabaseUrl: string; userId: string }): string {
   const p = getProfile(skill);
+  const now = Date.now();
 
   switch (phase) {
     case 1:
-      // Phase 1: Bootstrap PRD (matches brain/index.ts buildBootstrapPrompt)
       return `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
 
 Criar Projeto (Brain Specialist — ${p.title}):
 
-Este projeto é um sistema headless de IA especializada onde todas as perguntas serão respondidas de forma coerente e profissional como um especialista ${p.credentials}.
+Este projeto é um sistema headless de IA especializada.
 
-## PRD — Product Requirements Document
-
+## PRD
 ### Objetivo
-Sistema de resposta especializada com persona PhD/Sênior. O corpo da resposta deve ser anexado sempre em .md.
+Sistema de resposta especializada com persona PhD/Sênior.
 
-### Requisitos Funcionais
-1. Todas as respostas devem ser escritas em \`src/brain-output.md\` com frontmatter \`status: done\`
-2. NÃO criar componentes React, páginas ou rotas visuais — este é um backend de IA headless
+### Requisitos
+1. Respostas em \`src/brain-output.md\` com frontmatter \`status: done\` e \`timestamp: {epoch_ms}\`
+2. NÃO criar React/UI — backend headless
 
 ### Estrutura Inicial
-
-1. Crie o arquivo \`.lovable/plan.md\` com:
+1. \`.lovable/plan.md\`:
 \`\`\`markdown
 ---
 title: ${p.title}
 skill: ${skill}
 status: ready
-credentials: ${p.credentials}
 ---
 # ${p.title}
-Sistema especializado em ${p.focus}.
-Protocolo: todas as respostas em \`src/brain-output.md\` com status: done.
+Protocolo: respostas em src/brain-output.md com status: done e timestamp.
 \`\`\`
 
-2. Crie o arquivo \`src/brain-output.md\` com:
+2. \`src/brain-output.md\`:
 \`\`\`markdown
 ---
 status: ready
 skill: ${skill}
-timestamp: ${Date.now()}
+timestamp: ${now}
 ---
 # ${p.title}
-Brain ativado. Credenciais: ${p.credentials}
-Foco: ${p.focus}
-Aguardando instruções.
+Brain ativado. Aguardando instruções.
 \`\`\`
 
-3. Crie o arquivo \`src/INSTRUCTIONS.md\` com:
+3. \`src/INSTRUCTIONS.md\`:
 \`\`\`markdown
-# ${p.title} — Protocolo de Resposta
-
-## Identidade
-${p.credentials}
-
-## Regras
-1. SEMPRE escreva respostas em \`src/brain-output.md\` com frontmatter \`status: done\`
+# ${p.title} — Protocolo
+1. SEMPRE escreva em src/brain-output.md com status: done e timestamp: {epoch_ms}
 2. Responda em Português (Brasil)
-3. Seja técnico, detalhado e acionável
-4. NÃO crie componentes React ou páginas visuais
-5. Pode criar Edge Functions, SQL, scripts backend
-6. Use formato Markdown com código quando necessário
+3. NÃO crie React/UI
+4. O timestamp DEVE ser atualizado a cada resposta
 \`\`\`
 
-4. Crie o arquivo \`src/config.json\` com:
+4. \`src/config.json\`:
 \`\`\`json
-{
-  "brain_title": "${p.title}",
-  "skill": "${skill}",
-  "response_file": "src/brain-output.md",
-  "callback_url": "${ctx.supabaseUrl}/functions/v1/brain-capture-cron",
-  "user_id": "${ctx.userId}",
-  "status": "ready",
-  "version": "5.0"
-}
+{"brain_title":"${p.title}","skill":"${skill}","response_file":"src/brain-output.md","callback_url":"${ctx.supabaseUrl}/functions/v1/brain-capture-cron","user_id":"${ctx.userId}","status":"ready","version":"5.0"}
 \`\`\`
 
-NÃO crie componentes React, páginas ou rotas. Este projeto serve APENAS como backend de IA especializada.`;
+NÃO crie React, páginas ou rotas.`;
 
     case 2:
-      // Audit 1: Verify structure
-      return `IMPORTANTE: Não faça perguntas, execute diretamente.
-
-Verifique se todos os arquivos do sistema foram criados corretamente:
-- .lovable/plan.md (deve existir com skill: ${skill})
-- src/brain-output.md (deve existir com status: ready)
-- src/INSTRUCTIONS.md (deve existir com protocolo de resposta)
-Se algum arquivo estiver faltando, crie-o agora. Atualize src/brain-output.md com status: done e uma confirmação de que a estrutura está completa.`;
+      return `IMPORTANTE: Execute diretamente. Verifique arquivos: .lovable/plan.md, src/brain-output.md, src/INSTRUCTIONS.md. Crie faltantes. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
 
     case 3:
-      // Audit 2: Response templates
-      return `IMPORTANTE: Não faça perguntas, execute diretamente.
-
-Crie o arquivo src/response-templates.md com templates de resposta para diferentes tipos de consulta:
-
-\`\`\`markdown
----
-status: done
-timestamp: ${Date.now()}
----
-# Templates de Resposta — ${p.title}
-
-## Template: Análise Técnica
-- Diagnóstico
-- Causa raiz
-- Solução recomendada
-- Código (se aplicável)
-
-## Template: Arquitetura
-- Visão geral
-- Componentes
-- Fluxo de dados
-- Considerações de segurança
-
-## Template: Code Review
-- Problemas encontrados
-- Severidade
-- Correções sugeridas
-- Boas práticas
-\`\`\`
-
-Atualize src/brain-output.md com status: done confirmando a criação dos templates.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/response-templates.md com templates de resposta. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
 
     case 4:
-      // Audit 3: Capabilities manifest
-      return `IMPORTANTE: Não faça perguntas, execute diretamente.
-
-Crie o arquivo src/capabilities.json com o manifesto de capacidades deste Brain:
-
-\`\`\`json
-{
-  "brain": "${p.title}",
-  "skill": "${skill}",
-  "capabilities": [
-    "análise técnica avançada",
-    "geração de código",
-    "revisão de arquitetura",
-    "criação de documentação",
-    "resolução de problemas complexos"
-  ],
-  "response_formats": ["markdown", "json", "html"],
-  "output_file": "src/brain-output.md",
-  "version": "5.0",
-  "status": "operational"
-}
-\`\`\`
-
-Atualize src/brain-output.md com status: done.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/capabilities.json com manifesto. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
 
     case 5:
-      // Audit 4: Self-test
-      return `IMPORTANTE: Não faça perguntas, execute diretamente.
-
-Realize um auto-teste do sistema. Escreva em src/brain-output.md uma resposta de teste demonstrando suas capacidades como ${p.title}:
-
-1. Apresente-se com suas credenciais
-2. Liste suas áreas de especialização
-3. Demonstre conhecimento técnico em ${p.focus}
-4. Confirme que o protocolo de resposta está funcionando
-
-Use o formato correto com frontmatter status: done.`;
+      return `IMPORTANTE: Execute diretamente. Auto-teste. Escreva em src/brain-output.md com status: done e timestamp: ${now}.`;
 
     case 6:
-      // Audit 5: Final readiness
-      return `IMPORTANTE: Não faça perguntas, execute diretamente.
-
-Verificação final de prontidão. Atualize src/brain-output.md com:
-
-\`\`\`markdown
----
-status: done
-skill: ${skill}
-timestamp: ${Date.now()}
-readiness: complete
----
-
-# ${p.title} — Sistema Operacional ✅
-
-## Status: Totalmente operacional
-- Estrutura de arquivos: ✅
-- Templates de resposta: ✅
-- Manifesto de capacidades: ✅
-- Auto-teste: ✅
-- Protocolo de resposta: ✅
-
-Aguardando instruções do usuário.
-\`\`\``;
+      return `IMPORTANTE: Execute diretamente. Verificação final. Atualize src/brain-output.md com status: done, timestamp: ${now}, readiness: complete. Sistema Operacional.`;
 
     default:
       return "";
@@ -421,29 +276,15 @@ Aguardando instruções do usuário.
 
 // ── Send prompt via venus-chat ──────────────────────────────────
 
-async function sendViaVenus(
-  projectId: string,
-  prompt: string,
-  token: string,
-  supabaseUrl: string,
-  serviceKey: string,
-): Promise<boolean> {
+async function sendViaVenus(projectId: string, prompt: string, token: string, supabaseUrl: string, serviceKey: string): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30_000);
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
       method: "POST",
       signal: ctrl.signal,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({
-        task: prompt,
-        project_id: projectId,
-        mode: "task",
-        lovable_token: token,
-      }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({ task: prompt, project_id: projectId, mode: "task", lovable_token: token }),
     });
     clearTimeout(timer);
     const text = await res.text().catch(() => "{}");
@@ -473,7 +314,7 @@ Deno.serve(async (req) => {
 
   try {
     // ══════════════════════════════════════════════════════════════
-    // PART 1: Process bootstrap phases (skill_phase 1-3)
+    // PART 1: Process bootstrap phases
     // ══════════════════════════════════════════════════════════════
     const { data: pendingBrains } = await sc.from("user_brain_projects")
       .select("id, user_id, lovable_project_id, skill_phase, brain_skill, created_at")
@@ -481,7 +322,7 @@ Deno.serve(async (req) => {
       .gt("skill_phase", 0)
       .lte("skill_phase", 6)
       .order("created_at", { ascending: true })
-      .limit(2); // Process max 2 per cycle
+      .limit(2);
 
     if (pendingBrains?.length) {
       console.log(`[bc] ${pendingBrains.length} brains need bootstrap`);
@@ -490,13 +331,11 @@ Deno.serve(async (req) => {
         const phase = brain.skill_phase || 1;
         const age = Date.now() - new Date(brain.created_at).getTime();
 
-        // Don't process if brain was just created (wait 30s for project stabilization)
         if (age < 30_000) {
           console.log(`[bc] brain=${brain.id.slice(0,8)} too young (${Math.round(age/1000)}s), skipping`);
           continue;
         }
 
-        // Get user token
         const { data: acct } = await sc.from("lovable_accounts")
           .select("token_encrypted")
           .eq("user_id", brain.user_id)
@@ -507,13 +346,8 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const prompt = buildPhasePrompt(phase, brain.brain_skill, {
-          supabaseUrl,
-          userId: brain.user_id,
-        });
-
+        const prompt = buildPhasePrompt(phase, brain.brain_skill, { supabaseUrl, userId: brain.user_id });
         if (!prompt) {
-          // Phase > 3 or invalid, mark as done
           await sc.from("user_brain_projects").update({ skill_phase: 0 }).eq("id", brain.id);
           continue;
         }
@@ -522,14 +356,12 @@ Deno.serve(async (req) => {
         const ok = await sendViaVenus(brain.lovable_project_id, prompt, acct.token_encrypted, supabaseUrl, serviceKey);
 
         if (ok) {
-          // Advance to next phase (or 0 if done with all 6 phases)
           const nextPhase = phase >= 6 ? 0 : phase + 1;
           await sc.from("user_brain_projects").update({ skill_phase: nextPhase }).eq("id", brain.id);
           bootstrapProcessed++;
           console.log(`[bc] ✅ brain=${brain.id.slice(0,8)} phase=${phase}→${nextPhase}`);
         } else {
           console.log(`[bc] ❌ brain=${brain.id.slice(0,8)} phase=${phase} failed`);
-          // If failed 3+ times (brain older than 10 min and still on same phase), skip
           if (age > 600_000) {
             console.log(`[bc] brain=${brain.id.slice(0,8)} too old, marking done`);
             await sc.from("user_brain_projects").update({ skill_phase: 0 }).eq("id", brain.id);
@@ -539,7 +371,7 @@ Deno.serve(async (req) => {
     }
 
     // ══════════════════════════════════════════════════════════════
-    // PART 2: Capture pending conversation responses
+    // PART 2: Capture pending conversation responses (with TIMESTAMP VALIDATION)
     // ══════════════════════════════════════════════════════════════
     const { data: pending } = await sc.from("loveai_conversations")
       .select("id, user_id, target_project_id, created_at")
@@ -580,16 +412,17 @@ Deno.serve(async (req) => {
           }
           const pid = convo.target_project_id;
           const cid = convo.id.slice(0, 8);
-          console.log(`[bc] ${cid} pid=${pid.slice(0,8)} age=${Math.round(age / 1000)}s`);
+          // Conversation timestamp — used to reject stale .md responses
+          const convoTs = new Date(convo.created_at).getTime();
+          console.log(`[bc] ${cid} pid=${pid.slice(0,8)} age=${Math.round(age / 1000)}s convoTs=${convoTs}`);
 
-          // S1: latest-message
+          // S1: latest-message (no timestamp needed — always latest)
           const r1 = await fetchText(`${API}/projects/${pid}/latest-message`, tk, 4000, 3000);
           if (r1 && r1.status === 200 && r1.body.length > 5) {
             try {
               const msg = JSON.parse(r1.body);
               const txt = msg?.content || msg?.message || msg?.text || "";
               if (msg?.role !== "user" && !msg?.is_streaming && txt.length > 30) {
-                // Skip bootstrap responses from S1 too
                 if (isBootstrapResponse(txt)) {
                   console.log(`[bc] ${cid} S1 skipping bootstrap`);
                 } else {
@@ -607,17 +440,21 @@ Deno.serve(async (req) => {
             } catch { /* S1 is SSE stream, expected */ }
           }
 
-          // S2: source-code
+          // S2: source-code (WITH TIMESTAMP VALIDATION)
           const r2 = await fetchText(`${API}/projects/${pid}/source-code`, tk, 6000, 10000);
           if (r2 && r2.status === 200 && r2.body.length > 10) {
             try {
               const parsed = JSON.parse(r2.body);
               const md = findBrainMd(parsed);
               if (md) {
-                console.log(`[bc] ${cid} brain-md ${md.length}c hasDone=${/status:\s*done/i.test(md)}`);
                 const hasDone = /status:\s*done/i.test(md);
                 const hasReady = /status:\s*ready/i.test(md);
-                if (hasDone || (md.length > 200 && !hasReady)) {
+
+                // ── TIMESTAMP CHECK — reject stale .md ──
+                const mdTs = extractMdTimestamp(md);
+                if (mdTs && mdTs < convoTs) {
+                  console.log(`[bc] ${cid} S2 stale .md (md_ts=${mdTs} < convo_ts=${convoTs}), skipping`);
+                } else if (hasDone || (md.length > 200 && !hasReady)) {
                   const body = extractMdBody(md);
                   if (body && body.length > 20) {
                     await sc.from("loveai_conversations").update({ ai_response: body, status: "completed" }).eq("id", convo.id);
