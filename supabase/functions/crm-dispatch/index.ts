@@ -6,34 +6,59 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/**
- * CRM Dispatch — sends queued WhatsApp messages one-by-one with throttling.
- *
- * Flow:
- * 1. Picks up to 10 "pending" messages from crm_message_queue
- * 2. For each, sends via Evolution API / Z-API (configured per tenant)
- * 3. Waits 5-15s between sends to avoid WhatsApp rate-limiting
- * 4. Updates status to "sent" or "failed"
- *
- * Can be called by cron or manually from the CRM panel.
- */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const sc = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
   try {
+    // ── Auth: require JWT and verify tenant admin ──
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const anonClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: userErr } = await anonClient.auth.getUser();
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const body = await req.json().catch(() => ({}));
     const tenantId = body.tenant_id;
     const campaignId = body.campaign_id;
     const batchSize = Math.min(body.batch_size || 10, 20);
 
-    if (!tenantId) {
+    if (!tenantId || !/^[0-9a-f-]{36}$/i.test(tenantId)) {
       return new Response(JSON.stringify({ ok: false, error: "tenant_id required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Verify user is tenant admin via service client
+    const sc = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: tenantRole } = await sc
+      .from("tenant_users")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    const isAdmin = tenantRole?.role === "tenant_owner" || tenantRole?.role === "tenant_admin";
+    if (!isAdmin) {
+      return new Response(JSON.stringify({ ok: false, error: "Forbidden: tenant admin required" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -80,7 +105,6 @@ Deno.serve(async (req) => {
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
 
-      // Mark as sending
       await sc.from("crm_message_queue")
         .update({ status: "sending" })
         .eq("id", msg.id);
@@ -89,13 +113,11 @@ Deno.serve(async (req) => {
         const apiUrl = session.webhook_url.replace(/\/$/, "");
         const instanceName = session.instance_name || "default";
 
-        // Evolution API format
         const payload: Record<string, unknown> = {
           number: msg.phone.replace(/\D/g, ""),
           text: msg.message,
         };
 
-        // If media attached, use media endpoint
         let endpoint = `${apiUrl}/message/sendText/${instanceName}`;
         if (msg.media_url) {
           endpoint = `${apiUrl}/message/sendMedia/${instanceName}`;
@@ -135,9 +157,9 @@ Deno.serve(async (req) => {
         results.push({ id: msg.id, status: "failed", error: errMsg.substring(0, 200) });
       }
 
-      // Throttle: wait 5-15 seconds between messages to avoid WhatsApp blocking
+      // Throttle: 5-15 seconds between messages
       if (i < messages.length - 1) {
-        const delay = 5000 + Math.random() * 10000; // 5-15s random
+        const delay = 5000 + Math.random() * 10000;
         await new Promise((r) => setTimeout(r, delay));
       }
     }

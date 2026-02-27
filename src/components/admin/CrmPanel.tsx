@@ -234,11 +234,19 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
     setDispatching(campaign.id);
     try {
       // 1. Populate queue from contacts matching tags
-      const { data: targetContacts } = await supabase.from("crm_contacts")
-        .select("id, phone_normalized, name")
+      const { data: allContacts } = await supabase.from("crm_contacts")
+        .select("id, phone_normalized, name, tags")
         .eq("tenant_id", tenantId).eq("is_active", true);
 
-      if (!targetContacts?.length) { toast.error("Nenhum contato encontrado"); return; }
+      if (!allContacts?.length) { toast.error("Nenhum contato encontrado"); return; }
+
+      // Filter by campaign target_tags if any
+      const campaignTags = (campaign.target_tags || []).map(t => t.toLowerCase().trim()).filter(Boolean);
+      const targetContacts = campaignTags.length > 0
+        ? allContacts.filter(c => (c.tags || []).some((t: string) => campaignTags.includes(t.toLowerCase())))
+        : allContacts;
+
+      if (!targetContacts.length) { toast.error("Nenhum contato encontrado com as tags selecionadas"); return; }
 
       const queue = targetContacts.map(c => ({
         tenant_id: tenantId, campaign_id: campaign.id,
