@@ -224,7 +224,7 @@ export default function VenusPage() {
           {/* WL Note */}
           <div className="max-w-lg mx-auto mt-10 text-center">
             <p className="text-xs text-muted-foreground">
-              <strong>Para White Labels:</strong> a partir de R$19,90/dia ou R$99,90/mês por pessoa.{" "}
+              <strong>Para White Labels:</strong> a partir de R$7,96/dia ou R$59,96/mês por pessoa (40% do plano).{" "}
               <Link to="/whitelabel" className="text-primary hover:underline">Saiba mais →</Link>
             </p>
           </div>

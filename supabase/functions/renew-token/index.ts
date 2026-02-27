@@ -69,10 +69,10 @@ serve(async (req) => {
         type: "subscription",
         tenant_id: license.tenant_id,
         user_id: license.user_id,
-        amount: 2.90,
+        amount: 19.90,
         mp_payment_id: paymentId,
         status: "approved",
-        description: "Renovação token 24h (R$2,90)",
+        description: "Renovação token 24h (R$19,90)",
       });
     }
 

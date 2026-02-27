@@ -202,8 +202,8 @@ export default function ExtensionStore() {
             Desbloqueie todas as extensões
           </h2>
           <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-6">
-            Faça upgrade para o plano Pro e tenha acesso a todas as ferramentas profissionais.
-            A partir de R$9,90/dia.
+            Faça upgrade e tenha acesso ilimitado a todas as ferramentas profissionais.
+            A partir de R$19,90/dia ou R$149,90/mês.
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link to="/precos" className="lv-btn-primary h-10 px-6 text-sm flex items-center gap-2">

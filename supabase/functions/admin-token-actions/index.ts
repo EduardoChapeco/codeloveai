@@ -9,9 +9,9 @@ const corsHeaders = {
 
 const WORKER_URL = "https://Starble-fix-api.eusoueduoficial.workers.dev";
 
-// Tenant costs (platform fee)
-const DEFAULT_TOKEN_COST = 2.90;   // R$2,90 per 24h token
-const DEFAULT_MONTHLY_COST = 29.90; // R$29,90/month unlimited
+// Tenant costs (platform fee = 40% of retail price)
+const DEFAULT_TOKEN_COST = 7.96;   // R$7,96 per 24h token (40% of R$19,90)
+const DEFAULT_MONTHLY_COST = 59.96; // R$59,96/month unlimited (40% of R$149,90)
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {

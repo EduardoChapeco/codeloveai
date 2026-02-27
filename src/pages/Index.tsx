@@ -27,14 +27,24 @@ const plans = [
     highlight: false,
   },
   {
-    name: "Individual",
-    price: "R$4,90",
+    name: "Diário Ilimitado",
+    price: "R$19,90",
     period: "/dia",
     badge: "Mais popular",
-    features: ["Mensagens ilimitadas", "Até 2 projetos", "Ativa por 24h", "Sem mensalidade fixa"],
+    features: ["Mensagens ilimitadas", "Todas as extensões", "Ativa por 24h", "Deploy ilimitado"],
     cta: "Comprar acesso",
     href: "/checkout",
     highlight: true,
+  },
+  {
+    name: "Mensal Ilimitado",
+    price: "R$149,90",
+    period: "/mês",
+    badge: "Melhor custo",
+    features: ["Mensagens ilimitadas", "Todas as extensões", "30 dias de acesso", "Suporte prioritário"],
+    cta: "Assinar mensal",
+    href: "/checkout",
+    highlight: false,
   },
 ];
 
@@ -263,7 +273,7 @@ export default function Index() {
               </span>
             ))}
           </div>
-          <p className="lv-caption mb-6">A partir de <strong className="text-foreground">R$3,90/usuário/dia</strong> ou <strong className="text-foreground">R$29,90/usuário/mês</strong></p>
+          <p className="lv-caption mb-6">A partir de <strong className="text-foreground">R$7,96/usuário/dia</strong> ou <strong className="text-foreground">R$59,96/usuário/mês</strong> (40% do plano)</p>
           <Link to="/whitelabel" className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
             Saiba mais sobre White Label <ArrowRight className="h-4 w-4" />
           </Link>

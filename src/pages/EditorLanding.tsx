@@ -12,9 +12,8 @@ const features = [
 
 const plans = [
   { name: "Grátis", price: "R$ 0", msgs: "10/dia", highlight: false },
-  { name: "Diário", price: "R$ 4,90", msgs: "20/dia", highlight: false },
-  { name: "Pro", price: "R$ 29,90", msgs: "50/mês", highlight: false },
-  { name: "Venus", price: "R$ 79,90", msgs: "Ilimitado", highlight: true },
+  { name: "Diário", price: "R$ 19,90", msgs: "Ilimitado", highlight: true },
+  { name: "Mensal", price: "R$ 149,90", msgs: "Ilimitado", highlight: false },
 ];
 
 export default function EditorLanding() {

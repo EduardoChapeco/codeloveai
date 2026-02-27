@@ -313,7 +313,7 @@ export default function WhiteLabelOnboarding() {
               <p className="lv-caption mt-1">Para receber pagamentos dos seus usuários</p>
             </div>
             <div className="lv-card-sm bg-accent/50">
-              <p className="lv-caption"><strong className="text-foreground">Nota:</strong> Starble retém 20% de comissão sobre cada cobrança.</p>
+              <p className="lv-caption"><strong className="text-foreground">Nota:</strong> Starble cobra 40% do preço do plano por usuário ativo (R$7,96/dia ou R$59,96/mês).</p>
             </div>
             <div className="flex justify-between">
               <button onClick={goBack} className="lv-btn-secondary h-10 px-6"><ChevronLeft className="h-4 w-4 mr-1" /> Voltar</button>
