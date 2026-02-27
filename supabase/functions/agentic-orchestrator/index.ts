@@ -93,25 +93,14 @@ async function addLog(
   });
 }
 
-// ─── PRD Generation ───────────────────────────────────────────
+// ─── PRD Generation (via Lovable AI Gateway — fast & reliable) ──
 async function generatePRD(
   sc: SupabaseClient,
   userId: string,
   clientPrompt: string,
-  adminToken: string
+  _adminToken: string
 ): Promise<{ tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string }> } | null> {
-  // Get user's brain project (admin-owned)
-  const { data: brainRow } = await sc
-    .from("user_brain_projects")
-    .select("lovable_project_id")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .maybeSingle();
-  const brainProjectId = brainRow?.lovable_project_id || null;
-  const token = adminToken;
-  if (!brainProjectId) return null;
-
-  const architectPrompt = `${AQ_PREFIX}You are a senior software architect. A client wants to build: "${clientPrompt}"
+  const architectPrompt = `You are a senior software architect. A client wants to build: "${clientPrompt}"
 
 Break this into 3–7 sequential implementation tasks. Return ONLY valid JSON — no explanation, no markdown, no comments:
 
@@ -121,7 +110,7 @@ Break this into 3–7 sequential implementation tasks. Return ONLY valid JSON �
       "title": "Short task title",
       "intent": "security_fix_v2",
       "prompt": "Detailed implementation prompt with all context needed",
-      "stop_condition": "source_contains:TableName"
+      "stop_condition": "source_contains:keyword"
     }
   ]
 }
@@ -133,46 +122,98 @@ Rules:
 - Tasks must be sequential (each builds on the previous)
 - Inject implementation instructions — no questions`;
 
-  try {
-    const res = await extFetch(
-      `${EXT_API}/projects/${brainProjectId}/chat`,
-      { method: "POST", body: JSON.stringify({ message: architectPrompt, intent: "security_fix_v2", chat_only: false }) },
-      token
-    );
-    if (!res.ok) return null;
-    const data = await res.json() as Record<string, unknown>;
-    const messageId = (data.id || data.message_id) as string | undefined;
-    if (!messageId) return null;
+  // Strategy 1: Lovable AI Gateway (fastest, no API key needed beyond LOVABLE_API_KEY)
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  if (lovableKey) {
+    try {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: "You are a JSON-only architect. Return only valid JSON, no markdown fences, no explanation." },
+            { role: "user", content: architectPrompt },
+          ],
+          temperature: 0.2,
+          max_tokens: 3000,
+        }),
+      });
+      if (res.ok) {
+        const result = await res.json() as Record<string, unknown>;
+        const content = ((result?.choices as any)?.[0]?.message?.content || "") as string;
+        const parsed = extractJSON(content);
+        if (parsed) {
+          console.log("[PRD Gen] Success via Lovable Gateway");
+          return parsed;
+        }
+      } else {
+        const errBody = await res.text().catch(() => "");
+        console.error("[PRD Gen] Gateway error:", res.status, errBody.slice(0, 200));
+      }
+    } catch (e) {
+      console.error("[PRD Gen] Gateway exception:", (e as Error).message);
+    }
+  }
 
-    const maxWait = 30000;
-    const start = Date.now();
-    while (Date.now() - start < maxWait) {
-      await new Promise(r => setTimeout(r, 3000));
-      const pollRes = await extFetch(`${EXT_API}/projects/${brainProjectId}/latest-message`, { method: "GET" }, token);
-      if (pollRes.ok) {
-        const msg = await pollRes.json() as Record<string, unknown>;
-        if (msg && !msg.is_streaming) {
-          const content = (msg.content || msg.message || msg.text || "") as string;
-          if (content.length > 20) {
-            let jsonStr = content.trim();
-            const m = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (m) jsonStr = m[1].trim();
-            // Find JSON object
-            const objStart = jsonStr.indexOf("{");
-            if (objStart >= 0) jsonStr = jsonStr.slice(objStart);
-            try {
-              const parsed = JSON.parse(jsonStr) as { tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string }> };
-              if (parsed.tasks && Array.isArray(parsed.tasks)) return parsed;
-            } catch { /* keep polling */ }
-          }
+  // Strategy 2: OpenRouter fallback
+  const orKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (orKey) {
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${orKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://starble.lovable.app",
+          "X-Title": "Starble Orchestrator",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: "You are a JSON-only architect. Return only valid JSON, no markdown fences, no explanation." },
+            { role: "user", content: architectPrompt },
+          ],
+          temperature: 0.2,
+          max_tokens: 3000,
+        }),
+      });
+      if (res.ok) {
+        const result = await res.json() as Record<string, unknown>;
+        const content = ((result?.choices as any)?.[0]?.message?.content || "") as string;
+        const parsed = extractJSON(content);
+        if (parsed) {
+          console.log("[PRD Gen] Success via OpenRouter");
+          return parsed;
         }
       }
+    } catch (e) {
+      console.error("[PRD Gen] OpenRouter exception:", (e as Error).message);
     }
-    return null;
-  } catch (e) {
-    console.error("[PRD Gen] Error:", e);
-    return null;
   }
+
+  console.error("[PRD Gen] All strategies failed");
+  return null;
+}
+
+// Extract JSON tasks from AI response (handles markdown fences, leading text, etc.)
+function extractJSON(content: string): { tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string }> } | null {
+  if (!content || content.length < 10) return null;
+  let jsonStr = content.trim();
+  // Strip markdown fences
+  const m = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (m) jsonStr = m[1].trim();
+  // Find JSON object start
+  const objStart = jsonStr.indexOf("{");
+  if (objStart >= 0) jsonStr = jsonStr.slice(objStart);
+  // Find last closing brace
+  const objEnd = jsonStr.lastIndexOf("}");
+  if (objEnd >= 0) jsonStr = jsonStr.slice(0, objEnd + 1);
+  try {
+    const parsed = JSON.parse(jsonStr) as { tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string }> };
+    if (parsed.tasks && Array.isArray(parsed.tasks) && parsed.tasks.length > 0) return parsed;
+  } catch { /* invalid JSON */ }
+  return null;
 }
 
 // ─── Stop Conditions v2 ───────────────────────────────────────
