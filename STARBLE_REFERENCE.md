@@ -1,6 +1,6 @@
 # Starble — Referência Técnica Completa
 
-> Última atualização: 2026-02-23 19:42 BRT
+> Última atualização: 2026-02-27 14:00 BRT
 
 ---
 
@@ -79,6 +79,7 @@ https://qlhhmmboxlufvdtpbrsm.supabase.co/functions/v1/generate-clf-token (via fr
 | ------------------------------------------------------------------------------------------------------------ | ------ | ---------- |
 | [create-checkout](file:///c:/codeloveai/supabase/functions/create-checkout/index.ts)                         | POST   | ✅         |
 | [create-mp-preference](file:///c:/codeloveai/supabase/functions/create-mp-preference/index.ts)               | POST   | ✅         |
+| [marketplace-checkout](file:///c:/codeloveai/supabase/functions/marketplace-checkout/index.ts)                | POST   | ✅         |
 | [mercadopago-webhook](file:///c:/codeloveai/supabase/functions/mercadopago-webhook/index.ts)                 | POST   | ❌ Webhook |
 | [mp-webhook](file:///c:/codeloveai/supabase/functions/mp-webhook/index.ts)                                   | POST   | ❌ Webhook |
 | [create-white-label-checkout](file:///c:/codeloveai/supabase/functions/create-white-label-checkout/index.ts) | POST   | ✅         |
@@ -540,3 +541,75 @@ O Lovable nem sempre auto-deploya Edge Functions após `git push`. Verifique no 
 Se a variável `CLF_TOKEN_SECRET` não existir nos secrets do Supabase, `generate-clf-token` retorna erro 500. Configure em:
 
 - Dashboard → Settings → Edge Functions → Secrets
+
+---
+
+## 11. Marketplace de Projetos (Store)
+
+> Adicionado: 2026-02-27
+
+### Visão Geral
+
+Sistema de compra e venda de projetos/templates com pagamento via Mercado Pago e split automático.
+
+### Comissão & Split
+
+| Destinatário | Percentual |
+|---|---|
+| Plataforma (Starble) | **30%** |
+| Vendedor | **70%** |
+
+O comprador paga o valor cheio do projeto. As taxas de maquininha (Mercado Pago) são descontadas do comprador, e a comissão da plataforma é descontada do valor líquido.
+
+### Edge Function: `marketplace-checkout`
+
+- **Método:** POST
+- **Auth:** ✅ Bearer JWT
+- **Entrada:** `{ listing_id, payment_method?: "pix" }`
+- **Saída (PIX):** `{ pix_code, pix_qr_base64, payment_id, purchase_id, price, commission, seller_receives }`
+- **Saída (Cartão):** `{ init_point, purchase_id, price, commission, seller_receives }`
+
+### Fluxo de Compra
+
+```
+1. Comprador → marketplace-checkout (PIX ou Cartão)
+2. Edge Function → Cria registro em marketplace_purchases (status: "pending")
+3. Edge Function → Cria pagamento/preferência no Mercado Pago
+4. MP webhook → Atualiza marketplace_purchases.status → "paid"
+5. Vendedor recebe 70% automaticamente
+```
+
+### Rotas Frontend
+
+| Rota | Componente | Descrição |
+|---|---|---|
+| `/store` | MarketplaceLanding | Landing page pública da loja |
+| `/marketplace` | Marketplace | Catálogo com filtros e busca |
+| `/marketplace/vender` | MarketplaceSell | Gestão de catálogo do vendedor |
+| `/marketplace/:slug` | MarketplaceDetail | Detalhe e compra do projeto |
+
+### UI/UX
+
+- Design "Liquid Glass Dark" com botões grandes (h-14, rounded-2xl)
+- Categorias em scroll horizontal com gradientes por tipo
+- Barra unificada: busca + filtro + subcategorias numa mesma seção
+- TopProjectsBanner: banner rotativo com projetos em destaque da comunidade
+- Cards com preview de imagem, stats (views, sales, rating) e seller info
+
+---
+
+## 12. Editor de Projetos — Sincronização em Tempo Real
+
+> Adicionado: 2026-02-27
+
+### Detecção de Conclusão via `update.md`
+
+O venus-chat injeta uma instrução para que a IA atualize `src/update.md` com timestamp ao concluir cada tarefa. O editor faz polling desse arquivo a cada 5 segundos.
+
+### Cache-Bust do Preview
+
+Quando uma atualização é detectada, o iframe de preview é recarregado com `?_cb={Date.now()}`, forçando o navegador a buscar a versão mais recente (equivalente a Ctrl+Shift+R).
+
+### Persistência de Chat
+
+O histórico de mensagens do editor é salvo em `localStorage` por projeto (`starble_chat_{projectId}`), preservando até 100 mensagens entre reloads.

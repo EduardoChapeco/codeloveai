@@ -70,26 +70,23 @@ export default function MarketplaceDetail() {
     if (!listing) return;
     setPurchasing(true);
     try {
-      const commissionAmount = listing.price * listing.commission_rate;
-      const sellerAmount = listing.price - commissionAmount;
-
-      const { error } = await supabase.from("marketplace_purchases").insert({
-        listing_id: listing.id,
-        buyer_id: user.id,
-        seller_id: listing.seller_id,
-        price: listing.price,
-        commission_amount: commissionAmount,
-        seller_amount: sellerAmount,
-        status: listing.price === 0 ? "paid" : "pending",
+      // Use marketplace-checkout edge function for Mercado Pago payment
+      const { data, error } = await supabase.functions.invoke("marketplace-checkout", {
+        body: { listing_id: listing.id, payment_method: "pix" },
       });
 
       if (error) throw error;
 
-      if (listing.price === 0) {
+      if (data?.free) {
         toast.success("Projeto adquirido! Você pode acessá-lo nos seus projetos.");
         setAlreadyPurchased(true);
-      } else {
-        toast.success("Compra registrada! Prossiga com o pagamento.");
+      } else if (data?.pix_code) {
+        // Show PIX payment info
+        toast.success("PIX gerado! Copie o código para pagar.");
+        // Could open a modal with QR code here
+        navigator.clipboard?.writeText(data.pix_code);
+      } else if (data?.init_point) {
+        window.open(data.init_point, "_blank");
       }
     } catch (err: any) {
       toast.error("Erro ao processar compra: " + (err.message || "tente novamente"));
@@ -206,7 +203,7 @@ export default function MarketplaceDetail() {
               <div className="text-2xl font-bold text-foreground mb-1">
                 {listing.price === 0 ? "Grátis" : `R$ ${listing.price.toFixed(2)}`}
               </div>
-              <p className="text-[10px] text-muted-foreground/60 mb-4">Comissão da plataforma: 40%</p>
+              <p className="text-[10px] text-muted-foreground/60 mb-4">Comissão da plataforma: 30% • Vendedor recebe 70%</p>
 
               {alreadyPurchased ? (
                 <div className="h-11 rounded-xl bg-green-500/10 text-green-600 text-sm font-semibold flex items-center justify-center gap-2">
