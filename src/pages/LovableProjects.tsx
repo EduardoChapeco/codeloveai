@@ -344,13 +344,6 @@ export default function LovableProjects() {
                   title={selectedProject.display_name || selectedProject.name}
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
                 />
-                {/* Floating "Editar Projeto" button on preview */}
-                <button
-                  onClick={() => navigate(`/projeto/${selectedProject.id}/editar`)}
-                  className="absolute top-3 right-3 h-9 px-4 rounded-2xl bg-primary text-primary-foreground text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-transform z-10 hidden md:flex"
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Editar Projeto
-                </button>
               </div>
             </>
           ) : (
