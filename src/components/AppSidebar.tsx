@@ -411,8 +411,8 @@ export default function AppSidebar() {
   const mainItems = [
     { to: "/dashboard", label: "Painel", icon: LayoutDashboard, desc: "Visão geral" },
     { to: "/extensoes", label: "Extensões", icon: Puzzle, desc: "Loja de extensões" },
+    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos", badge: "Novo" },
     { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
-    { to: "/assistente", label: "Assistente", icon: Bot, desc: "Dúvidas da plataforma" },
     { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de projetos" },
     { to: "/automation", label: "Automação", icon: Zap, desc: "Regras automáticas" },
     { to: "/notes", label: "Notas", icon: StickyNote, desc: "Anotações rápidas" },
@@ -422,7 +422,6 @@ export default function AppSidebar() {
 
   const lovableItems = [
     { to: "/lovable/connect", label: "Conectar", icon: Link2, desc: "Vincular conta" },
-    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos", badge: "Novo" },
   ];
 
   const accountItems = [
@@ -620,22 +619,11 @@ export default function AppSidebar() {
             </SidebarMenuItem>
           )}
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={isSupportOpen} onClick={toggleSupport} tooltip="Suporte">
-              <span className="relative">
-                <Headphones className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1.5 h-3.5 min-w-[14px] rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground flex items-center justify-center px-0.5">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
-              </span>
-              <span>Suporte</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton isActive={isChatOpen} onClick={toggleChat} tooltip={brandName + " AI"}>
-              <Bot className="h-4 w-4" />
-              <span>{brandName} AI</span>
+            <SidebarMenuButton asChild isActive={isActive("/assistente")} tooltip="Assistente">
+              <NavLink to="/assistente">
+                <Bot className="h-4 w-4" />
+                <span>Assistente</span>
+              </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
