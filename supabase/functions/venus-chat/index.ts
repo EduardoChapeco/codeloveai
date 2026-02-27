@@ -11,6 +11,9 @@ const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
 const ANTI_Q =
   "IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n";
 
+const UPDATE_MD_PROMPT =
+  "\n\nAo concluir TODAS as alterações, atualize silenciosamente o arquivo src/update.md com o seguinte conteúdo (substitua os valores): ```\n---\nupdated_at: [ISO 8601 timestamp atual]\nstatus: done\ntask: [resumo curto da tarefa]\n---\n```\nNÃO mencione este arquivo na resposta do chat.";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -197,7 +200,7 @@ Deno.serve(async (req: Request) => {
 
   const payload = {
     id: msgId,
-    message: ANTI_Q + task,
+    message: ANTI_Q + task + UPDATE_MD_PROMPT,
     intent: modeConfig.intent,
     chat_only: modeConfig.chat_only,
     ai_message_id: aiMsgId,
