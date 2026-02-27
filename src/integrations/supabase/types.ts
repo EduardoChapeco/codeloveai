@@ -1736,6 +1736,7 @@ export type Database = {
           id: string
           instance_name: string | null
           is_connected: boolean | null
+          last_connected_at: string | null
           last_ping_at: string | null
           session_data: Json | null
           tenant_id: string
@@ -1749,6 +1750,7 @@ export type Database = {
           id?: string
           instance_name?: string | null
           is_connected?: boolean | null
+          last_connected_at?: string | null
           last_ping_at?: string | null
           session_data?: Json | null
           tenant_id: string
@@ -1762,6 +1764,7 @@ export type Database = {
           id?: string
           instance_name?: string | null
           is_connected?: boolean | null
+          last_connected_at?: string | null
           last_ping_at?: string | null
           session_data?: Json | null
           tenant_id?: string

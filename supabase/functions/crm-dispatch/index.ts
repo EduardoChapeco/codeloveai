@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
     const tenantId = body.tenant_id;
     const campaignId = body.campaign_id;
     const batchSize = Math.min(body.batch_size || 10, 20);
+    const mode = body.mode || "dispatch"; // "dispatch" | "test" | "retry"
 
     if (!tenantId || !/^[0-9a-f-]{36}$/i.test(tenantId)) {
       return new Response(JSON.stringify({ ok: false, error: "tenant_id required" }), {
@@ -78,7 +79,56 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2. Pick pending messages
+    // ═══ TEST MODE: just ping the API ═══
+    if (mode === "test") {
+      try {
+        const apiUrl = session.webhook_url.replace(/\/$/, "");
+        const instanceName = session.instance_name || "default";
+        const resp = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
+          method: "GET",
+          headers: { apikey: session.api_key_encrypted },
+        });
+        const data = await resp.json().catch(() => null);
+        const connected = resp.ok && data?.instance?.state === "open";
+
+        // Update session connection status
+        await sc.from("crm_whatsapp_sessions").update({
+          is_connected: connected,
+          last_connected_at: connected ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        }).eq("tenant_id", tenantId);
+
+        return new Response(JSON.stringify({
+          ok: true,
+          connected,
+          state: data?.instance?.state || "unknown",
+          detail: data,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : "Connection failed";
+        return new Response(JSON.stringify({
+          ok: false, connected: false, error: errMsg,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
+    // ═══ RETRY MODE: reset failed messages to pending ═══
+    if (mode === "retry") {
+      const filter: Record<string, string> = { tenant_id: tenantId, status: "failed" };
+      if (campaignId) filter.campaign_id = campaignId;
+
+      const { count } = await sc.from("crm_message_queue")
+        .update({ status: "pending", error_message: null })
+        .match(filter)
+        .select("id", { count: "exact", head: true });
+
+      return new Response(JSON.stringify({
+        ok: true, reset: count || 0,
+        message: `${count || 0} mensagens resetadas para reenvio`,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ═══ DISPATCH MODE ═══
     let query = sc
       .from("crm_message_queue")
       .select("*")
@@ -92,7 +142,7 @@ Deno.serve(async (req) => {
     const { data: messages, error: fetchErr } = await query;
     if (fetchErr) throw fetchErr;
     if (!messages || messages.length === 0) {
-      return new Response(JSON.stringify({ ok: true, sent: 0, message: "No pending messages" }), {
+      return new Response(JSON.stringify({ ok: true, sent: 0, failed: 0, remaining: 0, message: "No pending messages" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -174,14 +224,23 @@ Deno.serve(async (req) => {
       if (stats) {
         const sentCount = stats.filter((s) => s.status === "sent").length;
         const failedCount = stats.filter((s) => s.status === "failed").length;
+        const pendingCount = stats.filter((s) => s.status === "pending").length;
+
         await sc.from("crm_campaigns").update({
           sent_count: sentCount,
           failed_count: failedCount,
+          status: pendingCount === 0 ? "completed" : "running",
         }).eq("id", campaignId);
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, sent, failed, results }), {
+    // Check remaining
+    const { count: remaining } = await sc.from("crm_message_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("status", "pending");
+
+    return new Response(JSON.stringify({ ok: true, sent, failed, remaining: remaining || 0, results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
