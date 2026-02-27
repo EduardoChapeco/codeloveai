@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import TopProjectsBanner from "@/components/community/TopProjectsBanner";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
@@ -1519,12 +1520,15 @@ export default function Community() {
               onEdit={() => {/* TODO: edit modal */}}
             />
           ) : (
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <p className="ep-subtitle mb-1">COMUNIDADE</p>
-                <h1 className="ep-section-title text-2xl">FEED</h1>
+            <>
+              <TopProjectsBanner />
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="ep-subtitle mb-1">COMUNIDADE</p>
+                  <h1 className="ep-section-title text-2xl">FEED</h1>
+                </div>
               </div>
-            </div>
+            </>
           )}
 
           {/* Mobile groups + filters */}

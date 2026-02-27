@@ -103,7 +103,7 @@ export default function Marketplace() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar projetos..."
-              className="w-full h-10 pl-10 pr-4 rounded-xl bg-muted/30 border border-border/40 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="lv-input w-full pl-10 pr-4"
             />
           </div>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -111,21 +111,21 @@ export default function Marketplace() {
               <button
                 key={c.value}
                 onClick={() => setCategory(c.value)}
-                className={`h-8 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`h-8 px-3.5 rounded-[10px] text-xs font-semibold whitespace-nowrap transition-all ${
                   category === c.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "clf-liquid-glass text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {c.label}
               </button>
             ))}
           </div>
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as any)}
-            className="h-8 px-3 rounded-lg text-xs bg-muted/30 border-none focus:outline-none text-muted-foreground"
-          >
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as any)}
+              className="lv-input h-8 w-auto px-3 text-xs"
+            >
             <option value="recent">Mais recentes</option>
             <option value="popular">Mais vendidos</option>
             <option value="price_asc">Menor preço</option>
@@ -135,7 +135,7 @@ export default function Marketplace() {
           {user && (
             <Link
               to="/marketplace/vender"
-              className="h-8 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+              className="lv-btn-primary h-8 px-4 text-xs"
             >
               <Tag className="h-3.5 w-3.5" /> Vender Projeto
             </Link>
