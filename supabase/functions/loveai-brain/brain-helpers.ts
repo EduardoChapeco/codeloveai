@@ -69,113 +69,194 @@ async function acquireBrainLock(sc: SupabaseClient, userId: string): Promise<boo
   return true;
 }
 
-// ─── Skill Injection Prompts (5 phases) ───
-// These are subtle, task-oriented prompts that build the brain system incrementally.
-// Each prompt asks the AI to create/edit specific files as a natural development task.
+// ─── Dynamic Skill Injection Prompts (5 phases) ───
+// Generated at runtime with actual secrets/URLs so the Brain project
+// can communicate back to our backend.
 
-const SKILL_PROMPTS: string[] = [
-  // Phase 1: Project naming + base output structure
-  `Rename this project to "Star AI Brain". Then create a file called src/brain-output.md with this content:
+interface BrainContext {
+  supabaseUrl: string;
+  anonKey: string;
+  userId: string;
+  projectId: string;
+}
+
+function buildSkillPrompts(ctx: BrainContext): string[] {
+  const { supabaseUrl, anonKey, userId, projectId } = ctx;
+  const callbackUrl = `${supabaseUrl}/functions/v1/brain-capture-cron`;
+  const relayUrl = `${supabaseUrl}/functions/v1/relay-response`;
+
+  return [
+    // Phase 1: Project config + env file with real credentials
+    `Create these project configuration files:
+
+1. Create .env with the backend connection settings:
+\`\`\`
+SUPABASE_URL=${supabaseUrl}
+SUPABASE_ANON_KEY=${anonKey}
+BRAIN_USER_ID=${userId}
+BRAIN_PROJECT_ID=${projectId}
+CALLBACK_URL=${callbackUrl}
+\`\`\`
+
+2. Create src/brain-output.md:
+\`\`\`
 ---
 status: idle
 timestamp: 0
 ---
-
-(empty)
-
-Also create src/config.json with:
-{"version":"1.0","output_file":"src/brain-output.md","format":"markdown"}`,
-
-  // Phase 2: Response protocol
-  `Create a file src/INSTRUCTIONS.md with these project guidelines:
-
-# Project Guidelines
-
-This project is a headless API response system. It does NOT render UI.
-
-## How to respond to tasks:
-1. Read the user request carefully
-2. Write your complete answer inside src/brain-output.md
-3. Use the frontmatter format: status must be "done" when finished
-4. Never create React components, pages, or routes
-5. Keep responses in Brazilian Portuguese
-
-## Output format:
 \`\`\`
+
+3. Create src/config.json:
+\`\`\`json
+{"version":"2.0","output_file":"src/brain-output.md","callback_url":"${callbackUrl}","relay_url":"${relayUrl}","user_id":"${userId}"}
+\`\`\``,
+
+    // Phase 2: Instructions with callback protocol
+    `Create src/INSTRUCTIONS.md with these project rules:
+
+# Star AI Brain — System Guidelines
+
+This is a headless task processing system. No UI rendering.
+
+## Response Protocol
+1. Write all answers in \`src/brain-output.md\`
+2. Use frontmatter: \`status: done\` when complete
+3. Never create React components, pages, or visual routes
+4. Respond in Brazilian Portuguese
+5. For code tasks, embed code inside the markdown response
+
+## Output Format
+\`\`\`markdown
 ---
 status: done
 timestamp: (unix ms)
 ---
 
-Your response here as plain markdown text.
-\`\`\``,
+(answer here)
+\`\`\`
 
-  // Phase 3: Webhook handler scaffold
-  `Create supabase/functions/brain-webhook/index.ts with a simple webhook endpoint:
+## Backend Connection
+- API Base: \`${supabaseUrl}\`
+- Callback: \`${callbackUrl}\`
+- This project can call the backend to report completion`,
+
+    // Phase 3: Webhook edge function with real callback
+    `Create supabase/functions/brain-webhook/index.ts — a webhook that reports task completion back to our backend:
 
 \`\`\`typescript
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const corsHeaders = {
+const CALLBACK = "${callbackUrl}";
+const ANON_KEY = "${anonKey}";
+const USER_ID = "${userId}";
+
+const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type",
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+
   try {
     const body = await req.json();
-    return new Response(JSON.stringify({ ok: true, received: body }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const { task_id, response, status } = body;
+
+    // Report back to parent system
+    await fetch(CALLBACK, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + ANON_KEY,
+      },
+      body: JSON.stringify({
+        user_id: USER_ID,
+        task_id,
+        response,
+        status: status || "done",
+        source: "brain-webhook",
+      }),
     });
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid request" }), {
+
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: String(e) }), {
       status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   }
 });
+\`\`\`
+
+Also add to supabase/config.toml:
+\`\`\`toml
+[functions.brain-webhook]
+verify_jwt = false
 \`\`\``,
 
-  // Phase 4: API helpers
-  `Create src/api-helpers.ts with utility functions for the project:
+    // Phase 4: Utility helpers for response formatting + API calls
+    `Create src/api-helpers.ts with helper functions:
 
 \`\`\`typescript
-export function formatResponse(text: string): string {
-  const ts = Date.now();
+const CONFIG = {
+  supabaseUrl: "${supabaseUrl}",
+  anonKey: "${anonKey}",
+  userId: "${userId}",
+  callbackUrl: "${callbackUrl}",
+  relayUrl: "${relayUrl}",
+};
+
+export function formatOutput(text: string): string {
   return [
     "---",
     "status: done",
-    "timestamp: " + ts,
+    "timestamp: " + Date.now(),
     "---",
     "",
-    text
+    text,
   ].join("\\n");
 }
 
-export function parseRequest(raw: string): { type: string; content: string } {
-  const lines = raw.split("\\n");
-  const typeLine = lines.find(l => l.startsWith("type:"));
-  return {
-    type: typeLine ? typeLine.replace("type:", "").trim() : "general",
-    content: lines.filter(l => !l.startsWith("type:")).join("\\n").trim(),
-  };
+export async function notifyCompletion(taskId: string, response: string) {
+  try {
+    await fetch(CONFIG.callbackUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + CONFIG.anonKey,
+      },
+      body: JSON.stringify({
+        user_id: CONFIG.userId,
+        task_id: taskId,
+        response,
+        status: "done",
+      }),
+    });
+  } catch (e) {
+    console.error("Callback failed:", e);
+  }
 }
+
+export { CONFIG };
 \`\`\``,
 
-  // Phase 5: Final validation + ready state
-  `Update src/brain-output.md to confirm the system is ready:
+    // Phase 5: Final ready signal
+    `Update src/brain-output.md to confirm the system is fully initialized:
 
+\`\`\`markdown
 ---
 status: done
 timestamp: ${Date.now()}
 ---
 
-Star AI Brain initialized successfully. System ready to receive tasks.
+Star AI Brain v2.0 initialized. Backend connected to ${supabaseUrl}. Webhook and callback system ready. Awaiting tasks.
+\`\`\`
 
-Also make sure src/config.json exists with version "1.0".`,
-];
+Make sure all files are saved: .env, src/config.json, src/INSTRUCTIONS.md, src/api-helpers.ts, and supabase/functions/brain-webhook/index.ts.`,
+  ];
+}
 
 /**
  * Sends skill injection prompts sequentially after ghost create.
@@ -186,9 +267,12 @@ async function injectSkills(
   userId: string,
   projectId: string,
   token: string,
+  ctx: BrainContext,
   startPhase: number = 0
 ): Promise<boolean> {
-  for (let i = startPhase; i < SKILL_PROMPTS.length; i++) {
+  const prompts = buildSkillPrompts(ctx);
+
+  for (let i = startPhase; i < prompts.length; i++) {
     const phase = i + 1;
     console.log(`[Brain] Injecting skill phase ${phase}/5 for ${obfuscate(userId)}`);
 
@@ -196,7 +280,7 @@ async function injectSkills(
       .update({ skill_phase: phase, status: "injecting" })
       .eq("user_id", userId);
 
-    const payload = buildTaskPayload(SKILL_PROMPTS[i]);
+    const payload = buildTaskPayload(prompts[i]);
 
     try {
       const res = await lovFetch(
@@ -209,14 +293,13 @@ async function injectSkills(
         const errText = await res.text().catch(() => "");
         console.error(`[Brain] Skill phase ${phase} failed: ${res.status} ${errText.slice(0, 200)}`);
         if (res.status === 401 || res.status === 403) return false;
-        // Continue to next phase on non-auth errors
         continue;
       }
 
       console.log(`[Brain] ✅ Skill phase ${phase} sent`);
 
       // Wait for Lovable to process (40s between phases for commit cooldown)
-      const waitMs = i < SKILL_PROMPTS.length - 1 ? 40000 : 15000;
+      const waitMs = i < prompts.length - 1 ? 40000 : 15000;
       await new Promise(r => setTimeout(r, waitMs));
     } catch (e) {
       console.error(`[Brain] Skill phase ${phase} error:`, e);
@@ -324,11 +407,18 @@ export async function createFreshBrain(
       })
       .eq("user_id", userId);
 
-    // ── STEP 4: Inject skills (5 phases) ──
+    // ── STEP 4: Inject skills (5 phases) with real credentials ──
+    const brainCtx: BrainContext = {
+      supabaseUrl: Deno.env.get("SUPABASE_URL") || "",
+      anonKey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+      userId,
+      projectId,
+    };
+
     // Run in background — don't block the response
     (async () => {
       try {
-        const success = await injectSkills(sc, userId, projectId, token);
+        const success = await injectSkills(sc, userId, projectId, token, brainCtx);
         if (success) {
           await sc.from("user_brain_projects")
             .update({ status: "active", skill_phase: 5 })
