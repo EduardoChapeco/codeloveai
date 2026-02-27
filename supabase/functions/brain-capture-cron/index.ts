@@ -58,16 +58,68 @@ async function fetchText(url: string, token: string, connectMs = 5000, bodyMs = 
   }
 }
 
+// ── Bootstrap detection + cleaning ──────────────────────────────
+
+const BOOTSTRAP_MARKERS = [
+  /^#\s*Star AI\s*—.*Sistema Operacional\s*✅/im,
+  /^Brain ativado\.\s*Credenciais:/im,
+  /^Brain ativado\.\s*Aguardando instruções/im,
+  /Aguardando instruções do usuário\.?\s*$/im,
+  /^Sistema operacional\.\s*Aguardando instruções/im,
+  /readiness:\s*complete/im,
+];
+
+const BOILERPLATE_LINES = [
+  /^#\s*Resposta do Star AI\s*—/i,
+  /^#+\s*Star AI\s*—.*—\s*Sistema Operacional/i,
+  /^##?\s*Auto-Teste Conclu[ií]do/i,
+  /^##?\s*Verificações\s*$/i,
+  /^-\s*✅\s*(Estrutura de arquivos|Templates de resposta|Manifesto de capacidades|Auto-teste|Protocolo de resposta)/i,
+  /^##?\s*Status:\s*Totalmente operacional/i,
+  /^\|\s*Item\s*\|\s*Resultado\s*\|/i,
+  /^\|\s*-+\s*\|\s*-+\s*\|/,
+  /^\|\s*Varredura de segurança\s*\|/i,
+  /^\|\s*Vulnerabilidades\s*\|/i,
+  /^\|\s*Ação necessária\s*\|/i,
+];
+
+function isBootstrapResponse(text: string): boolean {
+  return BOOTSTRAP_MARKERS.some(r => r.test(text));
+}
+
+function cleanBrainResponse(raw: string): string {
+  if (!raw || raw.length < 5) return raw;
+  let text = raw.replace(/^---[\s\S]*?---\s*/m, "").trim();
+  text = text.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+  const lines = text.split("\n");
+  const cleaned = lines.filter(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+    return !BOILERPLATE_LINES.some(r => r.test(trimmed));
+  });
+  let result = cleaned.join("\n").trim();
+  result = result.replace(/Sistema operacional\.\s*Aguardando instruções\.?\s*$/im, "").trim();
+  result = result.replace(/Aguardando instruções do usuário\.?\s*$/im, "").trim();
+  result = result.replace(/Aguardando instruções\.?\s*$/im, "").trim();
+  result = result.replace(/^#\s*Resposta do Star AI\s*—[^\n]*\n\s*/i, "").trim();
+  result = result.replace(/\n{3,}/g, "\n\n");
+  return result.length > 5 ? result : raw;
+}
+
 function extractMdBody(c: string): string | null {
   if (!c) return null;
   const p = c.split("---");
+  let raw = "";
   if (p.length >= 3) {
-    let b = p.slice(2).join("---").trim();
-    b = b.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
-    return b.length > 5 ? b : null;
+    raw = p.slice(2).join("---").trim();
+    raw = raw.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+  } else {
+    raw = c.replace(/^---[\s\S]*?---\s*/m, "").trim();
   }
-  const a = c.replace(/^---[\s\S]*?---\s*/m, "").trim();
-  return a.length > 5 ? a : null;
+  if (raw.length < 5) return null;
+  // Skip bootstrap content
+  if (isBootstrapResponse(raw)) return null;
+  return cleanBrainResponse(raw);
 }
 
 /** Find brain-output.md in source-code response (supports {name, contents} format) */
@@ -528,14 +580,20 @@ Deno.serve(async (req) => {
               const msg = JSON.parse(r1.body);
               const txt = msg?.content || msg?.message || msg?.text || "";
               if (msg?.role !== "user" && !msg?.is_streaming && txt.length > 30) {
-                await sc.from("loveai_conversations").update({ ai_response: txt.trim(), status: "completed" }).eq("id", convo.id);
-                await sc.from("brain_outputs").insert({
-                  user_id: userId, conversation_id: convo.id, skill: "general",
-                  request: "", response: txt.trim(), status: "done", brain_project_id: pid,
-                }).catch(() => {});
-                captured++;
-                console.log(`[bc] ✅ ${cid} S1 ${txt.length}c`);
-                continue;
+                // Skip bootstrap responses from S1 too
+                if (isBootstrapResponse(txt)) {
+                  console.log(`[bc] ${cid} S1 skipping bootstrap`);
+                } else {
+                  const cleanedTxt = cleanBrainResponse(txt.trim());
+                  await sc.from("loveai_conversations").update({ ai_response: cleanedTxt, status: "completed" }).eq("id", convo.id);
+                  await sc.from("brain_outputs").insert({
+                    user_id: userId, conversation_id: convo.id, skill: "general",
+                    request: "", response: cleanedTxt, status: "done", brain_project_id: pid,
+                  }).catch(() => {});
+                  captured++;
+                  console.log(`[bc] ✅ ${cid} S1 ${cleanedTxt.length}c`);
+                  continue;
+                }
               }
             } catch { /* S1 is SSE stream, expected */ }
           }
