@@ -1073,6 +1073,107 @@ export type Database = {
           },
         ]
       }
+      community_group_members: {
+        Row: {
+          group_id: string
+          id: string
+          joined_at: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "community_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_groups: {
+        Row: {
+          cover_url: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          icon_url: string | null
+          id: string
+          is_archived: boolean
+          is_private: boolean
+          members_count: number
+          name: string
+          posts_count: number
+          rules: string | null
+          slug: string
+          tenant_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          cover_url?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_archived?: boolean
+          is_private?: boolean
+          members_count?: number
+          name: string
+          posts_count?: number
+          rules?: string | null
+          slug: string
+          tenant_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_archived?: boolean
+          is_private?: boolean
+          members_count?: number
+          name?: string
+          posts_count?: number
+          rules?: string | null
+          slug?: string
+          tenant_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_groups_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_groups_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_messages: {
         Row: {
           channel_id: string
@@ -1117,6 +1218,7 @@ export type Database = {
           content: string
           copy_count: number
           created_at: string
+          group_id: string | null
           id: string
           is_archived: boolean
           is_blurred: boolean
@@ -1145,6 +1247,7 @@ export type Database = {
           content?: string
           copy_count?: number
           created_at?: string
+          group_id?: string | null
           id?: string
           is_archived?: boolean
           is_blurred?: boolean
@@ -1173,6 +1276,7 @@ export type Database = {
           content?: string
           copy_count?: number
           created_at?: string
+          group_id?: string | null
           id?: string
           is_archived?: boolean
           is_blurred?: boolean
@@ -1197,6 +1301,13 @@ export type Database = {
           views_count?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "community_posts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "community_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "community_posts_tenant_id_fkey"
             columns: ["tenant_id"]
