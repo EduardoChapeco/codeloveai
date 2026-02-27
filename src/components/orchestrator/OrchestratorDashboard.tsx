@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   Loader2, Play, Pause, ExternalLink, ChevronDown, ChevronRight,
   CheckCircle, XCircle, Clock, Zap, Shield, AlertTriangle, RefreshCw, Plus, ArrowRight,
+  Brain as BrainIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -146,6 +147,13 @@ function LogLine({ log }: { log: OrchestratorLog }) {
 
 // ─── Main Component ───────────────────────────────────────────
 
+interface UserBrain {
+  id: string;
+  name: string;
+  brain_skills: string[];
+  status: string;
+}
+
 export default function OrchestratorDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -158,6 +166,19 @@ export default function OrchestratorDashboard() {
   const [prompt, setPrompt] = useState("");
   const [launching, setLaunching] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const [brains, setBrains] = useState<UserBrain[]>([]);
+  const [selectedBrainId, setSelectedBrainId] = useState<string>("");
+
+  // Fetch user's brains
+  const fetchBrains = useCallback(async () => {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from("user_brain_projects")
+      .select("id, name, brain_skills, status")
+      .eq("user_id", user.id)
+      .eq("status", "active");
+    setBrains((data as UserBrain[]) || []);
+  }, [user]);
 
   // Fetch projects list
   const fetchProjects = useCallback(async () => {
@@ -186,7 +207,8 @@ export default function OrchestratorDashboard() {
 
   useEffect(() => {
     fetchProjects();
-  }, [user, fetchProjects]);
+    fetchBrains();
+  }, [user, fetchProjects, fetchBrains]);
 
   useEffect(() => {
     if (selectedId) fetchDetails(selectedId);
@@ -229,7 +251,7 @@ export default function OrchestratorDashboard() {
     setLaunching(true);
     try {
       const { data, error } = await supabase.functions.invoke("agentic-orchestrator", {
-        body: { action: "start", client_prompt: prompt.trim() },
+        body: { action: "start", client_prompt: prompt.trim(), brain_id: selectedBrainId || undefined },
       });
       if (error || !data?.project_id) throw new Error(error?.message || "No project ID returned");
       toast.success("Orchestração iniciada!");
@@ -275,7 +297,26 @@ export default function OrchestratorDashboard() {
     <div className="space-y-6">
       {/* Prompt input */}
       <div className="lv-card space-y-3">
-        <p className="lv-body-strong">Nova Orchestração</p>
+        <div className="flex items-center justify-between">
+          <p className="lv-body-strong">Nova Orchestração</p>
+          {brains.length > 0 && (
+            <div className="flex items-center gap-2">
+              <BrainIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              <select
+                value={selectedBrainId}
+                onChange={e => setSelectedBrainId(e.target.value)}
+                className="h-7 px-2 text-[11px] rounded-lg bg-muted/30 border border-border/50 focus:outline-none text-muted-foreground"
+              >
+                <option value="">Sem Brain (IA direta)</option>
+                {brains.map(b => (
+                  <option key={b.id} value={b.id}>
+                    🧠 {b.name || "Brain"} ({(b.brain_skills || []).join(", ") || "geral"})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
         <div className="flex gap-3">
           <textarea
             className="lv-input flex-1 resize-none"
@@ -294,7 +335,9 @@ export default function OrchestratorDashboard() {
             <span className="text-xs">Iniciar</span>
           </button>
         </div>
-        <p className="lv-caption text-muted-foreground">⌘+Enter para iniciar</p>
+        <p className="lv-caption text-muted-foreground">
+          {selectedBrainId ? "🧠 Brain selecionado influencia PRD e routing de tarefas" : "⌘+Enter para iniciar"}
+        </p>
       </div>
 
       {loadingProjects ? (
