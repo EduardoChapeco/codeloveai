@@ -195,57 +195,86 @@ async function acquireBrainLock(sc: SupabaseClient, userId: string, skills: stri
   return error ? null : row?.id || null;
 }
 
-// ── Expert skill profiles (v3 — .md response) ─────────────────
+// ── Expert skill profiles (v4 — enhanced expert personas) ─────
 
 const SKILL_PROFILES: Record<BrainSkill, { title: string; credentials: string; focus: string }> = {
   general: {
     title: "Star AI — Assistente Geral Sênior",
-    credentials: "PhD em Ciência da Computação (MIT), MBA (Harvard), 50 anos de experiência.",
-    focus: "análise geral, planejamento e arquitetura de software",
+    credentials: "PhD em Ciência da Computação (MIT), MBA (Harvard), 50 anos de experiência em arquitetura de sistemas, liderança técnica e consultoria empresarial.",
+    focus: "análise geral, planejamento, arquitetura de software, resolução de problemas complexos",
   },
   design: {
     title: "Star AI — Arquiteto de Design & UX",
-    credentials: "PhD em HCI (MIT Media Lab), Mestre em Design Visual (RISD), 40 anos de experiência.",
-    focus: "design systems, UX, acessibilidade, Tailwind CSS, shadcn/ui",
+    credentials: "PhD em HCI (MIT Media Lab), Mestre em Design Visual (RISD), 40 anos de experiência em design systems, acessibilidade e branding corporativo.",
+    focus: "design systems, UX research, acessibilidade WCAG, Tailwind CSS, shadcn/ui, Figma-to-code",
   },
   code: {
     title: "Star AI — Engenheiro de Software Principal",
-    credentials: "PhD em Engenharia de Software (Stanford), 50 anos como Staff Engineer.",
-    focus: "TypeScript, React, Node.js, Deno, PostgreSQL, Edge Functions",
+    credentials: "PhD em Engenharia de Software (Stanford), 50 anos como Staff Engineer em empresas Fortune 500.",
+    focus: "TypeScript, React, Node.js, Deno, PostgreSQL, Edge Functions, arquitetura de microsserviços",
   },
   scraper: {
     title: "Star AI — Especialista em Extração de Dados",
-    credentials: "PhD em Data Engineering (CMU), 30 anos em web scraping e pipelines.",
-    focus: "crawlers, parsing, Firecrawl, APIs de dados, ETL",
+    credentials: "PhD em Data Engineering (CMU), 30 anos em web scraping, NLP e pipelines de dados em larga escala.",
+    focus: "crawlers, parsing, Firecrawl, APIs de dados, ETL, processamento de linguagem natural",
   },
   migration: {
     title: "Star AI — Arquiteto de Dados & Migrações",
-    credentials: "PhD em Database Systems (UC Berkeley), 40 anos em PostgreSQL.",
-    focus: "migrações SQL, modelagem relacional, performance tuning",
+    credentials: "PhD em Database Systems (UC Berkeley), 40 anos em PostgreSQL, modelagem relacional e otimização de queries.",
+    focus: "migrações SQL, modelagem relacional, performance tuning, índices, RLS policies",
   },
   data: {
     title: "Star AI — Cientista de Dados Sênior",
-    credentials: "PhD em ML (Stanford), PhD em Estatística (MIT), 35 anos de experiência.",
-    focus: "análise de dados, visualização, modelagem preditiva",
+    credentials: "PhD em Machine Learning (Stanford), PhD em Estatística (MIT), 35 anos de experiência em analytics e modelagem preditiva.",
+    focus: "análise de dados, visualização, modelagem preditiva, ETL, dashboards",
   },
   devops: {
     title: "Star AI — Engenheiro DevOps/SRE Principal",
-    credentials: "PhD em Sistemas Distribuídos (MIT), 40 anos em infraestrutura.",
-    focus: "CI/CD, Edge Functions, Supabase, monitoramento, cron jobs",
+    credentials: "PhD em Sistemas Distribuídos (MIT), 40 anos em infraestrutura cloud, CI/CD e monitoramento.",
+    focus: "CI/CD, Edge Functions, Supabase, monitoramento, cron jobs, Kubernetes",
   },
   security: {
     title: "Star AI — Engenheiro de Segurança Principal",
-    credentials: "PhD em Cybersecurity (MIT), CISSP, OSCP, 45 anos em AppSec.",
-    focus: "RLS policies, OAuth, criptografia, hardening de infraestrutura",
+    credentials: "PhD em Cybersecurity (MIT), CISSP, OSCP, 45 anos em AppSec, pentesting e hardening.",
+    focus: "RLS policies, OAuth, criptografia, hardening de infraestrutura, auditoria de segurança",
   },
 };
 
-// ── Bootstrap prompt (sent AFTER ghost-create) ─────────────────
-// This sets up the Brain project with Lovable Cloud + response files
+// ── Bootstrap prompt (v4 — enhanced expert persona with PRD format)
+// Creates project structure + expert persona + response protocol
 
-function buildBootstrapPrompt(skill: BrainSkill): string {
+function buildBootstrapPrompt(skill: BrainSkill, ctx?: { supabaseUrl?: string; anonKey?: string; userId?: string }): string {
   const p = SKILL_PROFILES[skill];
-  return `Ative o Lovable Cloud neste projeto. Após ativar, crie a seguinte estrutura inicial:
+  const callbackSection = ctx?.supabaseUrl ? `
+4. Crie o arquivo \`src/config.json\` com:
+\`\`\`json
+{
+  "brain_title": "${p.title}",
+  "skill": "${skill}",
+  "response_file": "src/brain-output.md",
+  "callback_url": "${ctx.supabaseUrl}/functions/v1/brain-capture-cron",
+  "user_id": "${ctx.userId || ""}",
+  "status": "ready",
+  "version": "4.0"
+}
+\`\`\`` : "";
+
+  return `Criar Projeto (Brain Specialist — ${p.title}):
+
+Este projeto é um sistema headless de IA especializada onde todas as perguntas serão respondidas de forma coerente e profissional como um especialista ${p.credentials}.
+
+## PRD — Product Requirements Document
+
+### Objetivo
+Sistema de resposta especializada com persona PhD/Sênior. O corpo da resposta deve ser anexado sempre em .md (nos arquivos em JSON também, nos arquivos .md e no corpo do site em HTML).
+
+### Requisitos Funcionais
+1. Todas as respostas devem ser escritas em \`src/brain-output.md\` com frontmatter \`status: done\`
+2. Respostas devem ser criadas em formato .md, .json e HTML5 quando solicitado
+3. O sistema deve suportar webhooks/APIs para integração externa
+4. NÃO criar componentes React, páginas ou rotas visuais — este é um backend de IA headless
+
+### Estrutura Inicial
 
 1. Crie o arquivo \`.lovable/plan.md\` com:
 \`\`\`markdown
@@ -253,10 +282,11 @@ function buildBootstrapPrompt(skill: BrainSkill): string {
 title: ${p.title}
 skill: ${skill}
 status: ready
+credentials: ${p.credentials}
 ---
 # ${p.title}
-Este projeto é um Brain especializado em ${p.focus}.
-Todas as respostas devem ser escritas em \`src/brain-output.md\`.
+Sistema especializado em ${p.focus}.
+Protocolo: todas as respostas em \`src/brain-output.md\` com status: done.
 \`\`\`
 
 2. Crie o arquivo \`src/brain-output.md\` com:
@@ -267,23 +297,132 @@ skill: ${skill}
 timestamp: ${Date.now()}
 ---
 # ${p.title}
-Brain ativado e pronto para receber instruções.
-Credenciais: ${p.credentials}
+Brain ativado. Credenciais: ${p.credentials}
 Foco: ${p.focus}
+Aguardando instruções.
 \`\`\`
 
-3. Crie o arquivo \`src/brain-config.json\` com:
+3. Crie o arquivo \`src/INSTRUCTIONS.md\` com:
+\`\`\`markdown
+# ${p.title} — Protocolo de Resposta
+
+## Identidade
+${p.credentials}
+
+## Regras
+1. SEMPRE escreva respostas em \`src/brain-output.md\` com frontmatter \`status: done\`
+2. Responda em Português (Brasil)
+3. Seja técnico, detalhado e acionável
+4. NÃO crie componentes React ou páginas visuais
+5. Pode criar Edge Functions, SQL, scripts backend
+6. Use formato Markdown com código quando necessário
+\`\`\`
+${callbackSection}
+
+NÃO crie componentes React, páginas ou rotas. Este projeto serve APENAS como backend de IA especializada.`;
+}
+
+// ── Post-bootstrap audit prompts (5 sequential at 1min intervals)
+// These prompts audit and complete the brain setup
+
+function buildAuditPrompts(skill: BrainSkill): string[] {
+  const p = SKILL_PROFILES[skill];
+  return [
+    // Audit 1: Verify structure was created
+    `Verifique se todos os arquivos do sistema foram criados corretamente:
+- .lovable/plan.md (deve existir com skill: ${skill})
+- src/brain-output.md (deve existir com status: ready)
+- src/INSTRUCTIONS.md (deve existir com protocolo de resposta)
+Se algum arquivo estiver faltando, crie-o agora. Atualize src/brain-output.md com status: done e uma confirmação de que a estrutura está completa.`,
+
+    // Audit 2: Create response templates
+    `Crie o arquivo src/response-templates.md com templates de resposta para diferentes tipos de consulta:
+
+\`\`\`markdown
+---
+status: done
+timestamp: ${Date.now()}
+---
+
+# Templates de Resposta — ${p.title}
+
+## Template: Análise Técnica
+- Diagnóstico
+- Causa raiz
+- Solução recomendada
+- Código (se aplicável)
+
+## Template: Arquitetura
+- Visão geral
+- Componentes
+- Fluxo de dados
+- Considerações de segurança
+
+## Template: Code Review
+- Problemas encontrados
+- Severidade
+- Correções sugeridas
+- Boas práticas
+\`\`\`
+
+Atualize src/brain-output.md com status: done confirmando a criação dos templates.`,
+
+    // Audit 3: Create capability manifest
+    `Crie o arquivo src/capabilities.json com o manifesto de capacidades deste Brain:
+
 \`\`\`json
 {
-  "brain_title": "${p.title}",
+  "brain": "${p.title}",
   "skill": "${skill}",
-  "response_file": "src/brain-output.md",
-  "status": "ready",
-  "version": "3.0"
+  "capabilities": [
+    "análise técnica avançada",
+    "geração de código",
+    "revisão de arquitetura",
+    "criação de documentação",
+    "resolução de problemas complexos"
+  ],
+  "response_formats": ["markdown", "json", "html"],
+  "output_file": "src/brain-output.md",
+  "version": "4.0",
+  "status": "operational"
 }
 \`\`\`
 
-NÃO crie componentes React, páginas ou rotas. Este projeto serve APENAS como backend de IA.`;
+Atualize src/brain-output.md com status: done.`,
+
+    // Audit 4: Self-test
+    `Realize um auto-teste do sistema. Escreva em src/brain-output.md uma resposta de teste demonstrando suas capacidades como ${p.title}:
+
+1. Apresente-se com suas credenciais
+2. Liste suas áreas de especialização
+3. Demonstre conhecimento técnico em ${p.focus}
+4. Confirme que o protocolo de resposta está funcionando
+
+Use o formato correto com frontmatter status: done.`,
+
+    // Audit 5: Final readiness check
+    `Verificação final de prontidão. Atualize src/brain-output.md com:
+
+\`\`\`markdown
+---
+status: done
+skill: ${skill}
+timestamp: ${Date.now()}
+readiness: complete
+---
+
+# ${p.title} — Sistema Operacional ✅
+
+## Status: Totalmente operacional
+- Estrutura de arquivos: ✅
+- Templates de resposta: ✅
+- Manifesto de capacidades: ✅
+- Auto-teste: ✅
+- Protocolo de resposta: ✅
+
+Aguardando instruções do usuário.
+\`\`\``,
+  ];
 }
 
 // ── Brain prompt (v3 — .md response format) ────────────────────
@@ -603,9 +742,11 @@ async function createFreshBrain(
       console.warn(`[Brain] Project ${projectId} never became ready, skipping bootstrap`);
     }
 
-    // Step 4: Bootstrap — send via venus-chat (task mode) to set up response files
+    // Step 4: Bootstrap — send enhanced PRD prompt via venus-chat
     if (projectReady) {
-      const bootstrapPrompt = buildBootstrapPrompt(primarySkill);
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+      const bootstrapPrompt = buildBootstrapPrompt(primarySkill, { supabaseUrl, anonKey, userId });
       let bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
       
       // Retry once if 404
@@ -616,9 +757,29 @@ async function createFreshBrain(
       }
       
       console.log(`[Brain] Bootstrap via venus ok=${bootstrapResult.ok} project=${projectId}`);
-      if (!bootstrapResult.ok) {
-        console.warn(`[Brain] Bootstrap failed (non-critical): ${bootstrapResult.error}`);
-      }
+
+      // Step 5: Background audit prompts (5 sequential at ~60s intervals)
+      // Run in background — don't block the response
+      (async () => {
+        try {
+          const auditPrompts = buildAuditPrompts(primarySkill);
+          // Wait 60s for bootstrap to complete before starting audits
+          await new Promise((r) => setTimeout(r, 60_000));
+          
+          for (let i = 0; i < auditPrompts.length; i++) {
+            console.log(`[Brain] Audit ${i + 1}/5 for project=${projectId}`);
+            const result = await sendViaVenus(projectId, auditPrompts[i], token);
+            console.log(`[Brain] Audit ${i + 1}/5 ok=${result.ok}`);
+            // Wait 60s between each audit for task completion
+            if (i < auditPrompts.length - 1) {
+              await new Promise((r) => setTimeout(r, 60_000));
+            }
+          }
+          console.log(`[Brain] All 5 audits complete for project=${projectId}`);
+        } catch (e) {
+          console.error(`[Brain] Audit background error:`, e);
+        }
+      })();
     }
 
     console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")}`);

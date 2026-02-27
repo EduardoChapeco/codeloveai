@@ -86,10 +86,19 @@ function buildSkillPrompts(ctx: BrainContext): string[] {
   const relayUrl = `${supabaseUrl}/functions/v1/relay-response`;
 
   return [
-    // Phase 1: Project config + env file with real credentials
-    `Create these project configuration files:
+    // Phase 1: PRD-format project setup with expert persona
+    `Criar Projeto (Brain Specialist — Star AI Assistente Geral Sênior):
 
-1. Create .env with the backend connection settings:
+Este projeto é um sistema headless de IA especializada. Todas as perguntas serão respondidas de forma coerente e profissional como um especialista PhD em Ciência da Computação (MIT), MBA (Harvard), com 50 anos de experiência.
+
+## PRD — Product Requirements Document
+
+### Objetivo
+Sistema de resposta especializada com persona PhD/Sênior. O corpo da resposta deve ser anexado sempre em .md, JSON e HTML5.
+
+### Estrutura Inicial
+
+1. Create .env with backend connection:
 \`\`\`
 SUPABASE_URL=${supabaseUrl}
 SUPABASE_ANON_KEY=${anonKey}
@@ -99,7 +108,7 @@ CALLBACK_URL=${callbackUrl}
 \`\`\`
 
 2. Create src/brain-output.md:
-\`\`\`
+\`\`\`markdown
 ---
 status: idle
 timestamp: 0
@@ -108,22 +117,29 @@ timestamp: 0
 
 3. Create src/config.json:
 \`\`\`json
-{"version":"2.0","output_file":"src/brain-output.md","callback_url":"${callbackUrl}","relay_url":"${relayUrl}","user_id":"${userId}"}
-\`\`\``,
+{"version":"4.0","output_file":"src/brain-output.md","callback_url":"${callbackUrl}","relay_url":"${relayUrl}","user_id":"${userId}"}
+\`\`\`
+
+NÃO crie componentes React, páginas ou rotas visuais.`,
 
     // Phase 2: Instructions with callback protocol
     `Create src/INSTRUCTIONS.md with these project rules:
 
-# Star AI Brain — System Guidelines
+# Star AI Brain — System Guidelines (v4.0)
 
 This is a headless task processing system. No UI rendering.
 
+## Identity
+PhD em Ciência da Computação (MIT), MBA (Harvard), 50 anos de experiência.
+Responda como especialista sênior em todas as áreas.
+
 ## Response Protocol
-1. Write all answers in \`src/brain-output.md\`
+1. Write ALL answers in \`src/brain-output.md\`
 2. Use frontmatter: \`status: done\` when complete
 3. Never create React components, pages, or visual routes
 4. Respond in Brazilian Portuguese
 5. For code tasks, embed code inside the markdown response
+6. Support .md, .json and .html output formats
 
 ## Output Format
 \`\`\`markdown
@@ -162,7 +178,6 @@ serve(async (req) => {
     const body = await req.json();
     const { task_id, response, status } = body;
 
-    // Report back to parent system
     await fetch(CALLBACK, {
       method: "POST",
       headers: {
@@ -196,9 +211,24 @@ Also add to supabase/config.toml:
 verify_jwt = false
 \`\`\``,
 
-    // Phase 4: Utility helpers for response formatting + API calls
-    `Create src/api-helpers.ts with helper functions:
+    // Phase 4: Audit — verify structure and create capability manifest
+    `Verifique que todos os arquivos foram criados corretamente e crie o manifesto de capacidades:
 
+1. Verifique: .env, src/brain-output.md, src/config.json, src/INSTRUCTIONS.md
+2. Crie src/capabilities.json:
+\`\`\`json
+{
+  "brain": "Star AI — Assistente Geral Sênior",
+  "capabilities": ["análise técnica", "geração de código", "revisão de arquitetura", "documentação"],
+  "response_formats": ["markdown", "json", "html"],
+  "output_file": "src/brain-output.md",
+  "callback_url": "${callbackUrl}",
+  "version": "4.0",
+  "status": "operational"
+}
+\`\`\`
+
+3. Crie src/api-helpers.ts with helper functions:
 \`\`\`typescript
 const CONFIG = {
   supabaseUrl: "${supabaseUrl}",
@@ -209,52 +239,47 @@ const CONFIG = {
 };
 
 export function formatOutput(text: string): string {
-  return [
-    "---",
-    "status: done",
-    "timestamp: " + Date.now(),
-    "---",
-    "",
-    text,
-  ].join("\\n");
+  return ["---", "status: done", "timestamp: " + Date.now(), "---", "", text].join("\\n");
 }
 
 export async function notifyCompletion(taskId: string, response: string) {
   try {
     await fetch(CONFIG.callbackUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + CONFIG.anonKey,
-      },
-      body: JSON.stringify({
-        user_id: CONFIG.userId,
-        task_id: taskId,
-        response,
-        status: "done",
-      }),
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + CONFIG.anonKey },
+      body: JSON.stringify({ user_id: CONFIG.userId, task_id: taskId, response, status: "done" }),
     });
-  } catch (e) {
-    console.error("Callback failed:", e);
-  }
+  } catch (e) { console.error("Callback failed:", e); }
 }
 
 export { CONFIG };
 \`\`\``,
 
-    // Phase 5: Final ready signal
-    `Update src/brain-output.md to confirm the system is fully initialized:
+    // Phase 5: Final ready signal + self-test
+    `Realize um auto-teste e confirme que o sistema está operacional. Atualize src/brain-output.md:
 
 \`\`\`markdown
 ---
 status: done
 timestamp: ${Date.now()}
+readiness: complete
 ---
 
-Star AI Brain v2.0 initialized. Backend connected to ${supabaseUrl}. Webhook and callback system ready. Awaiting tasks.
+# Star AI Brain v4.0 — Sistema Operacional ✅
+
+Backend conectado a ${supabaseUrl}. Webhook e callback prontos.
+
+## Status
+- Estrutura de arquivos: ✅
+- Protocolo de resposta: ✅
+- Webhook configurado: ✅
+- Helpers de API: ✅
+- Auto-teste: ✅
+
+Aguardando instruções do usuário.
 \`\`\`
 
-Make sure all files are saved: .env, src/config.json, src/INSTRUCTIONS.md, src/api-helpers.ts, and supabase/functions/brain-webhook/index.ts.`,
+Make sure all files are saved: .env, src/config.json, src/INSTRUCTIONS.md, src/api-helpers.ts, src/capabilities.json, and supabase/functions/brain-webhook/index.ts.`,
   ];
 }
 
