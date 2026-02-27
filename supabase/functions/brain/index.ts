@@ -1215,30 +1215,40 @@ async function createFreshBrain(
 
     console.log(`[Brain] Bootstrap result ok=${bootstrapResult.ok} project=${projectId}`);
 
-    // ── Phase 6: Send audit prompts sequentially with 40s delays ──
+    // ── Phase 6: Mark as active immediately ──
+    // Audit prompts are sent asynchronously in background to avoid Edge Function timeout
+    await sc.from("user_brain_projects")
+      .update({ status: "active", skill_phase: 2 })
+      .eq("id", lockId);
+
+    // ── Phase 7: Fire-and-forget background audit (first 3 prompts only) ──
+    // Send first audit prompt inline (self-protection) then let cron handle the rest
     if (bootstrapResult.ok) {
       const auditPrompts = buildAuditPrompts(primarySkill, { supabaseUrl, anonKey, userId, projectId });
-      for (let i = 0; i < auditPrompts.length; i++) {
-        // Wait 40 seconds between each audit prompt (commit cooldown)
-        await new Promise((r) => setTimeout(r, 40_000));
-        console.log(`[Brain] Sending audit prompt ${i + 1}/${auditPrompts.length} project=${projectId}`);
-        const auditResult = await sendViaVenus(projectId, auditPrompts[i], token);
-        if (!auditResult.ok) {
-          console.warn(`[Brain] Audit prompt ${i + 1} failed: ${auditResult.error}, continuing...`);
-          // Don't break — try next prompt
-          continue;
+      // Send only the first audit prompt (self-protection identity) with a short delay
+      try {
+        await new Promise((r) => setTimeout(r, 10_000));
+        console.log(`[Brain] Sending audit prompt 1/${auditPrompts.length} (self-protection) project=${projectId}`);
+        const auditResult = await sendViaVenus(projectId, auditPrompts[0], token);
+        if (auditResult.ok) {
+          await sc.from("user_brain_projects")
+            .update({ skill_phase: 3 })
+            .eq("id", lockId);
         }
-        // Update skill_phase for progress tracking (bootstrap=1, then 2-11)
-        await sc.from("user_brain_projects")
-          .update({ skill_phase: i + 2 })
-          .eq("id", lockId);
+        console.log(`[Brain] Audit 1 result ok=${auditResult.ok}`);
+      } catch (e) {
+        console.warn(`[Brain] Audit 1 error (non-fatal):`, e);
       }
-    }
 
-    // Mark as active
-    await sc.from("user_brain_projects")
-      .update({ status: "active", skill_phase: 12 })
-      .eq("id", lockId);
+      // Queue remaining audit prompts for background execution via brain-capture-cron
+      await sc.from("user_brain_projects")
+        .update({
+          pending_audit_prompts: auditPrompts.length - 1,
+          audit_start_index: 1,
+        })
+        .eq("id", lockId)
+        .then(() => {});
+    }
 
     console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")}`);
     return { projectId, workspaceId, brainId: lockId };
