@@ -58,6 +58,26 @@ const glassNav = {
   borderBottom: "0.5px solid var(--clf-border)",
 } as const;
 
+/* ── Chat persistence helpers ── */
+const CHAT_STORAGE_KEY = (projectId: string) => `editor_chat_${projectId}`;
+
+function loadPersistedChat(projectId: string): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY(projectId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function persistChat(projectId: string, messages: ChatMessage[]) {
+  try {
+    // Keep last 100 messages
+    const toStore = messages.slice(-100);
+    localStorage.setItem(CHAT_STORAGE_KEY(projectId), JSON.stringify(toStore));
+  } catch { /* storage full — silent */ }
+}
+
 export default function ProjectEditor() {
   const { id } = useParams<{ id: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -72,6 +92,7 @@ export default function ProjectEditor() {
   const [projectName, setProjectName] = useState("");
   const [chatMode, setChatMode] = useState<ChatMode>("task");
   const [showStatusCard, setShowStatusCard] = useState(false);
+  const [updatePolling, setUpdatePolling] = useState(false);
 
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiMode, setAiMode] = useState<BrainType>("design");
@@ -81,10 +102,25 @@ export default function ProjectEditor() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const lastUpdateTs = useRef<string>("");
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
   }, [user, authLoading, navigate]);
+
+  // Load persisted chat on mount
+  useEffect(() => {
+    if (!id) return;
+    const saved = loadPersistedChat(id);
+    if (saved.length > 0) setChatMessages(saved);
+  }, [id]);
+
+  // Persist chat on every change
+  useEffect(() => {
+    if (!id || chatMessages.length === 0) return;
+    persistChat(id, chatMessages);
+  }, [chatMessages, id]);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -115,20 +151,100 @@ export default function ProjectEditor() {
     setLoadingPreview(false);
   }, [id]);
 
-  const reloadPreview = useCallback(() => {
+  /* ── Hard reload preview (cache bust) ── */
+  const hardReloadPreview = useCallback(() => {
     if (!id) return;
     setSandboxUrl(null);
     setLoadingPreview(true);
+    // Cache-bust with timestamp query param
+    const bustUrl = `https://id-preview--${id}.lovable.app?_cb=${Date.now()}`;
     setTimeout(() => {
-      setSandboxUrl(`https://id-preview--${id}.lovable.app`);
+      setSandboxUrl(bustUrl);
       setLoadingPreview(false);
-    }, 400);
+    }, 300);
   }, [id]);
 
+  const reloadPreview = useCallback(() => {
+    hardReloadPreview();
+  }, [hardReloadPreview]);
+
+  /* ── update.md scraper: poll for file changes ── */
+  const startUpdatePolling = useCallback(() => {
+    if (!id || !user) return;
+    setUpdatePolling(true);
+
+    // Clear existing interval
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    let attempts = 0;
+    const maxAttempts = 60; // 5 min max (5s * 60)
+
+    pollIntervalRef.current = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts) {
+        // Timeout — force complete
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+        setUpdatePolling(false);
+        setShowStatusCard(false);
+        hardReloadPreview();
+        return;
+      }
+
+      try {
+        // Fetch the update.md file from the project preview
+        const res = await fetch(`https://id-preview--${id}.lovable.app/src/update.md?_t=${Date.now()}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) return; // File doesn't exist yet, keep polling
+
+        const text = await res.text();
+
+        // Parse the frontmatter for updated_at
+        const match = text.match(/updated_at:\s*(.+)/);
+        if (!match) return;
+
+        const fileTs = match[1].trim();
+
+        // If timestamp changed from last known, update is done
+        if (fileTs && fileTs !== lastUpdateTs.current) {
+          lastUpdateTs.current = fileTs;
+
+          // Stop polling
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+          setUpdatePolling(false);
+
+          // Animate completion
+          setShowStatusCard(false);
+
+          // Wait a beat then hard reload
+          setTimeout(() => {
+            hardReloadPreview();
+            toast.success("Projeto atualizado!", { duration: 2000 });
+          }, 800);
+        }
+      } catch {
+        // Network error — keep polling
+      }
+    }, 5000);
+  }, [id, user, hardReloadPreview]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
+
   const handleStatusComplete = useCallback(() => {
-    setShowStatusCard(false);
-    reloadPreview();
-  }, [reloadPreview]);
+    // Status card animation done — if not polling yet, trigger reload as fallback
+    if (!updatePolling) {
+      setShowStatusCard(false);
+      hardReloadPreview();
+    }
+  }, [updatePolling, hardReloadPreview]);
 
   const sendChatMessage = async () => {
     if (!message.trim() || sending || !id) return;
@@ -160,9 +276,12 @@ export default function ProjectEditor() {
       const modeLabel = chatModes.find(m => m.id === chatMode)?.label || chatMode;
       setChatMessages(prev => [...prev, {
         id: crypto.randomUUID(), role: "ai",
-        content: `✅ Task enviada via **${modeLabel}**. Processando alterações...\n\n> MsgID: \`${venusData.msgId?.slice(0, 8)}...\``,
-        timestamp: new Date().toISOString(), status: "sent",
+        content: `✅ Task enviada via **${modeLabel}**. Aguardando conclusão...`,
+        timestamp: new Date().toISOString(), status: "processing",
       }]);
+
+      // Start polling for update.md changes
+      startUpdatePolling();
 
       try {
         await supabase.from("loveai_conversations").insert({
@@ -235,6 +354,11 @@ export default function ProjectEditor() {
                 <Code2 className="h-3.5 w-3.5 text-primary" />
               </div>
               <span className="text-[13px] font-bold text-foreground tracking-tight">Editor</span>
+              {updatePolling && (
+                <span className="flex items-center gap-1 text-[10px] text-primary font-medium">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" /> Sync
+                </span>
+              )}
             </div>
             <button
               onClick={() => setShowAiModal(true)}
@@ -375,12 +499,12 @@ export default function ProjectEditor() {
               <button
                 onClick={reloadPreview}
                 className="h-8 w-8 rounded-xl flex items-center justify-center hover:bg-muted/50 transition-colors"
-                title="Recarregar"
+                title="Recarregar (limpa cache)"
               >
                 <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
               {sandboxUrl && (
-                <a href={sandboxUrl} target="_blank" rel="noopener noreferrer"
+                <a href={`https://id-preview--${id}.lovable.app`} target="_blank" rel="noopener noreferrer"
                   className="h-8 w-8 rounded-xl flex items-center justify-center hover:bg-muted/50 transition-colors"
                   title="Abrir em nova aba"
                 >
