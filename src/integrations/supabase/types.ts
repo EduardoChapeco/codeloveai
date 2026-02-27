@@ -3927,6 +3927,7 @@ export type Database = {
           lovable_project_id: string
           lovable_workspace_id: string
           name: string
+          skill_phase: number | null
           status: string
           tenant_id: string | null
           user_id: string
@@ -3941,6 +3942,7 @@ export type Database = {
           lovable_project_id: string
           lovable_workspace_id: string
           name?: string
+          skill_phase?: number | null
           status?: string
           tenant_id?: string | null
           user_id: string
@@ -3955,6 +3957,7 @@ export type Database = {
           lovable_project_id?: string
           lovable_workspace_id?: string
           name?: string
+          skill_phase?: number | null
           status?: string
           tenant_id?: string | null
           user_id?: string

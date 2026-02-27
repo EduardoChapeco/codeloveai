@@ -118,13 +118,21 @@ Deno.serve(async (req) => {
 
       let brain = await getBrain(sc, userId);
 
-      // If brain is creating, wait briefly
+      // If brain is creating or injecting skills, wait briefly
       const raw = await getBrainRaw(sc, userId);
-      if (raw?.status === "creating") {
-        await new Promise(r => setTimeout(r, 5000));
+      if (raw?.status === "creating" || raw?.status === "injecting") {
+        const waitTime = raw?.status === "injecting" ? 8000 : 5000;
+        await new Promise(r => setTimeout(r, waitTime));
         brain = await getBrain(sc, userId);
         if (!brain) {
-          return json({ error: "Brain está sendo criado. Tente novamente em alguns segundos.", code: "brain_creating" }, 503);
+          const phase = raw?.skill_phase || 0;
+          return json({ 
+            error: raw?.status === "injecting" 
+              ? `Brain está sendo configurado (fase ${phase}/5). Tente novamente em alguns segundos.`
+              : "Brain está sendo criado. Tente novamente em alguns segundos.", 
+            code: "brain_creating",
+            skill_phase: phase,
+          }, 503);
         }
       }
 
