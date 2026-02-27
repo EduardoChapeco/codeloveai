@@ -182,9 +182,9 @@ export default function LovableProjects() {
 
   return (
     <AppLayout>
-      <div className="flex h-[calc(100vh-4rem)] md:h-screen">
+      <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] md:h-screen">
         {/* ── Left column: Compact project grid ── */}
-        <div className="w-56 shrink-0 flex flex-col h-full overflow-hidden" style={{ borderRight: '0.5px solid var(--clf-border)' }}>
+        <div className="w-full md:w-56 shrink-0 flex flex-col h-44 md:h-full overflow-hidden" style={{ borderRight: '0.5px solid var(--clf-border)', borderBottom: '0.5px solid var(--clf-border)' }}>
           {/* Header */}
           <div className="p-2.5 shrink-0">
             <div className="flex items-center justify-between">
@@ -214,7 +214,7 @@ export default function LovableProjects() {
           </div>
 
           {/* Project list */}
-          <div className="flex-1 overflow-y-auto px-1.5 pb-2 no-scrollbar space-y-1">
+          <div className="flex-1 overflow-y-auto md:overflow-y-auto overflow-x-auto px-1.5 pb-2 no-scrollbar md:space-y-1 flex md:flex-col gap-2 md:gap-0">
             {loadingWs || loading ? (
               <div className="text-center py-12">
                 <Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" />
@@ -230,7 +230,7 @@ export default function LovableProjects() {
                 <div
                   key={project.id}
                   onClick={() => setSelectedProject(project)}
-                  className={`group relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 ${
+                  className={`group relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 shrink-0 w-36 md:w-auto ${
                     isActive ? "ring-[1.5px] ring-primary/40 shadow-md shadow-primary/5" : "hover:ring-1 hover:ring-border/60"
                   }`}
                   style={{ border: '0.5px solid var(--clf-border)' }}
@@ -347,7 +347,7 @@ export default function LovableProjects() {
                 {/* Floating "Editar Projeto" button on preview */}
                 <button
                   onClick={() => navigate(`/projeto/${selectedProject.id}/editar`)}
-                  className="absolute top-3 right-3 h-9 px-4 rounded-2xl bg-primary text-primary-foreground text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-transform z-10"
+                  className="absolute top-3 right-3 h-9 px-4 rounded-2xl bg-primary text-primary-foreground text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-transform z-10 hidden md:flex"
                 >
                   <Pencil className="h-3.5 w-3.5" /> Editar Projeto
                 </button>
