@@ -11,7 +11,6 @@ function json(d: unknown, s = 200) {
   return new Response(JSON.stringify(d), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 }
 
-/** Read response body manually from stream with hard cutoff */
 async function readStream(body: ReadableStream<Uint8Array>, maxBytes = 500_000, timeoutMs = 5000): Promise<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -49,7 +48,7 @@ async function fetchText(url: string, token: string, connectMs = 5000, bodyMs = 
     });
     clearTimeout(timer);
     if (!r.body) return { status: r.status, body: "" };
-    const body = await readStream(r.body, 500_000, bodyMs);
+    const body = await readStream(r.body, 800_000, bodyMs);
     return { status: r.status, body };
   } catch (e) {
     clearTimeout(timer);
@@ -70,18 +69,66 @@ function extractMdBody(c: string): string | null {
   return a.length > 5 ? a : null;
 }
 
-function getFile(files: any, path: string): string | null {
-  if (!files) return null;
-  if (Array.isArray(files)) {
-    const f = files.find((x: any) => x.path === path || x.name === path);
-    return typeof f === "string" ? f : (f?.content || f?.source || null);
-  }
-  if (typeof files === "object") {
-    const v = files[path];
+/** Deep-search for brain-output.md in any structure */
+function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
+  if (!obj || typeof obj !== "object") return null;
+
+  // Direct key match: { "src/brain-output.md": "content" | { content: "..." } }
+  if (obj[target]) {
+    const v = obj[target];
     if (typeof v === "string") return v;
-    if (v && typeof v === "object") return v.content || v.source || null;
+    if (typeof v === "object") return v.content || v.source || v.code || null;
   }
+
+  // Array of { path, content } or { name, content }
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      if (!item || typeof item !== "object") continue;
+      const p = item.path || item.name || item.file_path || "";
+      if (p === target || p.endsWith("brain-output.md")) {
+        const c = item.content || item.source || item.code;
+        if (typeof c === "string") return c;
+      }
+    }
+    return null;
+  }
+
+  // Check common wrappers: files, data, source, source_code, project
+  for (const key of ["files", "data", "source", "source_code", "project", "code"]) {
+    if (obj[key]) {
+      const result = findBrainMd(obj[key], target);
+      if (result) return result;
+    }
+  }
+
+  // Last resort: scan all keys ending with brain-output.md
+  for (const key of Object.keys(obj)) {
+    if (key.endsWith("brain-output.md")) {
+      const v = obj[key];
+      if (typeof v === "string") return v;
+      if (typeof v === "object") return v?.content || v?.source || null;
+    }
+  }
+
   return null;
+}
+
+/** Describe structure for diagnostics */
+function describeStructure(obj: any, depth = 0): string {
+  if (depth > 2) return typeof obj;
+  if (obj === null || obj === undefined) return "null";
+  if (typeof obj === "string") return `str(${obj.length})`;
+  if (typeof obj === "number" || typeof obj === "boolean") return String(obj);
+  if (Array.isArray(obj)) {
+    const sample = obj.length > 0 ? describeStructure(obj[0], depth + 1) : "empty";
+    return `arr[${obj.length}](${sample})`;
+  }
+  if (typeof obj === "object") {
+    const keys = Object.keys(obj);
+    const sample = keys.slice(0, 6).map(k => `${k}:${describeStructure(obj[k], depth + 1)}`).join(", ");
+    return `{${keys.length}keys: ${sample}}`;
+  }
+  return typeof obj;
 }
 
 Deno.serve(async (req) => {
@@ -113,12 +160,11 @@ Deno.serve(async (req) => {
           timedOut++; continue;
         }
         const pid = convo.target_project_id, cid = convo.id.slice(0, 8);
-        console.log(`[bc] ${cid} age=${Math.round(age/1000)}s`);
+        console.log(`[bc] ${cid} pid=${pid.slice(0,8)} age=${Math.round(age/1000)}s`);
 
         // S1: latest-message (4s connect, 3s body)
         const r1 = await fetchText(`${API}/projects/${pid}/latest-message`, tk, 4000, 3000);
         if (r1) {
-          console.log(`[bc] ${cid} S1 ${r1.status} ${r1.body.length}b preview=${r1.body.slice(0,150)}`);
           if (r1.status === 200 && r1.body.length > 5) {
             try {
               const msg = JSON.parse(r1.body);
@@ -127,23 +173,23 @@ Deno.serve(async (req) => {
                 await sc.from("loveai_conversations").update({ ai_response: txt.trim(), status: "completed" }).eq("id", convo.id);
                 captured++; console.log(`[bc] ✅ ${cid} S1 ${txt.length}c`); continue;
               }
-              console.log(`[bc] ${cid} S1 role=${msg?.role} stream=${msg?.is_streaming}`);
-            } catch { console.log(`[bc] ${cid} S1 not-json`); }
+            } catch { /* S1 is SSE stream, expected */ }
           }
         }
 
-        // S2: source-code (6s connect, 8s body)
-        const r2 = await fetchText(`${API}/projects/${pid}/source-code`, tk, 6000, 8000);
+        // S2: source-code (6s connect, 10s body — increased for large projects)
+        const r2 = await fetchText(`${API}/projects/${pid}/source-code`, tk, 6000, 10000);
         if (r2) {
           console.log(`[bc] ${cid} S2 ${r2.status} ${r2.body.length}b`);
           if (r2.status === 200 && r2.body.length > 10) {
             try {
               const parsed = JSON.parse(r2.body);
-              const files = parsed?.files || parsed?.data?.files || parsed?.source?.files || parsed;
-              const md = getFile(files, "src/brain-output.md");
+              // Log top-level structure for diagnostics
+              console.log(`[bc] ${cid} S2-struct: ${describeStructure(parsed)}`);
+
+              const md = findBrainMd(parsed);
               if (md) {
-                console.log(`[bc] ${cid} brain-md ${md.length}c hasDone=${/status:\s*done/i.test(md)} preview=${md.slice(0,80)}`);
-                // Accept if has "status: done" OR substantial content (>200 chars, not just "ready")
+                console.log(`[bc] ${cid} brain-md ${md.length}c preview=${md.slice(0,120)}`);
                 const hasDone = /status:\s*done/i.test(md);
                 const hasReady = /status:\s*ready/i.test(md);
                 if (hasDone || (md.length > 200 && !hasReady)) {
@@ -154,12 +200,9 @@ Deno.serve(async (req) => {
                   }
                 }
               } else {
-                // Log all file keys that contain "brain" or "output" or "task"
-                const allKeys = typeof files === "object" && !Array.isArray(files) ? Object.keys(files) : [];
-                const brainKeys = allKeys.filter(k => k.includes("brain") || k.includes("output") || k.includes("task")).slice(0, 5);
-                console.log(`[bc] ${cid} S2 no-brain-md total=${allKeys.length} brainKeys=${JSON.stringify(brainKeys)}`);
+                console.log(`[bc] ${cid} S2 no-brain-md`);
               }
-            } catch { console.log(`[bc] ${cid} S2 parse-err`); }
+            } catch (e) { console.log(`[bc] ${cid} S2 parse-err: ${String(e).slice(0,100)}`); }
           }
         }
         console.log(`[bc] ${cid} no-capture`);
