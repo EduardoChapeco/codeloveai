@@ -178,6 +178,38 @@ export default function EvolutionSetupGuide() {
           <Step number={3} title="Criar Key Value (Redis)" isActive={activeStep === 3} isComplete={completedSteps.has(3)} onClick={() => setActiveStep(3)}>
             <p className="text-sm text-muted-foreground">O Redis é usado como cache pela Evolution API para melhorar a performance e armazenar sessões temporárias.</p>
 
+            <InfoBox>
+              <strong>⚠️ O que é "Key Value"?</strong><br/>
+              No Render, o Redis é chamado de <strong>"Key Value"</strong> (não aparece como "Redis" diretamente). É o mesmo serviço — apenas o nome é diferente no painel do Render.
+            </InfoBox>
+
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4 space-y-3">
+              <p className="text-xs font-bold text-primary">📍 Como encontrar o Key Value no Render (3 formas):</p>
+              
+              <div className="space-y-3 text-xs text-muted-foreground">
+                <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
+                  <p className="font-bold text-foreground mb-1">Forma 1 — Link direto (mais rápido)</p>
+                  <p>Clique no botão abaixo para ir direto à página de criação:</p>
+                </div>
+
+                <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
+                  <p className="font-bold text-foreground mb-1">Forma 2 — Botão "New +" no topo</p>
+                  <p>1. Abra o <a href="https://dashboard.render.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Dashboard do Render</a></p>
+                  <p>2. No canto superior direito, clique no botão <strong className="text-foreground">"New +"</strong> (botão roxo/azul)</p>
+                  <p>3. Na lista que aparece, clique em <strong className="text-foreground">"Key Value"</strong></p>
+                  <p className="text-muted-foreground/60 mt-1">💡 A lista mostra: Web Service, Static Site, Private Service, Background Worker, <strong>Key Value</strong>, PostgreSQL, Cron Job</p>
+                </div>
+
+                <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
+                  <p className="font-bold text-foreground mb-1">Forma 3 — Menu lateral (sidebar)</p>
+                  <p>1. No Dashboard do Render, olhe na <strong className="text-foreground">barra lateral esquerda</strong></p>
+                  <p>2. Procure por <strong className="text-foreground">"Key Value"</strong> na lista de seções</p>
+                  <p>3. Clique nela e depois em <strong className="text-foreground">"New Key Value"</strong></p>
+                  <p className="text-muted-foreground/60 mt-1">💡 Na sidebar: Services, PostgreSQL, <strong>Key Value</strong>, Environment Groups...</p>
+                </div>
+              </div>
+            </div>
+
             <LinkButton href="https://dashboard.render.com/new/redis">Criar novo Key Value (Redis)</LinkButton>
 
             <div className="rounded-xl border border-white/[0.06] p-4 space-y-2">
@@ -195,8 +227,8 @@ export default function EvolutionSetupGuide() {
             </InfoBox>
 
             <div className="rounded-xl border border-white/[0.06] p-4">
-              <p className="text-xs font-bold text-foreground mb-2">Onde encontrar:</p>
-              <p className="text-xs text-muted-foreground">Dashboard → Key Value → <strong>evolution-redis</strong> → aba <strong>"Info"</strong> → campo <strong>"Internal Redis URL"</strong></p>
+              <p className="text-xs font-bold text-foreground mb-2">📋 Onde encontrar a URL depois de criar:</p>
+              <p className="text-xs text-muted-foreground">Dashboard → <strong>Key Value</strong> (menu lateral) → clique em <strong>evolution-redis</strong> → aba <strong>"Info"</strong> → campo <strong>"Internal Redis URL"</strong></p>
               <p className="text-xs text-muted-foreground mt-2">Formato: <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded text-[10px]">redis://red-xxxxx-a:6379</code></p>
             </div>
 
