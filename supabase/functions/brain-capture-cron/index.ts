@@ -81,6 +81,13 @@ const BOILERPLATE_LINES = [
   /^\|\s*Varredura de segurança\s*\|/i,
   /^\|\s*Vulnerabilidades\s*\|/i,
   /^\|\s*Ação necessária\s*\|/i,
+  // "Próximos Passos" and Lovable-related boilerplate
+  /^##?\s*Próximos?\s*Passos?\s*$/i,
+  /^[-*]\s*(Ativar|Executar|Configurar|Criar)\s*(Lovable|Cloud|migrations|RLS|Edge Functions)/i,
+  /^[-*]\s*.*\(coisas relacionadas a\s*l[oa][vb]a[bl][el]\)/i,
+  /^\s*O projeto opera em modo headless/i,
+  /^\s*não há superfície de ataque exposta/i,
+  /^Análise executada com sucesso\.\s*0 vulnerabilidades/i,
 ];
 
 function isBootstrapResponse(text: string): boolean {
@@ -98,6 +105,8 @@ function cleanBrainResponse(raw: string): string {
     return !BOILERPLATE_LINES.some(r => r.test(trimmed));
   });
   let result = cleaned.join("\n").trim();
+  // Remove entire "Próximos Passos" trailing section (header + bullets)
+  result = result.replace(/\n##?\s*Próximos?\s*Passos?[\s\S]*$/im, "").trim();
   result = result.replace(/Sistema operacional\.\s*Aguardando instruções\.?\s*$/im, "").trim();
   result = result.replace(/Aguardando instruções do usuário\.?\s*$/im, "").trim();
   result = result.replace(/Aguardando instruções\.?\s*$/im, "").trim();
