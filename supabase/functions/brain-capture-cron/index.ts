@@ -1,11 +1,16 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 /**
- * brain-capture-cron v3 — Response Miner
+ * brain-capture-cron v4 — High-Frequency Response Miner
  * 
- * Polls Lovable projects for Brain responses using src/brain-output.md (primary)
- * with fallbacks to .json and latest-message.
- * Runs every 30s via pg_cron.
+ * Polls Lovable Brain projects for responses using multiple strategies:
+ * 1. src/brain-output.md (primary — frontmatter status:done)
+ * 2. src/brain-output.json (legacy JSON format)
+ * 3. .lovable/tasks/*.md (task files with status:done)
+ * 4. latest-message API (direct AI message fallback)
+ * 5. Source fingerprint change detection
+ * 
+ * Runs every 10-30s via pg_cron for near-realtime capture.
  */
 
 const CORS = {
@@ -39,13 +44,21 @@ function lovFetch(url: string, token: string, opts: RequestInit = {}) {
 // ── Mining strategies ──────────────────────────────────────────
 
 function extractFromMd(content: string): string | null {
-  if (!content || !/status:\s*done/i.test(content)) return null;
+  if (!content) return null;
+  // Must have status: done in frontmatter
+  if (!/status:\s*done/i.test(content)) return null;
+  
   const parts = content.split("---");
   if (parts.length >= 3) {
     const body = parts.slice(2).join("---").trim();
-    if (body.length > 10) return body;
+    // Strip code fences that wrap the entire body
+    const cleaned = body
+      .replace(/^```(?:markdown|md)?\s*/i, "")
+      .replace(/```\s*$/, "")
+      .trim();
+    if (cleaned.length > 10) return cleaned;
   }
-  // Fallback: strip frontmatter
+  // Fallback: strip frontmatter block
   const afterFm = content.replace(/^---[\s\S]*?---\s*/m, "").trim();
   return afterFm.length > 10 ? afterFm : null;
 }
@@ -61,18 +74,66 @@ function extractFromJson(content: string): string | null {
     if (out?.status === "done" && typeof out?.response === "string" && out.response.length > 0) {
       return out.response;
     }
-  } catch { /* not valid */ }
+    // Also accept { answer, content } shapes
+    const text = out?.response || out?.answer || out?.content || out?.result;
+    if (typeof text === "string" && text.length > 10 && out?.status === "done") {
+      return text;
+    }
+  } catch { /* not valid JSON */ }
   return null;
 }
 
-async function mineProjectResponse(projectId: string, token: string): Promise<string | null> {
-  // Strategy 1: Mine source-code files
+function extractFromHtml(content: string): string | null {
+  if (!content) return null;
+  // Look for content inside <body> or <main> tags
+  const bodyMatch = content.match(/<(?:body|main)[^>]*>([\s\S]*?)<\/(?:body|main)>/i);
+  if (bodyMatch) {
+    // Strip HTML tags for plain text, keep basic structure
+    const text = bodyMatch[1]
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text.length > 30) return text;
+  }
+  return null;
+}
+
+/** Compute simple hash for fingerprint comparison */
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return hash.toString(36);
+}
+
+interface MineResult {
+  response: string | null;
+  fingerprint: string | null;
+  source: string;
+}
+
+async function mineProjectResponse(projectId: string, token: string, prevFingerprint?: string | null): Promise<MineResult> {
+  const noResult: MineResult = { response: null, fingerprint: prevFingerprint || null, source: "none" };
+
+  // Strategy 1: Mine source-code files (primary)
   try {
     const res = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
     if (res.ok) {
       const raw = await res.text();
+      
+      // Fingerprint check — skip if code hasn't changed
+      const currentFp = simpleHash(raw);
+      if (prevFingerprint && currentFp === prevFingerprint) {
+        return { ...noResult, fingerprint: currentFp, source: "unchanged" };
+      }
+
       let parsed: any = {};
-      try { parsed = JSON.parse(raw); } catch { return null; }
+      try { parsed = JSON.parse(raw); } catch { return { ...noResult, fingerprint: currentFp }; }
 
       const files = parsed?.files || parsed?.data?.files || parsed?.source?.files || parsed;
 
@@ -85,19 +146,23 @@ async function mineProjectResponse(projectId: string, token: string): Promise<st
         return null;
       };
 
-      // Primary: src/brain-output.md
+      // Priority 1: src/brain-output.md
       const mdResult = extractFromMd(getContent("src/brain-output.md") || "");
-      if (mdResult) return mdResult;
+      if (mdResult) return { response: mdResult, fingerprint: currentFp, source: "brain-output.md" };
 
-      // Fallback: src/brain-output.json (legacy)
+      // Priority 2: src/brain-output.json
       const jsonResult = extractFromJson(getContent("src/brain-output.json") || "");
-      if (jsonResult) return jsonResult;
+      if (jsonResult) return { response: jsonResult, fingerprint: currentFp, source: "brain-output.json" };
 
-      // Fallback: .lovable/tasks/brain-response.md
+      // Priority 3: src/brain-output.html
+      const htmlResult = extractFromHtml(getContent("src/brain-output.html") || "");
+      if (htmlResult) return { response: htmlResult, fingerprint: currentFp, source: "brain-output.html" };
+
+      // Priority 4: .lovable/tasks/brain-response.md
       const taskResult = extractFromMd(getContent(".lovable/tasks/brain-response.md") || "");
-      if (taskResult) return taskResult;
+      if (taskResult) return { response: taskResult, fingerprint: currentFp, source: "tasks/brain-response.md" };
 
-      // Fallback: any task .md with status: done
+      // Priority 5: Any task .md with status: done (newest first)
       if (Array.isArray(files)) {
         const taskFiles = files
           .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
@@ -106,13 +171,15 @@ async function mineProjectResponse(projectId: string, token: string): Promise<st
         for (const tf of taskFiles) {
           const content = tf.content || tf.source || "";
           const result = extractFromMd(content);
-          if (result) return result;
+          if (result) return { response: result, fingerprint: currentFp, source: `tasks/${tf.path}` };
         }
       }
-    }
-  } catch { /* continue */ }
 
-  // Strategy 2: latest-message (last resort)
+      return { ...noResult, fingerprint: currentFp, source: "no-match" };
+    }
+  } catch { /* continue to fallback */ }
+
+  // Strategy 2: latest-message API (last resort)
   try {
     const res = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
     if (res.ok) {
@@ -120,13 +187,13 @@ async function mineProjectResponse(projectId: string, token: string): Promise<st
       if (msg && !msg.is_streaming && msg.role !== "user") {
         const content = msg.content || msg.message || msg.text || "";
         if (typeof content === "string" && content.trim().length > 30) {
-          return content.trim();
+          return { response: content.trim(), fingerprint: null, source: "latest-message" };
         }
       }
     }
   } catch { /* continue */ }
 
-  return null;
+  return noResult;
 }
 
 // ── Main handler ───────────────────────────────────────────────
@@ -139,13 +206,13 @@ Deno.serve(async (req) => {
   const sc = createClient(supabaseUrl, serviceKey);
 
   try {
-    // Find all "processing" conversations (max 10)
+    // Find all "processing" conversations (max 20 for higher throughput)
     const { data: pending } = await sc
       .from("loveai_conversations")
       .select("id, user_id, target_project_id, created_at")
       .eq("status", "processing")
       .order("created_at", { ascending: true })
-      .limit(10);
+      .limit(20);
 
     if (!pending || pending.length === 0) {
       return json({ message: "No pending conversations", processed: 0 });
@@ -153,45 +220,80 @@ Deno.serve(async (req) => {
 
     let captured = 0;
     let timedOut = 0;
+    let unchanged = 0;
 
-    for (const convo of pending) {
-      if (!convo.target_project_id) continue;
+    // Group conversations by user to avoid redundant token lookups
+    const byUser = new Map<string, typeof pending>();
+    for (const c of pending) {
+      const list = byUser.get(c.user_id) || [];
+      list.push(c);
+      byUser.set(c.user_id, list);
+    }
 
-      // Timeout after 5 min
-      const age = Date.now() - new Date(convo.created_at).getTime();
-      if (age > 300_000) {
-        await sc.from("loveai_conversations")
-          .update({ status: "timeout" })
-          .eq("id", convo.id);
-        timedOut++;
-        continue;
-      }
-
-      // Get user's Lovable token
+    for (const [userId, convos] of byUser) {
+      // Get user's Lovable token once per user
       const { data: account } = await sc
         .from("lovable_accounts")
         .select("token_encrypted")
-        .eq("user_id", convo.user_id)
+        .eq("user_id", userId)
         .eq("status", "active")
         .maybeSingle();
 
       if (!account?.token_encrypted) continue;
 
-      const response = await mineProjectResponse(
-        convo.target_project_id,
-        account.token_encrypted,
-      );
+      // Get last known fingerprint for this user's brain project
+      const { data: brain } = await sc
+        .from("user_brain_projects")
+        .select("lovable_project_id, source_fingerprint")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .maybeSingle();
 
-      if (response) {
-        await sc.from("loveai_conversations").update({
-          ai_response: response,
-          status: "completed",
-        }).eq("id", convo.id);
-        captured++;
+      for (const convo of convos) {
+        if (!convo.target_project_id) continue;
+
+        // Timeout after 5 min
+        const age = Date.now() - new Date(convo.created_at).getTime();
+        if (age > 300_000) {
+          await sc.from("loveai_conversations")
+            .update({ status: "timeout" })
+            .eq("id", convo.id);
+          timedOut++;
+          continue;
+        }
+
+        const prevFp = brain?.source_fingerprint || null;
+        const result = await mineProjectResponse(
+          convo.target_project_id,
+          account.token_encrypted,
+          prevFp,
+        );
+
+        // Update fingerprint if changed
+        if (result.fingerprint && result.fingerprint !== prevFp) {
+          await sc.from("user_brain_projects")
+            .update({ source_fingerprint: result.fingerprint })
+            .eq("user_id", userId)
+            .eq("status", "active");
+        }
+
+        if (result.source === "unchanged") {
+          unchanged++;
+          continue;
+        }
+
+        if (result.response) {
+          await sc.from("loveai_conversations").update({
+            ai_response: result.response,
+            status: "completed",
+          }).eq("id", convo.id);
+          captured++;
+          console.log(`[brain-capture] ✅ Captured from ${result.source} for convo ${convo.id.slice(0, 8)}`);
+        }
       }
     }
 
-    return json({ processed: pending.length, captured, timedOut });
+    return json({ processed: pending.length, captured, timedOut, unchanged });
   } catch (err) {
     console.error("[brain-capture-cron] Error:", err);
     return json({ error: "Internal error" }, 500);
