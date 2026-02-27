@@ -119,13 +119,13 @@ export default function Marketplace() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar projetos..."
-                className="w-full h-11 pl-11 pr-4 rounded-xl text-sm bg-card/60 backdrop-blur-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/30 transition-all placeholder:text-muted-foreground/50"
+                className="w-full h-11 pl-11 pr-4 rounded-xl text-sm clf-liquid-glass focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/30 transition-all placeholder:text-muted-foreground/50"
               />
             </div>
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as any)}
-              className="h-11 px-4 rounded-xl text-xs font-semibold bg-card/60 backdrop-blur-xl border border-border/50 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="h-11 px-4 rounded-xl text-xs font-semibold clf-liquid-glass text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <option value="recent">Recentes</option>
               <option value="popular">🔥 Hot</option>
@@ -251,7 +251,7 @@ function FeaturedCard({ listing, onClick }: { listing: Listing; onClick: () => v
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.01] hover:shadow-xl hover:shadow-primary/10 relative bg-card/60 backdrop-blur-xl border border-border/40 hover:border-primary/30"
+      className="group cursor-pointer rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.01] hover:shadow-xl hover:shadow-primary/10 relative clf-liquid-glass hover:border-primary/30"
     >
       {/* Image */}
       <div className="relative aspect-[16/9] bg-muted/10 overflow-hidden">
@@ -301,7 +301,7 @@ function ListingCard({ listing, onClick }: { listing: Listing; onClick: () => vo
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary/8 bg-card/50 backdrop-blur-xl border border-border/30 hover:border-primary/30"
+      className="group cursor-pointer rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary/8 clf-liquid-glass hover:border-primary/30"
     >
       {/* Image */}
       <div className="relative aspect-[16/10] bg-muted/10 overflow-hidden">
