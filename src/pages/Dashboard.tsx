@@ -283,16 +283,16 @@ export default function Dashboard() {
       <div className="min-h-full">
         <div className="max-w-5xl mx-auto px-6 py-8 space-y-5">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between animate-fade-in">
             <div>
-              <p className="lv-overline mb-1">Área do membro</p>
+              <p className="lv-overline mb-1.5">Área do membro</p>
               <h1 className="lv-heading-lg">Dashboard</h1>
-              <p className="lv-body mt-1">
+              <p className="lv-body-lg mt-1.5">
                 {license?.plan_type === 'custom' ? "Plano Profissional Ativo" : "Plataforma — Ferramentas de IA"}
               </p>
             </div>
             {!license && !activeTokens.length && (
-              <Link to="/plans" className="lv-btn-primary h-10 px-6 flex items-center gap-2">
+              <Link to="/plans" className="lv-btn-primary h-11 px-6 flex items-center gap-2 shadow-lg shadow-primary/20">
                 <Zap className="h-4 w-4" /> Ver Planos
               </Link>
             )}
@@ -340,7 +340,7 @@ export default function Dashboard() {
           </div>
 
           {/* ━━━ BENTO GRID ━━━ */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
             {/* Status — full width */}
             <div className="clf-liquid-glass md:col-span-2 p-6 lg:p-8">
@@ -511,14 +511,22 @@ export default function Dashboard() {
             <p className="lv-overline mb-6">Como começar</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { step: "01", title: "Baixar", desc: "Faça download da extensão oficial", icon: Download },
-                { step: "02", title: "Instalar", desc: "Ative o Modo do Desenvolvedor no Chrome", icon: Monitor },
-                { step: "03", title: "Conectar", desc: "Vincule sua conta Lovable com segurança", icon: Key },
-                { step: "04", title: "Pronto", desc: "Inicie o lovable.dev e deixe a mágica acontecer", icon: Zap },
+                { step: "01", title: "Baixar", desc: "Faça download da extensão oficial", icon: Download, gradient: "from-blue-500 to-cyan-500" },
+                { step: "02", title: "Instalar", desc: "Ative o Modo do Desenvolvedor no Chrome", icon: Monitor, gradient: "from-violet-500 to-purple-500" },
+                { step: "03", title: "Conectar", desc: "Vincule sua conta Lovable com segurança", icon: Key, gradient: "from-emerald-500 to-green-500" },
+                { step: "04", title: "Pronto", desc: "Inicie o lovable.dev e deixe a mágica acontecer", icon: Zap, gradient: "from-amber-500 to-orange-500" },
               ].map((item) => (
-                <div key={item.step} className="rounded-2xl border border-black/[0.03] dark:border-white/[0.03] bg-black/[0.02] dark:bg-white/[0.02] p-6 relative group overflow-hidden">
-                  <span className="text-[48px] font-black text-foreground/5 absolute -bottom-1 -right-1 leading-none group-hover:text-primary/10 transition-colors">{item.step}</span>
-                  <div className="h-10 w-10 rounded-xl bg-primary shadow-lg shadow-primary/20 flex items-center justify-center mb-4 text-white">
+                <div
+                  key={item.step}
+                  className="rounded-2xl p-6 relative group overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+                  style={{
+                    background: 'var(--liquid-glass-bg)',
+                    backdropFilter: 'blur(20px)',
+                    border: '0.5px solid var(--clf-border)',
+                  }}
+                >
+                  <span className="text-[56px] font-black text-foreground/[0.03] absolute -bottom-2 -right-1 leading-none group-hover:text-primary/8 transition-colors duration-500">{item.step}</span>
+                  <div className={`h-11 w-11 rounded-xl bg-gradient-to-br ${item.gradient} shadow-lg flex items-center justify-center mb-4 text-white group-hover:scale-110 transition-transform duration-300`}>
                     <item.icon className="h-5 w-5" />
                   </div>
                   <p className="lv-body-strong text-sm mb-1.5">{item.title}</p>
