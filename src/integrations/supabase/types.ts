@@ -1647,6 +1647,33 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_flags: {
+        Row: {
+          created_at: string
+          description: string | null
+          enabled_for: string
+          feature: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          enabled_for?: string
+          feature: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          enabled_for?: string
+          feature?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       hashtags: {
         Row: {
           created_at: string
@@ -4825,6 +4852,7 @@ export type Database = {
       }
     }
     Functions: {
+      check_feature_access: { Args: { p_feature: string }; Returns: boolean }
       get_user_primary_tenant: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -4845,7 +4873,9 @@ export type Database = {
         Args: { p_date: string; p_license_id: string }
         Returns: number
       }
-      is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_admin:
+        | { Args: never; Returns: boolean }
+        | { Args: { _user_id: string }; Returns: boolean }
       is_tenant_admin: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
