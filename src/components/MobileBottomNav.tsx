@@ -1,21 +1,21 @@
 import { useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import {
-  LayoutDashboard, Puzzle, MessageCircle, User, Brain, StickyNote, Download,
-  Link2, FolderOpen, CreditCard, BookOpen, LifeBuoy, Scale, Users, Globe,
-  Handshake, Bot, Workflow, Sparkles,
+  MessageCircle, Package, Puzzle, FolderOpen, Brain, Workflow, Zap,
+  StickyNote, User, CreditCard, BookOpen, LifeBuoy,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
+// Same order as AppSidebar mainItems + accountItems
 const allItems = [
   { to: "/community", icon: MessageCircle },
-  { to: "/dashboard", icon: LayoutDashboard },
+  { to: "/marketplace", icon: Package },
   { to: "/extensoes", icon: Puzzle },
-  { to: "/brain", icon: Brain },
-  { to: "/assistente", icon: Bot },
-  { to: "/orquestrador", icon: Workflow },
-  { to: "/notes", icon: StickyNote },
   { to: "/lovable/projects", icon: FolderOpen },
+  { to: "/brain", icon: Brain },
+  { to: "/orquestrador", icon: Workflow },
+  { to: "/automation", icon: Zap },
+  { to: "/notes", icon: StickyNote },
   { to: "/plans", icon: CreditCard },
   { to: "/ajuda", icon: BookOpen },
   { to: "/suporte", icon: LifeBuoy },
