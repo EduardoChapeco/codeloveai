@@ -63,7 +63,22 @@ serve(async (req) => {
       ...(body ? { body } : {}),
     });
 
-    const data = await resp.json();
+    const contentType = resp.headers.get("content-type") || "";
+    const rawText = await resp.text();
+
+    if (!contentType.includes("application/json")) {
+      console.error("Evolution API returned non-JSON:", rawText.substring(0, 300));
+      return new Response(JSON.stringify({ 
+        error: `A Evolution API retornou HTML em vez de JSON (status ${resp.status}). Verifique se a URL do serviço está correta e se o servidor está rodando.`,
+        hint: rawText.includes("Cannot GET") ? "A rota pode estar incorreta. Confirme a URL base da API." : 
+              rawText.includes("DOCTYPE") ? "O servidor retornou uma página HTML. Pode estar em modo de espera (cold start) ou a URL está errada." : undefined
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const data = JSON.parse(rawText);
 
     return new Response(JSON.stringify(data), {
       status: resp.status,
