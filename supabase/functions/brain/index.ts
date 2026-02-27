@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { generateTypeId, obfuscate } from "../_shared/crypto.ts";
 
 type SupabaseClient = any;
-type BrainSkill = "general" | "design" | "code" | "scraper" | "migration" | "data" | "devops" | "security";
+type BrainSkill = "general" | "design" | "code" | "scraper" | "migration" | "data" | "devops" | "security" | "code_review";
 
 const API = "https://api.lovable.dev";
 const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
@@ -14,8 +14,8 @@ const CORS = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const VALID_ACTIONS = new Set(["status", "history", "reset", "setup", "send", "capture", "list", "delete"]);
-const VALID_SKILLS = new Set<string>(["general", "design", "code", "scraper", "migration", "data", "devops", "security"]);
+const VALID_ACTIONS = new Set(["status", "history", "reset", "setup", "send", "capture", "list", "delete", "review_code"]);
+const VALID_SKILLS = new Set<string>(["general", "design", "code", "scraper", "migration", "data", "devops", "security", "code_review"]);
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -195,7 +195,7 @@ async function acquireBrainLock(sc: SupabaseClient, userId: string, skills: stri
   return error ? null : row?.id || null;
 }
 
-// ── Expert skill profiles (v4 — enhanced expert personas) ─────
+// ── Expert skill profiles (v5 — includes code_review) ─────
 
 const SKILL_PROFILES: Record<BrainSkill, { title: string; credentials: string; focus: string }> = {
   general: {
@@ -238,10 +238,25 @@ const SKILL_PROFILES: Record<BrainSkill, { title: string; credentials: string; f
     credentials: "PhD em Cybersecurity (MIT), CISSP, OSCP, 45 anos em AppSec, pentesting e hardening.",
     focus: "RLS policies, OAuth, criptografia, hardening de infraestrutura, auditoria de segurança",
   },
+  code_review: {
+    title: "Star AI — Code Reviewer & Auditor Principal",
+    credentials: "PhD em Software Engineering (MIT), 40 anos em code review, static analysis, refactoring e arquitetura limpa.",
+    focus: "code review, auditoria de código, refactoring, clean architecture, performance, segurança de código, best practices",
+  },
 };
 
+// ── Timestamp extraction from .md frontmatter ──────────────────
+// Used to ensure we only return responses NEWER than the question
+
+function extractMdTimestamp(mdContent: string): number | null {
+  const match = mdContent.match(/timestamp:\s*(\d{10,15})/);
+  if (!match) return null;
+  const ts = parseInt(match[1], 10);
+  // Normalize to ms (support both seconds and milliseconds)
+  return ts < 1e12 ? ts * 1000 : ts;
+}
+
 // ── Bootstrap prompt (v4 — enhanced expert persona with PRD format)
-// Creates project structure + expert persona + response protocol
 
 function buildBootstrapPrompt(skill: BrainSkill, ctx?: { supabaseUrl?: string; anonKey?: string; userId?: string }): string {
   const p = SKILL_PROFILES[skill];
@@ -255,7 +270,7 @@ function buildBootstrapPrompt(skill: BrainSkill, ctx?: { supabaseUrl?: string; a
   "callback_url": "${ctx.supabaseUrl}/functions/v1/brain-capture-cron",
   "user_id": "${ctx.userId || ""}",
   "status": "ready",
-  "version": "4.0"
+  "version": "5.0"
 }
 \`\`\`` : "";
 
@@ -269,7 +284,7 @@ Este projeto é um sistema headless de IA especializada onde todas as perguntas 
 Sistema de resposta especializada com persona PhD/Sênior. O corpo da resposta deve ser anexado sempre em .md (nos arquivos em JSON também, nos arquivos .md e no corpo do site em HTML).
 
 ### Requisitos Funcionais
-1. Todas as respostas devem ser escritas em \`src/brain-output.md\` com frontmatter \`status: done\`
+1. Todas as respostas devem ser escritas em \`src/brain-output.md\` com frontmatter \`status: done\` e \`timestamp: {epoch_ms}\`
 2. Respostas devem ser criadas em formato .md, .json e HTML5 quando solicitado
 3. O sistema deve suportar webhooks/APIs para integração externa
 4. NÃO criar componentes React, páginas ou rotas visuais — este é um backend de IA headless
@@ -310,12 +325,13 @@ Aguardando instruções.
 ${p.credentials}
 
 ## Regras
-1. SEMPRE escreva respostas em \`src/brain-output.md\` com frontmatter \`status: done\`
+1. SEMPRE escreva respostas em \`src/brain-output.md\` com frontmatter \`status: done\` e \`timestamp: {epoch_ms_atual}\`
 2. Responda em Português (Brasil)
 3. Seja técnico, detalhado e acionável
 4. NÃO crie componentes React ou páginas visuais
 5. Pode criar Edge Functions, SQL, scripts backend
 6. Use formato Markdown com código quando necessário
+7. O campo timestamp DEVE ser atualizado com Date.now() a cada resposta nova
 \`\`\`
 ${callbackSection}
 
@@ -323,19 +339,16 @@ NÃO crie componentes React, páginas ou rotas. Este projeto serve APENAS como b
 }
 
 // ── Post-bootstrap audit prompts (5 sequential at 1min intervals)
-// These prompts audit and complete the brain setup
 
 function buildAuditPrompts(skill: BrainSkill): string[] {
   const p = SKILL_PROFILES[skill];
   return [
-    // Audit 1: Verify structure was created
     `Verifique se todos os arquivos do sistema foram criados corretamente:
 - .lovable/plan.md (deve existir com skill: ${skill})
 - src/brain-output.md (deve existir com status: ready)
 - src/INSTRUCTIONS.md (deve existir com protocolo de resposta)
-Se algum arquivo estiver faltando, crie-o agora. Atualize src/brain-output.md com status: done e uma confirmação de que a estrutura está completa.`,
+Se algum arquivo estiver faltando, crie-o agora. Atualize src/brain-output.md com status: done, timestamp: ${Date.now()} e uma confirmação de que a estrutura está completa.`,
 
-    // Audit 2: Create response templates
     `Crie o arquivo src/response-templates.md com templates de resposta para diferentes tipos de consulta:
 
 \`\`\`markdown
@@ -343,21 +356,12 @@ Se algum arquivo estiver faltando, crie-o agora. Atualize src/brain-output.md co
 status: done
 timestamp: ${Date.now()}
 ---
-
 # Templates de Resposta — ${p.title}
-
 ## Template: Análise Técnica
 - Diagnóstico
 - Causa raiz
 - Solução recomendada
 - Código (se aplicável)
-
-## Template: Arquitetura
-- Visão geral
-- Componentes
-- Fluxo de dados
-- Considerações de segurança
-
 ## Template: Code Review
 - Problemas encontrados
 - Severidade
@@ -365,9 +369,8 @@ timestamp: ${Date.now()}
 - Boas práticas
 \`\`\`
 
-Atualize src/brain-output.md com status: done confirmando a criação dos templates.`,
+Atualize src/brain-output.md com status: done e timestamp: ${Date.now()} confirmando a criação dos templates.`,
 
-    // Audit 3: Create capability manifest
     `Crie o arquivo src/capabilities.json com o manifesto de capacidades deste Brain:
 
 \`\`\`json
@@ -383,26 +386,21 @@ Atualize src/brain-output.md com status: done confirmando a criação dos templa
   ],
   "response_formats": ["markdown", "json", "html"],
   "output_file": "src/brain-output.md",
-  "version": "4.0",
+  "version": "5.0",
   "status": "operational"
 }
 \`\`\`
 
-Atualize src/brain-output.md com status: done.`,
+Atualize src/brain-output.md com status: done e timestamp: ${Date.now()}.`,
 
-    // Audit 4: Self-test
-    `Realize um auto-teste do sistema. Escreva em src/brain-output.md uma resposta de teste demonstrando suas capacidades como ${p.title}:
-
+    `Realize um auto-teste do sistema. Escreva em src/brain-output.md uma resposta de teste:
 1. Apresente-se com suas credenciais
 2. Liste suas áreas de especialização
 3. Demonstre conhecimento técnico em ${p.focus}
 4. Confirme que o protocolo de resposta está funcionando
+Use frontmatter status: done e timestamp: ${Date.now()}.`,
 
-Use o formato correto com frontmatter status: done.`,
-
-    // Audit 5: Final readiness check
-    `Verificação final de prontidão. Atualize src/brain-output.md com:
-
+    `Verificação final. Atualize src/brain-output.md com:
 \`\`\`markdown
 ---
 status: done
@@ -410,25 +408,18 @@ skill: ${skill}
 timestamp: ${Date.now()}
 readiness: complete
 ---
-
 # ${p.title} — Sistema Operacional ✅
-
-## Status: Totalmente operacional
-- Estrutura de arquivos: ✅
-- Templates de resposta: ✅
-- Manifesto de capacidades: ✅
-- Auto-teste: ✅
-- Protocolo de resposta: ✅
-
+Estrutura de arquivos: ✅ | Templates: ✅ | Capacidades: ✅ | Protocolo: ✅
 Aguardando instruções do usuário.
 \`\`\``,
   ];
 }
 
-// ── Brain prompt (v3 — .md response format) ────────────────────
+// ── Brain prompt (v4 — .md response format with timestamp) ──────
 
 function buildBrainPrompt(skill: BrainSkill, message: string): string {
   const p = SKILL_PROFILES[skill];
+  const now = Date.now();
 
   return `Você é o ${p.title}.
 Credenciais: ${p.credentials}
@@ -449,7 +440,7 @@ OBRIGATÓRIO — Ao finalizar, crie/atualize o arquivo src/brain-output.md com:
 ---
 status: done
 skill: ${skill}
-timestamp: ${Date.now()}
+timestamp: ${now}
 request: "${message.slice(0, 100)}"
 ---
 
@@ -458,13 +449,61 @@ request: "${message.slice(0, 100)}"
 [SUA RESPOSTA COMPLETA AQUI — detalhada, em Markdown, com código se necessário]
 \`\`\`
 
+IMPORTANTE: O timestamp DEVE ser exatamente ${now} — isso é usado para sincronização.
 Se criar tabelas SQL, crie em supabase/migrations/.
 Se criar funções, crie em supabase/functions/<nome>/index.ts.
-SEMPRE finalize atualizando src/brain-output.md com status: done.`;
+SEMPRE finalize atualizando src/brain-output.md com status: done e timestamp: ${now}.`;
+}
+
+// ── Code Review prompt builder ─────────────────────────────────
+
+function buildCodeReviewPrompt(code: string, projectName: string): string {
+  const p = SKILL_PROFILES.code_review;
+  const now = Date.now();
+
+  return `Você é o ${p.title}.
+Credenciais: ${p.credentials}
+
+## Tarefa: Code Review Completo
+
+Projeto: ${projectName}
+
+Analise o código-fonte abaixo e produza um relatório completo de code review:
+
+### Código-fonte:
+\`\`\`
+${code.slice(0, 50000)}
+\`\`\`
+
+### Seu relatório deve incluir:
+1. **Resumo Executivo** — visão geral da qualidade do código
+2. **Problemas Críticos** — bugs, vulnerabilidades de segurança, erros lógicos
+3. **Melhorias de Performance** — otimizações possíveis
+4. **Qualidade de Código** — legibilidade, manutenibilidade, padrões
+5. **Segurança** — RLS, validação de input, exposição de dados
+6. **Sugestões de Refactoring** — com código exemplo quando aplicável
+7. **Super Prompts** — prompts prontos para a IA do projeto implementar as correções
+
+REGRAS:
+- NÃO faça perguntas, execute diretamente
+- Responda em Português (Brasil)
+- Seja técnico e acionável
+- NÃO crie componentes React
+
+Atualize src/brain-output.md com:
+\`\`\`markdown
+---
+status: done
+skill: code_review
+timestamp: ${now}
+request: "Code Review: ${projectName.slice(0, 50)}"
+---
+
+[SEU RELATÓRIO COMPLETO AQUI]
+\`\`\``;
 }
 
 // ── Send message via venus-chat (task mode) ────────────────────
-// Uses the internal venus-chat edge function for free messaging
 
 async function sendViaVenus(
   projectId: string,
@@ -507,7 +546,6 @@ async function sendViaVenus(
 }
 
 // ── Response cleaning ───────────────────────────────────────────
-// Strips bootstrap/audit boilerplate so only real answers are returned
 
 const BOOTSTRAP_MARKERS = [
   /^#\s*Star AI\s*—.*Sistema Operacional\s*✅/im,
@@ -531,7 +569,6 @@ const BOILERPLATE_LINES = [
   /^\|\s*Varredura de segurança\s*\|/i,
   /^\|\s*Vulnerabilidades\s*\|/i,
   /^\|\s*Ação necessária\s*\|/i,
-  // "Próximos Passos" and Lovable-related boilerplate
   /^##?\s*Próximos?\s*Passos?\s*$/i,
   /^[-*]\s*(Ativar|Executar|Configurar|Criar)\s*(Lovable|Cloud|migrations|RLS|Edge Functions)/i,
   /^[-*]\s*.*\(coisas relacionadas a\s*l[oa][vb]a[bl][el]\)/i,
@@ -546,23 +583,15 @@ function isBootstrapResponse(text: string): boolean {
 
 function cleanBrainResponse(raw: string): string {
   if (!raw || raw.length < 5) return raw;
-
-  // Remove frontmatter if still present
   let text = raw.replace(/^---[\s\S]*?---\s*/m, "").trim();
-
-  // Strip code fences wrapping the whole thing
   text = text.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
-
-  // Remove boilerplate lines
   const lines = text.split("\n");
   const cleaned = lines.filter(line => {
     const trimmed = line.trim();
-    if (!trimmed) return true; // keep empty lines
+    if (!trimmed) return true;
     return !BOILERPLATE_LINES.some(r => r.test(trimmed));
   });
-
   let result = cleaned.join("\n").trim();
-  // Remove entire "Próximos Passos" trailing section (header + bullets)
   result = result.replace(/\n##?\s*Próximos?\s*Passos?[\s\S]*$/im, "").trim();
   result = result.replace(/Sistema operacional\.\s*Aguardando instruções\.?\s*$/im, "").trim();
   result = result.replace(/Aguardando instruções do usuário\.?\s*$/im, "").trim();
@@ -572,7 +601,7 @@ function cleanBrainResponse(raw: string): string {
   return result.length > 5 ? result : raw;
 }
 
-// ── Response mining (scraper) ──────────────────────────────────
+// ── Response mining (scraper) with TIMESTAMP VALIDATION ─────────
 
 async function mineResponse(
   projectId: string,
@@ -580,6 +609,7 @@ async function mineResponse(
   maxWaitMs = 90_000,
   intervalMs = 5_000,
   initialDelayMs = 8_000,
+  questionTimestamp?: number, // epoch ms — only accept .md with timestamp > this
 ): Promise<{ response: string | null; status: "completed" | "processing" | "timeout" }> {
   await new Promise((r) => setTimeout(r, initialDelayMs));
   const deadline = Date.now() + maxWaitMs;
@@ -608,66 +638,80 @@ async function mineResponse(
           return null;
         };
 
-        // Log file keys for debugging (first poll only)
-        if (Date.now() < deadline - maxWaitMs + initialDelayMs + intervalMs + 2000) {
-          const fileKeys = typeof files === "object" && !Array.isArray(files)
-            ? Object.keys(files).filter(k => k.includes("brain") || k.includes("output") || k.includes("tasks")).slice(0, 10)
-            : Array.isArray(files)
-              ? files.filter((f: any) => {
-                  const p = f?.path || f?.name || "";
-                  return p.includes("brain") || p.includes("output") || p.includes("tasks");
-                }).map((f: any) => f?.path || f?.name).slice(0, 10)
-              : [];
-          console.log(`[Mine] project=${projectId.slice(0,8)} files-type=${Array.isArray(files) ? "array" : typeof files} brain-files=${JSON.stringify(fileKeys)}`);
-        }
-
         // Primary: src/brain-output.md
         const mdContent = getContent("src/brain-output.md");
         if (mdContent) {
-          console.log(`[Mine] brain-output.md found, len=${mdContent.length}, hasDone=${/status:\s*done/i.test(mdContent)}`);
-           
-           // Accept if status: done OR if content is substantial (>100 chars, meaning AI wrote something)
-           const hasDone = /status:\s*done/i.test(mdContent);
-           const hasReady = /status:\s*ready/i.test(mdContent);
-           
-           if (hasDone || (mdContent.length > 200 && !hasReady)) {
-             const parts = mdContent.split("---");
-             let body = "";
-             if (parts.length >= 3) {
-               body = parts.slice(2).join("---").trim();
-               body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
-             } else {
-               body = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
-             }
+          const hasDone = /status:\s*done/i.test(mdContent);
+          const hasReady = /status:\s*ready/i.test(mdContent);
 
-             // Skip bootstrap/audit boilerplate
-             if (isBootstrapResponse(body)) {
-               console.log(`[Mine] Skipping bootstrap response`);
-             } else if (body.length > 10) {
-               const cleaned = cleanBrainResponse(body);
-               if (cleaned.length > 10) return { response: cleaned, status: "completed" };
-             }
-           }
+          // ── TIMESTAMP VALIDATION ──
+          // Only accept if the .md timestamp is NEWER than when we sent the question
+          if (questionTimestamp) {
+            const mdTs = extractMdTimestamp(mdContent);
+            if (mdTs && mdTs < questionTimestamp) {
+              console.log(`[Mine] Skipping stale .md (md_ts=${mdTs} < question_ts=${questionTimestamp})`);
+              // Don't accept — this is from a previous response
+            } else if (hasDone || (mdContent.length > 200 && !hasReady)) {
+              const parts = mdContent.split("---");
+              let body = "";
+              if (parts.length >= 3) {
+                body = parts.slice(2).join("---").trim();
+                body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+              } else {
+                body = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
+              }
+
+              if (isBootstrapResponse(body)) {
+                console.log(`[Mine] Skipping bootstrap response`);
+              } else if (body.length > 10) {
+                const cleaned = cleanBrainResponse(body);
+                if (cleaned.length > 10) return { response: cleaned, status: "completed" };
+              }
+            }
+          } else {
+            // No timestamp to compare — use original logic
+            if (hasDone || (mdContent.length > 200 && !hasReady)) {
+              const parts = mdContent.split("---");
+              let body = "";
+              if (parts.length >= 3) {
+                body = parts.slice(2).join("---").trim();
+                body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+              } else {
+                body = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
+              }
+
+              if (isBootstrapResponse(body)) {
+                console.log(`[Mine] Skipping bootstrap response`);
+              } else if (body.length > 10) {
+                const cleaned = cleanBrainResponse(body);
+                if (cleaned.length > 10) return { response: cleaned, status: "completed" };
+              }
+            }
+          }
         }
 
-        // Fallback: ANY .md file with "status: done" in .lovable/tasks/
+        // Fallback: .lovable/tasks/*.md
         const allKeys = typeof files === "object" && !Array.isArray(files) ? Object.keys(files) : [];
         for (const key of allKeys) {
           if (!key.includes(".lovable/tasks/") && !key.includes("brain-response")) continue;
           const taskContent = getContent(key);
           if (taskContent && /status:\s*done/i.test(taskContent)) {
+            // Also check timestamp if available
+            if (questionTimestamp) {
+              const taskTs = extractMdTimestamp(taskContent);
+              if (taskTs && taskTs < questionTimestamp) continue; // stale
+            }
             const parts = taskContent.split("---");
             if (parts.length >= 3) {
               const body = parts.slice(2).join("---").trim();
               if (body.length > 20) {
-                console.log(`[Mine] Found done task: ${key} len=${body.length}`);
                 return { response: body, status: "completed" };
               }
             }
           }
         }
 
-        // Fallback: src/brain-output.json (legacy)
+        // Fallback: src/brain-output.json
         const jsonContent = getContent("src/brain-output.json");
         if (jsonContent) {
           let clean = typeof jsonContent === "string" ? jsonContent.trim() : "";
@@ -677,16 +721,19 @@ async function mineResponse(
           try {
             const out = JSON.parse(clean);
             if (out?.status === "done" && typeof out?.response === "string" && out.response.length > 0) {
-              return { response: out.response, status: "completed" };
+              // Check timestamp
+              if (questionTimestamp && out.timestamp && out.timestamp < questionTimestamp) {
+                console.log(`[Mine] Skipping stale .json`);
+              } else {
+                return { response: out.response, status: "completed" };
+              }
             }
           } catch { /* ignore */ }
         }
-      } else {
-        console.log(`[Mine] source-code HTTP ${srcRes.status} for project=${projectId.slice(0,8)}`);
       }
     } catch (e) { console.log(`[Mine] source-code error: ${String(e).slice(0,100)}`); }
 
-    // Strategy 2: latest-message as last resort (with timeout protection)
+    // Strategy 2: latest-message
     try {
       const ctrl = new AbortController();
       const lmTimer = setTimeout(() => ctrl.abort(), 8_000);
@@ -711,7 +758,7 @@ async function mineResponse(
           }
         }
       }
-    } catch { /* continue — timeout or network error */ }
+    } catch { /* continue */ }
 
     await new Promise((r) => setTimeout(r, intervalMs));
   }
@@ -773,7 +820,6 @@ async function cancelInitialCreation(
 }
 
 // ── Project creation pipeline ──────────────────────────────────
-// 1. Create project → 2. Ghost cancel → 3. Bootstrap prompt (via venus task mode)
 
 async function createFreshBrain(
   sc: SupabaseClient,
@@ -835,18 +881,15 @@ async function createFreshBrain(
         brain_skill: primarySkill,
         brain_skills: skills,
         name,
-        skill_phase: 1, // Queue audit prompts for cron processing
+        skill_phase: 1,
       })
       .eq("id", lockId);
 
-    // Step 2: Ghost cancel — prevent credit usage from initial_message
     const cancelResult = await cancelInitialCreation(projectId, token, created);
     console.log(`[Brain] Ghost cancel result=${cancelResult.cancelled} project=${projectId}`);
 
-    // Step 3: Wait for project to stabilize (8s minimum after cancel)
     await new Promise((r) => setTimeout(r, 8_000));
 
-    // Step 3b: Verify project is accessible before bootstrap
     let projectReady = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       const check = await lovFetch(`${API}/projects/${projectId}`, token, { method: "GET" });
@@ -854,32 +897,21 @@ async function createFreshBrain(
         projectReady = true;
         break;
       }
-      console.warn(`[Brain] Project not ready yet (attempt ${attempt + 1}/3, status=${check.status})`);
       await new Promise((r) => setTimeout(r, 5_000));
     }
 
-    if (!projectReady) {
-      console.warn(`[Brain] Project ${projectId} never became ready, skipping bootstrap`);
-    }
-
-    // Step 4: Bootstrap — send enhanced PRD prompt via venus-chat
     if (projectReady) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
       const bootstrapPrompt = buildBootstrapPrompt(primarySkill, { supabaseUrl, anonKey, userId });
       let bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
       
-      // Retry once if 404
       if (!bootstrapResult.ok && bootstrapResult.error?.includes("404")) {
-        console.warn(`[Brain] Bootstrap got 404, retrying after 5s...`);
         await new Promise((r) => setTimeout(r, 5_000));
         bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
       }
       
       console.log(`[Brain] Bootstrap via venus ok=${bootstrapResult.ok} project=${projectId}`);
-
-      // NOTE: Background audit prompts removed — edge functions get killed after response.
-      // Audits should be triggered separately via cron or explicit user action.
     }
 
     console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")}`);
@@ -888,6 +920,48 @@ async function createFreshBrain(
     console.error("[Brain] createFreshBrain error:", err);
     await sc.from("user_brain_projects").delete().eq("id", lockId);
     return { error: "Erro inesperado ao criar Brain" };
+  }
+}
+
+// ── Extract project source code for code review ────────────────
+
+async function extractProjectCode(projectId: string, token: string): Promise<string | null> {
+  try {
+    const res = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
+    if (!res.ok) return null;
+    const raw = await res.text();
+    let parsed: any;
+    try { parsed = JSON.parse(raw); } catch { return null; }
+
+    const files = parsed?.files || parsed?.data?.files || parsed;
+    if (!files) return null;
+
+    const codeLines: string[] = [];
+    const processFile = (path: string, content: string) => {
+      // Only include relevant source files
+      if (/\.(ts|tsx|js|jsx|sql|json|css|html|md)$/.test(path) &&
+          !path.includes("node_modules") && !path.includes(".lock") &&
+          content.length < 20000) {
+        codeLines.push(`\n// ═══ FILE: ${path} ═══\n${content}\n`);
+      }
+    };
+
+    if (Array.isArray(files)) {
+      for (const f of files) {
+        const p = f.path || f.name || "";
+        const c = f.contents || f.content || f.source || "";
+        if (p && c) processFile(p, c);
+      }
+    } else if (typeof files === "object") {
+      for (const [path, val] of Object.entries(files)) {
+        const c = typeof val === "string" ? val : (val as any)?.contents || (val as any)?.content || "";
+        if (c) processFile(path, c);
+      }
+    }
+
+    return codeLines.join("\n").slice(0, 60000); // Max 60K chars for prompt
+  } catch {
+    return null;
   }
 }
 
@@ -1042,11 +1116,77 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── REVIEW_CODE — Code Review via Brain ──
+    if (action === "review_code") {
+      const targetProjectId = typeof body?.project_id === "string" ? body.project_id : "";
+      if (!targetProjectId) return json({ error: "project_id obrigatório" }, 400);
+
+      let brain = await getBrain(sc, userId);
+      if (!brain) return json({ error: "Star AI não está ativo. Crie um Brain primeiro.", code: "brain_inactive" }, 400);
+
+      const brainProjectId = brain.lovable_project_id;
+      if (!brainProjectId || brainProjectId === "creating") {
+        return json({ error: "Brain ainda está sendo criado.", code: "brain_creating" }, 503);
+      }
+
+      // Extract code from target project
+      const code = await extractProjectCode(targetProjectId, lovableToken);
+      if (!code) return json({ error: "Não foi possível extrair código do projeto." }, 502);
+
+      const projectName = body?.project_name || targetProjectId.slice(0, 8);
+      const prompt = buildCodeReviewPrompt(code, projectName);
+      const questionTs = Date.now();
+
+      const { data: convoRow } = await sc.from("loveai_conversations")
+        .insert({
+          user_id: userId,
+          user_message: `Code Review: ${projectName}`,
+          brain_type: "code_review",
+          status: "processing",
+          target_project_id: brainProjectId,
+        })
+        .select("id")
+        .single();
+
+      const convoId = convoRow?.id;
+      const venusResult = await sendViaVenus(brainProjectId, prompt, lovableToken);
+
+      if (!venusResult.ok) {
+        if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+        return json({ error: `Erro ao enviar: ${venusResult.error}` }, 502);
+      }
+
+      // Quick mine with timestamp validation
+      let quickResponse: string | null = null;
+      try {
+        const quickResult = await mineResponse(brainProjectId, lovableToken, 12_000, 3_000, 6_000, questionTs);
+        if (quickResult.status === "completed") quickResponse = quickResult.response;
+      } catch { /* cron handles it */ }
+
+      if (quickResponse && convoId) {
+        await sc.from("loveai_conversations").update({ ai_response: quickResponse, status: "completed" }).eq("id", convoId);
+        await sc.from("brain_outputs").insert({
+          user_id: userId, conversation_id: convoId, skill: "code_review",
+          request: `Code Review: ${projectName}`, response: quickResponse,
+          status: "done", brain_project_id: brainProjectId,
+        }).catch(() => {});
+      }
+
+      return json({
+        conversation_id: convoId,
+        response: quickResponse,
+        status: quickResponse ? "completed" : "processing",
+        skill: "code_review",
+      });
+    }
+
     // ── SEND (via venus-chat task mode) ──
     if (action === "send") {
       const message = typeof body?.message === "string" ? body.message.trim() : "";
       const rawSkill = typeof body?.brain_type === "string" ? body.brain_type : "";
       const brainId = typeof body?.brain_id === "string" ? body.brain_id : undefined;
+      // Track when this question was asked
+      const questionTimestamp = Date.now();
 
       if (!message || message.length < 1 || message.length > 10_000) {
         return json({ error: "Mensagem inválida (1-10000 chars)" }, 400);
@@ -1060,13 +1200,11 @@ Deno.serve(async (req) => {
 
       const brainProjectId = brain.lovable_project_id;
 
-      // Safeguard: brain project must NOT be "creating" placeholder
       if (!brainProjectId || brainProjectId === "creating") {
         return json({ error: "Brain ainda está sendo criado. Aguarde.", code: "brain_creating" }, 503);
       }
 
-      // Log which project we're targeting
-      console.log(`[Brain:send] user=${userId.slice(0,8)} brain=${brain.id.slice(0,8)} project=${brainProjectId.slice(0,8)} skill=${brain.brain_skill}`);
+      console.log(`[Brain:send] user=${userId.slice(0,8)} brain=${brain.id.slice(0,8)} project=${brainProjectId.slice(0,8)} skill=${brain.brain_skill} question_ts=${questionTimestamp}`);
 
       const access = await verifyProjectState(brainProjectId, lovableToken);
       if (access.state === "not_found") {
@@ -1082,7 +1220,7 @@ Deno.serve(async (req) => {
       const skill: BrainSkill = (VALID_SKILLS.has(rawSkill) ? rawSkill : (brain.brain_skill || "general")) as BrainSkill;
       const prompt = buildBrainPrompt(skill, message);
 
-      // Log conversation — uses brain's lovable_project_id (NOT the main app)
+      // Store conversation with timestamp
       const { data: convoRow } = await sc.from("loveai_conversations")
         .insert({
           user_id: userId,
@@ -1091,18 +1229,17 @@ Deno.serve(async (req) => {
           status: "processing",
           target_project_id: brainProjectId,
         })
-        .select("id")
+        .select("id, created_at")
         .single();
 
       const convoId = convoRow?.id;
       console.log(`[Brain:send] convo=${convoId?.slice(0,8)} target_project=${brainProjectId.slice(0,8)}`);
 
-      // Send via venus-chat (task mode) — FREE
+      // Send via venus-chat
       let venusResult = await sendViaVenus(brainProjectId, prompt, lovableToken);
       let activeProjectId = brainProjectId;
 
       if (!venusResult.ok) {
-        // If 404 — brain project was deleted, auto-recreate
         const is404 = venusResult.error?.includes("404");
         if (is404) {
           console.warn(`[Brain] Project ${brainProjectId} returned 404, recreating...`);
@@ -1114,12 +1251,10 @@ Deno.serve(async (req) => {
           }
           activeProjectId = newBrain.projectId;
           if (convoId) await sc.from("loveai_conversations").update({ target_project_id: activeProjectId }).eq("id", convoId);
-          // Wait for new brain to stabilize
           await new Promise(r => setTimeout(r, 5000));
           venusResult = await sendViaVenus(activeProjectId, prompt, lovableToken);
         }
 
-        // Token might be expired — try refresh
         if (!venusResult.ok) {
           const refreshed = await refreshToken(sc, userId);
           if (refreshed) {
@@ -1135,10 +1270,10 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Quick mine (10s) for fast responses
+      // Quick mine with TIMESTAMP VALIDATION — only accept responses newer than our question
       let quickResponse: string | null = null;
       try {
-        const quickResult = await mineResponse(activeProjectId, lovableToken, 8_000, 3_000, 5_000);
+        const quickResult = await mineResponse(activeProjectId, lovableToken, 8_000, 3_000, 5_000, questionTimestamp);
         if (quickResult.status === "completed") {
           quickResponse = quickResult.response;
         }
@@ -1150,7 +1285,6 @@ Deno.serve(async (req) => {
           status: "completed",
         }).eq("id", convoId);
 
-        // Persist to brain_outputs table for API access
         await sc.from("brain_outputs").insert({
           user_id: userId,
           conversation_id: convoId,
@@ -1184,7 +1318,7 @@ Deno.serve(async (req) => {
       if (!conversationId) return json({ error: "conversation_id obrigatório" }, 400);
 
       const { data: convo } = await sc.from("loveai_conversations")
-        .select("id, user_id, ai_response, status, target_project_id")
+        .select("id, user_id, ai_response, status, target_project_id, created_at")
         .eq("id", conversationId)
         .eq("user_id", userId)
         .maybeSingle();
@@ -1198,14 +1332,15 @@ Deno.serve(async (req) => {
       const projectId = convo.target_project_id;
       if (!projectId) return json({ response: null, status: convo.status || "processing" });
 
-      const capture = await mineResponse(projectId, lovableToken, 45_000, 4_000, 0);
+      // Use conversation created_at as the timestamp threshold
+      const convoTs = convo.created_at ? new Date(convo.created_at).getTime() : undefined;
+      const capture = await mineResponse(projectId, lovableToken, 45_000, 4_000, 0, convoTs);
       if (capture.response) {
         await sc.from("loveai_conversations").update({
           ai_response: capture.response,
           status: capture.status === "completed" ? "completed" : convo.status,
         }).eq("id", conversationId);
 
-        // Persist to brain_outputs
         await sc.from("brain_outputs").insert({
           user_id: userId,
           conversation_id: conversationId,
