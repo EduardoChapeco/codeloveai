@@ -174,43 +174,37 @@ export default function LovableProjects() {
   return (
     <AppLayout>
       <div className="flex h-[calc(100vh-4rem)] md:h-screen">
-        {/* ── Left column: Project cards ── */}
-        <div className="w-80 lg:w-96 shrink-0 flex flex-col h-full overflow-hidden" style={{ borderRight: '0.5px solid var(--clf-border)' }}>
+        {/* ── Left column: Compact project grid ── */}
+        <div className="w-56 shrink-0 flex flex-col h-full overflow-hidden" style={{ borderRight: '0.5px solid var(--clf-border)' }}>
           {/* Header */}
-          <div className="p-3 shrink-0">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                  <FolderOpen className="h-3.5 w-3.5 text-primary" />
-                </div>
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Projetos</span>
-              </div>
-              <div className="flex items-center gap-1">
+          <div className="p-2.5 shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Projetos</span>
+              <div className="flex items-center gap-0.5">
                 {workspaces.length > 1 && (
                   <select value={selectedWs} onChange={e => setSelectedWs(e.target.value)}
-                    className="h-7 px-2 text-[10px] rounded-lg bg-muted/30 border-none focus:outline-none text-muted-foreground">
+                    className="h-6 px-1.5 text-[9px] rounded-md bg-muted/30 border-none focus:outline-none text-muted-foreground">
                     {workspaces.map(ws => <option key={ws.id} value={ws.id}>{ws.display_name}</option>)}
                   </select>
                 )}
                 <button onClick={loadProjects} disabled={loading}
-                  className="h-7 w-7 flex items-center justify-center rounded-xl hover:bg-muted/40 transition-colors" title="Atualizar">
-                  <RefreshCw className={`h-3.5 w-3.5 text-muted-foreground ${loading ? "animate-spin" : ""}`} />
+                  className="h-6 w-6 flex items-center justify-center rounded-lg hover:bg-muted/40 transition-colors" title="Atualizar">
+                  <RefreshCw className={`h-3 w-3 text-muted-foreground ${loading ? "animate-spin" : ""}`} />
                 </button>
               </div>
             </div>
           </div>
 
           {/* Project list */}
-          <div className="flex-1 overflow-y-auto px-2 pb-3 no-scrollbar space-y-1.5">
+          <div className="flex-1 overflow-y-auto px-1.5 pb-2 no-scrollbar space-y-1">
             {loadingWs || loading ? (
               <div className="text-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-                <p className="text-[10px] text-muted-foreground mt-2">Carregando...</p>
+                <Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" />
               </div>
             ) : projects.length === 0 ? (
               <div className="text-center py-12">
-                <Globe className="h-8 w-8 mx-auto text-muted-foreground/20 mb-2" />
-                <p className="text-xs text-muted-foreground">Nenhum projeto</p>
+                <Globe className="h-6 w-6 mx-auto text-muted-foreground/20 mb-1" />
+                <p className="text-[10px] text-muted-foreground">Nenhum projeto</p>
               </div>
             ) : projects.map(project => {
               const isActive = selectedProject?.id === project.id;
@@ -218,45 +212,58 @@ export default function LovableProjects() {
                 <div
                   key={project.id}
                   onClick={() => setSelectedProject(project)}
-                  className={`group cursor-pointer p-2.5 rounded-2xl transition-all duration-200 ${
-                    isActive ? "shadow-sm" : "hover:bg-muted/20"
-                  }`}
+                  className="group relative cursor-pointer rounded-xl overflow-hidden transition-all duration-200"
                   style={{
-                    border: isActive ? '1px solid hsl(var(--primary) / 0.2)' : '1px solid transparent',
-                    background: isActive ? 'hsl(var(--primary) / 0.06)' : undefined,
+                    border: isActive ? '1.5px solid hsl(var(--primary) / 0.4)' : '1px solid hsl(var(--border) / 0.3)',
+                    boxShadow: isActive ? '0 0 0 2px hsl(var(--primary) / 0.1)' : undefined,
                   }}
                 >
-                  <div className="flex items-center gap-3">
-                    {/* Thumbnail */}
-                    <div className="h-12 w-12 rounded-xl overflow-hidden shrink-0 bg-muted/30">
-                      {project.latest_screenshot_url ? (
-                        <img src={project.latest_screenshot_url} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="h-full w-full flex items-center justify-center">
-                          <Globe className="h-4 w-4 text-muted-foreground/30" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold truncate">{project.display_name || project.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate font-mono">{project.id.slice(0, 8)}</p>
+                  {/* Mini screenshot preview */}
+                  <div className="aspect-[16/10] bg-muted/20 relative">
+                    {project.latest_screenshot_url ? (
+                      <img src={project.latest_screenshot_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center">
+                        <Globe className="h-5 w-5 text-muted-foreground/15" />
+                      </div>
+                    )}
+                    {/* Hover overlay with actions */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center gap-1.5 p-2">
+                      <button onClick={e => { e.stopPropagation(); handleDeploy(project.id); }}
+                        disabled={deploying === project.id}
+                        className="w-full h-6 rounded-md bg-primary text-primary-foreground text-[9px] font-semibold flex items-center justify-center gap-1 hover:opacity-90 transition-opacity">
+                        {deploying === project.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Rocket className="h-2.5 w-2.5" />} Deploy
+                      </button>
+                      <div className="flex gap-1 w-full">
+                        <button onClick={e => { e.stopPropagation(); navigate(`/projeto/${project.id}/editar`); }}
+                          className="flex-1 h-6 rounded-md bg-white/20 text-white text-[9px] font-medium flex items-center justify-center gap-0.5 hover:bg-white/30 transition-colors">
+                          <Pencil className="h-2.5 w-2.5" /> Editar
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); navigate(`/lovable/preview?projectId=${project.id}`); }}
+                          className="flex-1 h-6 rounded-md bg-white/20 text-white text-[9px] font-medium flex items-center justify-center gap-0.5 hover:bg-white/30 transition-colors">
+                          <Eye className="h-2.5 w-2.5" /> Preview
+                        </button>
+                      </div>
+                      <button onClick={e => { e.stopPropagation(); setRenamingId(project.id); setRenameValue(project.display_name || project.name || ""); }}
+                        className="w-full h-5 rounded-md text-white/60 text-[8px] flex items-center justify-center gap-0.5 hover:text-white/90 transition-colors">
+                        <Pencil className="h-2 w-2" /> Renomear
+                      </button>
                     </div>
                   </div>
-                  {/* Quick action buttons */}
-                  <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={e => { e.stopPropagation(); handleDeploy(project.id); }}
-                      disabled={deploying === project.id}
-                      className="h-7 px-2.5 rounded-lg bg-primary/10 text-primary text-[10px] font-semibold flex items-center gap-1 hover:bg-primary/20 transition-colors">
-                      {deploying === project.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />} Deploy
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); navigate(`/projeto/${project.id}/editar`); }}
-                      className="h-7 px-2.5 rounded-lg bg-muted/30 text-[10px] font-semibold flex items-center gap-1 hover:bg-muted/50 transition-colors">
-                      <Pencil className="h-3 w-3" /> Editar
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); navigate(`/lovable/preview?projectId=${project.id}`); }}
-                      className="h-7 px-2.5 rounded-lg bg-muted/30 text-[10px] font-semibold flex items-center gap-1 hover:bg-muted/50 transition-colors">
-                      <Eye className="h-3 w-3" /> Preview
-                    </button>
+                  {/* Project name */}
+                  <div className="px-2 py-1.5">
+                    {renamingId === project.id ? (
+                      <div className="flex items-center gap-1">
+                        <input value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                          className="flex-1 h-5 px-1.5 text-[10px] font-medium rounded bg-muted/40 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                          autoFocus onClick={e => e.stopPropagation()}
+                          onKeyDown={e => { if (e.key === "Enter") handleRename(project.id); if (e.key === "Escape") setRenamingId(null); }} />
+                        <button onClick={e => { e.stopPropagation(); handleRename(project.id); }} className="h-5 w-5 rounded bg-primary flex items-center justify-center text-primary-foreground"><Check className="h-2.5 w-2.5" /></button>
+                        <button onClick={e => { e.stopPropagation(); setRenamingId(null); }} className="h-5 w-5 rounded bg-muted/30 flex items-center justify-center"><X className="h-2.5 w-2.5" /></button>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] font-semibold truncate">{project.display_name || project.name}</p>
+                    )}
                   </div>
                 </div>
               );
