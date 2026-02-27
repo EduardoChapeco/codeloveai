@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Key, Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Eye, EyeOff, Save, Copy } from "lucide-react";
+import { Key, Plus, Trash2, ToggleLeft, ToggleRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface ApiKeyEntry {
   id: string;
   provider: string;
   label: string;
-  api_key_encrypted: string;
+  api_key_masked: string;
   is_active: boolean;
   requests_count: number;
   last_used_at: string | null;
@@ -28,7 +28,7 @@ const PROVIDERS = [
 export default function ApiKeysManagementTab() {
   const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
+  
 
   // New key form
   const [newProvider, setNewProvider] = useState("firecrawl");
@@ -39,7 +39,7 @@ export default function ApiKeysManagementTab() {
   const fetchKeys = async () => {
     setLoading(true);
     const { data, error } = await (supabase as any)
-      .from("api_key_vault")
+      .from("api_key_vault_safe")
       .select("*")
       .order("provider", { ascending: true });
     if (error) {
@@ -82,18 +82,9 @@ export default function ApiKeysManagementTab() {
     fetchKeys();
   };
 
-  const toggleReveal = (id: string) => {
-    setRevealedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const maskKey = (key: string) => {
-    if (key.length <= 8) return "••••••••";
-    return key.slice(0, 4) + "••••" + key.slice(-4);
+    if (!key || key.length <= 4) return "••••••••";
+    return "••••••••" + key.slice(-4);
   };
 
   const getProviderInfo = (provider: string) =>
@@ -168,7 +159,6 @@ export default function ApiKeysManagementTab() {
           <div className="space-y-3">
             {keys.map(k => {
               const prov = getProviderInfo(k.provider);
-              const revealed = revealedIds.has(k.id);
               return (
                 <div key={k.id} className="flex items-center gap-4 p-3 rounded-lg border border-border/60 bg-card/50">
                   {/* Provider badge */}
@@ -182,7 +172,7 @@ export default function ApiKeysManagementTab() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{k.label}</p>
                     <p className="text-xs text-muted-foreground font-mono">
-                      {revealed ? k.api_key_encrypted : maskKey(k.api_key_encrypted)}
+                      {maskKey(k.api_key_masked || "")}
                     </p>
                   </div>
 
@@ -196,23 +186,6 @@ export default function ApiKeysManagementTab() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => toggleReveal(k.id)}
-                      className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-muted"
-                      title={revealed ? "Ocultar" : "Revelar"}
-                    >
-                      {revealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(k.api_key_encrypted);
-                        toast.success("Chave copiada!");
-                      }}
-                      className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-muted"
-                      title="Copiar"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
                     <button
                       onClick={() => toggleActive(k.id, k.is_active)}
                       className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-muted"
