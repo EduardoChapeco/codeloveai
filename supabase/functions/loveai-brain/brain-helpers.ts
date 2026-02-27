@@ -548,24 +548,9 @@ export function buildPayload(prompt: string) {
  * No aggressive prefixes — just a clean task description.
  */
 export function buildBrainPrompt(brainType: string, message: string): string {
-  const ts = Date.now();
-
-  // Simple, direct instruction — respond naturally AND save to .md
-  const outputRule = `
-
-Responda em Português Brasileiro de forma direta e completa.
-
-Após responder, salve sua resposta completa no arquivo src/brain-output.md neste formato:
----
-status: done
-timestamp: ${ts}
-type: ${brainType}
----
-
-(sua resposta aqui)`;
-
-  // No wrappers — just the user message + output rule
-  return message + outputRule;
+  // Keep it simple — Lovable responds via chat, we capture via latest-message API
+  // No file creation demands — just answer naturally
+  return `Responda em Português Brasileiro de forma direta e completa.\n\n${message}`;
 }
 
 /**
@@ -575,14 +560,37 @@ export async function captureResponse(
   projectId: string,
   token: string,
   maxWaitMs = 90000,
-  intervalMs = 3000,
-  initialDelayMs = 5000
+  intervalMs = 4000,
+  initialDelayMs = 8000
 ): Promise<{ response: string | null; status: "completed" | "processing" | "timeout" }> {
   await new Promise(r => setTimeout(r, initialDelayMs));
   const deadline = Date.now() + maxWaitMs;
+  let lastSeenMsgId: string | null = null;
 
   while (Date.now() < deadline) {
-    // Strategy 1: Poll source-code for brain-output.md (PRIMARY — most reliable)
+    // ── Strategy 1 (PRIMARY): latest-message API — this is what Lovable actually produces ──
+    try {
+      const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
+      if (latestRes.ok) {
+        const msg = await latestRes.json();
+        if (msg && msg.role !== "user" && !msg.is_streaming) {
+          const content = msg.content || msg.message || msg.text || "";
+          const msgId = msg.id || msg.message_id || "";
+          // Only accept if it's a new message with meaningful content
+          if (typeof content === "string" && content.trim().length > 20) {
+            // Skip if we already saw this exact message (avoid returning stale)
+            if (msgId && msgId === lastSeenMsgId) {
+              // Same message — still processing, continue polling
+            } else {
+              return { response: content.trim(), status: "completed" };
+            }
+          }
+          if (msgId) lastSeenMsgId = msgId;
+        }
+      }
+    } catch { /* continue */ }
+
+    // ── Strategy 2: Check .lovable/tasks/*.md with status: done (Lovable creates these) ──
     try {
       const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
       if (srcRes.ok) {
@@ -591,58 +599,22 @@ export async function captureResponse(
         try { srcData = JSON.parse(rawText); } catch { srcData = {}; }
         const files = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
 
-        const getContent = (path: string, name: string): string | null => {
-          if (Array.isArray(files)) {
-            const f = files.find((f: any) => f.path === path || f.name === name);
-            return f?.content || f?.source || null;
-          } else if (files && typeof files === "object") {
-            return files[path] || null;
-          }
-          return null;
-        };
-
-        // Check brain-output.md (primary)
-        const mdContent = getContent("src/brain-output.md", "brain-output.md");
-        if (mdContent && /status:\s*done/i.test(mdContent)) {
-          const parts = mdContent.split("---");
-          if (parts.length >= 3) {
-            let body = parts.slice(2).join("---").trim();
-            // Strip wrapping code fences
-            body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
-            if (body.length > 5) return { response: body, status: "completed" };
-          }
-        }
-
-        // Check brain-output.json (secondary)
-        const jsonContent = getContent("src/brain-output.json", "brain-output.json");
-        if (jsonContent) {
-          let clean = jsonContent.trim();
-          if (clean.startsWith("```")) clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-          try {
-            const parsed = JSON.parse(clean);
-            if (parsed.status === "done" && typeof parsed.response === "string" && parsed.response.length > 0) {
-              return { response: parsed.response, status: "completed" };
-            }
-          } catch { /* not ready */ }
-        }
-
-        // Check brain-output.html (tertiary)
-        const htmlContent = getContent("src/brain-output.html", "brain-output.html");
-        if (htmlContent) {
-          const bodyMatch = htmlContent.match(/<(?:body|main)[^>]*>([\s\S]*?)<\/(?:body|main)>/i);
-          if (bodyMatch) {
-            const text = bodyMatch[1]
-              .replace(/<script[\s\S]*?<\/script>/gi, "")
-              .replace(/<style[\s\S]*?<\/style>/gi, "")
-              .replace(/<[^>]+>/g, " ")
-              .replace(/\s+/g, " ")
-              .trim();
-            if (text.length > 30) return { response: text, status: "completed" };
-          }
-        }
-
-        // Check .lovable/tasks/*.md with status: done
+        // Check brain-output.md (if Lovable happened to create it)
         if (Array.isArray(files)) {
+          const brainMd = files.find((f: any) => f.path === "src/brain-output.md");
+          if (brainMd) {
+            const mdContent = brainMd.content || brainMd.source || "";
+            if (/status:\s*done/i.test(mdContent)) {
+              const parts = mdContent.split("---");
+              if (parts.length >= 3) {
+                let body = parts.slice(2).join("---").trim();
+                body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+                if (body.length > 5) return { response: body, status: "completed" };
+              }
+            }
+          }
+
+          // Check task files (newest first)
           const taskFiles = files
             .filter((f: any) => f.path?.startsWith(".lovable/tasks/") && f.path?.endsWith(".md"))
             .sort((a: any, b: any) => (b.path || "").localeCompare(a.path || ""));
@@ -656,18 +628,6 @@ export async function captureResponse(
               }
             }
           }
-        }
-      }
-    } catch { /* continue */ }
-
-    // Strategy 2: Check latest-message API (fallback)
-    try {
-      const latestRes = await lovFetch(`${API}/projects/${projectId}/latest-message`, token, { method: "GET" });
-      if (latestRes.ok) {
-        const msg = await latestRes.json();
-        if (msg && !msg.is_streaming && msg.role !== "user") {
-          const content = msg.content || msg.message || msg.text || "";
-          if (content.length > 20) return { response: content, status: "completed" };
         }
       }
     } catch { /* continue */ }
