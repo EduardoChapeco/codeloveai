@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card } from "@/components/ui/card";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingUp, Users, MessageSquare, Zap, Crown, BarChart3, Activity, Globe } from "lucide-react";
@@ -284,42 +284,42 @@ export default function ActivityDashboard({ isGlobalAdmin, tenantId }: Props) {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4 space-y-1">
+        <div className="clf-liquid-glass p-4 space-y-1">
           <div className="flex items-center gap-2 text-muted-foreground">
             <MessageSquare className="h-4 w-4" />
             <span className="text-xs font-medium">Mensagens</span>
           </div>
           <p className="text-2xl font-bold">{totalMessages.toLocaleString()}</p>
           <p className="text-xs text-muted-foreground">{periodDays}d período</p>
-        </Card>
-        <Card className="p-4 space-y-1">
+        </div>
+        <div className="clf-liquid-glass p-4 space-y-1">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Users className="h-4 w-4" />
             <span className="text-xs font-medium">Usuários ativos</span>
           </div>
           <p className="text-2xl font-bold">{activeUsers}</p>
           <p className="text-xs text-muted-foreground">com uso no período</p>
-        </Card>
-        <Card className="p-4 space-y-1">
+        </div>
+        <div className="clf-liquid-glass p-4 space-y-1">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Zap className="h-4 w-4" />
             <span className="text-xs font-medium">Licenças ativas</span>
           </div>
           <p className="text-2xl font-bold">{totalActiveLicenses}<span className="text-sm text-muted-foreground">/{totalLicenses}</span></p>
           <p className="text-xs text-muted-foreground">ativa / total</p>
-        </Card>
-        <Card className="p-4 space-y-1">
+        </div>
+        <div className="clf-liquid-glass p-4 space-y-1">
           <div className="flex items-center gap-2 text-muted-foreground">
             <TrendingUp className="h-4 w-4" />
             <span className="text-xs font-medium">Média/usuário</span>
           </div>
           <p className="text-2xl font-bold">{avgMessagesPerUser}</p>
           <p className="text-xs text-muted-foreground">mensagens/usuário</p>
-        </Card>
+        </div>
       </div>
 
       {/* Messages per day chart */}
-      <Card className="p-5">
+      <div className="clf-liquid-glass p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-primary" />
@@ -347,11 +347,11 @@ export default function ActivityDashboard({ isGlobalAdmin, tenantId }: Props) {
           <span className="text-[10px] text-muted-foreground">{dailyData[0]?.date ? format(new Date(dailyData[0].date), "dd/MM") : ""}</span>
           <span className="text-[10px] text-muted-foreground">{dailyData.length > 0 ? format(new Date(dailyData[dailyData.length - 1].date), "dd/MM") : ""}</span>
         </div>
-      </Card>
+        </div>
 
       <div className="grid md:grid-cols-2 gap-4">
         {/* Top Users Ranking */}
-        <Card className="p-5">
+        <div className="clf-liquid-glass p-5">
           <div className="flex items-center gap-2 mb-4">
             <Crown className="h-4 w-4 text-accent" />
             <h3 className="text-sm font-semibold">Top 10 Usuários</h3>
@@ -375,10 +375,10 @@ export default function ActivityDashboard({ isGlobalAdmin, tenantId }: Props) {
               </div>
             ))}
           </div>
-        </Card>
+        </div>
 
         {/* Plan Distribution */}
-        <Card className="p-5">
+        <div className="clf-liquid-glass p-5">
           <div className="flex items-center gap-2 mb-4">
             <Activity className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Distribuição por plano</h3>
@@ -419,12 +419,12 @@ export default function ActivityDashboard({ isGlobalAdmin, tenantId }: Props) {
               </div>
             </>
           )}
-        </Card>
+        </div>
       </div>
 
       {/* Tenant distribution (global admin only) */}
       {isGlobalAdmin && tenantDistribution.length > 0 && (
-        <Card className="p-5">
+        <div className="clf-liquid-glass p-5">
           <div className="flex items-center gap-2 mb-4">
             <Globe className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Mensagens por tenant</h3>
@@ -446,7 +446,7 @@ export default function ActivityDashboard({ isGlobalAdmin, tenantId }: Props) {
               );
             })}
           </div>
-        </Card>
+        </div>
       )}
     </div>
   );
