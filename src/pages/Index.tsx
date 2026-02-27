@@ -27,22 +27,22 @@ const plans = [
     highlight: false,
   },
   {
-    name: "Diário Ilimitado",
+    name: "Venus Diário",
     price: "R$19,90",
     period: "/dia",
     badge: "Mais popular",
-    features: ["Mensagens ilimitadas", "Todas as extensões", "Ativa por 24h", "Deploy ilimitado"],
-    cta: "Comprar acesso",
+    features: ["Mensagens ilimitadas", "God Mode ativo", "Ativa por 24h", "Deploy ilimitado"],
+    cta: "Ativar Venus",
     href: "/checkout",
     highlight: true,
   },
   {
-    name: "Mensal Ilimitado",
+    name: "Venus Mensal",
     price: "R$149,90",
     period: "/mês",
     badge: "Melhor custo",
-    features: ["Mensagens ilimitadas", "Todas as extensões", "30 dias de acesso", "Suporte prioritário"],
-    cta: "Assinar mensal",
+    features: ["Mensagens ilimitadas", "God Mode ativo", "30 dias de acesso", "Suporte prioritário"],
+    cta: "Assinar Venus",
     href: "/checkout",
     highlight: false,
   },
@@ -142,7 +142,7 @@ export default function Index() {
           <span className="text-base font-semibold tracking-tight text-foreground">{brandName}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/community" className="lv-btn-ghost h-9 px-3 text-xs">CodeLovers</Link>
+          <Link to="/community" className="lv-btn-ghost h-9 px-3 text-xs">Comunidade</Link>
           <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
           <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Começar Grátis</Link>
         </div>
@@ -159,7 +159,7 @@ export default function Index() {
       <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center animate-fade-in">
         <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-primary">🚀 30 dias grátis — tudo liberado!</span>
+          <span className="text-sm font-medium text-primary">⚡ Venus God Mode — poder máximo!</span>
         </div>
         <h1 className="lv-heading-xl mb-6">
           {isDefaultTenant

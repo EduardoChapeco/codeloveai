@@ -1,21 +1,19 @@
-import { useState } from "react";
-import { 
-  ChevronRight, ChevronDown, Copy, Check, ExternalLink, 
-  Server, Database, Key, Wifi, Shield, Zap, Terminal,
-  ArrowRight, AlertTriangle, CheckCircle2, Info, Globe
+import { useState, useMemo } from "react";
+import AppLayout from "@/components/AppLayout";
+import {
+  ChevronRight, ChevronDown, Copy, Check, ExternalLink,
+  Server, Database, Key, Zap, Terminal,
+  ArrowRight, AlertTriangle, CheckCircle2, Info, Globe,
+  Lightbulb, FileDown, ArrowLeft, Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
-interface StepProps {
-  number: number;
-  title: string;
-  children: React.ReactNode;
-  isActive: boolean;
-  isComplete: boolean;
-  onClick: () => void;
-}
+/* ── Reusable sub-components ── */
 
-function Step({ number, title, children, isActive, isComplete, onClick }: StepProps) {
+function Step({ number, title, children, isActive, isComplete, onClick }: {
+  number: number; title: string; children: React.ReactNode; isActive: boolean; isComplete: boolean; onClick: () => void;
+}) {
   return (
     <div className={`rounded-2xl border transition-all ${
       isActive ? "border-primary/30 bg-primary/[0.03]" : isComplete ? "border-emerald-500/20 bg-emerald-500/[0.02]" : "border-white/[0.06] bg-white/[0.02]"
@@ -34,7 +32,7 @@ function Step({ number, title, children, isActive, isComplete, onClick }: StepPr
   );
 }
 
-function CodeBlock({ code, label }: { code: string; label?: string }) {
+function CopyBlock({ code, label }: { code: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard.writeText(code);
@@ -83,36 +81,174 @@ function LinkButton({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
+function SmartInput({ label, placeholder, value, onChange, hint }: {
+  label: string; placeholder: string; value: string; onChange: (v: string) => void; hint?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+        <Key className="h-3 w-3 text-primary" /> {label}
+      </label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full h-10 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/30 transition-all font-mono text-xs"
+      />
+      {hint && <p className="text-[10px] text-muted-foreground/60">{hint}</p>}
+    </div>
+  );
+}
+
+function PromptSuggestion({ prompt }: { prompt: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(prompt);
+    setCopied(true);
+    toast.success("Prompt copiado!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3 flex gap-3 items-start cursor-pointer hover:bg-violet-500/[0.1] transition-colors" onClick={copy}>
+      <Sparkles className="h-4 w-4 text-violet-400 shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold text-violet-300 uppercase tracking-wider mb-1">💡 Prompt sugerido para Lovable</p>
+        <p className="text-xs text-foreground/80 leading-relaxed">{prompt}</p>
+      </div>
+      <button className="shrink-0 text-[10px] text-violet-400 hover:text-violet-200 flex items-center gap-1">
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      </button>
+    </div>
+  );
+}
+
+/* ── Main component ── */
+
 export default function EvolutionSetupGuide() {
+  const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+
+  // Smart input state — carries forward across steps
+  const [dbUrl, setDbUrl] = useState("");
+  const [redisUrl, setRedisUrl] = useState("");
+  const [serviceName, setServiceName] = useState("evolution-api");
+  const [apiKey, setApiKey] = useState("");
+  const [instanceName, setInstanceName] = useState("starcrm");
 
   const markComplete = (step: number) => {
     setCompletedSteps(prev => new Set([...prev, step]));
     setActiveStep(step + 1);
   };
 
-  const SUPABASE_URL = "https://qlhhmmboxlufvdtpbrsm.supabase.co";
-  const EDGE_FN_WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/crm-dispatch`;
+  const serviceUrl = `https://${serviceName || "[SEU-SERVICO]"}.onrender.com`;
+
+  // Generate .env content dynamically
+  const envContent = useMemo(() => {
+    const lines = [
+      `# === SERVER ===`,
+      `SERVER_TYPE=http`,
+      `SERVER_PORT=8080`,
+      `SERVER_URL=${serviceUrl}`,
+      ``,
+      `# === AUTENTICAÇÃO ===`,
+      `AUTHENTICATION_API_KEY=${apiKey || "[CRIE_UMA_CHAVE_FORTE_AQUI]"}`,
+      ``,
+      `# === BANCO DE DADOS ===`,
+      `DATABASE_ENABLED=true`,
+      `DATABASE_PROVIDER=postgresql`,
+      `DATABASE_CONNECTION_URI=${dbUrl || "[SUA_INTERNAL_DATABASE_URL]"}?schema=public`,
+      `DATABASE_CONNECTION_CLIENT_NAME=evolution_render`,
+      ``,
+      `# === PERSISTÊNCIA ===`,
+      `DATABASE_SAVE_DATA_INSTANCE=true`,
+      `DATABASE_SAVE_DATA_NEW_MESSAGE=true`,
+      `DATABASE_SAVE_MESSAGE_UPDATE=true`,
+      `DATABASE_SAVE_DATA_CONTACTS=true`,
+      `DATABASE_SAVE_DATA_CHATS=true`,
+      `DATABASE_SAVE_DATA_LABELS=true`,
+      `DATABASE_SAVE_DATA_HISTORIC=true`,
+      ``,
+      `# === REDIS/CACHE ===`,
+      `CACHE_REDIS_ENABLED=true`,
+      `CACHE_REDIS_URI=${redisUrl || "[SUA_INTERNAL_REDIS_URL]"}`,
+      `CACHE_REDIS_PREFIX_KEY=evolution`,
+      `CACHE_REDIS_SAVE_INSTANCES=false`,
+      `CACHE_LOCAL_ENABLED=false`,
+      ``,
+      `# === CORS ===`,
+      `CORS_ORIGIN=*`,
+      `CORS_METHODS=GET,POST,PUT,DELETE`,
+      `CORS_CREDENTIALS=true`,
+      ``,
+      `# === INSTÂNCIAS ===`,
+      `DEL_INSTANCE=false`,
+      ``,
+      `# === LOGS ===`,
+      `LOG_LEVEL=ERROR,WARN,INFO`,
+      `LOG_COLOR=true`,
+      `LOG_BAILEYS=error`,
+      ``,
+      `# === QRCODE ===`,
+      `QRCODE_LIMIT=30`,
+      ``,
+      `# === SESSÃO ===`,
+      `CONFIG_SESSION_PHONE_CLIENT=StarCRM`,
+      `CONFIG_SESSION_PHONE_NAME=Chrome`,
+      ``,
+      `# === TELEMETRIA ===`,
+      `TELEMETRY=false`,
+      ``,
+      `# === INTEGRAÇÕES (desabilitadas) ===`,
+      `RABBITMQ_ENABLED=false`,
+      `WEBSOCKET_ENABLED=false`,
+      `SQS_ENABLED=false`,
+      `CHATWOOT_ENABLED=false`,
+      `OPENAI_ENABLED=false`,
+      `DIFY_ENABLED=false`,
+      `S3_ENABLED=false`,
+    ];
+    return lines.join("\n");
+  }, [serviceUrl, apiKey, dbUrl, redisUrl]);
+
+  const filledCount = [dbUrl, redisUrl, apiKey].filter(Boolean).length;
 
   return (
+    <AppLayout>
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-3xl mx-auto px-4 py-12">
+      <div className="max-w-3xl mx-auto px-4 py-10 md:py-14">
+
+        {/* Back */}
+        <button onClick={() => navigate("/setup/evolution")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
+          <ArrowLeft className="h-4 w-4" /> Voltar
+        </button>
+
         {/* Header */}
-        <div className="mb-10">
+        <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-primary/20 flex items-center justify-center border border-emerald-500/20">
               <Zap className="h-7 w-7 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-foreground tracking-tight">Evolution API no Render</h1>
+              <h1 className="text-2xl font-black tracking-tight">Evolution API no Render</h1>
               <p className="text-sm text-muted-foreground">Deploy completo: Postgres + Redis + Evolution API v2</p>
             </div>
           </div>
 
+          {/* Disclaimer */}
+          <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/[0.04] p-5 flex gap-4 items-start"
+            style={{ backdropFilter: "blur(40px) saturate(180%)" }}>
+            <Lightbulb className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+            <div className="text-sm text-foreground/80 space-y-1">
+              <p className="font-bold text-foreground">Tutorial interativo</p>
+              <p>Preencha os campos em cada passo e os valores são carregados automaticamente nos próximos. No final, copie o <strong>.env completo</strong> e cole no Render.</p>
+            </div>
+          </div>
+
+          {/* Services overview */}
           <div className="grid grid-cols-3 gap-3 mt-6">
             {[
-              { icon: Database, label: "PostgreSQL", desc: "Render Postgres" },
+              { icon: Database, label: "PostgreSQL", desc: "Banco de dados" },
               { icon: Server, label: "Key Value", desc: "Redis (cache)" },
               { icon: Globe, label: "Web Service", desc: "Evolution API" },
             ].map((item) => (
@@ -124,12 +260,27 @@ export default function EvolutionSetupGuide() {
               </div>
             ))}
           </div>
+
+          {/* Progress bar */}
+          <div className="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 flex items-center gap-4"
+            style={{ backdropFilter: "blur(40px)" }}>
+            <div className={`h-8 w-8 rounded-xl flex items-center justify-center text-xs font-black ${filledCount === 3 ? "bg-emerald-500/20 text-emerald-400" : "bg-primary/20 text-primary"}`}>
+              {filledCount}/3
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-bold">Dados preenchidos</p>
+              <p className="text-[10px] text-muted-foreground">Preencha nos passos e o .env é gerado automaticamente</p>
+            </div>
+            <div className="w-24 h-2 rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500 transition-all duration-500" style={{ width: `${(filledCount / 3) * 100}%` }} />
+            </div>
+          </div>
         </div>
 
         {/* Steps */}
         <div className="space-y-3">
 
-          {/* STEP 1 — Render Account */}
+          {/* STEP 1 */}
           <Step number={1} title="Criar conta no Render" isActive={activeStep === 1} isComplete={completedSteps.has(1)} onClick={() => setActiveStep(1)}>
             <p className="text-sm text-muted-foreground">Acesse o Render e crie sua conta (pode usar GitHub para login rápido).</p>
             <LinkButton href="https://dashboard.render.com/register">Criar conta no Render</LinkButton>
@@ -141,71 +292,68 @@ export default function EvolutionSetupGuide() {
 
           {/* STEP 2 — PostgreSQL */}
           <Step number={2} title="Criar banco PostgreSQL" isActive={activeStep === 2} isComplete={completedSteps.has(2)} onClick={() => setActiveStep(2)}>
-            <p className="text-sm text-muted-foreground">No dashboard do Render, crie um banco PostgreSQL que será usado pela Evolution API para persistir instâncias, mensagens e contatos.</p>
-            
+            <p className="text-sm text-muted-foreground">No dashboard do Render, crie um banco PostgreSQL.</p>
             <LinkButton href="https://dashboard.render.com/new/database">Criar novo PostgreSQL</LinkButton>
 
-            <div className="space-y-3 mt-2">
-              <div className="rounded-xl border border-white/[0.06] p-4 space-y-2">
-                <p className="text-xs font-bold text-foreground">Preencha os campos:</p>
-                <div className="space-y-2 text-xs text-muted-foreground">
-                  <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Name:</span> <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution-db</code></span></div>
-                  <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Database:</span> <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution</code></span></div>
-                  <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">User:</span> <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution_user</code></span></div>
-                  <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Region:</span> <span>Oregon (US West) — mesmo da API</span></div>
-                  <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Plan:</span> <span>Free (ou Starter $7/mês para produção)</span></div>
-                </div>
-              </div>
-
-              <InfoBox type="warn">
-                Após criar, o Render mostrará uma <strong>"Internal Database URL"</strong> e uma <strong>"External Database URL"</strong>. 
-                <strong> Copie a "Internal Database URL"</strong> — ela começa com <code>postgres://</code>. Você vai precisar dela no Passo 4.
-              </InfoBox>
-
-              <div className="rounded-xl border border-white/[0.06] p-4">
-                <p className="text-xs font-bold text-foreground mb-2">Onde encontrar a URL:</p>
-                <p className="text-xs text-muted-foreground">Dashboard → PostgreSQL → <strong>evolution-db</strong> → aba <strong>"Info"</strong> → campo <strong>"Internal Database URL"</strong></p>
-                <p className="text-xs text-muted-foreground mt-2">Formato: <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded text-[10px]">postgres://evolution_user:SENHA@dpg-xxxxx-a/evolution</code></p>
+            <div className="rounded-xl border border-white/[0.06] p-4 space-y-2">
+              <p className="text-xs font-bold text-foreground">Preencha os campos no Render:</p>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Name:</span> <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution-db</code></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Database:</span> <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution</code></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">User:</span> <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution_user</code></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Region:</span> Oregon (US West)</div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Plan:</span> Free (ou Starter $7/mês)</div>
               </div>
             </div>
 
+            <InfoBox type="warn">
+              Após criar, o Render mostrará uma <strong>"Internal Database URL"</strong>. 
+              <strong> Copie-a</strong> e cole no campo abaixo — ela será usada automaticamente no Passo 4.
+            </InfoBox>
+
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+              <SmartInput
+                label="Internal Database URL"
+                placeholder="postgres://evolution_user:SENHA@dpg-xxxxx-a/evolution"
+                value={dbUrl}
+                onChange={setDbUrl}
+                hint="Dashboard → PostgreSQL → evolution-db → aba 'Info' → 'Internal Database URL'"
+              />
+              {dbUrl && (
+                <div className="mt-3 flex items-center gap-2 text-emerald-400 text-[11px]">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Salvo! Será usado automaticamente no Passo 4.
+                </div>
+              )}
+            </div>
+
             <button onClick={() => markComplete(2)} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2">
-              PostgreSQL criado, tenho a URL <ArrowRight className="h-4 w-4" />
+              PostgreSQL criado {dbUrl ? "✓" : ""} <ArrowRight className="h-4 w-4" />
             </button>
           </Step>
 
-          {/* STEP 3 — Redis (Key Value) */}
+          {/* STEP 3 — Redis */}
           <Step number={3} title="Criar Key Value (Redis)" isActive={activeStep === 3} isComplete={completedSteps.has(3)} onClick={() => setActiveStep(3)}>
-            <p className="text-sm text-muted-foreground">O Redis é usado como cache pela Evolution API para melhorar a performance e armazenar sessões temporárias.</p>
+            <p className="text-sm text-muted-foreground">O Redis é usado como cache pela Evolution API.</p>
 
             <InfoBox>
               <strong>⚠️ O que é "Key Value"?</strong><br/>
-              No Render, o Redis é chamado de <strong>"Key Value"</strong> (não aparece como "Redis" diretamente). É o mesmo serviço — apenas o nome é diferente no painel do Render.
+              No Render, o Redis é chamado de <strong>"Key Value"</strong>. É o mesmo serviço.
             </InfoBox>
 
             <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4 space-y-3">
-              <p className="text-xs font-bold text-primary">📍 Como encontrar o Key Value no Render (3 formas):</p>
-              
+              <p className="text-xs font-bold text-primary">📍 Como encontrar no Render (3 formas):</p>
               <div className="space-y-3 text-xs text-muted-foreground">
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
-                  <p className="font-bold text-foreground mb-1">Forma 1 — Link direto (mais rápido)</p>
-                  <p>Clique no botão abaixo para ir direto à página de criação:</p>
+                  <p className="font-bold text-foreground mb-1">Forma 1 — Link direto</p>
+                  <p>Use o botão abaixo.</p>
                 </div>
-
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
-                  <p className="font-bold text-foreground mb-1">Forma 2 — Botão "New +" no topo</p>
-                  <p>1. Abra o <a href="https://dashboard.render.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Dashboard do Render</a></p>
-                  <p>2. No canto superior direito, clique no botão <strong className="text-foreground">"New +"</strong> (botão roxo/azul)</p>
-                  <p>3. Na lista que aparece, clique em <strong className="text-foreground">"Key Value"</strong></p>
-                  <p className="text-muted-foreground/60 mt-1">💡 A lista mostra: Web Service, Static Site, Private Service, Background Worker, <strong>Key Value</strong>, PostgreSQL, Cron Job</p>
+                  <p className="font-bold text-foreground mb-1">Forma 2 — Botão "New +"</p>
+                  <p>Dashboard → canto superior direito → <strong className="text-foreground">"New +"</strong> → <strong className="text-foreground">"Key Value"</strong></p>
                 </div>
-
                 <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
-                  <p className="font-bold text-foreground mb-1">Forma 3 — Menu lateral (sidebar)</p>
-                  <p>1. No Dashboard do Render, olhe na <strong className="text-foreground">barra lateral esquerda</strong></p>
-                  <p>2. Procure por <strong className="text-foreground">"Key Value"</strong> na lista de seções</p>
-                  <p>3. Clique nela e depois em <strong className="text-foreground">"New Key Value"</strong></p>
-                  <p className="text-muted-foreground/60 mt-1">💡 Na sidebar: Services, PostgreSQL, <strong>Key Value</strong>, Environment Groups...</p>
+                  <p className="font-bold text-foreground mb-1">Forma 3 — Menu lateral</p>
+                  <p>Sidebar esquerda → <strong className="text-foreground">"Key Value"</strong> → <strong className="text-foreground">"New Key Value"</strong></p>
                 </div>
               </div>
             </div>
@@ -213,230 +361,270 @@ export default function EvolutionSetupGuide() {
             <LinkButton href="https://dashboard.render.com/new/redis">Criar novo Key Value (Redis)</LinkButton>
 
             <div className="rounded-xl border border-white/[0.06] p-4 space-y-2">
-              <p className="text-xs font-bold text-foreground">Preencha os campos:</p>
+              <p className="text-xs font-bold text-foreground">Preencha:</p>
               <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Name:</span> <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution-redis</code></span></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Region:</span> <span>Oregon (US West) — mesmo do Postgres</span></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Plan:</span> <span>Free (ou Starter para produção)</span></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Max Memory Policy:</span> <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">allkeys-lru</code></span></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Name:</span> <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution-redis</code></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Region:</span> Oregon (US West)</div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Max Memory Policy:</span> <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">allkeys-lru</code></div>
               </div>
             </div>
 
-            <InfoBox type="warn">
-              Após criar, copie a <strong>"Internal Redis URL"</strong>. Ela começa com <code>redis://</code>. Você vai precisar no Passo 4.
-            </InfoBox>
-
-            <div className="rounded-xl border border-white/[0.06] p-4">
-              <p className="text-xs font-bold text-foreground mb-2">📋 Onde encontrar a URL depois de criar:</p>
-              <p className="text-xs text-muted-foreground">Dashboard → <strong>Key Value</strong> (menu lateral) → clique em <strong>evolution-redis</strong> → aba <strong>"Info"</strong> → campo <strong>"Internal Redis URL"</strong></p>
-              <p className="text-xs text-muted-foreground mt-2">Formato: <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded text-[10px]">redis://red-xxxxx-a:6379</code></p>
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+              <SmartInput
+                label="Internal Redis URL"
+                placeholder="redis://red-xxxxx-a:6379"
+                value={redisUrl}
+                onChange={setRedisUrl}
+                hint="Dashboard → Key Value → evolution-redis → aba 'Info' → 'Internal Redis URL'"
+              />
+              {redisUrl && (
+                <div className="mt-3 flex items-center gap-2 text-emerald-400 text-[11px]">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Salvo! Será usado automaticamente no Passo 4.
+                </div>
+              )}
             </div>
 
             <button onClick={() => markComplete(3)} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2">
-              Redis criado, tenho a URL <ArrowRight className="h-4 w-4" />
+              Redis criado {redisUrl ? "✓" : ""} <ArrowRight className="h-4 w-4" />
             </button>
           </Step>
 
-          {/* STEP 4 — Web Service (Evolution API) */}
+          {/* STEP 4 — Web Service with .env generator */}
           <Step number={4} title="Criar Web Service (Evolution API)" isActive={activeStep === 4} isComplete={completedSteps.has(4)} onClick={() => setActiveStep(4)}>
-            <p className="text-sm text-muted-foreground">Agora vamos deployar a Evolution API como um Web Service usando a imagem Docker oficial.</p>
-
+            <p className="text-sm text-muted-foreground">Deploy a Evolution API como Web Service usando Docker.</p>
             <LinkButton href="https://dashboard.render.com/new/web-service">Criar novo Web Service</LinkButton>
 
             <div className="rounded-xl border border-white/[0.06] p-4 space-y-3">
               <p className="text-xs font-bold text-foreground">Configuração do serviço:</p>
               <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Source:</span> <span>Selecione <strong>"Deploy an existing image from a registry"</strong></span></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Image URL:</span> <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">atendai/evolution-api:v2.2.3</code></span></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Name:</span> <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">evolution-api</code></span></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Region:</span> <span>Oregon (mesmo dos outros)</span></div>
-                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Plan:</span> <span>Starter ($7/mês) — Free pode hibernar a instância</span></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Source:</span> Selecione <strong>"Deploy an existing image from a registry"</strong></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Image URL:</span> <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">atendai/evolution-api:v2.2.3</code></div>
+                <div className="flex items-start gap-2"><span className="text-primary font-bold shrink-0">Plan:</span> Starter ($7/mês) — Free hiberna a instância</div>
+              </div>
+            </div>
+
+            {/* Smart inputs */}
+            <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-5 space-y-4">
+              <p className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Key className="h-4 w-4 text-primary" /> Configure seus dados
+              </p>
+
+              <SmartInput
+                label="Nome do Web Service"
+                placeholder="evolution-api"
+                value={serviceName}
+                onChange={setServiceName}
+                hint={`URL final: ${serviceUrl}`}
+              />
+              <SmartInput
+                label="API Key (crie uma senha forte)"
+                placeholder="minha-chave-super-secreta-32chars"
+                value={apiKey}
+                onChange={setApiKey}
+                hint="Use um gerador de senhas — mínimo 32 caracteres"
+              />
+
+              {/* Auto-filled values */}
+              <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Valores dos passos anteriores:</p>
+                <div className="flex items-center gap-2 text-xs">
+                  {dbUrl ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />}
+                  <span className="text-muted-foreground">Database URL:</span>
+                  <code className="text-[10px] text-foreground/60 truncate max-w-[200px]">{dbUrl || "⚠ Preencha no Passo 2"}</code>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  {redisUrl ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />}
+                  <span className="text-muted-foreground">Redis URL:</span>
+                  <code className="text-[10px] text-foreground/60 truncate max-w-[200px]">{redisUrl || "⚠ Preencha no Passo 3"}</code>
+                </div>
               </div>
             </div>
 
             <InfoBox type="warn">
-              <strong>Importante:</strong> Se usar o plano Free, o serviço "dorme" após 15min de inatividade e leva ~30s para reiniciar.
-              Para uso em produção com WhatsApp, use no mínimo o plano <strong>Starter</strong> para manter a conexão ativa 24/7.
+              <strong>Como adicionar as variáveis no Render:</strong><br/>
+              Na página do Web Service → aba <strong>"Environment"</strong> → clique em <strong>"Add from .env"</strong> → cole o conteúdo abaixo. O Render cria todas as variáveis automaticamente!
             </InfoBox>
 
-            <p className="text-sm font-bold text-foreground mt-4 mb-2">Variáveis de Ambiente (Environment Variables)</p>
-            <p className="text-xs text-muted-foreground mb-3">Na seção <strong>"Environment"</strong> do Web Service, adicione cada variável abaixo. Substitua os valores entre colchetes pelos dados reais.</p>
+            {/* .env generator */}
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] overflow-hidden">
+              <div className="px-5 py-3 bg-emerald-500/[0.06] border-b border-emerald-500/10 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileDown className="h-4 w-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-emerald-300">Arquivo .env gerado automaticamente</span>
+                </div>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(envContent); toast.success("Variáveis copiadas! Cole no Render em 'Add from .env'"); }}
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
+                >
+                  <Copy className="h-3 w-3" /> Copiar tudo
+                </button>
+              </div>
+              <pre className="p-4 overflow-x-auto text-[11px] font-mono text-foreground/70 bg-black/30 leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">{envContent}</pre>
+            </div>
 
-            <CodeBlock label="Variáveis de Ambiente — copie uma por vez" code={`# === SERVER ===
-SERVER_TYPE=http
-SERVER_PORT=8080
-SERVER_URL=https://[SEU-SERVICO].onrender.com
-
-# === AUTENTICAÇÃO ===
-AUTHENTICATION_API_KEY=[CRIE_UMA_CHAVE_FORTE_AQUI]
-
-# === BANCO DE DADOS ===
-DATABASE_ENABLED=true
-DATABASE_PROVIDER=postgresql
-DATABASE_CONNECTION_URI=[SUA_INTERNAL_DATABASE_URL_DO_PASSO_2]?schema=public
-DATABASE_CONNECTION_CLIENT_NAME=evolution_render
-
-# === PERSISTÊNCIA ===
-DATABASE_SAVE_DATA_INSTANCE=true
-DATABASE_SAVE_DATA_NEW_MESSAGE=true
-DATABASE_SAVE_MESSAGE_UPDATE=true
-DATABASE_SAVE_DATA_CONTACTS=true
-DATABASE_SAVE_DATA_CHATS=true
-DATABASE_SAVE_DATA_LABELS=true
-DATABASE_SAVE_DATA_HISTORIC=true
-
-# === REDIS/CACHE ===
-CACHE_REDIS_ENABLED=true
-CACHE_REDIS_URI=[SUA_INTERNAL_REDIS_URL_DO_PASSO_3]
-CACHE_REDIS_PREFIX_KEY=evolution
-CACHE_REDIS_SAVE_INSTANCES=false
-CACHE_LOCAL_ENABLED=false
-
-# === CORS ===
-CORS_ORIGIN=*
-CORS_METHODS=GET,POST,PUT,DELETE
-CORS_CREDENTIALS=true
-
-# === INSTÂNCIAS ===
-DEL_INSTANCE=false
-
-# === LOGS ===
-LOG_LEVEL=ERROR,WARN,INFO
-LOG_COLOR=true
-LOG_BAILEYS=error
-
-# === QRCODE ===
-QRCODE_LIMIT=30
-
-# === SESSÃO ===
-CONFIG_SESSION_PHONE_CLIENT=StarCRM
-CONFIG_SESSION_PHONE_NAME=Chrome
-
-# === TELEMETRIA ===
-TELEMETRY=false
-
-# === INTEGRAÇÕES (desabilitadas) ===
-RABBITMQ_ENABLED=false
-WEBSOCKET_ENABLED=false
-SQS_ENABLED=false
-CHATWOOT_ENABLED=false
-OPENAI_ENABLED=false
-DIFY_ENABLED=false
-S3_ENABLED=false`} />
-
-            <InfoBox>
-              <strong>Onde preencher os valores:</strong><br/>
-              • <code>[SEU-SERVICO]</code> → O nome que você deu ao Web Service (ex: <code>evolution-api</code>). A URL final será <code>https://evolution-api.onrender.com</code><br/>
-              • <code>[CRIE_UMA_CHAVE_FORTE]</code> → Gere uma chave aleatória segura (use um gerador de senha de 32+ caracteres)<br/>
-              • <code>[SUA_INTERNAL_DATABASE_URL]</code> → A URL interna do PostgreSQL do Passo 2<br/>
-              • <code>[SUA_INTERNAL_REDIS_URL]</code> → A URL interna do Redis do Passo 3
+            <InfoBox type="success">
+              Após colar as variáveis, clique em <strong>"Create Web Service"</strong>. O deploy leva 2-5 minutos.
             </InfoBox>
-
-            <InfoBox type="warn">
-              Certifique-se de adicionar <code>?schema=public</code> ao final da DATABASE_CONNECTION_URI. Sem isso, a Evolution API pode ter erros de migração.
-            </InfoBox>
-
-            <p className="text-xs text-muted-foreground mt-3">Após preencher todas as variáveis, clique em <strong>"Create Web Service"</strong>. O deploy levará de 2 a 5 minutos.</p>
 
             <button onClick={() => markComplete(4)} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2">
-              Web Service criado e deployando <ArrowRight className="h-4 w-4" />
+              Web Service criado <ArrowRight className="h-4 w-4" />
             </button>
           </Step>
 
-          {/* STEP 5 — Verificar deploy */}
+          {/* STEP 5 — Verify */}
           <Step number={5} title="Verificar se está rodando" isActive={activeStep === 5} isComplete={completedSteps.has(5)} onClick={() => setActiveStep(5)}>
             <p className="text-sm text-muted-foreground">Após o deploy finalizar (status "Live"), teste se a API está funcionando.</p>
 
             <div className="rounded-xl border border-white/[0.06] p-4 space-y-3">
               <p className="text-xs font-bold text-foreground">Teste no navegador:</p>
-              <CodeBlock label="URL de teste" code="https://[SEU-SERVICO].onrender.com/" />
-              <p className="text-xs text-muted-foreground">Você deve ver um JSON com informações da API, algo como:</p>
-              <CodeBlock label="Resposta esperada" code={`{
+              <CopyBlock label="URL de teste" code={serviceUrl} />
+              <p className="text-xs text-muted-foreground">Resposta esperada:</p>
+              <CopyBlock label="JSON esperado" code={`{
   "status": 200,
   "message": "Welcome to the Evolution API, it is working!",
-  "version": "2.2.3",
-  "documentation": "https://doc.evolution-api.com"
+  "version": "2.2.3"
 }`} />
             </div>
 
-            <InfoBox type="warn">Se receber erro 502 ou timeout, aguarde mais 2-3 minutos. O primeiro deploy pode demorar. Verifique os logs no dashboard do Render: Dashboard → Web Services → evolution-api → Logs.</InfoBox>
+            <InfoBox type="warn">Se receber erro 502 ou timeout, aguarde mais 2-3 minutos. O primeiro deploy pode demorar.</InfoBox>
 
             <button onClick={() => markComplete(5)} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2">
               API está rodando! <ArrowRight className="h-4 w-4" />
             </button>
           </Step>
 
-          {/* STEP 6 — Create instance */}
+          {/* STEP 6 — Create instance & connect WhatsApp (IMPROVED) */}
           <Step number={6} title="Criar instância e conectar WhatsApp" isActive={activeStep === 6} isComplete={completedSteps.has(6)} onClick={() => setActiveStep(6)}>
-            <p className="text-sm text-muted-foreground">Agora crie uma instância na Evolution API e escaneie o QR Code para conectar seu WhatsApp.</p>
+            <p className="text-sm text-muted-foreground">Crie uma instância na Evolution API e escaneie o QR Code para conectar seu WhatsApp.</p>
 
-            <div className="space-y-4">
-              <div className="rounded-xl border border-white/[0.06] p-4">
-                <p className="text-xs font-bold text-foreground mb-3">1. Criar instância via API:</p>
-                <CodeBlock label="cURL — Criar instância" code={`curl -X POST 'https://[SEU-SERVICO].onrender.com/instance/create' \\
+            {/* Instance name input */}
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+              <SmartInput
+                label="Nome da instância"
+                placeholder="starcrm"
+                value={instanceName}
+                onChange={setInstanceName}
+                hint="Nome identificador — use apenas letras minúsculas, sem espaços"
+              />
+            </div>
+
+            <InfoBox>
+              <strong>O que é uma instância?</strong><br/>
+              Cada instância é uma conexão WhatsApp separada. Normalmente você cria uma por número de telefone. O nome serve como identificador interno.
+            </InfoBox>
+
+            {/* Sub-step 6.1 — Create instance */}
+            <div className="rounded-2xl border border-white/[0.08] overflow-hidden">
+              <div className="px-4 py-3 bg-white/[0.04] border-b border-white/[0.06]">
+                <p className="text-xs font-bold text-foreground flex items-center gap-2">
+                  <Terminal className="h-3.5 w-3.5 text-primary" /> 6.1 — Criar a instância via API
+                </p>
+              </div>
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground">Abra o <strong>Terminal</strong> (Mac/Linux) ou <strong>PowerShell</strong> (Windows) e execute o comando abaixo:</p>
+                <CopyBlock label="cURL — Criar instância" code={`curl -X POST '${serviceUrl}/instance/create' \\
   -H 'Content-Type: application/json' \\
-  -H 'apikey: [SUA_AUTHENTICATION_API_KEY]' \\
+  -H 'apikey: ${apiKey || "[SUA_API_KEY_DO_PASSO_4]"}' \\
   -d '{
-    "instanceName": "starcrm",
+    "instanceName": "${instanceName}",
     "integration": "WHATSAPP-BAILEYS",
     "qrcode": true
   }'`} />
-                <p className="text-xs text-muted-foreground mt-2">Isso retorna um QR Code em base64. Copie o campo <code>qrcode.base64</code> da resposta.</p>
-              </div>
+                <InfoBox type="success">
+                  Se tudo estiver certo, a resposta conterá um campo <code>qrcode.base64</code> com o QR Code. Mas é mais fácil usar o método visual do passo seguinte.
+                </InfoBox>
 
-              <div className="rounded-xl border border-white/[0.06] p-4">
-                <p className="text-xs font-bold text-foreground mb-3">2. Escanear QR Code:</p>
-                <p className="text-xs text-muted-foreground mb-2">Acesse o endpoint de QR Code no navegador:</p>
-                <CodeBlock label="URL do QR Code" code="https://[SEU-SERVICO].onrender.com/instance/connect/starcrm" />
-                <p className="text-xs text-muted-foreground mt-2">
-                  Abra o <strong>WhatsApp no celular</strong> → <strong>Configurações</strong> → <strong>Dispositivos conectados</strong> → <strong>Conectar dispositivo</strong> → Escaneie o QR Code exibido.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-white/[0.06] p-4">
-                <p className="text-xs font-bold text-foreground mb-3">3. Verificar conexão:</p>
-                <CodeBlock label="cURL — Verificar status" code={`curl -X GET 'https://[SEU-SERVICO].onrender.com/instance/connectionState/starcrm' \\
-  -H 'apikey: [SUA_AUTHENTICATION_API_KEY]'`} />
-                <p className="text-xs text-muted-foreground mt-2">Resposta esperada: <code className="text-emerald-400">{`{"instance":{"state":"open"}}`}</code></p>
+                <InfoBox type="warn">
+                  <strong>Não tem terminal?</strong> Você pode usar ferramentas online como <a href="https://reqbin.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">ReqBin</a> ou <a href="https://hoppscotch.io/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Hoppscotch</a>. Basta colar a URL, adicionar o header <code>apikey</code> e enviar o body JSON.
+                </InfoBox>
               </div>
             </div>
 
-            <InfoBox type="success">
-              Quando o estado for <code>"open"</code>, seu WhatsApp está conectado e pronto para enviar mensagens!
-            </InfoBox>
+            {/* Sub-step 6.2 — QR Code */}
+            <div className="rounded-2xl border border-white/[0.08] overflow-hidden">
+              <div className="px-4 py-3 bg-white/[0.04] border-b border-white/[0.06]">
+                <p className="text-xs font-bold text-foreground flex items-center gap-2">
+                  <Terminal className="h-3.5 w-3.5 text-primary" /> 6.2 — Escanear o QR Code (método visual)
+                </p>
+              </div>
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground">Abra esta URL diretamente no <strong>navegador</strong> para ver o QR Code:</p>
+                <CopyBlock label="URL do QR Code — abra no navegador" code={`${serviceUrl}/instance/connect/${instanceName}`} />
+
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-2">
+                  <p className="text-xs font-bold text-emerald-400">📱 Passos no celular:</p>
+                  <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                    <li>Abra o <strong className="text-foreground">WhatsApp</strong> no celular</li>
+                    <li>Toque nos <strong className="text-foreground">3 pontinhos</strong> (Android) ou <strong className="text-foreground">Configurações</strong> (iPhone)</li>
+                    <li>Toque em <strong className="text-foreground">"Dispositivos conectados"</strong></li>
+                    <li>Toque em <strong className="text-foreground">"Conectar dispositivo"</strong></li>
+                    <li>Aponte a câmera para o QR Code no navegador</li>
+                    <li>Aguarde a conexão ser estabelecida (aparecerá "conectado")</li>
+                  </ol>
+                </div>
+
+                <InfoBox type="warn">
+                  O QR Code expira em ~30 segundos. Se expirar, <strong>recarregue a página</strong> para gerar um novo. Se não aparecer nenhum QR Code, verifique se o Passo 6.1 foi executado.
+                </InfoBox>
+              </div>
+            </div>
+
+            {/* Sub-step 6.3 — Verify connection */}
+            <div className="rounded-2xl border border-white/[0.08] overflow-hidden">
+              <div className="px-4 py-3 bg-white/[0.04] border-b border-white/[0.06]">
+                <p className="text-xs font-bold text-foreground flex items-center gap-2">
+                  <Terminal className="h-3.5 w-3.5 text-primary" /> 6.3 — Verificar se conectou
+                </p>
+              </div>
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground">Execute este comando para confirmar que o WhatsApp está conectado:</p>
+                <CopyBlock label="cURL — Verificar status" code={`curl -X GET '${serviceUrl}/instance/connectionState/${instanceName}' \\
+  -H 'apikey: ${apiKey || "[SUA_API_KEY_DO_PASSO_4]"}'`} />
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Resposta esperada:</span>
+                  <code className="text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">{`{"instance":{"state":"open"}}`}</code>
+                </div>
+                <InfoBox type="success">
+                  Se o <code>state</code> for <strong>"open"</strong>, seu WhatsApp está conectado e pronto! Se for <strong>"close"</strong>, repita o Passo 6.2.
+                </InfoBox>
+              </div>
+            </div>
 
             <button onClick={() => markComplete(6)} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2">
               WhatsApp conectado! <ArrowRight className="h-4 w-4" />
             </button>
           </Step>
 
-          {/* STEP 7 — Configure CRM */}
+          {/* STEP 7 — CRM Config */}
           <Step number={7} title="Configurar no CRM da plataforma" isActive={activeStep === 7} isComplete={completedSteps.has(7)} onClick={() => setActiveStep(7)}>
-            <p className="text-sm text-muted-foreground">Último passo! Configure a conexão no painel CRM da sua White Label.</p>
+            <p className="text-sm text-muted-foreground">Último passo! Configure a conexão no painel CRM.</p>
 
             <div className="rounded-xl border border-white/[0.06] p-4 space-y-3">
               <p className="text-xs font-bold text-foreground">No painel Admin → CRM → WhatsApp, preencha:</p>
               <div className="space-y-2 text-xs text-muted-foreground">
                 <div className="flex items-start gap-2">
                   <span className="text-primary font-bold shrink-0">URL da API:</span>
-                  <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">https://[SEU-SERVICO].onrender.com</code></span>
+                  <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded text-[11px] break-all">{serviceUrl}</code>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-primary font-bold shrink-0">API Key:</span>
-                  <span>A mesma <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">AUTHENTICATION_API_KEY</code> que você criou no Passo 4</span>
+                  <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded text-[11px] break-all">{apiKey || "[sua chave do Passo 4]"}</code>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-primary font-bold shrink-0">Instância:</span>
-                  <span><code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">starcrm</code> (ou o nome que deu no Passo 6)</span>
+                  <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">{instanceName}</code>
                 </div>
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground mt-3">Clique em <strong>"Salvar Configuração"</strong> e depois <strong>"Testar Conexão"</strong>. Se aparecer "WhatsApp Online" ✅, está tudo pronto!</p>
+            <PromptSuggestion prompt={`Configure a integração com a Evolution API usando:
+- URL: ${serviceUrl}
+- API Key: ${apiKey || "[sua API key]"}
+- Instância: ${instanceName}
+Conecte o CRM para enviar e receber mensagens WhatsApp automaticamente.`} />
 
             <InfoBox type="success">
-              <strong>Pronto!</strong> Agora você pode importar contatos via CSV e criar campanhas de disparo automático de mensagens no CRM.
-              As mensagens são enviadas uma a uma com intervalo de 3-5 segundos para evitar bloqueio do WhatsApp.
+              <strong>Pronto!</strong> Clique em "Salvar Configuração" e depois "Testar Conexão". Se aparecer "WhatsApp Online" ✅, está tudo configurado!
             </InfoBox>
 
             <button onClick={() => markComplete(7)} className="h-11 px-6 rounded-2xl bg-emerald-500 text-white text-sm font-bold flex items-center gap-2">
@@ -445,44 +633,32 @@ S3_ENABLED=false`} />
           </Step>
         </div>
 
-        {/* Summary */}
+        {/* Summary table */}
         <div className="mt-8 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 space-y-4" style={{ backdropFilter: "blur(40px)" }}>
-          <h3 className="text-base font-bold text-foreground">Resumo dos dados que você precisa</h3>
+          <h3 className="text-base font-bold">Resumo dos seus dados</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-white/[0.06]">
                   <th className="text-left py-2 text-[10px] text-muted-foreground uppercase font-bold">Dado</th>
-                  <th className="text-left py-2 text-[10px] text-muted-foreground uppercase font-bold">Onde encontrar</th>
-                  <th className="text-left py-2 text-[10px] text-muted-foreground uppercase font-bold">Usado em</th>
+                  <th className="text-left py-2 text-[10px] text-muted-foreground uppercase font-bold">Valor</th>
+                  <th className="text-left py-2 text-[10px] text-muted-foreground uppercase font-bold">Status</th>
                 </tr>
               </thead>
               <tbody className="text-muted-foreground">
-                <tr className="border-b border-white/[0.04]">
-                  <td className="py-2 text-foreground font-semibold">Internal Database URL</td>
-                  <td className="py-2">Render → PostgreSQL → Info</td>
-                  <td className="py-2">Passo 4 (DATABASE_CONNECTION_URI)</td>
-                </tr>
-                <tr className="border-b border-white/[0.04]">
-                  <td className="py-2 text-foreground font-semibold">Internal Redis URL</td>
-                  <td className="py-2">Render → Key Value → Info</td>
-                  <td className="py-2">Passo 4 (CACHE_REDIS_URI)</td>
-                </tr>
-                <tr className="border-b border-white/[0.04]">
-                  <td className="py-2 text-foreground font-semibold">AUTHENTICATION_API_KEY</td>
-                  <td className="py-2">Você cria (senha forte)</td>
-                  <td className="py-2">Passo 4 + Passo 7 (API Key no CRM)</td>
-                </tr>
-                <tr className="border-b border-white/[0.04]">
-                  <td className="py-2 text-foreground font-semibold">URL do Web Service</td>
-                  <td className="py-2">Render → Web Service → Settings</td>
-                  <td className="py-2">Passo 4 (SERVER_URL) + Passo 7 (URL da API)</td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-foreground font-semibold">Nome da instância</td>
-                  <td className="py-2">Você define (ex: starcrm)</td>
-                  <td className="py-2">Passo 6 + Passo 7 (Instância no CRM)</td>
-                </tr>
+                {[
+                  { name: "Database URL", value: dbUrl, ok: !!dbUrl },
+                  { name: "Redis URL", value: redisUrl, ok: !!redisUrl },
+                  { name: "API Key", value: apiKey ? "••••••••" : "", ok: !!apiKey },
+                  { name: "Service URL", value: serviceUrl, ok: !!serviceName },
+                  { name: "Instance Name", value: instanceName, ok: !!instanceName },
+                ].map((r) => (
+                  <tr key={r.name} className="border-b border-white/[0.04]">
+                    <td className="py-2 text-foreground font-semibold">{r.name}</td>
+                    <td className="py-2 font-mono text-[10px] max-w-[200px] truncate">{r.value || "—"}</td>
+                    <td className="py-2">{r.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -490,14 +666,14 @@ S3_ENABLED=false`} />
 
         {/* Troubleshooting */}
         <div className="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 space-y-4" style={{ backdropFilter: "blur(40px)" }}>
-          <h3 className="text-base font-bold text-foreground">Problemas comuns</h3>
+          <h3 className="text-base font-bold">Problemas comuns</h3>
           <div className="space-y-3">
             {[
-              { q: "Erro 502 Bad Gateway", a: "O serviço ainda está iniciando. Aguarde 2-3 minutos. Verifique os logs no Render para erros de conexão com o banco." },
-              { q: "QR Code não aparece", a: "Verifique se a AUTHENTICATION_API_KEY está correta no header. Tente acessar via navegador: /instance/connect/starcrm" },
-              { q: "WhatsApp desconecta após horas", a: "Pode ser o plano Free do Render hibernando. Upgrade para Starter ($7/mês) para manter 24/7." },
-              { q: "Erro de banco de dados", a: "Certifique-se que adicionou ?schema=public no final da DATABASE_CONNECTION_URI e que o Postgres está na mesma região." },
-              { q: "Mensagens não enviam", a: "Verifique se a instância está com state: 'open'. Se desconectou, re-escaneie o QR Code." },
+              { q: "Erro 502 Bad Gateway", a: "O serviço ainda está iniciando. Aguarde 2-3 minutos." },
+              { q: "QR Code não aparece", a: "Verifique se a API Key está correta e se a instância foi criada (Passo 6.1)." },
+              { q: "WhatsApp desconecta", a: "Plano Free hiberna. Use Starter ($7/mês) para 24/7." },
+              { q: "Erro de banco de dados", a: "Certifique-se que adicionou ?schema=public na DATABASE_CONNECTION_URI." },
+              { q: "Mensagens não enviam", a: "Verifique se a instância está com state: 'open'." },
             ].map((item, i) => (
               <div key={i} className="rounded-xl border border-white/[0.04] p-3">
                 <p className="text-xs font-bold text-foreground mb-1">{item.q}</p>
@@ -505,6 +681,16 @@ S3_ENABLED=false`} />
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Prompt suggestions */}
+        <div className="mt-6 space-y-3">
+          <h3 className="text-base font-bold flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-violet-400" /> Prompts sugeridos para Lovable
+          </h3>
+          <PromptSuggestion prompt="Crie um painel de monitoramento para minha Evolution API que mostra o status da conexão WhatsApp, número de mensagens enviadas hoje e um botão para reconectar se a sessão cair." />
+          <PromptSuggestion prompt="Implemente um sistema de filas para envio de mensagens WhatsApp em massa com intervalo de 3-5 segundos entre mensagens, barra de progresso e log de erros." />
+          <PromptSuggestion prompt="Adicione um webhook que recebe mensagens do WhatsApp via Evolution API e salva automaticamente no CRM como novos leads, com nome, telefone e última mensagem." />
         </div>
 
         {/* Links */}
@@ -515,5 +701,6 @@ S3_ENABLED=false`} />
         </div>
       </div>
     </div>
+    </AppLayout>
   );
 }

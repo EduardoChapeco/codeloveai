@@ -412,7 +412,7 @@ export default function AppSidebar() {
   const mainItems = [
     { to: "/community", label: "CodeLovers", icon: MessageCircle, desc: "Comunidade de devs", badge: "🔥" },
     { to: "/marketplace", label: "Loja de Projetos", icon: Package, desc: "Compre e venda projetos", badge: "Novo" },
-    { to: "/extensoes", label: "Extensões", icon: Puzzle, desc: "Loja de extensões" },
+    { to: "/extensoes/venus", label: "Venus AI", icon: Sparkles, desc: "Extensão God Mode", badge: "⚡" },
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos" },
     { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
     { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de projetos" },
@@ -440,7 +440,7 @@ export default function AppSidebar() {
     ...(isDefaultTenant ? [{ to: "/afiliados", label: "Programa de Afiliados", icon: Users, desc: "Ganhe comissões" }] : []),
     ...(isDefaultTenant ? [{ to: "/whitelabel", label: "White Label", icon: Globe, desc: "Sua marca" }] : []),
     { to: "/parceiros", label: "Parceiros", icon: Handshake, desc: "Parcerias" },
-    { to: "/extensoes/venus", label: "Venus AI", icon: Sparkles, desc: "Assistente visual" },
+    { to: "/setup/evolution", label: "Tutorial Evolution", icon: BookOpen, desc: "WhatsApp API" },
   ];
 
   const adminItems = [
