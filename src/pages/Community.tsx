@@ -1382,6 +1382,10 @@ export default function Community() {
               }`}>
               <TrendingUp className="h-3.5 w-3.5" /> FEED GERAL
             </button>
+            <a href="/community/tests"
+              className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-[10px] text-xs font-bold text-muted-foreground hover:bg-muted transition-colors">
+              <Eye className="h-3.5 w-3.5" /> TESTE & FEEDBACK
+            </a>
             {loadingGroups ? (
               <Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" />
             ) : (

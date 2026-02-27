@@ -1351,6 +1351,110 @@ export type Database = {
         }
         Relationships: []
       }
+      community_test_feedback: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_deleted: boolean
+          reaction_type: string | null
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_deleted?: boolean
+          reaction_type?: string | null
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_deleted?: boolean
+          reaction_type?: string | null
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_test_feedback_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "community_test_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_test_sessions: {
+        Row: {
+          closed_at: string | null
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          feedbacks_count: number
+          id: string
+          preview_url: string
+          project_name: string | null
+          reactions_count: number
+          status: string
+          tenant_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          closed_at?: string | null
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          feedbacks_count?: number
+          id?: string
+          preview_url: string
+          project_name?: string | null
+          reactions_count?: number
+          status?: string
+          tenant_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          closed_at?: string | null
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          feedbacks_count?: number
+          id?: string
+          preview_url?: string
+          project_name?: string | null
+          reactions_count?: number
+          status?: string
+          tenant_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_test_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_test_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_usage: {
         Row: {
           date: string
