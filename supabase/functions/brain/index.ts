@@ -801,27 +801,47 @@ Deno.serve(async (req) => {
       const convoId = convoRow?.id;
 
       // Send via venus-chat (task mode) — FREE
-      const venusResult = await sendViaVenus(brain.lovable_project_id, prompt, lovableToken);
+      let venusResult = await sendViaVenus(brain.lovable_project_id, prompt, lovableToken);
+      let activeProjectId = brain.lovable_project_id;
 
       if (!venusResult.ok) {
-        // Token might be expired — try refresh
-        const refreshed = await refreshToken(sc, userId);
-        if (refreshed) {
-          const retry = await sendViaVenus(brain.lovable_project_id, prompt, refreshed);
-          if (!retry.ok) {
+        // If 404 — brain project was deleted, auto-recreate
+        const is404 = venusResult.error?.includes("404");
+        if (is404) {
+          console.warn(`[Brain] Project ${brain.lovable_project_id} returned 404, recreating...`);
+          await sc.from("user_brain_projects").delete().eq("id", brain.id);
+          const newBrain = await createFreshBrain(sc, userId, lovableToken, [skill], brain.name || `Star AI — ${skill}`);
+          if ("error" in newBrain) {
             if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
-            return json({ error: `Erro ao enviar: ${retry.error}` }, 502);
+            return json({ error: `Brain recriado com falha: ${newBrain.error}` }, 502);
           }
-        } else {
-          if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
-          return json({ error: `Erro ao enviar: ${venusResult.error}` }, 502);
+          activeProjectId = newBrain.projectId;
+          if (convoId) await sc.from("loveai_conversations").update({ target_project_id: activeProjectId }).eq("id", convoId);
+          // Wait for new brain to stabilize
+          await new Promise(r => setTimeout(r, 5000));
+          venusResult = await sendViaVenus(activeProjectId, prompt, lovableToken);
+        }
+
+        // Token might be expired — try refresh
+        if (!venusResult.ok) {
+          const refreshed = await refreshToken(sc, userId);
+          if (refreshed) {
+            const retry = await sendViaVenus(activeProjectId, prompt, refreshed);
+            if (!retry.ok) {
+              if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+              return json({ error: `Erro ao enviar: ${retry.error}` }, 502);
+            }
+          } else {
+            if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
+            return json({ error: `Erro ao enviar: ${venusResult.error}` }, 502);
+          }
         }
       }
 
       // Quick mine (10s) for fast responses
       let quickResponse: string | null = null;
       try {
-        const quickResult = await mineResponse(brain.lovable_project_id, lovableToken, 8_000, 3_000, 5_000);
+        const quickResult = await mineResponse(activeProjectId, lovableToken, 8_000, 3_000, 5_000);
         if (quickResult.status === "completed") {
           quickResponse = quickResult.response;
         }
