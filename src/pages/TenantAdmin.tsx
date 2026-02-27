@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
 import ActivityDashboard from "@/components/admin/ActivityDashboard";
+import CrmPanel from "@/components/admin/CrmPanel";
 
 // ── Types ──
 interface TenantMember {
@@ -30,7 +31,7 @@ interface TenantLicense {
 interface WalletInfo { balance: number; total_credited: number; total_debited: number; }
 interface WalletTransaction { id: string; amount: number; type: string; description: string; created_at: string; }
 
-type Tab = "editor" | "users" | "licenses" | "finances" | "activity";
+type Tab = "editor" | "users" | "licenses" | "finances" | "activity" | "crm";
 
 const THEME_PRESETS = TENANT_THEME_PRESETS.map((preset) => ({
   id: preset.id,
@@ -422,7 +423,8 @@ export default function TenantAdmin() {
 
   const TABS = [
     { id: "editor" as Tab, label: "Editor Visual", icon: Palette, desc: "Personalização" },
-    { id: "users" as Tab, label: "Usuários", icon: Users, desc: `${members.length} membros` },
+    { id: "crm" as Tab, label: "CRM", icon: Users, desc: "Contatos & Campanhas" },
+    { id: "users" as Tab, label: "Usuários", icon: Key, desc: `${members.length} membros` },
     { id: "licenses" as Tab, label: "Licenças", icon: Key, desc: `${licenses.length} ativas` },
     { id: "finances" as Tab, label: "Financeiro", icon: Wallet, desc: wallet ? `R$${wallet.balance.toFixed(2)}` : "—" },
   ];
@@ -1009,6 +1011,11 @@ export default function TenantAdmin() {
                 </div>
               </GlassCard>
             </div>
+          )}
+
+          {/* ═══════════════ CRM TAB ═══════════════ */}
+          {tab === "crm" && tenant && user && (
+            <CrmPanel tenantId={tenant.id} userId={user.id} />
           )}
 
           {/* ═══════════════ ACTIVITY TAB ═══════════════ */}
