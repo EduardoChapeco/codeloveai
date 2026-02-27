@@ -11,7 +11,7 @@ function json(d: unknown, s = 200) {
   return new Response(JSON.stringify(d), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 }
 
-async function readStream(body: ReadableStream<Uint8Array>, maxBytes = 500_000, timeoutMs = 5000): Promise<string> {
+async function readStream(body: ReadableStream<Uint8Array>, maxBytes = 800_000, timeoutMs = 5000): Promise<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let result = "";
@@ -33,19 +33,20 @@ async function readStream(body: ReadableStream<Uint8Array>, maxBytes = 500_000, 
   return result;
 }
 
+function lovHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Origin: "https://lovable.dev",
+    Referer: "https://lovable.dev/",
+    "X-Client-Git-SHA": GIT_SHA,
+  };
+}
+
 async function fetchText(url: string, token: string, connectMs = 5000, bodyMs = 5000): Promise<{ status: number; body: string } | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), connectMs);
   try {
-    const r = await fetch(url, {
-      signal: ctrl.signal,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Origin: "https://lovable.dev",
-        Referer: "https://lovable.dev/",
-        "X-Client-Git-SHA": GIT_SHA,
-      },
-    });
+    const r = await fetch(url, { signal: ctrl.signal, headers: lovHeaders(token) });
     clearTimeout(timer);
     if (!r.body) return { status: r.status, body: "" };
     const body = await readStream(r.body, 800_000, bodyMs);
@@ -69,31 +70,28 @@ function extractMdBody(c: string): string | null {
   return a.length > 5 ? a : null;
 }
 
-/** Deep-search for brain-output.md in any structure */
+/** Find brain-output.md in source-code response (supports {name, contents} format) */
 function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
   if (!obj || typeof obj !== "object") return null;
 
-  // Direct key match: { "src/brain-output.md": "content" | { content: "..." } }
   if (obj[target]) {
     const v = obj[target];
     if (typeof v === "string") return v;
-    if (typeof v === "object") return v.content || v.source || v.code || null;
+    if (typeof v === "object") return v.contents || v.content || v.source || null;
   }
 
-  // Array of { path, content } or { name, content }
   if (Array.isArray(obj)) {
     for (const item of obj) {
       if (!item || typeof item !== "object") continue;
       const p = item.path || item.name || item.file_path || "";
       if (p === target || p.endsWith("brain-output.md")) {
-        const c = item.content || item.source || item.code;
+        const c = item.contents || item.content || item.source || item.code;
         if (typeof c === "string") return c;
       }
     }
     return null;
   }
 
-  // Check common wrappers: files, data, source, source_code, project
   for (const key of ["files", "data", "source", "source_code", "project", "code"]) {
     if (obj[key]) {
       const result = findBrainMd(obj[key], target);
@@ -101,134 +99,434 @@ function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
     }
   }
 
-  // Last resort: scan all keys ending with brain-output.md
   for (const key of Object.keys(obj)) {
     if (key.endsWith("brain-output.md")) {
       const v = obj[key];
       if (typeof v === "string") return v;
-      if (typeof v === "object") return v?.content || v?.source || null;
+      if (typeof v === "object") return v?.contents || v?.content || v?.source || null;
     }
   }
 
   return null;
 }
 
-/** Describe structure for diagnostics */
-function describeStructure(obj: any, depth = 0): string {
-  if (depth > 2) return typeof obj;
-  if (obj === null || obj === undefined) return "null";
-  if (typeof obj === "string") return `str(${obj.length})`;
-  if (typeof obj === "number" || typeof obj === "boolean") return String(obj);
-  if (Array.isArray(obj)) {
-    const sample = obj.length > 0 ? describeStructure(obj[0], depth + 1) : "empty";
-    return `arr[${obj.length}](${sample})`;
-  }
-  if (typeof obj === "object") {
-    const keys = Object.keys(obj);
-    const sample = keys.slice(0, 6).map(k => `${k}:${describeStructure(obj[k], depth + 1)}`).join(", ");
-    return `{${keys.length}keys: ${sample}}`;
-  }
-  return typeof obj;
+// ── Bootstrap phase prompts ──────────────────────────────────────
+// These are sent sequentially by the cron to build the brain project
+
+type SkillProfile = { title: string; credentials: string; focus: string };
+
+const SKILL_PROFILES: Record<string, SkillProfile> = {
+  general: {
+    title: "Star AI — Assistente Geral Sênior",
+    credentials: "PhD em Ciência da Computação (MIT), MBA (Harvard), 50 anos de experiência.",
+    focus: "análise geral, planejamento, arquitetura de software, resolução de problemas complexos",
+  },
+  design: {
+    title: "Star AI — Arquiteto de Design & UX",
+    credentials: "PhD em HCI (MIT Media Lab), Mestre em Design Visual (RISD).",
+    focus: "design systems, UX research, acessibilidade WCAG, Tailwind CSS, shadcn/ui",
+  },
+  code: {
+    title: "Star AI — Engenheiro de Software Principal",
+    credentials: "PhD em Engenharia de Software (Stanford), 50 anos como Staff Engineer.",
+    focus: "TypeScript, React, Node.js, Deno, PostgreSQL, Edge Functions",
+  },
+  scraper: {
+    title: "Star AI — Especialista em Extração de Dados",
+    credentials: "PhD em Data Engineering (CMU), 30 anos em web scraping.",
+    focus: "crawlers, parsing, Firecrawl, APIs de dados, ETL",
+  },
+  security: {
+    title: "Star AI — Engenheiro de Segurança Principal",
+    credentials: "PhD em Cybersecurity (MIT), CISSP, OSCP.",
+    focus: "RLS policies, OAuth, criptografia, hardening, auditoria",
+  },
+};
+
+function getProfile(skill: string): SkillProfile {
+  return SKILL_PROFILES[skill] || SKILL_PROFILES.general;
 }
+
+function buildPhasePrompt(phase: number, skill: string, ctx: { supabaseUrl: string; userId: string }): string {
+  const p = getProfile(skill);
+
+  switch (phase) {
+    case 1:
+      // Phase 1: Create core structure + webhook system
+      return `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
+
+Crie a estrutura completa do sistema Brain especializado. Este é um sistema HEADLESS de IA — NÃO crie componentes React visuais.
+
+## 1. Arquivo src/brain-output.md
+\`\`\`markdown
+---
+status: ready
+skill: ${skill}
+timestamp: ${Date.now()}
+---
+# ${p.title}
+Brain ativado. Aguardando instruções.
+\`\`\`
+
+## 2. Arquivo src/INSTRUCTIONS.md
+\`\`\`markdown
+# ${p.title} — Protocolo de Resposta
+
+## Identidade
+${p.credentials}
+
+## Regras
+1. SEMPRE escreva respostas em src/brain-output.md com frontmatter status: done
+2. Responda em Português (Brasil)
+3. Seja técnico, detalhado e acionável
+4. NÃO crie componentes React ou páginas visuais
+5. Pode criar Edge Functions, SQL, scripts backend
+6. Use formato Markdown com código quando necessário
+7. Ao gerar imagens, salve a URL/path no brain-output.md
+\`\`\`
+
+## 3. Arquivo .lovable/plan.md
+\`\`\`markdown
+---
+title: ${p.title}
+skill: ${skill}
+status: ready
+---
+# ${p.title}
+Sistema especializado em ${p.focus}.
+Protocolo: todas as respostas em src/brain-output.md com status: done.
+\`\`\`
+
+## 4. Arquivo src/config.json
+\`\`\`json
+{
+  "brain_title": "${p.title}",
+  "skill": "${skill}",
+  "response_file": "src/brain-output.md",
+  "callback_url": "${ctx.supabaseUrl}/functions/v1/brain-capture-cron",
+  "user_id": "${ctx.userId}",
+  "status": "ready",
+  "version": "5.0"
+}
+\`\`\`
+
+NÃO crie componentes React, páginas ou rotas. Este projeto serve APENAS como backend de IA especializada.`;
+
+    case 2:
+      // Phase 2: Create response templates + capabilities manifest
+      return `IMPORTANTE: Não faça perguntas, execute diretamente.
+
+Crie os seguintes arquivos no projeto:
+
+## 1. src/response-templates.md
+\`\`\`markdown
+---
+status: done
+timestamp: ${Date.now()}
+---
+# Templates de Resposta — ${p.title}
+
+## Template: Análise Técnica
+- Diagnóstico detalhado
+- Causa raiz identificada
+- Solução com código
+- Considerações de performance
+
+## Template: Arquitetura
+- Visão geral do sistema
+- Componentes e suas responsabilidades
+- Fluxo de dados
+- Segurança e escalabilidade
+
+## Template: Code Review
+- Problemas encontrados (severidade)
+- Correções com diff
+- Boas práticas aplicáveis
+- Métricas de qualidade
+\`\`\`
+
+## 2. src/capabilities.json
+\`\`\`json
+{
+  "brain": "${p.title}",
+  "skill": "${skill}",
+  "capabilities": [
+    "análise técnica avançada",
+    "geração de código TypeScript/React",
+    "criação de Edge Functions",
+    "revisão de arquitetura",
+    "criação de SQL/migrações",
+    "geração de documentação",
+    "análise de segurança"
+  ],
+  "response_formats": ["markdown", "json", "code"],
+  "output_file": "src/brain-output.md",
+  "version": "5.0",
+  "status": "operational"
+}
+\`\`\`
+
+Atualize src/brain-output.md com status: done confirmando a criação.`;
+
+    case 3:
+      // Phase 3: Self-test + readiness
+      return `IMPORTANTE: Não faça perguntas, execute diretamente.
+
+Realize um auto-teste completo do sistema ${p.title}. Atualize src/brain-output.md com:
+
+\`\`\`markdown
+---
+status: done
+skill: ${skill}
+timestamp: ${Date.now()}
+readiness: complete
+---
+
+# ${p.title} — Sistema Operacional ✅
+
+## Auto-Teste Concluído
+
+### Identidade
+${p.credentials}
+
+### Especialização
+${p.focus}
+
+### Verificações
+- ✅ Estrutura de arquivos criada
+- ✅ Templates de resposta configurados
+- ✅ Manifesto de capacidades definido
+- ✅ Protocolo de resposta em .md funcional
+- ✅ Sistema headless (sem UI React)
+
+### Protocolo Ativo
+Todas as respostas serão escritas em \`src/brain-output.md\` com frontmatter \`status: done\`.
+Aguardando instruções do usuário.
+\`\`\``;
+
+    default:
+      return "";
+  }
+}
+
+// ── Send prompt via venus-chat ──────────────────────────────────
+
+async function sendViaVenus(
+  projectId: string,
+  prompt: string,
+  token: string,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({
+        task: prompt,
+        project_id: projectId,
+        mode: "task",
+        lovable_token: token,
+      }),
+    });
+    clearTimeout(timer);
+    const text = await res.text().catch(() => "{}");
+    let data: any = {};
+    try { data = JSON.parse(text); } catch {}
+    const ok = res.ok && data?.ok;
+    console.log(`[bc:venus] project=${projectId.slice(0,8)} ok=${ok} status=${res.status}`);
+    return ok;
+  } catch (e) {
+    clearTimeout(timer);
+    console.log(`[bc:venus] error: ${String(e).slice(0, 80)}`);
+    return false;
+  }
+}
+
+// ── Main handler ────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
-  const sc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const sc = createClient(supabaseUrl, serviceKey);
+
+  let bootstrapProcessed = 0;
+  let captured = 0;
+  let timedOut = 0;
 
   try {
+    // ══════════════════════════════════════════════════════════════
+    // PART 1: Process bootstrap phases (skill_phase 1-3)
+    // ══════════════════════════════════════════════════════════════
+    const { data: pendingBrains } = await sc.from("user_brain_projects")
+      .select("id, user_id, lovable_project_id, skill_phase, brain_skill, created_at")
+      .eq("status", "active")
+      .gt("skill_phase", 0)
+      .lte("skill_phase", 3)
+      .order("created_at", { ascending: true })
+      .limit(2); // Process max 2 per cycle
+
+    if (pendingBrains?.length) {
+      console.log(`[bc] ${pendingBrains.length} brains need bootstrap`);
+
+      for (const brain of pendingBrains) {
+        const phase = brain.skill_phase || 1;
+        const age = Date.now() - new Date(brain.created_at).getTime();
+
+        // Don't process if brain was just created (wait 30s for project stabilization)
+        if (age < 30_000) {
+          console.log(`[bc] brain=${brain.id.slice(0,8)} too young (${Math.round(age/1000)}s), skipping`);
+          continue;
+        }
+
+        // Get user token
+        const { data: acct } = await sc.from("lovable_accounts")
+          .select("token_encrypted")
+          .eq("user_id", brain.user_id)
+          .eq("status", "active")
+          .maybeSingle();
+        if (!acct?.token_encrypted) {
+          console.log(`[bc] brain=${brain.id.slice(0,8)} no-token, skipping`);
+          continue;
+        }
+
+        const prompt = buildPhasePrompt(phase, brain.brain_skill, {
+          supabaseUrl,
+          userId: brain.user_id,
+        });
+
+        if (!prompt) {
+          // Phase > 3 or invalid, mark as done
+          await sc.from("user_brain_projects").update({ skill_phase: 0 }).eq("id", brain.id);
+          continue;
+        }
+
+        console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} skill=${brain.brain_skill} sending...`);
+        const ok = await sendViaVenus(brain.lovable_project_id, prompt, acct.token_encrypted, supabaseUrl, serviceKey);
+
+        if (ok) {
+          // Advance to next phase (or 0 if done)
+          const nextPhase = phase >= 3 ? 0 : phase + 1;
+          await sc.from("user_brain_projects").update({ skill_phase: nextPhase }).eq("id", brain.id);
+          bootstrapProcessed++;
+          console.log(`[bc] ✅ brain=${brain.id.slice(0,8)} phase=${phase}→${nextPhase}`);
+        } else {
+          console.log(`[bc] ❌ brain=${brain.id.slice(0,8)} phase=${phase} failed`);
+          // If failed 3+ times (brain older than 10 min and still on same phase), skip
+          if (age > 600_000) {
+            console.log(`[bc] brain=${brain.id.slice(0,8)} too old, marking done`);
+            await sc.from("user_brain_projects").update({ skill_phase: 0 }).eq("id", brain.id);
+          }
+        }
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // PART 2: Capture pending conversation responses
+    // ══════════════════════════════════════════════════════════════
     const { data: pending } = await sc.from("loveai_conversations")
       .select("id, user_id, target_project_id, created_at")
-      .eq("status", "processing").order("created_at", { ascending: true }).limit(5);
-    if (!pending?.length) return json({ processed: 0 });
-    console.log(`[bc] ${pending.length} pending`);
+      .eq("status", "processing")
+      .order("created_at", { ascending: true })
+      .limit(5);
 
-    let captured = 0, timedOut = 0;
-    const byUser = new Map<string, typeof pending>();
-    for (const c of pending) { const l = byUser.get(c.user_id) || []; l.push(c); byUser.set(c.user_id, l); }
+    if (!pending?.length && !bootstrapProcessed) {
+      return json({ processed: 0, bootstrap: bootstrapProcessed });
+    }
 
-    for (const [userId, convos] of byUser) {
-      const { data: acct } = await sc.from("lovable_accounts")
-        .select("token_encrypted").eq("user_id", userId).eq("status", "active").maybeSingle();
-      if (!acct?.token_encrypted) { console.log(`[bc] no-token`); continue; }
-      const tk = acct.token_encrypted;
+    if (pending?.length) {
+      console.log(`[bc] ${pending.length} pending conversations`);
 
-      for (const convo of convos) {
-        if (!convo.target_project_id) continue;
-        const age = Date.now() - new Date(convo.created_at).getTime();
-        if (age > 300_000) {
-          await sc.from("loveai_conversations").update({ status: "timeout" }).eq("id", convo.id);
-          timedOut++; continue;
-        }
-        const pid = convo.target_project_id, cid = convo.id.slice(0, 8);
-        console.log(`[bc] ${cid} pid=${pid.slice(0,8)} age=${Math.round(age/1000)}s`);
+      const byUser = new Map<string, typeof pending>();
+      for (const c of pending) {
+        const l = byUser.get(c.user_id) || [];
+        l.push(c);
+        byUser.set(c.user_id, l);
+      }
 
-        // S1: latest-message (4s connect, 3s body)
-        const r1 = await fetchText(`${API}/projects/${pid}/latest-message`, tk, 4000, 3000);
-        if (r1) {
-          if (r1.status === 200 && r1.body.length > 5) {
+      for (const [userId, convos] of byUser) {
+        const { data: acct } = await sc.from("lovable_accounts")
+          .select("token_encrypted")
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .maybeSingle();
+        if (!acct?.token_encrypted) { console.log(`[bc] no-token`); continue; }
+        const tk = acct.token_encrypted;
+
+        for (const convo of convos) {
+          if (!convo.target_project_id) continue;
+          const age = Date.now() - new Date(convo.created_at).getTime();
+          if (age > 300_000) {
+            await sc.from("loveai_conversations").update({ status: "timeout" }).eq("id", convo.id);
+            timedOut++;
+            continue;
+          }
+          const pid = convo.target_project_id;
+          const cid = convo.id.slice(0, 8);
+          console.log(`[bc] ${cid} pid=${pid.slice(0,8)} age=${Math.round(age / 1000)}s`);
+
+          // S1: latest-message
+          const r1 = await fetchText(`${API}/projects/${pid}/latest-message`, tk, 4000, 3000);
+          if (r1 && r1.status === 200 && r1.body.length > 5) {
             try {
               const msg = JSON.parse(r1.body);
               const txt = msg?.content || msg?.message || msg?.text || "";
               if (msg?.role !== "user" && !msg?.is_streaming && txt.length > 30) {
                 await sc.from("loveai_conversations").update({ ai_response: txt.trim(), status: "completed" }).eq("id", convo.id);
-                // Persist to brain_outputs
                 await sc.from("brain_outputs").insert({
-                  user_id: userId,
-                  conversation_id: convo.id,
-                  skill: "general",
-                  request: "",
-                  response: txt.trim(),
-                  status: "done",
-                  brain_project_id: pid,
+                  user_id: userId, conversation_id: convo.id, skill: "general",
+                  request: "", response: txt.trim(), status: "done", brain_project_id: pid,
                 }).catch(() => {});
-                captured++; console.log(`[bc] ✅ ${cid} S1 ${txt.length}c`); continue;
+                captured++;
+                console.log(`[bc] ✅ ${cid} S1 ${txt.length}c`);
+                continue;
               }
             } catch { /* S1 is SSE stream, expected */ }
           }
-        }
 
-        // S2: source-code (6s connect, 10s body — increased for large projects)
-        const r2 = await fetchText(`${API}/projects/${pid}/source-code`, tk, 6000, 10000);
-        if (r2) {
-          console.log(`[bc] ${cid} S2 ${r2.status} ${r2.body.length}b`);
-          if (r2.status === 200 && r2.body.length > 10) {
+          // S2: source-code
+          const r2 = await fetchText(`${API}/projects/${pid}/source-code`, tk, 6000, 10000);
+          if (r2 && r2.status === 200 && r2.body.length > 10) {
             try {
               const parsed = JSON.parse(r2.body);
-              // Log top-level structure for diagnostics
-              console.log(`[bc] ${cid} S2-struct: ${describeStructure(parsed)}`);
-
               const md = findBrainMd(parsed);
               if (md) {
-                console.log(`[bc] ${cid} brain-md ${md.length}c preview=${md.slice(0,120)}`);
+                console.log(`[bc] ${cid} brain-md ${md.length}c hasDone=${/status:\s*done/i.test(md)}`);
                 const hasDone = /status:\s*done/i.test(md);
                 const hasReady = /status:\s*ready/i.test(md);
                 if (hasDone || (md.length > 200 && !hasReady)) {
                   const body = extractMdBody(md);
                   if (body && body.length > 20) {
                     await sc.from("loveai_conversations").update({ ai_response: body, status: "completed" }).eq("id", convo.id);
-                    // Persist to brain_outputs
                     await sc.from("brain_outputs").insert({
-                      user_id: userId,
-                      conversation_id: convo.id,
-                      skill: "general",
-                      request: "",
-                      response: body,
-                      status: "done",
-                      brain_project_id: pid,
+                      user_id: userId, conversation_id: convo.id, skill: "general",
+                      request: "", response: body, status: "done", brain_project_id: pid,
                     }).catch(() => {});
-                    captured++; console.log(`[bc] ✅ ${cid} S2 ${body.length}c`); continue;
+                    captured++;
+                    console.log(`[bc] ✅ ${cid} S2 ${body.length}c`);
+                    continue;
                   }
                 }
               } else {
                 console.log(`[bc] ${cid} S2 no-brain-md`);
               }
-            } catch (e) { console.log(`[bc] ${cid} S2 parse-err: ${String(e).slice(0,100)}`); }
+            } catch (e) {
+              console.log(`[bc] ${cid} S2 parse-err: ${String(e).slice(0, 100)}`);
+            }
           }
+          console.log(`[bc] ${cid} no-capture`);
         }
-        console.log(`[bc] ${cid} no-capture`);
       }
     }
-    return json({ processed: pending.length, captured, timedOut });
+
+    return json({ processed: pending?.length || 0, captured, timedOut, bootstrap: bootstrapProcessed });
   } catch (err) {
     console.error("[bc] fatal:", err);
     return json({ error: String(err) }, 500);

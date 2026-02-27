@@ -534,12 +534,12 @@ async function mineResponse(
           if (!files) return null;
           if (Array.isArray(files)) {
             const found = files.find((f: any) => f.path === path || f.name === path);
-            return typeof found === "string" ? found : (found?.content || found?.source || null);
+            return typeof found === "string" ? found : (found?.contents || found?.content || found?.source || null);
           }
           if (typeof files === "object") {
             const val = files[path];
             if (typeof val === "string") return val;
-            if (val && typeof val === "object") return val.content || val.source || null;
+            if (val && typeof val === "object") return val.contents || val.content || val.source || null;
           }
           return null;
         };
@@ -765,6 +765,7 @@ async function createFreshBrain(
         brain_skill: primarySkill,
         brain_skills: skills,
         name,
+        skill_phase: 1, // Queue audit prompts for cron processing
       })
       .eq("id", lockId);
 
