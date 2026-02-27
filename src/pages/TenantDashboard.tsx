@@ -98,7 +98,7 @@ export default function TenantDashboard() {
               <p className="text-xs text-muted-foreground">Sua plataforma de IA personalizada • <span className="text-emerald-400">Ativo</span></p>
             </div>
           </div>
-          <Link to="/tenant/admin" className="h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-primary/25 transition-all">
+          <Link to="/admin/tenant" className="h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-primary/25 transition-all">
             <Palette className="h-4 w-4" /> Personalizar
           </Link>
         </div>
@@ -154,8 +154,8 @@ export default function TenantDashboard() {
                   <h3 className="text-sm font-bold text-foreground mb-4">🚀 Ações Rápidas</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {[
-                      { label: "Personalizar Marca", icon: Palette, link: "/tenant/admin", desc: "Cores, logo, domínio" },
-                      { label: "Gerenciar CRM", icon: Users, link: "/tenant/admin?tab=crm", desc: "Contatos & campanhas" },
+                      { label: "Personalizar Marca", icon: Palette, link: "/admin/tenant", desc: "Cores, logo, domínio" },
+                      { label: "Gerenciar CRM", icon: Users, link: "/admin/tenant?tab=crm", desc: "Contatos & campanhas" },
                       { label: "Ver Comunidade", icon: Globe, link: "/community", desc: "Comunidade unificada" },
                     ].map(a => (
                       <Link key={a.label} to={a.link}

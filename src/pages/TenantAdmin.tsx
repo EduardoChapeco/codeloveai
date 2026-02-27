@@ -427,6 +427,7 @@ export default function TenantAdmin() {
     { id: "users" as Tab, label: "Usuários", icon: Key, desc: `${members.length} membros` },
     { id: "licenses" as Tab, label: "Licenças", icon: Key, desc: `${licenses.length} ativas` },
     { id: "finances" as Tab, label: "Financeiro", icon: Wallet, desc: wallet ? `R$${wallet.balance.toFixed(2)}` : "—" },
+    { id: "activity" as Tab, label: "Atividade", icon: BarChart3, desc: "Logs & métricas" },
   ];
 
   return (
@@ -497,7 +498,21 @@ export default function TenantAdmin() {
             </GlassCard>
           )}
 
-          {/* Tab navigation moved to sidebar */}
+          {/* Tab Navigation */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => setSearchParams({ tab: t.id })}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  tab === t.id
+                    ? "bg-primary/10 text-primary border border-primary/20"
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/[0.03] border border-transparent"
+                }`}>
+                <t.icon className="h-3.5 w-3.5" />
+                {t.label}
+                {t.desc && <span className="text-[10px] text-muted-foreground ml-1 hidden sm:inline">{t.desc}</span>}
+              </button>
+            ))}
+          </div>
 
           {/* ═══════════════ EDITOR TAB ═══════════════ */}
           {tab === "editor" && (
