@@ -409,15 +409,13 @@ export default function AppSidebar() {
 
   // ─── Default sidebar — Big Glass Buttons ───
   const mainItems = [
-    { to: "/dashboard", label: "Painel", icon: LayoutDashboard, desc: "Visão geral" },
+    { to: "/community", label: "CodeLovers", icon: MessageCircle, desc: "Comunidade de devs", badge: "🔥" },
     { to: "/extensoes", label: "Extensões", icon: Puzzle, desc: "Loja de extensões" },
-    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos", badge: "Novo" },
+    { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos" },
     { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
     { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de projetos" },
     { to: "/automation", label: "Automação", icon: Zap, desc: "Regras automáticas" },
     { to: "/notes", label: "Notas", icon: StickyNote, desc: "Anotações rápidas" },
-    { to: "/community", label: "Comunidade", icon: MessageCircle, desc: "Fórum & discussões" },
-    { to: "/install", label: "Instalar", icon: Download, desc: "Download da extensão" },
   ];
 
   const lovableItems = [
@@ -618,6 +616,14 @@ export default function AppSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/dashboard")} tooltip="Painel">
+              <NavLink to="/dashboard">
+                <LayoutDashboard className="h-4 w-4" />
+                <span>Painel</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={isActive("/assistente")} tooltip="Assistente">
               <NavLink to="/assistente">

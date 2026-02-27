@@ -934,6 +934,32 @@ export default function AdminGlobal() {
                   </div>
                 </div>
               </div>
+
+              {/* Kill Switch: Free Master */}
+              <div className="lv-card">
+                <p className="lv-overline mb-4">🚨 Kill Switch — Free Master</p>
+                <p className="lv-caption mb-4">Desativa o plano "Free Master" e expira todas as licenças associadas imediatamente.</p>
+                <button
+                  onClick={async () => {
+                    if (!confirm("Tem certeza? Isso vai desativar o plano Free Master e expirar TODAS as licenças free_master de todos os usuários.")) return;
+                    // 1. Deactivate the plan
+                    const { data: fmPlan } = await supabase.from("plans").select("id").eq("name", "Free Master").maybeSingle();
+                    if (!fmPlan) return toast.error("Plano Free Master não encontrado");
+                    await supabase.from("plans").update({ is_active: false } as any).eq("id", fmPlan.id);
+                    // 2. Mass-expire all licenses linked to this plan
+                    const { error } = await supabase.from("licenses").update({
+                      active: false,
+                      status: "expired",
+                    } as any).eq("plan", "free_master").eq("active", true);
+                    if (error) return toast.error("Erro ao expirar licenças: " + error.message);
+                    toast.success("Free Master desativado e todas as licenças expiradas! ☠️");
+                    fetchAll();
+                  }}
+                  className="lv-btn-primary h-10 px-6 text-xs bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                >
+                  <ShieldAlert className="h-4 w-4 mr-2 inline" /> Desativar Free Master
+                </button>
+              </div>
             </div>
           )}
 
