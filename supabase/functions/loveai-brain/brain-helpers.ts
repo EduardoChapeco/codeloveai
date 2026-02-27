@@ -550,43 +550,22 @@ export function buildPayload(prompt: string) {
 export function buildBrainPrompt(brainType: string, message: string): string {
   const ts = Date.now();
 
-  // Strong instruction to ALWAYS overwrite src/brain-output.md
+  // Simple, direct instruction — respond naturally AND save to .md
   const outputRule = `
 
-CRITICAL INSTRUCTION — OUTPUT FORMAT:
-You MUST overwrite the file src/brain-output.md with your COMPLETE response using EXACTLY this format:
+Responda em Português Brasileiro de forma direta e completa.
 
-\`\`\`markdown
+Após responder, salve sua resposta completa no arquivo src/brain-output.md neste formato:
 ---
 status: done
 timestamp: ${ts}
 type: ${brainType}
 ---
 
-(your full answer here)
-\`\`\`
+(sua resposta aqui)`;
 
-Rules:
-1. ALWAYS overwrite src/brain-output.md — never create new files for the response
-2. The frontmatter MUST contain "status: done" — this triggers response capture
-3. Write your ENTIRE answer inside this single .md file
-4. Respond in Brazilian Portuguese
-5. Do NOT create React components, pages, routes or visual elements
-6. For code: embed code blocks inside the markdown response
-7. Also write the same response to src/brain-output.json in format: {"status":"done","timestamp":${ts},"response":"(your answer)"}`;
-
-  const modes: Record<string, string> = {
-    general: message + outputRule,
-    design: `Help me with this design task: ${message}${outputRule}`,
-    code: `Help me write this code: ${message}${outputRule}`,
-    scraper: `Create a web scraper for: ${message}${outputRule}`,
-    migration: `Generate SQL migration for: ${message}${outputRule}`,
-    data: `Help with this data/analytics task: ${message}${outputRule}`,
-    devops: `Help with this DevOps/infrastructure task: ${message}${outputRule}`,
-    security: `Help with this security task: ${message}${outputRule}`,
-  };
-
-  return modes[brainType] || modes.general;
+  // No wrappers — just the user message + output rule
+  return message + outputRule;
 }
 
 /**
