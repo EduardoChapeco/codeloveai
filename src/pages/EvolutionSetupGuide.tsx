@@ -513,16 +513,111 @@ export default function EvolutionSetupGuide() {
               Cada instância é uma conexão WhatsApp separada. Normalmente você cria uma por número de telefone. O nome serve como identificador interno.
             </InfoBox>
 
-            {/* Sub-step 6.1 — Create instance */}
-            <div className="rounded-2xl border border-white/[0.08] overflow-hidden">
-              <div className="px-4 py-3 bg-white/[0.04] border-b border-white/[0.06]">
-                <p className="text-xs font-bold text-foreground flex items-center gap-2">
-                  <Terminal className="h-3.5 w-3.5 text-primary" /> 6.1 — Criar a instância via API
+            {/* METHOD SELECTOR */}
+            <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 space-y-2">
+              <p className="text-xs font-bold text-primary">🎯 Escolha o método mais fácil para você:</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
+                  <p className="text-xs font-bold text-emerald-400 mb-1">✅ Método A — Pelo Navegador (Recomendado)</p>
+                  <p className="text-[10px] text-muted-foreground">Acesse o painel visual da Evolution API direto no browser. Sem terminal, sem código.</p>
+                </div>
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+                  <p className="text-xs font-bold text-foreground mb-1">Método B — Via Terminal (Avançado)</p>
+                  <p className="text-[10px] text-muted-foreground">Use cURL no Terminal ou PowerShell. Para quem já tem experiência.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* METHOD A — Browser Manager (RECOMMENDED) */}
+            <div className="rounded-2xl border-2 border-emerald-500/30 overflow-hidden">
+              <div className="px-4 py-3 bg-emerald-500/[0.08] border-b border-emerald-500/20">
+                <p className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                  <Globe className="h-4 w-4" /> Método A — Pelo Navegador (mais fácil)
                 </p>
               </div>
-              <div className="p-4 space-y-3">
-                <p className="text-xs text-muted-foreground">Abra o <strong>Terminal</strong> (Mac/Linux) ou <strong>PowerShell</strong> (Windows) e execute o comando abaixo:</p>
-                <CopyBlock label="cURL — Criar instância" code={`curl -X POST '${serviceUrl}/instance/create' \\
+              <div className="p-4 space-y-4">
+                {/* A.1 — Open Manager */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 space-y-3">
+                  <p className="text-xs font-bold text-foreground flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-black">1</span>
+                    Abrir o painel da Evolution API
+                  </p>
+                  <p className="text-xs text-muted-foreground">Acesse esta URL no navegador — é o painel visual da sua API:</p>
+                  <CopyBlock label="URL do painel — abra no navegador" code={`${serviceUrl}/manager`} />
+                  <InfoBox type="info">
+                    <strong>Dica:</strong> Se pedir "API Key" ou "Global API Key", cole a sua chave: <code className="text-foreground">{apiKey || "[sua API key do Passo 4]"}</code>
+                  </InfoBox>
+                </div>
+
+                {/* A.2 — Create instance in manager */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 space-y-3">
+                  <p className="text-xs font-bold text-foreground flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-black">2</span>
+                    Criar a instância pelo painel
+                  </p>
+                  <div className="rounded-xl border border-emerald-500/10 bg-emerald-500/[0.03] p-3 space-y-2">
+                    <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
+                      <li>No painel, clique no botão <strong className="text-foreground">"+ Add Instance"</strong> (ou "Nova Instância")</li>
+                      <li>Em <strong className="text-foreground">"Instance Name"</strong>, digite: <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">{instanceName}</code></li>
+                      <li>Em <strong className="text-foreground">"Integration"</strong>, selecione <code className="text-foreground bg-white/[0.06] px-1.5 py-0.5 rounded">WHATSAPP-BAILEYS</code></li>
+                      <li>Marque a opção <strong className="text-foreground">"QR Code"</strong> como ativo</li>
+                      <li>Clique em <strong className="text-foreground">"Create"</strong> ou <strong className="text-foreground">"Salvar"</strong></li>
+                    </ol>
+                  </div>
+                </div>
+
+                {/* A.3 — Scan QR */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 space-y-3">
+                  <p className="text-xs font-bold text-foreground flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-black">3</span>
+                    Escanear o QR Code
+                  </p>
+                  <p className="text-xs text-muted-foreground">Após criar, o painel mostrará o <strong>QR Code automaticamente</strong>. Se não aparecer, clique na instância e depois em <strong>"Connect"</strong>.</p>
+
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-2">
+                    <p className="text-xs font-bold text-emerald-400">📱 No celular:</p>
+                    <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                      <li>Abra o <strong className="text-foreground">WhatsApp</strong> no celular</li>
+                      <li>Toque nos <strong className="text-foreground">3 pontinhos ⋮</strong> (Android) ou <strong className="text-foreground">Configurações ⚙️</strong> (iPhone)</li>
+                      <li>Toque em <strong className="text-foreground">"Dispositivos conectados"</strong></li>
+                      <li>Toque em <strong className="text-foreground">"Conectar dispositivo"</strong></li>
+                      <li>Aponte a câmera para o <strong className="text-foreground">QR Code na tela do computador</strong></li>
+                      <li>Aguarde aparecer <strong className="text-foreground">"conectado" ✅</strong></li>
+                    </ol>
+                  </div>
+
+                  <InfoBox type="warn">
+                    O QR Code expira em ~30 segundos. Se expirar, clique em <strong>"Refresh"</strong> ou recarregue a página para gerar um novo.
+                  </InfoBox>
+                </div>
+
+                {/* A.4 — Verify */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 space-y-3">
+                  <p className="text-xs font-bold text-foreground flex items-center gap-2">
+                    <span className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-black">4</span>
+                    Confirmar conexão
+                  </p>
+                  <p className="text-xs text-muted-foreground">No painel, a instância deve aparecer com status <strong className="text-emerald-400">"open"</strong> ou <strong className="text-emerald-400">"connected"</strong>.</p>
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-emerald-400">Status: open = WhatsApp conectado com sucesso!</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* METHOD B — Terminal (collapsible) */}
+            <details className="rounded-2xl border border-white/[0.08] overflow-hidden group">
+              <summary className="px-4 py-3 bg-white/[0.04] cursor-pointer flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
+                <Terminal className="h-4 w-4" /> Método B — Via Terminal (avançado)
+                <ChevronRight className="h-4 w-4 ml-auto group-open:rotate-90 transition-transform" />
+              </summary>
+              <div className="p-4 space-y-4">
+                {/* B.1 — Create via cURL */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-foreground">B.1 — Criar instância via cURL</p>
+                  <p className="text-xs text-muted-foreground">Abra o <strong>Terminal</strong> (Mac/Linux) ou <strong>PowerShell</strong> (Windows) e execute:</p>
+                  <CopyBlock label="cURL — Criar instância" code={`curl -X POST '${serviceUrl}/instance/create' \\
   -H 'Content-Type: application/json' \\
   -H 'apikey: ${apiKey || "[SUA_API_KEY_DO_PASSO_4]"}' \\
   -d '{
@@ -530,65 +625,30 @@ export default function EvolutionSetupGuide() {
     "integration": "WHATSAPP-BAILEYS",
     "qrcode": true
   }'`} />
-                <InfoBox type="success">
-                  Se tudo estiver certo, a resposta conterá um campo <code>qrcode.base64</code> com o QR Code. Mas é mais fácil usar o método visual do passo seguinte.
-                </InfoBox>
-
-                <InfoBox type="warn">
-                  <strong>Não tem terminal?</strong> Você pode usar ferramentas online como <a href="https://reqbin.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">ReqBin</a> ou <a href="https://hoppscotch.io/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Hoppscotch</a>. Basta colar a URL, adicionar o header <code>apikey</code> e enviar o body JSON.
-                </InfoBox>
-              </div>
-            </div>
-
-            {/* Sub-step 6.2 — QR Code */}
-            <div className="rounded-2xl border border-white/[0.08] overflow-hidden">
-              <div className="px-4 py-3 bg-white/[0.04] border-b border-white/[0.06]">
-                <p className="text-xs font-bold text-foreground flex items-center gap-2">
-                  <Terminal className="h-3.5 w-3.5 text-primary" /> 6.2 — Escanear o QR Code (método visual)
-                </p>
-              </div>
-              <div className="p-4 space-y-3">
-                <p className="text-xs text-muted-foreground">Abra esta URL diretamente no <strong>navegador</strong> para ver o QR Code:</p>
-                <CopyBlock label="URL do QR Code — abra no navegador" code={`${serviceUrl}/instance/connect/${instanceName}`} />
-
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-2">
-                  <p className="text-xs font-bold text-emerald-400">📱 Passos no celular:</p>
-                  <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                    <li>Abra o <strong className="text-foreground">WhatsApp</strong> no celular</li>
-                    <li>Toque nos <strong className="text-foreground">3 pontinhos</strong> (Android) ou <strong className="text-foreground">Configurações</strong> (iPhone)</li>
-                    <li>Toque em <strong className="text-foreground">"Dispositivos conectados"</strong></li>
-                    <li>Toque em <strong className="text-foreground">"Conectar dispositivo"</strong></li>
-                    <li>Aponte a câmera para o QR Code no navegador</li>
-                    <li>Aguarde a conexão ser estabelecida (aparecerá "conectado")</li>
-                  </ol>
+                  <InfoBox type="warn">
+                    <strong>Não tem terminal?</strong> Use <a href="https://hoppscotch.io/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Hoppscotch</a> ou <a href="https://reqbin.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">ReqBin</a> — cole a URL, adicione o header <code>apikey</code> e envie o body JSON.
+                  </InfoBox>
                 </div>
 
-                <InfoBox type="warn">
-                  O QR Code expira em ~30 segundos. Se expirar, <strong>recarregue a página</strong> para gerar um novo. Se não aparecer nenhum QR Code, verifique se o Passo 6.1 foi executado.
-                </InfoBox>
-              </div>
-            </div>
+                {/* B.2 — QR via URL */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-foreground">B.2 — Ver QR Code no navegador</p>
+                  <CopyBlock label="URL do QR Code — abra no navegador" code={`${serviceUrl}/instance/connect/${instanceName}`} />
+                  <p className="text-xs text-muted-foreground">Escaneie com o WhatsApp conforme descrito no Método A, passo 3.</p>
+                </div>
 
-            {/* Sub-step 6.3 — Verify connection */}
-            <div className="rounded-2xl border border-white/[0.08] overflow-hidden">
-              <div className="px-4 py-3 bg-white/[0.04] border-b border-white/[0.06]">
-                <p className="text-xs font-bold text-foreground flex items-center gap-2">
-                  <Terminal className="h-3.5 w-3.5 text-primary" /> 6.3 — Verificar se conectou
-                </p>
-              </div>
-              <div className="p-4 space-y-3">
-                <p className="text-xs text-muted-foreground">Execute este comando para confirmar que o WhatsApp está conectado:</p>
-                <CopyBlock label="cURL — Verificar status" code={`curl -X GET '${serviceUrl}/instance/connectionState/${instanceName}' \\
+                {/* B.3 — Verify via cURL */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-foreground">B.3 — Verificar conexão</p>
+                  <CopyBlock label="cURL — Verificar status" code={`curl -X GET '${serviceUrl}/instance/connectionState/${instanceName}' \\
   -H 'apikey: ${apiKey || "[SUA_API_KEY_DO_PASSO_4]"}'`} />
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Resposta esperada:</span>
-                  <code className="text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">{`{"instance":{"state":"open"}}`}</code>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Resposta esperada:</span>
+                    <code className="text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">{`{"instance":{"state":"open"}}`}</code>
+                  </div>
                 </div>
-                <InfoBox type="success">
-                  Se o <code>state</code> for <strong>"open"</strong>, seu WhatsApp está conectado e pronto! Se for <strong>"close"</strong>, repita o Passo 6.2.
-                </InfoBox>
               </div>
-            </div>
+            </details>
 
             <button onClick={() => markComplete(6)} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2">
               WhatsApp conectado! <ArrowRight className="h-4 w-4" />
