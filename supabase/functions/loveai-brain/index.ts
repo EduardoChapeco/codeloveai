@@ -1,12 +1,12 @@
 /**
- * Star AI Brain v8.2 — Improved stability, account mismatch auto-recovery
+ * Star AI Brain v9.0 — Uses venus-chat as centralized messaging proxy
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getUserToken, getValidToken, refreshToken, lovFetch } from "./token-helpers.ts";
 import {
   getBrain, getBrainRaw, verifyProject, createFreshBrain,
-  buildPayload, buildBrainPrompt, captureResponse,
+  buildBrainPrompt, captureResponse, sendViaBrain,
 } from "./brain-helpers.ts";
 
 const CORS = {
@@ -151,7 +151,8 @@ Deno.serve(async (req) => {
 
       const projectId = brain.lovable_project_id;
       const prompt = buildBrainPrompt(brain_type, message);
-      const payload = buildPayload(prompt);
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
       const { data: convoRow } = await sc.from("loveai_conversations").insert({
         user_id: userId,
@@ -163,23 +164,16 @@ Deno.serve(async (req) => {
 
       const convoId = convoRow?.id;
 
-      let chatRes = await lovFetch(
-        `https://api.lovable.dev/projects/${projectId}/chat`,
-        lovableToken,
-        { method: "POST", body: JSON.stringify(payload) }
-      );
+      // Send via venus-chat (centralized proxy)
+      let sendResult = await sendViaBrain(projectId, lovableToken, prompt, supabaseUrl, serviceKey);
 
       // Handle auth failures with auto-recovery
-      if (!chatRes.ok && (chatRes.status === 401 || chatRes.status === 403)) {
+      if (!sendResult.ok && (sendResult.status === 401 || sendResult.status === 403)) {
         const newToken = await refreshToken(sc, userId);
         if (newToken) {
           const accessible = await verifyProject(projectId, newToken);
           if (accessible) {
-            chatRes = await lovFetch(
-              `https://api.lovable.dev/projects/${projectId}/chat`,
-              newToken,
-              { method: "POST", body: JSON.stringify(payload) }
-            );
+            sendResult = await sendViaBrain(projectId, newToken, prompt, supabaseUrl, serviceKey);
           } else {
             // Account changed — recreate brain
             const newBrain = await createFreshBrain(sc, userId, newToken);
@@ -187,11 +181,7 @@ Deno.serve(async (req) => {
               if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
               return json({ error: newBrain.error }, 502);
             }
-            chatRes = await lovFetch(
-              `https://api.lovable.dev/projects/${newBrain.projectId}/chat`,
-              newToken,
-              { method: "POST", body: JSON.stringify(buildPayload(prompt)) }
-            );
+            sendResult = await sendViaBrain(newBrain.projectId, newToken, prompt, supabaseUrl, serviceKey);
             if (convoId) await sc.from("loveai_conversations").update({ target_project_id: newBrain.projectId }).eq("id", convoId);
           }
         } else {
@@ -200,10 +190,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      if (!chatRes.ok) {
-        const errBody = await chatRes.text().catch(() => "");
+      if (!sendResult.ok) {
         // If 404 — brain project deleted, auto-recreate
-        if (chatRes.status === 404) {
+        if (sendResult.status === 404) {
           console.warn(`[Brain] Project ${projectId} returned 404, recreating...`);
           await sc.from("user_brain_projects").delete().eq("user_id", userId);
           const newBrain = await createFreshBrain(sc, userId, lovableToken);
@@ -211,32 +200,28 @@ Deno.serve(async (req) => {
             if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
             return json({ error: `Brain recriado com falha: ${newBrain.error}` }, 502);
           }
-          // Retry with new project
-          chatRes = await lovFetch(
-            `https://api.lovable.dev/projects/${newBrain.projectId}/chat`,
-            lovableToken,
-            { method: "POST", body: JSON.stringify(buildPayload(prompt)) }
-          );
+          sendResult = await sendViaBrain(newBrain.projectId, lovableToken, prompt, supabaseUrl, serviceKey);
           if (convoId) await sc.from("loveai_conversations").update({ target_project_id: newBrain.projectId }).eq("id", convoId);
         }
       }
 
-      if (!chatRes.ok) {
+      if (!sendResult.ok) {
         if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
-        return json({ error: `Erro ao enviar (HTTP ${chatRes.status})` }, 502);
+        return json({ error: `Erro ao enviar (HTTP ${sendResult.status}): ${sendResult.error || ""}` }, 502);
       }
 
       const activeToken = await getUserToken(sc, userId) || lovableToken;
       const activeBrain = await getBrain(sc, userId);
       const activeProjectId = activeBrain?.lovable_project_id || projectId;
 
-      const capture = await captureResponse(activeProjectId, activeToken, 90000, 4000, 8000);
+      const capture = await captureResponse(activeProjectId, activeToken, 90000, 3000, 5000);
 
       let finalResponse = capture.response;
       if (finalResponse) {
         finalResponse = finalResponse
           .replace(/^(?:SISTEMA (?:STARBLE|STAR AI|CODELOVE) BRAIN[\s\S]*?(?:REGRAS:|RESPONDA)[\s\S]*?\n)/i, "")
           .replace(/^(?:Analise e corrija[\s\S]*?\n)/i, "")
+          .replace(/^(?:IMPORTANTE:[\s\S]*?execute\.?\s*\n\n)/i, "")
           .trim();
       }
 
