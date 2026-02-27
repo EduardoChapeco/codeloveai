@@ -2487,6 +2487,163 @@ export type Database = {
           },
         ]
       }
+      marketplace_location_log: {
+        Row: {
+          accuracy: number | null
+          consent_given: boolean | null
+          created_at: string
+          id: string
+          ip_address: string | null
+          latitude: number | null
+          longitude: number | null
+          purchase_id: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          accuracy?: number | null
+          consent_given?: boolean | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          purchase_id?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          accuracy?: number | null
+          consent_given?: boolean | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          purchase_id?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      marketplace_onboarding: {
+        Row: {
+          buyer_confirmed_delivery_at: string | null
+          buyer_confirmed_project_at: string | null
+          buyer_id: string
+          buyer_location: Json | null
+          created_at: string
+          current_step: number
+          id: string
+          listing_id: string
+          location_consent_buyer: boolean | null
+          location_consent_seller: boolean | null
+          notes: string | null
+          payout_released_at: string | null
+          purchase_id: string
+          seller_id: string
+          seller_location: Json | null
+          seller_started_at: string | null
+          status: string
+          total_steps: number
+          updated_at: string
+        }
+        Insert: {
+          buyer_confirmed_delivery_at?: string | null
+          buyer_confirmed_project_at?: string | null
+          buyer_id: string
+          buyer_location?: Json | null
+          created_at?: string
+          current_step?: number
+          id?: string
+          listing_id: string
+          location_consent_buyer?: boolean | null
+          location_consent_seller?: boolean | null
+          notes?: string | null
+          payout_released_at?: string | null
+          purchase_id: string
+          seller_id: string
+          seller_location?: Json | null
+          seller_started_at?: string | null
+          status?: string
+          total_steps?: number
+          updated_at?: string
+        }
+        Update: {
+          buyer_confirmed_delivery_at?: string | null
+          buyer_confirmed_project_at?: string | null
+          buyer_id?: string
+          buyer_location?: Json | null
+          created_at?: string
+          current_step?: number
+          id?: string
+          listing_id?: string
+          location_consent_buyer?: boolean | null
+          location_consent_seller?: boolean | null
+          notes?: string | null
+          payout_released_at?: string | null
+          purchase_id?: string
+          seller_id?: string
+          seller_location?: Json | null
+          seller_started_at?: string | null
+          status?: string
+          total_steps?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_onboarding_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketplace_onboarding_steps: {
+        Row: {
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          onboarding_id: string
+          step_number: number
+          title: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          onboarding_id: string
+          step_number: number
+          title: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          onboarding_id?: string
+          step_number?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_onboarding_steps_onboarding_id_fkey"
+            columns: ["onboarding_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_onboarding"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketplace_purchases: {
         Row: {
           buyer_id: string
@@ -2591,6 +2748,77 @@ export type Database = {
           },
           {
             foreignKeyName: "marketplace_reviews_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketplace_seller_invoices: {
+        Row: {
+          buyer_confirmed: boolean | null
+          buyer_id: string
+          commission_amount: number
+          created_at: string
+          gross_amount: number
+          hold_until: string
+          id: string
+          listing_id: string
+          net_amount: number
+          notes: string | null
+          paid_at: string | null
+          paid_by: string | null
+          payout_method: string | null
+          payout_reference: string | null
+          purchase_id: string
+          seller_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          buyer_confirmed?: boolean | null
+          buyer_id: string
+          commission_amount?: number
+          created_at?: string
+          gross_amount?: number
+          hold_until?: string
+          id?: string
+          listing_id: string
+          net_amount?: number
+          notes?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payout_method?: string | null
+          payout_reference?: string | null
+          purchase_id: string
+          seller_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          buyer_confirmed?: boolean | null
+          buyer_id?: string
+          commission_amount?: number
+          created_at?: string
+          gross_amount?: number
+          hold_until?: string
+          id?: string
+          listing_id?: string
+          net_amount?: number
+          notes?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payout_method?: string | null
+          payout_reference?: string | null
+          purchase_id?: string
+          seller_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_seller_invoices_purchase_id_fkey"
             columns: ["purchase_id"]
             isOneToOne: false
             referencedRelation: "marketplace_purchases"

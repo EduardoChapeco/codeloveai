@@ -613,3 +613,42 @@ Quando uma atualização é detectada, o iframe de preview é recarregado com `?
 ### Persistência de Chat
 
 O histórico de mensagens do editor é salvo em `localStorage` por projeto (`starble_chat_{projectId}`), preservando até 100 mensagens entre reloads.
+
+---
+
+## 13. Marketplace — Onboarding & Sistema de Faturas
+
+> Adicionado: 2026-02-27
+
+### Fluxo de Venda Segura (5 Etapas)
+
+1. **Início do Onboarding** — Vendedor inicia apresentação guiada
+2. **Demonstração & Dúvidas** — Vendedor demonstra funcionalidades
+3. **Acesso como Visualizador** — Vendedor duplica projeto e adiciona comprador como Viewer
+4. **Confirmação do Projeto** — Comprador confirma que o projeto é o mesmo do anúncio (com checkbox de aceite)
+5. **Liberação do Pagamento** — Comprador libera valor ao vendedor (irreversível, com termos CDC)
+
+### Tabelas Envolvidas
+- `marketplace_onboarding` — Sessão de onboarding por compra
+- `marketplace_onboarding_steps` — Log de cada etapa concluída
+- `marketplace_seller_invoices` — Faturas com hold de 7 dias
+- `marketplace_location_log` — Registro de localização (consentimento obrigatório)
+
+### Regras de Pagamento
+- **Hold de 7 dias** após confirmação de entrega pelo comprador
+- **Comissão de 30%** retida pela plataforma
+- **Vendedor recebe 70%** via fatura automática
+- Fatura criada automaticamente no checkout (PIX/card/gratuito)
+
+### Proteções Anti-Fraude
+- Localização ao vivo obrigatória para transações
+- IP e user-agent registrados
+- Avisos sobre pagamentos externos (plataforma não se responsabiliza)
+- Termos CDC para produtos digitais (sem devolução após acesso)
+- Monitoramento de todas as transações
+
+### Regras CDC (Código de Defesa do Consumidor)
+- Art. 49: Direito de arrependimento não se aplica a produtos digitais após acesso integral
+- Prestação de serviço concluída após onboarding completo
+- Aceite expresso obrigatório antes da liberação de pagamento
+- Impossibilidade de devolução de valores após confirmação
