@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-27T20:45:38Z
+updated_at: 2026-02-27T20:52:10Z
 status: done
-task: corrigidos erros de build/runtime e validada causa raiz
+task: corrigido setup Evolution API - adicionado DATABASE_URL, auto-suffix ?schema=public, normalização postgres->postgresql
 ---
