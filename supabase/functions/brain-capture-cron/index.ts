@@ -440,7 +440,7 @@ Deno.serve(async (req) => {
             } catch { /* S1 is SSE stream, expected */ }
           }
 
-          // S2: source-code (WITH TIMESTAMP VALIDATION)
+          // S2: source-code (WITH CONTENT-CHANGE + TIMESTAMP VALIDATION)
           const r2 = await fetchText(`${API}/projects/${pid}/source-code`, tk, 6000, 10000);
           if (r2 && r2.status === 200 && r2.body.length > 10) {
             try {
@@ -450,10 +450,14 @@ Deno.serve(async (req) => {
                 const hasDone = /status:\s*done/i.test(md);
                 const hasReady = /status:\s*ready/i.test(md);
 
-                // ── TIMESTAMP CHECK — reject stale .md ──
+                // ── TIMESTAMP CHECK — but also accept content-change ──
                 const mdTs = extractMdTimestamp(md);
-                if (mdTs && mdTs < convoTs) {
-                  console.log(`[bc] ${cid} S2 stale .md (md_ts=${mdTs} < convo_ts=${convoTs}), skipping`);
+                const isStaleTs = mdTs && mdTs < convoTs;
+
+                if (isStaleTs && age < 60_000) {
+                  // Only skip stale .md if conversation is young (< 60s)
+                  // After 60s, accept any valid content since AI may not update timestamp
+                  console.log(`[bc] ${cid} S2 stale .md (md_ts=${mdTs} < convo_ts=${convoTs}), waiting...`);
                 } else if (hasDone || (md.length > 200 && !hasReady)) {
                   const body = extractMdBody(md);
                   if (body && body.length > 20) {
@@ -463,7 +467,7 @@ Deno.serve(async (req) => {
                       request: "", response: body, status: "done", brain_project_id: pid,
                     }).catch(() => {});
                     captured++;
-                    console.log(`[bc] ✅ ${cid} S2 ${body.length}c`);
+                    console.log(`[bc] ✅ ${cid} S2 ${body.length}c (staleTs=${!!isStaleTs})`);
                     continue;
                   }
                 }
@@ -474,7 +478,41 @@ Deno.serve(async (req) => {
               console.log(`[bc] ${cid} S2 parse-err: ${String(e).slice(0, 100)}`);
             }
           }
-          console.log(`[bc] ${cid} no-capture`);
+
+          // S3: Try latest-message with SSE-aware parsing
+          if (age > 15_000) {
+            const r3 = await fetchText(`${API}/projects/${pid}/latest-message`, tk, 4000, 5000);
+            if (r3 && r3.status === 200 && r3.body.length > 5) {
+              try {
+                // Handle SSE format: extract last "data:" line
+                let msgText = r3.body;
+                if (msgText.includes("data:")) {
+                  const lines = msgText.split("\n").filter((l: string) => l.startsWith("data:"));
+                  if (lines.length > 0) {
+                    const lastLine = lines[lines.length - 1].replace(/^data:\s*/, "");
+                    try { msgText = lastLine; } catch { /* keep original */ }
+                  }
+                }
+                const msg = JSON.parse(msgText);
+                const txt = msg?.content || msg?.message || msg?.text || "";
+                if (msg?.role !== "user" && !msg?.is_streaming && typeof txt === "string" && txt.length > 30) {
+                  if (!isBootstrapResponse(txt)) {
+                    const cleanedTxt = cleanBrainResponse(txt.trim());
+                    await sc.from("loveai_conversations").update({ ai_response: cleanedTxt, status: "completed" }).eq("id", convo.id);
+                    await sc.from("brain_outputs").insert({
+                      user_id: userId, conversation_id: convo.id, skill: "general",
+                      request: "", response: cleanedTxt, status: "done", brain_project_id: pid,
+                    }).catch(() => {});
+                    captured++;
+                    console.log(`[bc] ✅ ${cid} S3-msg ${cleanedTxt.length}c`);
+                    continue;
+                  }
+                }
+              } catch { /* S3 parse failed */ }
+            }
+          }
+
+          console.log(`[bc] ${cid} no-capture (age=${Math.round(age/1000)}s)`);
         }
       }
     }
