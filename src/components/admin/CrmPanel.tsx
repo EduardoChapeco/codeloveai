@@ -78,6 +78,11 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
     name: "", message_template: "", media_url: "", target_tags: "" as string, schedule_at: ""
   });
 
+  // WhatsApp session
+  const [waSession, setWaSession] = useState({ webhook_url: "", api_key: "", instance_name: "" });
+  const [waSaving, setWaSaving] = useState(false);
+  const [dispatching, setDispatching] = useState<string | null>(null);
+
   const fetchContacts = useCallback(async () => {
     const { data } = await supabase.from("crm_contacts")
       .select("*").eq("tenant_id", tenantId).eq("is_active", true)
@@ -99,10 +104,16 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
     setCampaigns((data || []) as Campaign[]);
   }, [tenantId]);
 
+  const fetchWaSession = useCallback(async () => {
+    const { data } = await supabase.from("crm_whatsapp_sessions")
+      .select("*").eq("tenant_id", tenantId).maybeSingle();
+    if (data) setWaSession({ webhook_url: (data as any).webhook_url || "", api_key: (data as any).api_key_encrypted || "", instance_name: (data as any).instance_name || "" });
+  }, [tenantId]);
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchContacts(), fetchLists(), fetchCampaigns()]).finally(() => setLoading(false));
-  }, [fetchContacts, fetchLists, fetchCampaigns]);
+    Promise.all([fetchContacts(), fetchLists(), fetchCampaigns(), fetchWaSession()]).finally(() => setLoading(false));
+  }, [fetchContacts, fetchLists, fetchCampaigns, fetchWaSession]);
 
   // ═══ CSV Upload & Parse ═══
   const handleFileUpload = async (files: FileList) => {
@@ -202,6 +213,63 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
     await supabase.from("crm_contacts").update({ is_active: false } as any).eq("id", id);
     toast.success("Contato removido");
     fetchContacts();
+  };
+
+  const saveWaSession = async () => {
+    if (!waSession.webhook_url || !waSession.api_key) return toast.error("Preencha URL e chave de API");
+    setWaSaving(true);
+    const payload: any = {
+      tenant_id: tenantId, webhook_url: waSession.webhook_url,
+      api_key_encrypted: waSession.api_key, instance_name: waSession.instance_name || "default",
+      is_connected: false, updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from("crm_whatsapp_sessions").upsert(payload, { onConflict: "tenant_id" });
+    setWaSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Configuração salva!");
+  };
+
+  const dispatchCampaign = async (campaign: Campaign) => {
+    if (dispatching) return;
+    setDispatching(campaign.id);
+    try {
+      // 1. Populate queue from contacts matching tags
+      const { data: targetContacts } = await supabase.from("crm_contacts")
+        .select("id, phone_normalized, name")
+        .eq("tenant_id", tenantId).eq("is_active", true);
+
+      if (!targetContacts?.length) { toast.error("Nenhum contato encontrado"); return; }
+
+      const queue = targetContacts.map(c => ({
+        tenant_id: tenantId, campaign_id: campaign.id,
+        contact_id: c.id, phone: c.phone_normalized,
+        message: campaign.message_template.replace(/\{name\}/g, c.name || ""),
+        media_url: campaign.media_url || null, status: "pending",
+      }));
+
+      // Batch insert queue
+      const BATCH = 100;
+      for (let i = 0; i < queue.length; i += BATCH) {
+        await supabase.from("crm_message_queue").insert(queue.slice(i, i + BATCH) as any[]);
+      }
+
+      // Update campaign
+      await supabase.from("crm_campaigns").update({
+        status: "running", total_recipients: queue.length,
+      } as any).eq("id", campaign.id);
+
+      // 2. Trigger dispatch function
+      await supabase.functions.invoke("crm-dispatch", {
+        body: { tenant_id: tenantId, campaign_id: campaign.id, batch_size: 10 },
+      });
+
+      toast.success(`Campanha iniciada! ${queue.length} mensagens na fila`);
+      fetchCampaigns();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao disparar campanha");
+    } finally {
+      setDispatching(null);
+    }
   };
 
   const filteredContacts = contacts.filter(c =>
@@ -476,6 +544,13 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
                     <span className="text-muted-foreground">/{c.total_recipients}</span>
                   </div>
                   {statusBadge(c.status)}
+                  {c.status === "draft" && (
+                    <button onClick={() => dispatchCampaign(c)} disabled={!!dispatching}
+                      className="h-8 px-3 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold flex items-center gap-1.5 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
+                      {dispatching === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                      Disparar
+                    </button>
+                  )}
                 </div>
               </div>
             </GlassCard>
@@ -522,20 +597,25 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
               <div>
                 <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">URL da API</label>
                 <input className="w-full h-10 px-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground font-mono placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={waSession.webhook_url} onChange={e => setWaSession(s => ({ ...s, webhook_url: e.target.value }))}
                   placeholder="https://api.evolution.ai/..." />
               </div>
               <div>
                 <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Chave de API</label>
                 <input type="password" className="w-full h-10 px-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground font-mono placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={waSession.api_key} onChange={e => setWaSession(s => ({ ...s, api_key: e.target.value }))}
                   placeholder="••••••••••••" />
               </div>
               <div>
                 <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Nome da Instância</label>
                 <input className="w-full h-10 px-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={waSession.instance_name} onChange={e => setWaSession(s => ({ ...s, instance_name: e.target.value }))}
                   placeholder="minha-instancia" />
               </div>
-              <button className="h-10 px-6 rounded-xl bg-emerald-500 text-white text-sm font-semibold flex items-center gap-2 hover:bg-emerald-600 transition-colors">
-                <Zap className="h-4 w-4" /> Salvar e Testar Conexão
+              <button onClick={saveWaSession} disabled={waSaving}
+                className="h-10 px-6 rounded-xl bg-emerald-500 text-white text-sm font-semibold flex items-center gap-2 hover:bg-emerald-600 transition-colors disabled:opacity-50">
+                {waSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Salvar e Testar Conexão
               </button>
             </div>
           </GlassCard>

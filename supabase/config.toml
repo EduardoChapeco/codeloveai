@@ -150,3 +150,6 @@ verify_jwt = false
 
 [functions.venus-chat]
 verify_jwt = false
+
+[functions.crm-dispatch]
+verify_jwt = false
