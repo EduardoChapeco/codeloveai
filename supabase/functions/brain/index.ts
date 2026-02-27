@@ -506,8 +506,70 @@ async function sendViaVenus(
   }
 }
 
+// ── Response cleaning ───────────────────────────────────────────
+// Strips bootstrap/audit boilerplate so only real answers are returned
+
+const BOOTSTRAP_MARKERS = [
+  /^#\s*Star AI\s*—.*Sistema Operacional\s*✅/im,
+  /^Brain ativado\.\s*Credenciais:/im,
+  /^Brain ativado\.\s*Aguardando instruções/im,
+  /Aguardando instruções do usuário\.?\s*$/im,
+  /^Sistema operacional\.\s*Aguardando instruções/im,
+  /^Varredura de segurança\s*$/im,
+  /readiness:\s*complete/im,
+];
+
+const BOILERPLATE_LINES = [
+  /^#\s*Resposta do Star AI\s*—/i,
+  /^#+\s*Star AI\s*—.*—\s*Sistema Operacional/i,
+  /^##?\s*Auto-Teste Conclu[ií]do/i,
+  /^##?\s*Verificações\s*$/i,
+  /^-\s*✅\s*(Estrutura de arquivos|Templates de resposta|Manifesto de capacidades|Auto-teste|Protocolo de resposta)/i,
+  /^##?\s*Status:\s*Totalmente operacional/i,
+  /^\|\s*Item\s*\|\s*Resultado\s*\|/i,
+  /^\|\s*-+\s*\|\s*-+\s*\|/,
+  /^\|\s*Varredura de segurança\s*\|/i,
+  /^\|\s*Vulnerabilidades\s*\|/i,
+  /^\|\s*Ação necessária\s*\|/i,
+];
+
+function isBootstrapResponse(text: string): boolean {
+  return BOOTSTRAP_MARKERS.some(r => r.test(text));
+}
+
+function cleanBrainResponse(raw: string): string {
+  if (!raw || raw.length < 5) return raw;
+
+  // Remove frontmatter if still present
+  let text = raw.replace(/^---[\s\S]*?---\s*/m, "").trim();
+
+  // Strip code fences wrapping the whole thing
+  text = text.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+
+  // Remove boilerplate lines
+  const lines = text.split("\n");
+  const cleaned = lines.filter(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return true; // keep empty lines
+    return !BOILERPLATE_LINES.some(r => r.test(trimmed));
+  });
+
+  // Remove leading empty lines and trailing "Aguardando instruções"
+  let result = cleaned.join("\n").trim();
+  result = result.replace(/Sistema operacional\.\s*Aguardando instruções\.?\s*$/im, "").trim();
+  result = result.replace(/Aguardando instruções do usuário\.?\s*$/im, "").trim();
+  result = result.replace(/Aguardando instruções\.?\s*$/im, "").trim();
+
+  // Remove redundant "Resposta do Star AI" header if it's the only content
+  result = result.replace(/^#\s*Resposta do Star AI\s*—[^\n]*\n\s*/i, "").trim();
+
+  // Collapse multiple empty lines
+  result = result.replace(/\n{3,}/g, "\n\n");
+
+  return result.length > 5 ? result : raw;
+}
+
 // ── Response mining (scraper) ──────────────────────────────────
-// Mines the Brain project's source-code for the response in src/brain-output.md
 
 async function mineResponse(
   projectId: string,
@@ -560,23 +622,29 @@ async function mineResponse(
         const mdContent = getContent("src/brain-output.md");
         if (mdContent) {
           console.log(`[Mine] brain-output.md found, len=${mdContent.length}, hasDone=${/status:\s*done/i.test(mdContent)}`);
-          
-          // Accept if status: done OR if content is substantial (>100 chars, meaning AI wrote something)
-          const hasDone = /status:\s*done/i.test(mdContent);
-          const hasReady = /status:\s*ready/i.test(mdContent);
-          
-          if (hasDone || (mdContent.length > 200 && !hasReady)) {
-            const parts = mdContent.split("---");
-            if (parts.length >= 3) {
-              let body = parts.slice(2).join("---").trim();
-              // Strip markdown code fences if wrapping the content
-              body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
-              if (body.length > 10) return { response: body, status: "completed" };
-            }
-            // Fallback: entire content after frontmatter
-            const afterFm = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
-            if (afterFm.length > 10) return { response: afterFm, status: "completed" };
-          }
+           
+           // Accept if status: done OR if content is substantial (>100 chars, meaning AI wrote something)
+           const hasDone = /status:\s*done/i.test(mdContent);
+           const hasReady = /status:\s*ready/i.test(mdContent);
+           
+           if (hasDone || (mdContent.length > 200 && !hasReady)) {
+             const parts = mdContent.split("---");
+             let body = "";
+             if (parts.length >= 3) {
+               body = parts.slice(2).join("---").trim();
+               body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+             } else {
+               body = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
+             }
+
+             // Skip bootstrap/audit boilerplate
+             if (isBootstrapResponse(body)) {
+               console.log(`[Mine] Skipping bootstrap response`);
+             } else if (body.length > 10) {
+               const cleaned = cleanBrainResponse(body);
+               if (cleaned.length > 10) return { response: cleaned, status: "completed" };
+             }
+           }
         }
 
         // Fallback: ANY .md file with "status: done" in .lovable/tasks/

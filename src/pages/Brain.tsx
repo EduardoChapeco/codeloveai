@@ -689,10 +689,37 @@ export default function BrainPage() {
                         {convo.status === "failed" && (
                           <div className="flex items-center gap-2 text-destructive"><XCircle className="h-4 w-4" /><span className="text-sm">{convo.ai_response || "Falha ao processar."}</span></div>
                         )}
-                        {convo.status === "completed" && convo.ai_response && (
+                        {convo.status === "completed" && convo.ai_response && (() => {
+                          // Client-side cleaning as safety net
+                          let cleaned = convo.ai_response;
+                          cleaned = cleaned.replace(/^---[\s\S]*?---\s*/m, "").trim();
+                          cleaned = cleaned.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+                          cleaned = cleaned.replace(/^#\s*Resposta do Star AI\s*—[^\n]*\n\s*/i, "").trim();
+                          cleaned = cleaned.replace(/Sistema operacional\.\s*Aguardando instruções\.?\s*$/im, "").trim();
+                          cleaned = cleaned.replace(/Aguardando instruções do usuário\.?\s*$/im, "").trim();
+                          cleaned = cleaned.replace(/Aguardando instruções\.?\s*$/im, "").trim();
+                          // Remove status table boilerplate
+                          cleaned = cleaned.replace(/\|\s*Item\s*\|\s*Resultado\s*\|[\s\S]*?\|\s*Ação necessária\s*\|[^\n]*/gi, "").trim();
+                          cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+                          return (
                           <>
-                            <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed break-words [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_pre]:rounded-xl [&_pre]:bg-muted/50 [&_pre]:p-3 [&_pre]:text-xs [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{convo.ai_response}</ReactMarkdown>
+                            <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed break-words
+                              [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_pre]:rounded-xl [&_pre]:bg-black/80 [&_pre]:text-green-400 [&_pre]:p-4 [&_pre]:text-xs [&_pre]:font-mono [&_pre]:shadow-inner
+                              [&_code]:text-[12px] [&_code]:font-mono [&_code]:bg-muted/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:break-all
+                              [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-green-400
+                              [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2
+                              [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2]:text-foreground
+                              [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1
+                              [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5
+                              [&_p]:my-1.5
+                              [&_table]:text-xs [&_table]:w-full [&_th]:bg-muted/40 [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold
+                              [&_td]:px-3 [&_td]:py-1.5 [&_td]:border-t [&_td]:border-border/30
+                              [&_blockquote]:border-l-2 [&_blockquote]:border-primary/30 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-muted-foreground
+                              [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2
+                              [&_hr]:border-border/20 [&_hr]:my-3
+                              [&_strong]:font-bold [&_strong]:text-foreground
+                            ">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleaned}</ReactMarkdown>
                             </div>
                             <div className="flex items-center gap-3 mt-3 pt-2.5">
                               <button
@@ -707,7 +734,8 @@ export default function BrainPage() {
                               <CheckCircle className="h-3 w-3 text-green-500" />
                             </div>
                           </>
-                        )}
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
