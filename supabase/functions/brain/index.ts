@@ -520,31 +520,76 @@ async function mineResponse(
 
         const files = parsed?.files || parsed?.data?.files || parsed?.source?.files || parsed;
         const getContent = (path: string): string | null => {
+          if (!files) return null;
           if (Array.isArray(files)) {
-            const found = files.find((f: any) => f.path === path);
-            return found?.content || found?.source || null;
+            const found = files.find((f: any) => f.path === path || f.name === path);
+            return typeof found === "string" ? found : (found?.content || found?.source || null);
           }
-          if (files && typeof files === "object") return files[path] || null;
+          if (typeof files === "object") {
+            const val = files[path];
+            if (typeof val === "string") return val;
+            if (val && typeof val === "object") return val.content || val.source || null;
+          }
           return null;
         };
 
+        // Log file keys for debugging (first poll only)
+        if (Date.now() < deadline - maxWaitMs + initialDelayMs + intervalMs + 2000) {
+          const fileKeys = typeof files === "object" && !Array.isArray(files)
+            ? Object.keys(files).filter(k => k.includes("brain") || k.includes("output") || k.includes("tasks")).slice(0, 10)
+            : Array.isArray(files)
+              ? files.filter((f: any) => {
+                  const p = f?.path || f?.name || "";
+                  return p.includes("brain") || p.includes("output") || p.includes("tasks");
+                }).map((f: any) => f?.path || f?.name).slice(0, 10)
+              : [];
+          console.log(`[Mine] project=${projectId.slice(0,8)} files-type=${Array.isArray(files) ? "array" : typeof files} brain-files=${JSON.stringify(fileKeys)}`);
+        }
+
         // Primary: src/brain-output.md
         const mdContent = getContent("src/brain-output.md");
-        if (mdContent && /status:\s*done/i.test(mdContent)) {
-          const parts = mdContent.split("---");
-          if (parts.length >= 3) {
-            const body = parts.slice(2).join("---").trim();
-            if (body.length > 10) return { response: body, status: "completed" };
+        if (mdContent) {
+          console.log(`[Mine] brain-output.md found, len=${mdContent.length}, hasDone=${/status:\s*done/i.test(mdContent)}`);
+          
+          // Accept if status: done OR if content is substantial (>100 chars, meaning AI wrote something)
+          const hasDone = /status:\s*done/i.test(mdContent);
+          const hasReady = /status:\s*ready/i.test(mdContent);
+          
+          if (hasDone || (mdContent.length > 200 && !hasReady)) {
+            const parts = mdContent.split("---");
+            if (parts.length >= 3) {
+              let body = parts.slice(2).join("---").trim();
+              // Strip markdown code fences if wrapping the content
+              body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+              if (body.length > 10) return { response: body, status: "completed" };
+            }
+            // Fallback: entire content after frontmatter
+            const afterFm = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
+            if (afterFm.length > 10) return { response: afterFm, status: "completed" };
           }
-          // Fallback: entire content after frontmatter
-          const afterFm = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
-          if (afterFm.length > 10) return { response: afterFm, status: "completed" };
+        }
+
+        // Fallback: ANY .md file with "status: done" in .lovable/tasks/
+        const allKeys = typeof files === "object" && !Array.isArray(files) ? Object.keys(files) : [];
+        for (const key of allKeys) {
+          if (!key.includes(".lovable/tasks/") && !key.includes("brain-response")) continue;
+          const taskContent = getContent(key);
+          if (taskContent && /status:\s*done/i.test(taskContent)) {
+            const parts = taskContent.split("---");
+            if (parts.length >= 3) {
+              const body = parts.slice(2).join("---").trim();
+              if (body.length > 20) {
+                console.log(`[Mine] Found done task: ${key} len=${body.length}`);
+                return { response: body, status: "completed" };
+              }
+            }
+          }
         }
 
         // Fallback: src/brain-output.json (legacy)
         const jsonContent = getContent("src/brain-output.json");
         if (jsonContent) {
-          let clean = jsonContent.trim();
+          let clean = typeof jsonContent === "string" ? jsonContent.trim() : "";
           if (clean.startsWith("```")) {
             clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
           }
@@ -555,30 +600,10 @@ async function mineResponse(
             }
           } catch { /* ignore */ }
         }
-
-        // Fallback: .lovable/tasks/brain-response.md
-        const taskMd = getContent(".lovable/tasks/brain-response.md");
-        if (taskMd && /status:\s*done/i.test(taskMd)) {
-          const parts = taskMd.split("---");
-          if (parts.length >= 3) {
-            const body = parts.slice(2).join("---").trim();
-            if (body.length > 5) return { response: body, status: "completed" };
-          }
-        }
-
-        // Fallback: brain-config.json status check
-        const configContent = getContent("src/brain-config.json");
-        if (configContent) {
-          try {
-            const cfg = JSON.parse(configContent);
-            if (cfg?.status === "ready" && mdContent && mdContent.length > 50) {
-              // Config says ready but brain-output.md has content
-              return { response: mdContent, status: "completed" };
-            }
-          } catch { /* ignore */ }
-        }
+      } else {
+        console.log(`[Mine] source-code HTTP ${srcRes.status} for project=${projectId.slice(0,8)}`);
       }
-    } catch { /* continue */ }
+    } catch (e) { console.log(`[Mine] source-code error: ${String(e).slice(0,100)}`); }
 
     // Strategy 2: latest-message as last resort
     try {

@@ -72,8 +72,15 @@ function extractMdBody(c: string): string | null {
 
 function getFile(files: any, path: string): string | null {
   if (!files) return null;
-  if (Array.isArray(files)) { const f = files.find((x: any) => x.path === path); return f?.content || f?.source || null; }
-  if (typeof files === "object") { const v = files[path]; return typeof v === "string" ? v : v?.content || null; }
+  if (Array.isArray(files)) {
+    const f = files.find((x: any) => x.path === path || x.name === path);
+    return typeof f === "string" ? f : (f?.content || f?.source || null);
+  }
+  if (typeof files === "object") {
+    const v = files[path];
+    if (typeof v === "string") return v;
+    if (v && typeof v === "object") return v.content || v.source || null;
+  }
   return null;
 }
 
@@ -132,18 +139,25 @@ Deno.serve(async (req) => {
           if (r2.status === 200 && r2.body.length > 10) {
             try {
               const parsed = JSON.parse(r2.body);
-              const files = parsed?.files || parsed?.data?.files || parsed;
+              const files = parsed?.files || parsed?.data?.files || parsed?.source?.files || parsed;
               const md = getFile(files, "src/brain-output.md");
               if (md) {
-                console.log(`[bc] ${cid} brain-md ${md.length}c`);
-                const body = extractMdBody(md);
-                if (body && body.length > 20) {
-                  await sc.from("loveai_conversations").update({ ai_response: body, status: "completed" }).eq("id", convo.id);
-                  captured++; console.log(`[bc] ✅ ${cid} S2 ${body.length}c`); continue;
+                console.log(`[bc] ${cid} brain-md ${md.length}c hasDone=${/status:\s*done/i.test(md)} preview=${md.slice(0,80)}`);
+                // Accept if has "status: done" OR substantial content (>200 chars, not just "ready")
+                const hasDone = /status:\s*done/i.test(md);
+                const hasReady = /status:\s*ready/i.test(md);
+                if (hasDone || (md.length > 200 && !hasReady)) {
+                  const body = extractMdBody(md);
+                  if (body && body.length > 20) {
+                    await sc.from("loveai_conversations").update({ ai_response: body, status: "completed" }).eq("id", convo.id);
+                    captured++; console.log(`[bc] ✅ ${cid} S2 ${body.length}c`); continue;
+                  }
                 }
               } else {
-                const keys = typeof files === "object" ? Object.keys(files || {}).length : 0;
-                console.log(`[bc] ${cid} S2 no-md files=${keys}`);
+                // Log all file keys that contain "brain" or "output" or "task"
+                const allKeys = typeof files === "object" && !Array.isArray(files) ? Object.keys(files) : [];
+                const brainKeys = allKeys.filter(k => k.includes("brain") || k.includes("output") || k.includes("task")).slice(0, 5);
+                console.log(`[bc] ${cid} S2 no-brain-md total=${allKeys.length} brainKeys=${JSON.stringify(brainKeys)}`);
               }
             } catch { console.log(`[bc] ${cid} S2 parse-err`); }
           }
