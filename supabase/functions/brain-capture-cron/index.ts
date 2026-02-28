@@ -264,10 +264,22 @@ NÃO crie React, páginas ou rotas.`;
       return `IMPORTANTE: Execute diretamente. Crie src/capabilities.json com manifesto. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
 
     case 5:
-      return `IMPORTANTE: Execute diretamente. Auto-teste. Escreva em src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/security-guardrails.md com políticas de segurança, proteção de dados e validação de input. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
 
     case 6:
-      return `IMPORTANTE: Execute diretamente. Verificação final. Atualize src/brain-output.md com status: done, timestamp: ${now}, readiness: complete. Sistema Operacional.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/error-handlers.md com estratégias de retry, timeout e fallback. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+
+    case 7:
+      return `IMPORTANTE: Execute diretamente. Crie src/output-formats.ts com helpers markdown/json/html para respostas. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+
+    case 8:
+      return `IMPORTANTE: Execute diretamente. Reforce a Rule Zero no arquivo src/INSTRUCTIONS.md: \"EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO.\". Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+
+    case 9:
+      return `IMPORTANTE: Execute diretamente. Faça auto-teste técnico completo e registre resultado em src/brain-output.md com status: done e timestamp: ${now}.`;
+
+    case 10:
+      return `IMPORTANTE: Execute diretamente. Verificação final. Atualize src/brain-output.md com status: done, timestamp: ${now}, readiness: complete. Sistema Operacional pronto.`;
 
     default:
       return "";
@@ -320,7 +332,7 @@ Deno.serve(async (req) => {
       .select("id, user_id, lovable_project_id, skill_phase, brain_skill, created_at")
       .eq("status", "active")
       .gt("skill_phase", 0)
-      .lte("skill_phase", 6)
+      .lte("skill_phase", 10)
       .order("created_at", { ascending: true })
       .limit(2);
 
@@ -331,8 +343,8 @@ Deno.serve(async (req) => {
         const phase = brain.skill_phase || 1;
         const age = Date.now() - new Date(brain.created_at).getTime();
 
-        if (age < 30_000) {
-          console.log(`[bc] brain=${brain.id.slice(0,8)} too young (${Math.round(age/1000)}s), skipping`);
+        if (age < 5_000) {
+          console.log(`[bc] brain=${brain.id.slice(0,8)} very new (${Math.round(age/1000)}s), skipping`);
           continue;
         }
 
@@ -356,7 +368,7 @@ Deno.serve(async (req) => {
         const ok = await sendViaVenus(brain.lovable_project_id, prompt, acct.token_encrypted, supabaseUrl, serviceKey);
 
         if (ok) {
-          const nextPhase = phase >= 6 ? 0 : phase + 1;
+          const nextPhase = phase >= 10 ? 0 : phase + 1;
           await sc.from("user_brain_projects").update({ skill_phase: nextPhase }).eq("id", brain.id);
           bootstrapProcessed++;
           console.log(`[bc] ✅ brain=${brain.id.slice(0,8)} phase=${phase}→${nextPhase}`);
