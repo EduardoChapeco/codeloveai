@@ -1228,53 +1228,36 @@ async function createFreshBrain(
       return { projectId, workspaceId, brainId: lockId };
     }
 
-    // ── Phase 5: Send bootstrap prompt (main structure) ──
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-    const bootstrapPrompt = buildBootstrapPrompt(primarySkill, { supabaseUrl, anonKey, userId });
-
-    console.log(`[Brain] Sending bootstrap prompt to project=${projectId}`);
-    let bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
-
-    if (!bootstrapResult.ok) {
-      console.warn(`[Brain] Bootstrap attempt 1 failed: ${bootstrapResult.error}`);
-      await new Promise((r) => setTimeout(r, 5_000));
-      bootstrapResult = await sendViaVenus(projectId, bootstrapPrompt, token);
-    }
-
-    console.log(`[Brain] Bootstrap result ok=${bootstrapResult.ok} project=${projectId}`);
-
-    // ── Phase 6: Mark as active immediately ──
-    // Audit prompts are sent asynchronously in background to avoid Edge Function timeout
+    // ── Phase 5: Queue bootstrap/audit flow via trigger runner (venus-chat task mode) ──
+    // Root cause fixed: bootstrap was partially inlined here (phase drift) and only part of
+    // the flow executed. We now start at skill_phase=1 and let brain-capture-cron execute
+    // the full sequenced injection pipeline.
     await sc.from("user_brain_projects")
-      .update({ status: "active", skill_phase: 2 })
+      .update({ status: "active", skill_phase: 1 })
       .eq("id", lockId);
 
-    // ── Phase 7: Fire-and-forget background audit (first 3 prompts only) ──
-    // Send first audit prompt inline (self-protection) then let cron handle the rest
-    if (bootstrapResult.ok) {
-      const auditPrompts = buildAuditPrompts(primarySkill, { supabaseUrl, anonKey, userId, projectId });
-      // Send only the first audit prompt (self-protection identity) with a short delay
-      try {
-        await new Promise((r) => setTimeout(r, 10_000));
-        console.log(`[Brain] Sending audit prompt 1/${auditPrompts.length} (self-protection) project=${projectId}`);
-        const auditResult = await sendViaVenus(projectId, auditPrompts[0], token);
-        if (auditResult.ok) {
-          await sc.from("user_brain_projects")
-            .update({ skill_phase: 3 })
-            .eq("id", lockId);
-        }
-        console.log(`[Brain] Audit 1 result ok=${auditResult.ok}`);
-      } catch (e) {
-        console.warn(`[Brain] Audit 1 error (non-fatal):`, e);
+    // Kick bootstrap trigger immediately (cron also continues on schedule)
+    try {
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      if (supabaseUrl && serviceKey) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 2_500);
+        await fetch(`${supabaseUrl}/functions/v1/brain-capture-cron`, {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ source: "brain_setup", brain_id: lockId, project_id: projectId }),
+        }).catch(() => null);
+        clearTimeout(timer);
       }
-
-      // NOTE: removed queue metadata update because these columns do not exist in user_brain_projects
-      // (pending_audit_prompts, audit_start_index). Attempting to write them caused setup/runtime 502s.
-      // Remaining audit prompts continue via brain-capture-cron's standard flow without this metadata.
+    } catch (e) {
+      console.warn(`[Brain] trigger bootstrap kick failed (non-fatal):`, e);
     }
 
-    console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")}`);
+    console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")} bootstrap_queued=true`);
     return { projectId, workspaceId, brainId: lockId };
   } catch (err) {
     console.error("[Brain] createFreshBrain error:", err);

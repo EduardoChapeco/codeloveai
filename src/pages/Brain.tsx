@@ -123,7 +123,7 @@ const CREATION_STEPS = [
 ];
 
 /* ── Onboarding Step ── */
-function BrainOnboarding({ onCreated, creating }: { onCreated: () => void; creating: boolean }) {
+function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brainId?: string; projectId?: string; projectUrl?: string }) => void; creating: boolean }) {
   const [selectedSkills, setSelectedSkills] = useState<BrainSkill[]>(["general"]);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -169,25 +169,35 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: () => void; creat
     setCurrentStep(0);
     setStepProgress(0);
 
+    const creationStart = Date.now();
+
     try {
       const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "setup", skills: selectedSkills, name: name.trim() || undefined },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || "Erro ao criar Brain");
 
-      // Wait for animations to finish
+      // Keep animation smooth and deterministic before switching view
       const totalDuration = CREATION_STEPS.reduce((sum, s) => sum + s.duration, 0);
-      const elapsed = Date.now();
-      const remaining = Math.max(0, totalDuration - (Date.now() - elapsed));
-      
-      // Force final step completion
+      const elapsed = Date.now() - creationStart;
+      const remaining = Math.max(0, totalDuration - elapsed);
+
       setCurrentStep(CREATION_STEPS.length - 1);
-      await new Promise(r => setTimeout(r, Math.max(remaining, 2000)));
+      await new Promise(r => setTimeout(r, Math.max(remaining, 1200)));
       setStepProgress(100);
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 500));
+
+      const projectId = typeof data?.project_id === "string" ? data.project_id : undefined;
+      const projectUrl = typeof data?.project_url === "string"
+        ? data.project_url
+        : projectId ? `https://lovable.dev/projects/${projectId}` : undefined;
 
       toast.success("Brain criado com sucesso! 🧠");
-      onCreated();
+      onCreated({
+        brainId: typeof data?.brain_id === "string" ? data.brain_id : undefined,
+        projectId,
+        projectUrl,
+      });
     } catch (e: any) {
       toast.error(e.message);
       setCreationStarted(false);
@@ -214,74 +224,59 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: () => void; creat
             <p className="text-xs text-muted-foreground">{name || "Novo Brain"} • {selectedSkills.length} skill(s)</p>
           </div>
 
-          {/* Steps Grid */}
-          <div className="grid grid-cols-1 gap-3 mb-6">
-            {CREATION_STEPS.map((step, i) => {
-              const Icon = step.icon;
-              const isActive = i === currentStep;
-              const isDone = i < currentStep || (i === currentStep && stepProgress >= 100);
-              const isFuture = i > currentStep;
-
-              return (
-                <div
-                  key={i}
-                  className={`flex items-center gap-4 px-5 py-4 rounded-3xl transition-all duration-500 ${
-                    isDone
-                      ? "bg-primary/8 border border-primary/20"
-                      : isActive
-                        ? "bg-primary/5 border border-primary/15 shadow-lg shadow-primary/5"
-                        : isFuture
-                          ? "opacity-30 border border-transparent"
-                          : "border border-transparent"
-                  }`}
-                  style={!isFuture ? {
-                    background: isDone ? 'hsl(var(--primary) / 0.06)' : isActive ? 'var(--liquid-glass-bg, rgba(255,255,255,0.04))' : undefined,
-                    backdropFilter: isActive ? 'blur(40px) saturate(200%)' : undefined,
-                  } : undefined}
-                >
-                  {/* Icon */}
-                  <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-500 ${
-                    isDone
-                      ? "bg-primary/15"
-                      : isActive
-                        ? "bg-primary/10"
-                        : "bg-muted/20"
-                  }`}>
-                    {isDone ? (
-                      <CheckCircle className="h-5 w-5 text-primary" />
-                    ) : isActive ? (
-                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
-                    ) : (
-                      <Icon className="h-5 w-5 text-muted-foreground/30" />
-                    )}
-                  </div>
-
-                  {/* Text */}
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold transition-colors duration-300 ${
-                      isDone || isActive ? "text-foreground" : "text-muted-foreground/40"
-                    }`}>{step.label}</p>
-                    <p className={`text-[11px] transition-colors duration-300 ${
-                      isActive ? "text-muted-foreground" : isDone ? "text-muted-foreground/60" : "text-muted-foreground/20"
-                    }`}>{step.sub}</p>
-                  </div>
-
-                  {/* Status */}
-                  {isDone && (
-                    <span className="text-[9px] font-bold text-primary/60 uppercase tracking-wider">OK</span>
-                  )}
-                  {isActive && !isDone && (
-                    <span className="flex items-center gap-1 text-[9px] font-bold text-primary uppercase tracking-wider">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                      Ativo
-                    </span>
+          {/* Evolving central badge */}
+          <div className="flex flex-col items-center gap-5 mb-6">
+            <div
+              className="relative h-44 w-44 rounded-full flex items-center justify-center"
+              style={{
+                background: `conic-gradient(hsl(var(--primary)) ${totalProgress}%, hsl(var(--border)) ${totalProgress}% 100%)`,
+              }}
+            >
+              <div className="h-[88%] w-[88%] rounded-full bg-background/90 backdrop-blur-xl flex items-center justify-center border border-border/60 shadow-2xl">
+                <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent flex items-center justify-center relative">
+                  {currentStep >= CREATION_STEPS.length - 1 && stepProgress >= 100 ? (
+                    <CheckCircle className="h-12 w-12 text-primary" />
+                  ) : (
+                    <BrainIcon className="h-12 w-12 text-primary animate-pulse" />
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="text-center min-h-[70px]">
+              <p className="text-base font-bold">{CREATION_STEPS[Math.max(0, currentStep)]?.label || "Inicializando"}</p>
+              <p className="text-xs text-muted-foreground mt-1">{CREATION_STEPS[Math.max(0, currentStep)]?.sub || "Preparando"}</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-2">
+                {currentStep >= CREATION_STEPS.length - 1 && stepProgress >= 100
+                  ? "Concluído! Abrindo projeto..."
+                  : `Etapa ${Math.max(1, currentStep + 1)} de ${CREATION_STEPS.length}`}
+              </p>
+            </div>
+          </div>
+
+          {/* Step chips */}
+          <div className="flex flex-wrap justify-center gap-1.5 mb-6">
+            {CREATION_STEPS.map((step, i) => {
+              const isActive = i === currentStep;
+              const isDone = i < currentStep || (i === currentStep && stepProgress >= 100);
+              return (
+                <span
+                  key={i}
+                  className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
+                    isDone
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : isActive
+                        ? "border-primary/20 bg-primary/5 text-foreground"
+                        : "border-border/60 text-muted-foreground/50"
+                  }`}
+                >
+                  {step.label}
+                </span>
               );
             })}
           </div>
 
-          {/* Global progress bar */}
+          {/* Progress bar */}
           <div className="h-1.5 rounded-full bg-border/20 overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500 ease-out"
@@ -294,11 +289,6 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: () => void; creat
               }}
             />
           </div>
-          <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
-            {currentStep >= CREATION_STEPS.length - 1 && stepProgress >= 100
-              ? "Concluído! Redirecionando..."
-              : `Etapa ${currentStep + 1} de ${CREATION_STEPS.length}`}
-          </p>
         </div>
       </div>
     );
@@ -684,7 +674,23 @@ export default function BrainPage() {
       <AppLayout>
         <BrainOnboarding
           creating={creating}
-          onCreated={() => { setShowOnboarding(false); hasEverLoadedBrains.current = false; loadStatus(); }}
+          onCreated={(payload) => {
+            setShowOnboarding(false);
+            hasEverLoadedBrains.current = true;
+
+            if (payload?.brainId) {
+              setActiveBrainId(payload.brainId);
+            }
+
+            loadStatus();
+
+            if (payload?.projectUrl) {
+              const popup = window.open(payload.projectUrl, "_blank", "noopener,noreferrer");
+              if (!popup) {
+                window.location.assign(payload.projectUrl);
+              }
+            }
+          }}
         />
       </AppLayout>
     );

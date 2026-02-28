@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-28T04:17:30Z
+updated_at: 2026-02-28T04:39:00Z
 status: done
-task: correção de runtime no setup do brain por coluna inexistente
+task: correção do bootstrap trigger do brain e autoabertura do projeto/chat
 ---
