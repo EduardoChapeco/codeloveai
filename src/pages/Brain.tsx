@@ -532,9 +532,11 @@ export default function BrainPage() {
           if (ALL_SKILLS.some(s => s.id === primarySkill)) setBrainType(primarySkill);
         }
         setShowOnboarding(false);
-      } else if (!data.creating && !hasEverLoadedBrains.current) {
-        // Only show onboarding if we've NEVER seen brains before
+      } else if (!hasEverLoadedBrains.current) {
+        // No active brains — show onboarding regardless of 'creating' flag
+        // (stale "creating" records should not block the user)
         setShowOnboarding(true);
+        setCreating(false); // reset stuck creating state
       }
     } catch {
       statusRetryCount.current += 1;
@@ -677,11 +679,27 @@ export default function BrainPage() {
           onCreated={(payload) => {
             setShowOnboarding(false);
             hasEverLoadedBrains.current = true;
+            setCreating(false);
 
-            if (payload?.brainId) {
+            // Immediately populate brain in local state so UI doesn't hang
+            if (payload?.brainId && payload?.projectId) {
+              const newBrain: BrainEntry = {
+                id: payload.brainId,
+                name: "Star AI Brain",
+                project_id: payload.projectId,
+                project_url: payload.projectUrl || `https://lovable.dev/projects/${payload.projectId}`,
+                status: "active",
+                skill: "general",
+                skills: ["general"],
+                workspace_id: "",
+                last_message_at: null,
+                created_at: new Date().toISOString(),
+              };
+              setBrains([newBrain]);
               setActiveBrainId(payload.brainId);
             }
 
+            // Also refresh from server in background
             loadStatus();
 
             if (payload?.projectUrl) {
