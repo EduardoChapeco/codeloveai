@@ -1232,13 +1232,23 @@ async function createFreshBrain(
 ): Promise<{ projectId: string; workspaceId: string; brainId: string } | { error: string }> {
   const lockId = await acquireBrainLock(sc, userId, skills, name);
   if (!lockId) {
+    const recovering = await getBrainRaw(sc, userId);
+    if (recovering?.id && recovering?.lovable_project_id && !String(recovering.lovable_project_id).startsWith("creating")) {
+      return {
+        projectId: recovering.lovable_project_id,
+        workspaceId: recovering.lovable_workspace_id || "unknown",
+        brainId: recovering.id,
+      };
+    }
     return { error: "Brain está sendo criado. Tente novamente em alguns segundos." };
   }
 
   const primarySkill = skills[0] || "general";
+  let createdProjectId: string | null = null;
+  let workspaceId: string | null = null;
 
   try {
-    let workspaceId = await getWorkspaceId(token);
+    workspaceId = await getWorkspaceId(token);
     if (!workspaceId) {
       await new Promise((r) => setTimeout(r, 900));
       workspaceId = await getWorkspaceId(token);
@@ -1251,7 +1261,6 @@ async function createFreshBrain(
     const skillLabel = SKILL_PROFILES[primarySkill].title.replace(/Star AI — /, "").toLowerCase().replace(/\s+/g, "-");
     const projectName = `core-brain-${skillLabel}-${Date.now()}`;
 
-    // ── Phase 1: Create project with meaningful initial message ──
     console.log(`[Brain] Creating project=${projectName} skills=${skills.join(",")}`);
     const createRes = await lovFetch(`${API}/workspaces/${workspaceId}/projects`, token, {
       method: "POST",
@@ -1269,7 +1278,9 @@ async function createFreshBrain(
     }
 
     let created: any;
-    try { created = JSON.parse(createBody); } catch {
+    try {
+      created = JSON.parse(createBody);
+    } catch {
       await sc.from("user_brain_projects").delete().eq("id", lockId);
       return { error: "Resposta inválida da API ao criar projeto" };
     }
@@ -1280,19 +1291,17 @@ async function createFreshBrain(
       return { error: "ID do projeto não retornado pela API" };
     }
 
-    // ── Phase 2: Cancel initial creation immediately ──
+    createdProjectId = projectId;
+
     const cancelResult = await cancelInitialCreation(projectId, token, created);
     console.log(`[Brain] Ghost cancel result=${cancelResult.cancelled} project=${projectId}`);
 
-    // ── Phase 3: Wait 5 seconds for project to stabilize ──
-    await new Promise((r) => setTimeout(r, 5_000));
-
-    // Update DB with project info
-    await sc.from("user_brain_projects")
+    // Persist immediately to avoid orphan projects if any later step fails/timeouts.
+    const { error: updateErr } = await sc.from("user_brain_projects")
       .update({
         lovable_project_id: projectId,
         lovable_workspace_id: workspaceId,
-        status: "bootstrapping",
+        status: "active",
         brain_skill: primarySkill,
         brain_skills: skills,
         name,
@@ -1300,38 +1309,17 @@ async function createFreshBrain(
       })
       .eq("id", lockId);
 
-    // ── Phase 4: Verify project is accessible ──
-    let projectReady = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const check = await lovFetch(`${API}/projects/${projectId}`, token, { method: "GET" });
-      if (check.ok) {
-        projectReady = true;
-        break;
-      }
-      console.log(`[Brain] Project not ready yet, attempt ${attempt + 1}/5`);
-      await new Promise((r) => setTimeout(r, 3_000));
+    if (updateErr) {
+      console.error("[Brain] Persist after create failed:", updateErr.message);
+      return { error: "Projeto criado, mas falhou ao registrar o Brain localmente." };
     }
 
-    if (!projectReady) {
-      console.warn(`[Brain] Project ${projectId} not accessible after retries, marking active anyway`);
-      await sc.from("user_brain_projects").update({ status: "active" }).eq("id", lockId);
-      return { projectId, workspaceId, brainId: lockId };
-    }
-
-    // ── Phase 5: Queue bootstrap/audit flow via trigger runner (venus-chat task mode) ──
-    // Root cause fixed: bootstrap was partially inlined here (phase drift) and only part of
-    // the flow executed. We now start at skill_phase=1 and let brain-capture-cron execute
-    // the full sequenced injection pipeline.
-    await sc.from("user_brain_projects")
-      .update({ status: "active", skill_phase: 1 })
-      .eq("id", lockId);
-
-    // Kick bootstrap trigger immediately (cron also continues on schedule)
+    // Kick bootstrap trigger immediately (cron continues on schedule if this call fails).
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
       if (supabaseUrl && serviceKey) {
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 2_500);
+        const timer = setTimeout(() => ctrl.abort(), 2500);
         await fetch(`${supabaseUrl}/functions/v1/brain-capture-cron`, {
           method: "POST",
           signal: ctrl.signal,
@@ -1351,6 +1339,23 @@ async function createFreshBrain(
     return { projectId, workspaceId, brainId: lockId };
   } catch (err) {
     console.error("[Brain] createFreshBrain error:", err);
+
+    // If project was created, never drop local linkage: recover to active + phase 1.
+    if (createdProjectId) {
+      await sc.from("user_brain_projects")
+        .update({
+          lovable_project_id: createdProjectId,
+          lovable_workspace_id: workspaceId || "unknown",
+          status: "active",
+          skill_phase: 1,
+          brain_skill: primarySkill,
+          brain_skills: skills,
+          name,
+        })
+        .eq("id", lockId);
+      return { projectId: createdProjectId, workspaceId: workspaceId || "unknown", brainId: lockId };
+    }
+
     await sc.from("user_brain_projects").delete().eq("id", lockId);
     return { error: "Erro inesperado ao criar Brain" };
   }

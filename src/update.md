@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-28T05:01:30Z
+updated_at: 2026-02-28T05:30:00Z
 status: done
-task: corrigir crash na criação do brain, recuperar estado de onboarding e estabilizar bootstrap
+task: corrigir lock órfão do brain e garantir bootstrap de prompts após criação
 ---
