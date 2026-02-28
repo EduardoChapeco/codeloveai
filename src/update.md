@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-28T04:48:30Z
+updated_at: 2026-02-28T05:15:00Z
 status: done
-task: estabilizar brain edge functions com recuperação de projeto e token resiliente
+task: fix brain post-creation navigation stuck and increase bootstrap phase intervals to 90s
 ---
