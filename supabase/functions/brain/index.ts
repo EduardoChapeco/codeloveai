@@ -204,9 +204,11 @@ async function acquireBrainLock(sc: SupabaseClient, userId: string, skills: stri
   if (activeLocks && activeLocks.length > 0) return null;
 
   const primarySkill = skills[0] || "general";
+  // Use a unique placeholder to avoid UNIQUE constraint collision on lovable_project_id
+  const uniquePlaceholder = `creating_${userId.slice(0, 8)}_${Date.now()}`;
   const { data: row, error } = await sc.from("user_brain_projects").insert({
     user_id: userId,
-    lovable_project_id: "creating",
+    lovable_project_id: uniquePlaceholder,
     lovable_workspace_id: "pending",
     status: "creating",
     brain_owner: "user",
@@ -215,7 +217,11 @@ async function acquireBrainLock(sc: SupabaseClient, userId: string, skills: stri
     name,
   }).select("id").single();
 
-  return error ? null : row?.id || null;
+  if (error) {
+    console.error(`[Brain] acquireBrainLock insert error: ${error.message}`);
+    return null;
+  }
+  return row?.id || null;
 }
 
 // ── Expert skill profiles (v5 — includes code_review) ─────
@@ -1358,7 +1364,7 @@ Deno.serve(async (req) => {
       if (!token) return json({ active: false, connected: false, reason: "no_token" });
 
       const brains = await listBrains(sc, userId);
-      const activeBrains = brains.filter(b => b.status === "active" && b.lovable_project_id !== "creating");
+      const activeBrains = brains.filter(b => b.status === "active" && !b.lovable_project_id.startsWith("creating"));
       const currentWorkspaceId = await getWorkspaceId(token);
 
       // Check accessibility: only show brains whose workspace matches or are verified accessible
@@ -1412,7 +1418,7 @@ Deno.serve(async (req) => {
           id: b.id,
           name: b.name,
           project_id: b.lovable_project_id,
-          project_url: b.lovable_project_id !== "creating" ? `https://lovable.dev/projects/${b.lovable_project_id}` : null,
+          project_url: !b.lovable_project_id.startsWith("creating") ? `https://lovable.dev/projects/${b.lovable_project_id}` : null,
           status: b.status,
           skill: b.brain_skill,
           skills: b.brain_skills || [b.brain_skill],
@@ -1492,7 +1498,7 @@ Deno.serve(async (req) => {
       const existingBrains = await listBrains(sc, userId);
       
       for (const existing of existingBrains) {
-        if (existing.lovable_project_id === "creating") continue;
+        if (existing.lovable_project_id.startsWith("creating")) continue;
         if (existing.status !== "active") continue;
         
         // Check if this brain's project is accessible with current token
@@ -1541,7 +1547,7 @@ Deno.serve(async (req) => {
       if (!brain) return json({ error: "Star AI não está ativo. Crie um Brain primeiro.", code: "brain_inactive" }, 400);
 
       const brainProjectId = brain.lovable_project_id;
-      if (!brainProjectId || brainProjectId === "creating") {
+      if (!brainProjectId || brainProjectId.startsWith("creating")) {
         return json({ error: "Brain ainda está sendo criado.", code: "brain_creating" }, 503);
       }
 
@@ -1616,7 +1622,7 @@ Deno.serve(async (req) => {
 
       let brainProjectId = brain.lovable_project_id;
 
-      if (!brainProjectId || brainProjectId === "creating") {
+      if (!brainProjectId || brainProjectId.startsWith("creating")) {
         return json({ error: "Brain ainda está sendo criado. Aguarde.", code: "brain_creating" }, 503);
       }
 
@@ -1629,7 +1635,7 @@ Deno.serve(async (req) => {
         const allBrains = await listBrains(sc, userId);
         for (const candidate of allBrains) {
           if (candidate.id === brain.id) continue; // skip current (already failed)
-          if (candidate.lovable_project_id === "creating") continue;
+          if (candidate.lovable_project_id.startsWith("creating")) continue;
           if (candidate.status !== "active") continue;
 
           const candidateAccess = await verifyProjectState(candidate.lovable_project_id, lovableToken);
