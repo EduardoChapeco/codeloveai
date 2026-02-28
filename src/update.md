@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-28T04:39:00Z
+updated_at: 2026-02-28T05:15:00Z
 status: done
-task: correção do bootstrap trigger do brain e autoabertura do projeto/chat
+task: fix brain infinite loading e bootstrap prompt injection
 ---

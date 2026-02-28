@@ -169,7 +169,7 @@ async function verifyProjectState(
 
 const TRANSIENT_BRAIN_STATUSES = ["creating", "bootstrapping", "injecting"] as const;
 
-async function cleanupStaleBrainStates(sc: SupabaseClient, userId: string, maxAgeMs = 120_000): Promise<number> {
+async function cleanupStaleBrainStates(sc: SupabaseClient, userId: string, maxAgeMs = 60_000): Promise<number> {
   const { data: rows } = await sc.from("user_brain_projects")
     .select("id, status, created_at")
     .eq("user_id", userId)
@@ -1343,6 +1343,9 @@ Deno.serve(async (req) => {
 
     // ── STATUS ──
     if (action === "status") {
+      // Clean stale creating/bootstrapping states first
+      await cleanupStaleBrainStates(sc, userId, 60_000);
+      
       const token = await getUserToken(sc, userId);
       if (!token) return json({ active: false, connected: false, reason: "no_token" });
 
@@ -1471,7 +1474,7 @@ Deno.serve(async (req) => {
         : [((rawSkill || "general") as BrainSkill)];
       const name = typeof body?.name === "string" && body.name.trim() ? body.name.trim().slice(0, 60) : `Star AI — ${skills.join(", ")}`;
 
-      const cleanedLocks = await cleanupStaleBrainStates(sc, userId, 120_000);
+      const cleanedLocks = await cleanupStaleBrainStates(sc, userId, 60_000);
       if (cleanedLocks > 0) {
         console.log(`[Brain] Cleared ${cleanedLocks} stale transient brain record(s) for ${userId.slice(0, 8)}`);
       }
