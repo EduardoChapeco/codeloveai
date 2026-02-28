@@ -99,7 +99,10 @@ async function getValidToken(sc: SupabaseClient, userId: string): Promise<string
     token = await refreshToken(sc, userId);
     return token;
   }
-  return token;
+
+  // Token appears unhealthy for non-auth failures too (e.g. revoked/invalid upstream state)
+  // Returning null avoids cascading setup/send failures with a stale token.
+  return null;
 }
 
 // ── Workspace / Project helpers ────────────────────────────────
@@ -164,21 +167,41 @@ async function verifyProjectState(
   }
 }
 
-async function acquireBrainLock(sc: SupabaseClient, userId: string, skills: string[], name: string): Promise<string | null> {
-  const { data: stale } = await sc.from("user_brain_projects")
-    .select("id, created_at")
+const TRANSIENT_BRAIN_STATUSES = ["creating", "bootstrapping", "injecting"] as const;
+
+async function cleanupStaleBrainStates(sc: SupabaseClient, userId: string, maxAgeMs = 120_000): Promise<number> {
+  const { data: rows } = await sc.from("user_brain_projects")
+    .select("id, status, created_at")
     .eq("user_id", userId)
-    .eq("status", "creating");
-  if (stale) {
-    for (const s of stale) {
-      const ageMs = s.created_at ? Date.now() - new Date(s.created_at).getTime() : 0;
-      if (ageMs > 120_000) {
-        await sc.from("user_brain_projects").delete().eq("id", s.id);
-      } else {
-        return null;
-      }
-    }
+    .in("status", [...TRANSIENT_BRAIN_STATUSES]);
+
+  if (!rows?.length) return 0;
+
+  const now = Date.now();
+  let deleted = 0;
+
+  for (const row of rows) {
+    const createdAtMs = row.created_at ? new Date(row.created_at).getTime() : Number.NaN;
+    const isStale = !Number.isFinite(createdAtMs) || (now - createdAtMs) > maxAgeMs;
+    if (!isStale) continue;
+
+    await sc.from("user_brain_projects").delete().eq("id", row.id);
+    deleted += 1;
   }
+
+  return deleted;
+}
+
+async function acquireBrainLock(sc: SupabaseClient, userId: string, skills: string[], name: string): Promise<string | null> {
+  await cleanupStaleBrainStates(sc, userId, 120_000);
+
+  const { data: activeLocks } = await sc.from("user_brain_projects")
+    .select("id")
+    .eq("user_id", userId)
+    .in("status", [...TRANSIENT_BRAIN_STATUSES])
+    .limit(1);
+
+  if (activeLocks && activeLocks.length > 0) return null;
 
   const primarySkill = skills[0] || "general";
   const { data: row, error } = await sc.from("user_brain_projects").insert({
@@ -1464,6 +1487,11 @@ Deno.serve(async (req) => {
         : [((rawSkill || "general") as BrainSkill)];
       const name = typeof body?.name === "string" && body.name.trim() ? body.name.trim().slice(0, 60) : `Star AI — ${skills.join(", ")}`;
 
+      const cleanedLocks = await cleanupStaleBrainStates(sc, userId, 120_000);
+      if (cleanedLocks > 0) {
+        console.log(`[Brain] Cleared ${cleanedLocks} stale transient brain record(s) for ${userId.slice(0, 8)}`);
+      }
+
       // ── REUSE CHECK: Try to find an existing brain accessible from current account ──
       const currentWorkspaceId = await getWorkspaceId(lovableToken);
       const existingBrains = await listBrains(sc, userId);
@@ -1591,7 +1619,7 @@ Deno.serve(async (req) => {
         return json({ error: "Star AI não está ativo. Crie um Brain primeiro.", code: "brain_inactive" }, 400);
       }
 
-      const brainProjectId = brain.lovable_project_id;
+      let brainProjectId = brain.lovable_project_id;
 
       if (!brainProjectId || brainProjectId === "creating") {
         return json({ error: "Brain ainda está sendo criado. Aguarde.", code: "brain_creating" }, 503);
@@ -1620,6 +1648,7 @@ Deno.serve(async (req) => {
             console.log(`[Brain:send] ♻️ Auto-reactivated brain ${candidate.id.slice(0,8)} project=${candidate.lovable_project_id.slice(0,8)}`);
             // Redirect to the reactivated brain
             brain = candidate;
+            brainProjectId = candidate.lovable_project_id;
             break;
           }
         }
@@ -1655,15 +1684,16 @@ Deno.serve(async (req) => {
       console.log(`[Brain:send] convo=${convoId?.slice(0,8)} target_project=${brainProjectId.slice(0,8)}`);
 
       // Send via venus-chat
-      let venusResult = await sendViaVenus(brainProjectId, prompt, lovableToken);
       let activeProjectId = brainProjectId;
+      let activeLovableToken = lovableToken;
+      let venusResult = await sendViaVenus(activeProjectId, prompt, activeLovableToken);
 
       if (!venusResult.ok) {
         const is404 = venusResult.error?.includes("404");
         if (is404) {
           console.warn(`[Brain] Project ${brainProjectId} returned 404, recreating...`);
           await sc.from("user_brain_projects").delete().eq("id", brain.id);
-          const newBrain = await createFreshBrain(sc, userId, lovableToken, [skill], brain.name || `Star AI — ${skill}`);
+          const newBrain = await createFreshBrain(sc, userId, activeLovableToken, [skill], brain.name || `Star AI — ${skill}`);
           if ("error" in newBrain) {
             if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
             return json({ error: `Brain recriado com falha: ${newBrain.error}` }, 502);
@@ -1671,13 +1701,14 @@ Deno.serve(async (req) => {
           activeProjectId = newBrain.projectId;
           if (convoId) await sc.from("loveai_conversations").update({ target_project_id: activeProjectId }).eq("id", convoId);
           await new Promise(r => setTimeout(r, 5000));
-          venusResult = await sendViaVenus(activeProjectId, prompt, lovableToken);
+          venusResult = await sendViaVenus(activeProjectId, prompt, activeLovableToken);
         }
 
         if (!venusResult.ok) {
           const refreshed = await refreshToken(sc, userId);
           if (refreshed) {
-            const retry = await sendViaVenus(activeProjectId, prompt, refreshed);
+            activeLovableToken = refreshed;
+            const retry = await sendViaVenus(activeProjectId, prompt, activeLovableToken);
             if (!retry.ok) {
               if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
               return json({ error: `Erro ao enviar: ${retry.error}` }, 502);
@@ -1692,7 +1723,7 @@ Deno.serve(async (req) => {
       // Quick mine with TIMESTAMP VALIDATION — only accept responses newer than our question
       let quickResponse: string | null = null;
       try {
-        const quickResult = await mineResponse(activeProjectId, lovableToken, 8_000, 3_000, 5_000, questionTimestamp);
+        const quickResult = await mineResponse(activeProjectId, activeLovableToken, 8_000, 3_000, 5_000, questionTimestamp);
         if (quickResult.status === "completed") {
           quickResponse = quickResult.response;
         }
