@@ -343,8 +343,10 @@ Deno.serve(async (req) => {
         const phase = brain.skill_phase || 1;
         const age = Date.now() - new Date(brain.created_at).getTime();
 
-        if (age < 5_000) {
-          console.log(`[bc] brain=${brain.id.slice(0,8)} very new (${Math.round(age/1000)}s), skipping`);
+        // Each phase needs ~90s to complete; skip if not enough time has passed
+        const minAgeForPhase = phase === 1 ? 5_000 : (phase - 1) * 90_000;
+        if (age < minAgeForPhase) {
+          console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} too early (${Math.round(age/1000)}s < ${Math.round(minAgeForPhase/1000)}s), skipping`);
           continue;
         }
 

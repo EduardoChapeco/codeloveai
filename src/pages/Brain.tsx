@@ -701,13 +701,6 @@ export default function BrainPage() {
 
             // Also refresh from server in background
             loadStatus();
-
-            if (payload?.projectUrl) {
-              const popup = window.open(payload.projectUrl, "_blank", "noopener,noreferrer");
-              if (!popup) {
-                window.location.assign(payload.projectUrl);
-              }
-            }
           }}
         />
       </AppLayout>
