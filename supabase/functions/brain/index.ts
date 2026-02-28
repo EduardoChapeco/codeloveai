@@ -89,20 +89,26 @@ async function refreshToken(sc: SupabaseClient, userId: string): Promise<string 
 }
 
 async function getValidToken(sc: SupabaseClient, userId: string): Promise<string | null> {
-  let token = await getUserToken(sc, userId);
+  const token = await getUserToken(sc, userId);
   if (!token) return null;
 
-  const probe = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
-  if (probe.ok) return token;
-
-  if (probe.status === 401 || probe.status === 403) {
-    token = await refreshToken(sc, userId);
+  let probe: Response | null = null;
+  try {
+    probe = await lovFetch(`${API}/user/workspaces`, token, { method: "GET" });
+  } catch {
+    // Transient network failure: keep current token and let downstream retries handle it.
     return token;
   }
 
-  // Token appears unhealthy for non-auth failures too (e.g. revoked/invalid upstream state)
-  // Returning null avoids cascading setup/send failures with a stale token.
-  return null;
+  if (!probe) return token;
+  if (probe.ok) return token;
+
+  if (probe.status === 401 || probe.status === 403) {
+    return await refreshToken(sc, userId);
+  }
+
+  // Do not invalidate token on transient upstream failures (429/5xx/timeout-like states).
+  return token;
 }
 
 // ── Workspace / Project helpers ────────────────────────────────
@@ -116,6 +122,85 @@ async function getWorkspaceId(token: string): Promise<string | null> {
   const list = Array.isArray(body) ? body : (body?.workspaces || body?.data || []);
   if (list.length === 0 && body?.id) return body.id;
   return list?.[0]?.id || null;
+}
+
+type RemoteProjectSummary = {
+  id: string;
+  name: string;
+  updated_at: string | null;
+};
+
+function normalizeWorkspaceProjects(payload: any): RemoteProjectSummary[] {
+  const list = payload?.projects || payload?.data?.projects || payload?.data || payload;
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .map((p: any) => ({
+      id: String(p?.id || p?.project_id || ""),
+      name: String(p?.name || p?.display_name || "").trim(),
+      updated_at: p?.updated_at || p?.last_updated_at || p?.created_at || null,
+    }))
+    .filter((p: RemoteProjectSummary) => p.id.length > 0);
+}
+
+function isLikelyBrainProjectName(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.startsWith("core-brain-") || n.startsWith("star-ai-brain") || n.includes("brain");
+}
+
+async function listWorkspaceProjects(token: string, workspaceId: string): Promise<RemoteProjectSummary[]> {
+  try {
+    const res = await lovFetch(`${API}/workspaces/${workspaceId}/projects?limit=100&visibility=all`, token, { method: "GET" });
+    if (!res.ok) return [];
+    const body = await res.json().catch(() => null);
+    return normalizeWorkspaceProjects(body);
+  } catch {
+    return [];
+  }
+}
+
+async function registerRecoveredBrain(
+  sc: SupabaseClient,
+  userId: string,
+  workspaceId: string,
+  project: RemoteProjectSummary,
+  fallbackSkill: BrainSkill,
+  fallbackName: string,
+): Promise<{ id: string; lovable_project_id: string; lovable_workspace_id: string; brain_skill: string; brain_skills: string[]; name: string | null } | null> {
+  const { data: existing } = await sc.from("user_brain_projects")
+    .select("id, lovable_project_id, lovable_workspace_id, brain_skill, brain_skills, name")
+    .eq("user_id", userId)
+    .eq("lovable_project_id", project.id)
+    .maybeSingle();
+
+  const payload = {
+    lovable_workspace_id: workspaceId,
+    status: "active",
+    brain_owner: "user",
+    brain_skill: (existing?.brain_skill || fallbackSkill),
+    brain_skills: (existing?.brain_skills && existing.brain_skills.length > 0) ? existing.brain_skills : [fallbackSkill],
+    name: existing?.name || project.name || fallbackName,
+  };
+
+  if (existing?.id) {
+    const { data: updated } = await sc.from("user_brain_projects")
+      .update(payload)
+      .eq("id", existing.id)
+      .select("id, lovable_project_id, lovable_workspace_id, brain_skill, brain_skills, name")
+      .single();
+    return updated || null;
+  }
+
+  const { data: inserted } = await sc.from("user_brain_projects")
+    .insert({
+      user_id: userId,
+      lovable_project_id: project.id,
+      ...payload,
+    })
+    .select("id, lovable_project_id, lovable_workspace_id, brain_skill, brain_skills, name")
+    .single();
+
+  return inserted || null;
 }
 
 async function getBrainRaw(sc: SupabaseClient, userId: string, brainId?: string) {
@@ -1152,7 +1237,11 @@ async function createFreshBrain(
   const primarySkill = skills[0] || "general";
 
   try {
-    const workspaceId = await getWorkspaceId(token);
+    let workspaceId = await getWorkspaceId(token);
+    if (!workspaceId) {
+      await new Promise((r) => setTimeout(r, 900));
+      workspaceId = await getWorkspaceId(token);
+    }
     if (!workspaceId) {
       await sc.from("user_brain_projects").delete().eq("id", lockId);
       return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
@@ -1492,13 +1581,18 @@ Deno.serve(async (req) => {
       // ── REUSE CHECK: Try to find an existing brain accessible from current account ──
       // Be optimistic — only skip brains confirmed inaccessible (404/403).
       // "unknown" state (timeout/network error) should reuse the brain.
-      const currentWorkspaceId = await getWorkspaceId(lovableToken);
+      let currentWorkspaceId = await getWorkspaceId(lovableToken);
+      if (!currentWorkspaceId) {
+        await new Promise((r) => setTimeout(r, 900));
+        currentWorkspaceId = await getWorkspaceId(lovableToken);
+      }
+
       const existingBrains = await listBrains(sc, userId);
-      
+
       for (const existing of existingBrains) {
         if (existing.lovable_project_id.startsWith("creating")) continue;
         if (existing.status !== "active") continue;
-        
+
         // Same workspace = definitely reusable
         if (currentWorkspaceId && existing.lovable_workspace_id === currentWorkspaceId) {
           console.log(`[Brain] ♻️ Reusing brain (workspace match) ${existing.id.slice(0,8)} project=${existing.lovable_project_id.slice(0,8)}`);
@@ -1513,7 +1607,7 @@ Deno.serve(async (req) => {
             reused: true,
           });
         }
-        
+
         // Different/unknown workspace — verify via API
         const check = await verifyProjectState(existing.lovable_project_id, lovableToken);
         if (check.state === "accessible" || check.state === "unknown") {
@@ -1537,6 +1631,53 @@ Deno.serve(async (req) => {
         }
         // state === "not_found" — confirmed inaccessible, skip and continue checking others
         console.log(`[Brain] Brain ${existing.id.slice(0,8)} confirmed inaccessible (${check.status}), skipping`);
+      }
+
+      // ── REMOTE DISCOVERY: recover Brain project created previously but missing in local registry ──
+      if (currentWorkspaceId) {
+        const knownProjectIds = new Set(
+          existingBrains
+            .map((b) => b.lovable_project_id)
+            .filter((id) => typeof id === "string" && id.length > 0 && !id.startsWith("creating"))
+        );
+
+        const workspaceProjects = await listWorkspaceProjects(lovableToken, currentWorkspaceId);
+        const candidates = workspaceProjects
+          .filter((p) => !knownProjectIds.has(p.id) && isLikelyBrainProjectName(p.name))
+          .sort((a, b) => {
+            const ta = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+            const tb = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+            return tb - ta;
+          });
+
+        for (const project of candidates) {
+          const access = await verifyProjectState(project.id, lovableToken);
+          if (access.state !== "accessible") continue;
+
+          const recovered = await registerRecoveredBrain(
+            sc,
+            userId,
+            currentWorkspaceId,
+            project,
+            skills[0] || "general",
+            project.name || name,
+          );
+
+          if (recovered) {
+            console.log(`[Brain] ♻️ Recovered remote brain project=${project.id.slice(0,8)} user=${userId.slice(0,8)}`);
+            return json({
+              success: true,
+              brain_id: recovered.id,
+              project_id: recovered.lovable_project_id,
+              project_url: `https://lovable.dev/projects/${recovered.lovable_project_id}`,
+              skills: recovered.brain_skills || [recovered.brain_skill],
+              name: recovered.name || project.name || name,
+              stored_workspace_id: recovered.lovable_workspace_id,
+              reused: true,
+              recovered: true,
+            });
+          }
+        }
       }
 
       // No reusable brain found — create fresh
