@@ -278,7 +278,7 @@ async function cleanupStaleBrainStates(sc: SupabaseClient, userId: string, maxAg
 }
 
 async function acquireBrainLock(sc: SupabaseClient, userId: string, skills: string[], name: string): Promise<string | null> {
-  await cleanupStaleBrainStates(sc, userId, 120_000);
+  await cleanupStaleBrainStates(sc, userId, 30_000);
 
   const { data: activeLocks } = await sc.from("user_brain_projects")
     .select("id")

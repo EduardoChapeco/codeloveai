@@ -206,7 +206,7 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
         const recoveredBrains = Array.isArray(statusData?.brains) ? statusData.brains : [];
         const recovered = recoveredBrains[0];
 
-        if (recovered?.id && recovered?.project_id) {
+        if (recovered?.id && recovered?.project_id && !String(recovered.project_id).startsWith("creating")) {
           toast.success("Brain criado e recuperado com sucesso! 🧠");
           onCreated({
             brainId: recovered.id,
