@@ -1228,6 +1228,7 @@ async function createFreshBrain(
   token: string,
   skills: BrainSkill[],
   name: string,
+  supabaseUrl: string,
 ): Promise<{ projectId: string; workspaceId: string; brainId: string } | { error: string }> {
   const lockId = await acquireBrainLock(sc, userId, skills, name);
   if (!lockId) {
@@ -1681,7 +1682,7 @@ Deno.serve(async (req) => {
       }
 
       // No reusable brain found — create fresh
-      const result = await createFreshBrain(sc, userId, lovableToken, skills, name);
+      const result = await createFreshBrain(sc, userId, lovableToken, skills, name, supabaseUrl);
       if ("error" in result) return json({ error: result.error }, 502);
       return json({
         success: true,
@@ -1850,7 +1851,7 @@ Deno.serve(async (req) => {
         if (is404) {
           console.warn(`[Brain] Project ${brainProjectId} returned 404, recreating...`);
           await sc.from("user_brain_projects").delete().eq("id", brain.id);
-          const newBrain = await createFreshBrain(sc, userId, activeLovableToken, [skill], brain.name || `Star AI — ${skill}`);
+          const newBrain = await createFreshBrain(sc, userId, activeLovableToken, [skill], brain.name || `Star AI — ${skill}`, supabaseUrl);
           if ("error" in newBrain) {
             if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
             return json({ error: `Brain recriado com falha: ${newBrain.error}` }, 502);
