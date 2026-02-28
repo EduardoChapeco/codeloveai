@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-28T05:30:00Z
+updated_at: 2026-02-28T06:11:00Z
 status: done
-task: corrigir lock órfão do brain e garantir bootstrap de prompts após criação
+task: separar ghost create do bootstrap e ativar encadeamento manual via cron
 ---

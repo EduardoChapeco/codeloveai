@@ -28,6 +28,8 @@ interface BrainEntry {
   workspace_id: string;
   last_message_at: string | null;
   created_at: string;
+  skill_phase?: number;
+  bootstrap_started?: boolean;
 }
 
 interface Conversation {
@@ -165,11 +167,6 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
   const handleCreate = async () => {
     if (selectedSkills.length === 0) { toast.error("Selecione ao menos uma skill."); return; }
     setLoading(true);
-    setCreationStarted(true);
-    setCurrentStep(0);
-    setStepProgress(0);
-
-    const creationStart = Date.now();
 
     try {
       const { data, error } = await supabase.functions.invoke("brain", {
@@ -177,51 +174,37 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || "Erro ao criar Brain");
 
-      // Keep animation smooth and deterministic before switching view
-      const totalDuration = CREATION_STEPS.reduce((sum, s) => sum + s.duration, 0);
-      const elapsed = Date.now() - creationStart;
-      const remaining = Math.max(0, totalDuration - elapsed);
-
-      setCurrentStep(CREATION_STEPS.length - 1);
-      await new Promise(r => setTimeout(r, Math.max(remaining, 1200)));
-      setStepProgress(100);
-      await new Promise(r => setTimeout(r, 500));
-
-      const projectId = typeof data?.project_id === "string" ? data.project_id : undefined;
-      const projectUrl = typeof data?.project_url === "string"
+      let brainId = typeof data?.brain_id === "string" ? data.brain_id : undefined;
+      let projectId = typeof data?.project_id === "string" ? data.project_id : undefined;
+      let projectUrl = typeof data?.project_url === "string"
         ? data.project_url
         : projectId ? `https://lovable.dev/projects/${projectId}` : undefined;
 
-      toast.success("Brain criado com sucesso! 🧠");
-      onCreated({
-        brainId: typeof data?.brain_id === "string" ? data.brain_id : undefined,
-        projectId,
-        projectUrl,
-      });
-    } catch (e: any) {
-      // Recovery path: setup may have created the project but failed on a later non-critical step.
-      // In this case, pull current status and continue with the created brain instead of resetting UX.
-      try {
-        const { data: statusData } = await supabase.functions.invoke("brain", { body: { action: "status" } });
-        const recoveredBrains = Array.isArray(statusData?.brains) ? statusData.brains : [];
-        const recovered = recoveredBrains[0];
-
-        if (recovered?.id && recovered?.project_id && !String(recovered.project_id).startsWith("creating")) {
-          toast.success("Brain criado e recuperado com sucesso! 🧠");
-          onCreated({
-            brainId: recovered.id,
-            projectId: recovered.project_id,
-            projectUrl: recovered.project_url,
-          });
-          return;
+      // Another tab/request may hold the lock; wait and recover instead of failing UX.
+      if (!projectId || data?.creating || data?.code === "brain_creating") {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < 30_000) {
+          const { data: statusData } = await supabase.functions.invoke("brain", { body: { action: "status" } });
+          const recoveredBrains = Array.isArray(statusData?.brains) ? statusData.brains : [];
+          const recovered = recoveredBrains.find((b: any) => b?.id && b?.project_id && !String(b.project_id).startsWith("creating"));
+          if (recovered) {
+            brainId = recovered.id;
+            projectId = recovered.project_id;
+            projectUrl = recovered.project_url || `https://lovable.dev/projects/${recovered.project_id}`;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 1500));
         }
-      } catch {
-        // fall through to original error handling
       }
 
+      if (!brainId || !projectId) {
+        throw new Error("Projeto criado mas ainda sincronizando; tente novamente em alguns segundos.");
+      }
+
+      toast.success("Brain criado com sucesso! 🧠");
+      onCreated({ brainId, projectId, projectUrl });
+    } catch (e: any) {
       toast.error(e.message);
-      setCreationStarted(false);
-      setCurrentStep(-1);
     } finally {
       setLoading(false);
     }
@@ -617,6 +600,20 @@ export default function BrainPage() {
     return () => clearInterval(interval);
   }, [allConversations]);
 
+  const activateChain = async () => {
+    if (!activeBrainId) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("brain", {
+        body: { action: "bootstrap", brain_id: activeBrainId, skill: brainType },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao iniciar encadeamento");
+      toast.success(data?.started ? "Encadeamento iniciado." : "Encadeamento já estava ativo.");
+      await loadStatus();
+    } catch (e: any) {
+      toast.error(e.message || "Falha ao iniciar encadeamento");
+    }
+  };
+
   const sendMsg = async () => {
     if (!message.trim() || !activeBrainId) return;
     const userMsg = message.trim();
@@ -714,6 +711,8 @@ export default function BrainPage() {
                 workspace_id: "",
                 last_message_at: null,
                 created_at: new Date().toISOString(),
+                skill_phase: 0,
+                bootstrap_started: false,
               };
               setBrains([newBrain]);
               setActiveBrainId(payload.brainId);
@@ -819,6 +818,15 @@ export default function BrainPage() {
               >
                 <ExternalLink className="h-3.5 w-3.5" /> Projeto
               </a>
+            )}
+
+            {activeBrain && !(activeBrain.bootstrap_started ?? ((activeBrain.skill_phase || 0) > 0)) && (
+              <button
+                onClick={activateChain}
+                className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity shrink-0"
+              >
+                <Workflow className="h-3.5 w-3.5" /> Ativar encadeamento
+              </button>
             )}
 
             {/* Skill selector chips */}

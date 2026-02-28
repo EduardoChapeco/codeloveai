@@ -14,7 +14,7 @@ const CORS = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const VALID_ACTIONS = new Set(["status", "history", "reset", "setup", "send", "capture", "list", "delete", "review_code"]);
+const VALID_ACTIONS = new Set(["status", "history", "reset", "setup", "send", "capture", "list", "delete", "review_code", "bootstrap"]);
 const VALID_SKILLS = new Set<string>(["general", "design", "code", "scraper", "migration", "data", "devops", "security", "code_review"]);
 
 function json(data: unknown, status = 200) {
@@ -229,7 +229,7 @@ async function getBrain(sc: SupabaseClient, userId: string, brainId?: string) {
 
 async function listBrains(sc: SupabaseClient, userId: string) {
   const { data } = await sc.from("user_brain_projects")
-    .select("id, lovable_project_id, lovable_workspace_id, status, created_at, brain_skill, brain_skills, name, last_message_at")
+    .select("id, lovable_project_id, lovable_workspace_id, status, created_at, brain_skill, brain_skills, name, last_message_at, skill_phase")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   return data || [];
@@ -1305,7 +1305,8 @@ async function createFreshBrain(
         brain_skill: primarySkill,
         brain_skills: skills,
         name,
-        skill_phase: 1,
+        // Bootstrap is opt-in now; user starts chaining after opening chat.
+        skill_phase: 0,
       })
       .eq("id", lockId);
 
@@ -1314,28 +1315,7 @@ async function createFreshBrain(
       return { error: "Projeto criado, mas falhou ao registrar o Brain localmente." };
     }
 
-    // Kick bootstrap trigger immediately (cron continues on schedule if this call fails).
-    try {
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-      if (supabaseUrl && serviceKey) {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 2500);
-        await fetch(`${supabaseUrl}/functions/v1/brain-capture-cron`, {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({ source: "brain_setup", brain_id: lockId, project_id: projectId }),
-        }).catch(() => null);
-        clearTimeout(timer);
-      }
-    } catch (e) {
-      console.warn(`[Brain] trigger bootstrap kick failed (non-fatal):`, e);
-    }
-
-    console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")} bootstrap_queued=true`);
+    console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")} bootstrap_pending=true`);
     return { projectId, workspaceId, brainId: lockId };
   } catch (err) {
     console.error("[Brain] createFreshBrain error:", err);
@@ -1347,7 +1327,7 @@ async function createFreshBrain(
           lovable_project_id: createdProjectId,
           lovable_workspace_id: workspaceId || "unknown",
           status: "active",
-          skill_phase: 1,
+          skill_phase: 0,
           brain_skill: primarySkill,
           brain_skills: skills,
           name,
@@ -1493,6 +1473,8 @@ Deno.serve(async (req) => {
           workspace_id: b.lovable_workspace_id,
           last_message_at: b.last_message_at,
           created_at: b.created_at,
+          skill_phase: b.skill_phase || 0,
+          bootstrap_started: (b.skill_phase || 0) > 0,
         })),
         creating: brains.some(b => b.status === "creating"),
         current_workspace_id: currentWorkspaceId || null,
@@ -1516,6 +1498,8 @@ Deno.serve(async (req) => {
           workspace_id: b.lovable_workspace_id,
           last_message_at: b.last_message_at,
           created_at: b.created_at,
+          skill_phase: b.skill_phase || 0,
+          bootstrap_started: (b.skill_phase || 0) > 0,
         })),
       });
     }
@@ -1688,7 +1672,17 @@ Deno.serve(async (req) => {
 
       // No reusable brain found — create fresh
       const result = await createFreshBrain(sc, userId, lovableToken, skills, name, supabaseUrl);
-      if ("error" in result) return json({ error: result.error }, 502);
+      if ("error" in result) {
+        if (result.error.includes("sendo criado")) {
+          return json({
+            success: false,
+            creating: true,
+            code: "brain_creating",
+            error: result.error,
+          });
+        }
+        return json({ error: result.error }, 502);
+      }
       return json({
         success: true,
         brain_id: result.brainId,
@@ -1697,6 +1691,63 @@ Deno.serve(async (req) => {
         skills,
         name,
         stored_workspace_id: result.workspaceId,
+      });
+    }
+
+    // ── BOOTSTRAP / START CHAIN ──
+    if (action === "bootstrap") {
+      const brainId = typeof body?.brain_id === "string" ? body.brain_id : undefined;
+      const rawSkills = Array.isArray(body?.skills) ? body.skills.filter((s: string) => VALID_SKILLS.has(s)) : [];
+      const rawSkill = typeof body?.skill === "string" && VALID_SKILLS.has(body.skill) ? body.skill : null;
+      const skills: BrainSkill[] = rawSkills.length > 0
+        ? rawSkills as BrainSkill[]
+        : [((rawSkill || "general") as BrainSkill)];
+      const primarySkill = skills[0] || "general";
+
+      const targetBrain = await getBrainRaw(sc, userId, brainId) || await getBrainRaw(sc, userId);
+      if (!targetBrain?.id) return json({ error: "Brain não encontrado." }, 404);
+      if (!targetBrain.lovable_project_id || String(targetBrain.lovable_project_id).startsWith("creating")) {
+        return json({ error: "Projeto Brain ainda não está pronto." }, 409);
+      }
+
+      const alreadyRunning = typeof targetBrain.skill_phase === "number" && targetBrain.skill_phase > 0;
+      if (!alreadyRunning) {
+        await sc.from("user_brain_projects")
+          .update({
+            brain_skill: primarySkill,
+            brain_skills: skills,
+            status: "active",
+            skill_phase: 1,
+          })
+          .eq("id", targetBrain.id)
+          .eq("user_id", userId);
+      }
+
+      // Kick bootstrap cron immediately (best effort)
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 2500);
+        await fetch(`${supabaseUrl}/functions/v1/brain-capture-cron`, {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceRole}`,
+          },
+          body: JSON.stringify({ source: "brain_bootstrap", brain_id: targetBrain.id, project_id: targetBrain.lovable_project_id }),
+        }).catch(() => null);
+        clearTimeout(timer);
+      } catch {
+        // non-fatal; cron schedule will continue the chain
+      }
+
+      return json({
+        success: true,
+        started: !alreadyRunning,
+        brain_id: targetBrain.id,
+        project_id: targetBrain.lovable_project_id,
+        skill_phase: alreadyRunning ? targetBrain.skill_phase : 1,
+        skills,
       });
     }
 
