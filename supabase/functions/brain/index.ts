@@ -1351,35 +1351,44 @@ Deno.serve(async (req) => {
 
       const brains = await listBrains(sc, userId);
       const activeBrains = brains.filter(b => b.status === "active" && !b.lovable_project_id.startsWith("creating"));
-      const currentWorkspaceId = await getWorkspaceId(token);
+      
+      // Optimistic: show ALL active brains by default. Only hide if explicitly 404/403.
+      // This prevents transient network issues from hiding valid brains.
+      let currentWorkspaceId: string | null = null;
+      try {
+        currentWorkspaceId = await getWorkspaceId(token);
+      } catch { /* non-fatal */ }
 
-      // Check accessibility: only show brains whose workspace matches or are verified accessible
-      const accessibleBrains: typeof activeBrains = [];
+      const visibleBrains: typeof activeBrains = [];
       for (const b of activeBrains) {
+        // If workspace matches, always show
         if (currentWorkspaceId && b.lovable_workspace_id === currentWorkspaceId) {
-          accessibleBrains.push(b);
-        } else {
-          // Workspace mismatch — verify if project is still accessible from current token
+          visibleBrains.push(b);
+          continue;
+        }
+        // Workspace unknown or mismatch — verify only if we got a workspace
+        if (currentWorkspaceId) {
           try {
             const check = await verifyProjectState(b.lovable_project_id, token);
-            if (check.state === "accessible") {
-              // Update workspace if it changed
-              if (currentWorkspaceId && b.lovable_workspace_id !== currentWorkspaceId) {
-                await sc.from("user_brain_projects").update({ lovable_workspace_id: currentWorkspaceId }).eq("id", b.id);
-              }
-              accessibleBrains.push(b);
+            if (check.state === "not_found") {
+              // Confirmed inaccessible (403/404) — skip
+              continue;
             }
-            // else: inaccessible — hide from UI (not deleted, just hidden)
+            // "accessible" or "unknown" (timeout/error) — include optimistically
+            if (check.state === "accessible" && b.lovable_workspace_id !== currentWorkspaceId) {
+              await sc.from("user_brain_projects").update({ lovable_workspace_id: currentWorkspaceId }).eq("id", b.id);
+            }
           } catch {
-            // On error, hide to be safe
+            // Network error — include optimistically
           }
         }
+        visibleBrains.push(b);
       }
 
       return json({
-        active: accessibleBrains.length > 0,
+        active: visibleBrains.length > 0,
         connected: true,
-        brains: accessibleBrains.map(b => ({
+        brains: visibleBrains.map(b => ({
           id: b.id,
           name: b.name,
           project_id: b.lovable_project_id,
@@ -1388,11 +1397,12 @@ Deno.serve(async (req) => {
           skills: b.brain_skills || [b.brain_skill],
           workspace_id: b.lovable_workspace_id,
           last_message_at: b.last_message_at,
+          created_at: b.created_at,
         })),
         creating: brains.some(b => b.status === "creating"),
         current_workspace_id: currentWorkspaceId || null,
         total_brains: activeBrains.length,
-        hidden_brains: activeBrains.length - accessibleBrains.length,
+        hidden_brains: activeBrains.length - visibleBrains.length,
       });
     }
 
@@ -1480,6 +1490,8 @@ Deno.serve(async (req) => {
       }
 
       // ── REUSE CHECK: Try to find an existing brain accessible from current account ──
+      // Be optimistic — only skip brains confirmed inaccessible (404/403).
+      // "unknown" state (timeout/network error) should reuse the brain.
       const currentWorkspaceId = await getWorkspaceId(lovableToken);
       const existingBrains = await listBrains(sc, userId);
       
@@ -1487,16 +1499,31 @@ Deno.serve(async (req) => {
         if (existing.lovable_project_id.startsWith("creating")) continue;
         if (existing.status !== "active") continue;
         
-        // Check if this brain's project is accessible with current token
+        // Same workspace = definitely reusable
+        if (currentWorkspaceId && existing.lovable_workspace_id === currentWorkspaceId) {
+          console.log(`[Brain] ♻️ Reusing brain (workspace match) ${existing.id.slice(0,8)} project=${existing.lovable_project_id.slice(0,8)}`);
+          return json({
+            success: true,
+            brain_id: existing.id,
+            project_id: existing.lovable_project_id,
+            project_url: `https://lovable.dev/projects/${existing.lovable_project_id}`,
+            skills: existing.brain_skills || [existing.brain_skill],
+            name: existing.name || name,
+            stored_workspace_id: currentWorkspaceId,
+            reused: true,
+          });
+        }
+        
+        // Different/unknown workspace — verify via API
         const check = await verifyProjectState(existing.lovable_project_id, lovableToken);
-        if (check.state === "accessible") {
-          // Update workspace_id if it changed
-          if (currentWorkspaceId && existing.lovable_workspace_id !== currentWorkspaceId) {
+        if (check.state === "accessible" || check.state === "unknown") {
+          // Accessible or couldn't verify (timeout) — reuse optimistically
+          if (currentWorkspaceId && check.state === "accessible" && existing.lovable_workspace_id !== currentWorkspaceId) {
             await sc.from("user_brain_projects")
               .update({ lovable_workspace_id: currentWorkspaceId })
               .eq("id", existing.id);
           }
-          console.log(`[Brain] ♻️ Reusing existing brain ${existing.id.slice(0,8)} project=${existing.lovable_project_id.slice(0,8)}`);
+          console.log(`[Brain] ♻️ Reusing existing brain ${existing.id.slice(0,8)} project=${existing.lovable_project_id.slice(0,8)} state=${check.state}`);
           return json({
             success: true,
             brain_id: existing.id,
@@ -1508,6 +1535,8 @@ Deno.serve(async (req) => {
             reused: true,
           });
         }
+        // state === "not_found" — confirmed inaccessible, skip and continue checking others
+        console.log(`[Brain] Brain ${existing.id.slice(0,8)} confirmed inaccessible (${check.status}), skipping`);
       }
 
       // No reusable brain found — create fresh
