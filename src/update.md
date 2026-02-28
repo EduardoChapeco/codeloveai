@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-28T04:12:05Z
+updated_at: 2026-02-28T04:17:30Z
 status: done
-task: correção de runtime no brain e reforço de autenticação no venus-chat
+task: correção de runtime no setup do brain por coluna inexistente
 ---
