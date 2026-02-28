@@ -1630,12 +1630,13 @@ Deno.serve(async (req) => {
       const access = await verifyProjectState(brainProjectId, lovableToken);
       if (access.state === "not_found") {
         // ── AUTO-REACTIVATE: Search for another brain accessible from current account ──
+        let reactivated = false;
         const allBrains = await listBrains(sc, userId);
         for (const candidate of allBrains) {
           if (candidate.id === brain.id) continue; // skip current (already failed)
           if (candidate.lovable_project_id === "creating") continue;
           if (candidate.status !== "active") continue;
-          
+
           const candidateAccess = await verifyProjectState(candidate.lovable_project_id, lovableToken);
           if (candidateAccess.state === "accessible") {
             // Found a reusable brain! Update workspace and use it
@@ -1646,15 +1647,14 @@ Deno.serve(async (req) => {
                 .eq("id", candidate.id);
             }
             console.log(`[Brain:send] ♻️ Auto-reactivated brain ${candidate.id.slice(0,8)} project=${candidate.lovable_project_id.slice(0,8)}`);
-            // Redirect to the reactivated brain
             brain = candidate;
             brainProjectId = candidate.lovable_project_id;
+            reactivated = true;
             break;
           }
         }
 
-        // If still not found after checking all brains
-        if (brain.lovable_project_id === brainProjectId) {
+        if (!reactivated) {
           const currentWorkspaceId = await getWorkspaceId(lovableToken);
           return json({
             error: "Projeto Brain não encontrado no workspace atual. Crie um novo Brain.",

@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-02-28T04:10:00Z
+updated_at: 2026-02-28T04:12:05Z
 status: done
-task: correção do brain com recuperação de lock e token/captura robustos
+task: correção de runtime no brain e reforço de autenticação no venus-chat
 ---
