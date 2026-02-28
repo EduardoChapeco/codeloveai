@@ -17,7 +17,7 @@ const UPDATE_MD_PROMPT =
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-clf-token, x-clf-extension, x-speed-client",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-clf-token, x-clf-extension, x-speed-client, x-orchestrator-internal, x-admin-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -82,6 +82,39 @@ function makeAiMsgId(): string {
 }
 
 // ─── Token resolution (same pattern as speed-chat/lovable-proxy) ───
+function parseJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const decoded = atob(padded);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function shouldTreatAsUserJwt(authHeader: string): boolean {
+  if (!authHeader.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7).trim();
+  if (!token || token.startsWith("CLF1.")) return false;
+
+  const payload = parseJwtPayload(token);
+  if (!payload) return true;
+
+  const role = typeof payload.role === "string" ? payload.role : "";
+  const sub = typeof payload.sub === "string" ? payload.sub : "";
+
+  if (!sub) return false;
+  if (role === "service_role" || role === "anon") return false;
+  return true;
+}
+
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}
+
 async function getUserTokenFromAccount(
   adminClient: ReturnType<typeof createClient>,
   userId: string
@@ -115,9 +148,22 @@ async function resolveLovableToken(
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // 2. JWT user → lovable_accounts
+  // 2. Internal orchestrator route (secret + explicit user binding)
+  const isInternal = req.headers.get("x-orchestrator-internal") === "true";
+  if (isInternal) {
+    const expectedSecret = Deno.env.get("CODELOVE_ADMIN_SECRET") || "";
+    const providedSecret = req.headers.get("x-admin-secret") || "";
+    const internalUserId = typeof body?._internal_user_id === "string" ? body._internal_user_id.trim() : "";
+
+    if (expectedSecret && providedSecret === expectedSecret && isUuid(internalUserId)) {
+      const tok = await getUserTokenFromAccount(adminClient, internalUserId);
+      if (tok) return tok;
+    }
+  }
+
+  // 3. JWT user → lovable_accounts
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || "";
-  if (authHeader.startsWith("Bearer ") && !authHeader.includes("CLF1.")) {
+  if (shouldTreatAsUserJwt(authHeader)) {
     try {
       const userClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: authHeader } },
@@ -130,7 +176,7 @@ async function resolveLovableToken(
     } catch { /* ignore */ }
   }
 
-  // 3. CLF1 license → user_id → lovable_accounts
+  // 4. CLF1 license → user_id → lovable_accounts
   const headerClf = (req.headers.get("x-clf-token") || "").trim();
   const bodyClf = (
     (body.licenseKey as string) ||
