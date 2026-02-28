@@ -191,6 +191,20 @@ export default function LovableConnect() {
   }, [clfToken]);
 
   // handleAutoToken for Lovable connection
+  // Auto-start Brain creation after connecting Lovable account
+  const autoStartBrain = useCallback(async () => {
+    try {
+      const { data } = await supabase.functions.invoke("brain", {
+        body: { action: "setup", skills: ["general"] },
+      });
+      if (data?.success) {
+        console.log("[Starble] Brain auto-started:", data.reused ? "reused" : "created", data.project_id);
+      }
+    } catch {
+      // Non-fatal — user can always create manually from /brain
+    }
+  }, []);
+
   const handleAutoToken = useCallback(async (token: string, refreshToken?: string | null) => {
     if (saving || connectionStatus === "active") return;
     setSaving(true);
@@ -199,12 +213,14 @@ export default function LovableConnect() {
       toast.success("Conta conectada automaticamente!");
       setConnectionStatus("active");
       setLastVerified(new Date().toISOString());
+      // Auto-start Brain in background after successful connection
+      autoStartBrain();
     } catch (err: unknown) {
       toast.error((err as { message?: string })?.message || "Erro ao salvar token.");
     } finally {
       setSaving(false);
     }
-  }, [saving, connectionStatus, saveToken]);
+  }, [saving, connectionStatus, saveToken, autoStartBrain]);
 
   // Listen for token from extension via postMessage
   useEffect(() => {
