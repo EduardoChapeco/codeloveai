@@ -1263,14 +1263,9 @@ async function createFreshBrain(
         console.warn(`[Brain] Audit 1 error (non-fatal):`, e);
       }
 
-      // Queue remaining audit prompts for background execution via brain-capture-cron
-      await sc.from("user_brain_projects")
-        .update({
-          pending_audit_prompts: auditPrompts.length - 1,
-          audit_start_index: 1,
-        })
-        .eq("id", lockId)
-        .then(() => {});
+      // NOTE: removed queue metadata update because these columns do not exist in user_brain_projects
+      // (pending_audit_prompts, audit_start_index). Attempting to write them caused setup/runtime 502s.
+      // Remaining audit prompts continue via brain-capture-cron's standard flow without this metadata.
     }
 
     console.log(`[Brain] Setup complete project=${projectId} skills=${skills.join(",")}`);
