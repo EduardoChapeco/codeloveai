@@ -199,6 +199,26 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
         projectUrl,
       });
     } catch (e: any) {
+      // Recovery path: setup may have created the project but failed on a later non-critical step.
+      // In this case, pull current status and continue with the created brain instead of resetting UX.
+      try {
+        const { data: statusData } = await supabase.functions.invoke("brain", { body: { action: "status" } });
+        const recoveredBrains = Array.isArray(statusData?.brains) ? statusData.brains : [];
+        const recovered = recoveredBrains[0];
+
+        if (recovered?.id && recovered?.project_id) {
+          toast.success("Brain criado e recuperado com sucesso! 🧠");
+          onCreated({
+            brainId: recovered.id,
+            projectId: recovered.project_id,
+            projectUrl: recovered.project_url,
+          });
+          return;
+        }
+      } catch {
+        // fall through to original error handling
+      }
+
       toast.error(e.message);
       setCreationStarted(false);
       setCurrentStep(-1);
