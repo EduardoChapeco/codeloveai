@@ -329,12 +329,12 @@ Deno.serve(async (req) => {
     // PART 1: Process bootstrap phases
     // ══════════════════════════════════════════════════════════════
     const { data: pendingBrains } = await sc.from("user_brain_projects")
-      .select("id, user_id, lovable_project_id, skill_phase, brain_skill, created_at")
-      .eq("status", "active")
+      .select("id, user_id, lovable_project_id, skill_phase, brain_skill, created_at, status")
+      .in("status", ["active", "bootstrapping", "injecting"])
       .gt("skill_phase", 0)
       .lte("skill_phase", 10)
       .order("created_at", { ascending: true })
-      .limit(2);
+      .limit(5);
 
     if (pendingBrains?.length) {
       console.log(`[bc] ${pendingBrains.length} brains need bootstrap`);
@@ -342,6 +342,11 @@ Deno.serve(async (req) => {
       for (const brain of pendingBrains) {
         const phase = brain.skill_phase || 1;
         const age = Date.now() - new Date(brain.created_at).getTime();
+
+        if (!brain.lovable_project_id || String(brain.lovable_project_id).startsWith("creating")) {
+          console.log(`[bc] brain=${brain.id.slice(0,8)} has placeholder project id, skipping`);
+          continue;
+        }
 
         // Each phase needs ~90s to complete; skip if not enough time has passed
         const minAgeForPhase = phase === 1 ? 5_000 : (phase - 1) * 90_000;
@@ -371,7 +376,7 @@ Deno.serve(async (req) => {
 
         if (ok) {
           const nextPhase = phase >= 10 ? 0 : phase + 1;
-          await sc.from("user_brain_projects").update({ skill_phase: nextPhase }).eq("id", brain.id);
+          await sc.from("user_brain_projects").update({ skill_phase: nextPhase, status: "active" }).eq("id", brain.id);
           bootstrapProcessed++;
           console.log(`[bc] ✅ brain=${brain.id.slice(0,8)} phase=${phase}→${nextPhase}`);
         } else {
