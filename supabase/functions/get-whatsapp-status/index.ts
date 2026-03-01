@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
     let status = mapConnectionState(stateRes.data);
     let qrCode = extractQr(stateRes.data);
     let phone = pickPhone(stateRes.data);
+    let probeWorked = stateRes.ok || stateRes.status === 200;
 
     if (status !== "connected") {
       const connectRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
@@ -81,6 +82,7 @@ Deno.serve(async (req) => {
       });
 
       console.log(`[get-whatsapp-status] Evolution GET ${connectRes.endpoint} -> ${connectRes.status}`);
+      probeWorked = probeWorked || connectRes.ok || connectRes.status === 200;
       qrCode = qrCode || extractQr(connectRes.data);
       if (mapConnectionState(connectRes.data) === "connected") status = "connected";
       phone = phone || pickPhone(connectRes.data);
@@ -99,24 +101,27 @@ Deno.serve(async (req) => {
           timeoutMs: 20000,
         });
         console.log(`[get-whatsapp-status] Evolution GET ${qrRes.endpoint} -> ${qrRes.status}`);
+        probeWorked = probeWorked || qrRes.ok || qrRes.status === 200;
         qrCode = extractQr(qrRes.data);
       }
     }
+
+    const resolvedStatus = status === "connected" ? "connected" : qrCode || probeWorked ? "connecting" : "failed";
 
     const sc = createClient(supabaseUrl, serviceRole);
     await sc
       .from("whatsapp_instances")
       .update({
-        status: status === "connected" ? "connected" : qrCode ? "connecting" : "failed",
-        qr_code: status === "connected" ? null : qrCode,
-        phone_number: status === "connected" ? phone : null,
+        status: resolvedStatus,
+        qr_code: resolvedStatus === "connected" ? null : qrCode,
+        phone_number: resolvedStatus === "connected" ? phone : null,
         updated_at: new Date().toISOString(),
       })
       .eq("instance_name", safeName);
 
     return json({
-      status: status === "connected" ? "connected" : qrCode ? "connecting" : "failed",
-      qr_code: status === "connected" ? null : qrCode,
+      status: resolvedStatus,
+      qr_code: resolvedStatus === "connected" ? null : qrCode,
       phone_number: phone,
       endpoint_used: stateRes.endpoint,
     });
