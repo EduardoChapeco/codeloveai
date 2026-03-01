@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T20:30:00Z
+updated_at: 2026-03-01T20:41:32Z
 status: done
-task: Auditoria profunda e correção da criação de instância WhatsApp com melhorias de runtime/build
+task: Corrigir falha 403 na criação de instância WhatsApp com recuperação de instância existente
 ---

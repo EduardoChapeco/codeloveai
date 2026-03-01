@@ -3,6 +3,7 @@ import {
   extractQr,
   hasInstanceAlreadyExists,
   isLikelyColdStartHtml,
+  mapConnectionState,
   requestEvolution,
 } from "../_shared/evolution.ts";
 
@@ -92,8 +93,28 @@ Deno.serve(async (req) => {
     console.log(`[create-whatsapp-instance] Evolution POST ${createRes.endpoint} -> ${createRes.status}`);
 
     const alreadyExists = hasInstanceAlreadyExists(createRes.status, createRes.raw, createRes.data);
+    let recoveredExistingInstance = false;
 
-    if (!createRes.ok && !alreadyExists) {
+    if (!createRes.ok && (alreadyExists || createRes.status === 403 || createRes.status === 422)) {
+      const stateProbe = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
+        method: "GET",
+        endpoints: [
+          `/instance/connectionState/${instanceName}`,
+          `/instance/connection-state/${instanceName}`,
+          `/api/instance/connectionState/${instanceName}`,
+          `/v2/instance/connectionState/${instanceName}`,
+        ],
+        timeoutMs: 25000,
+      });
+
+      console.log(
+        `[create-whatsapp-instance] Evolution RECOVERY ${stateProbe.endpoint} -> ${stateProbe.status}`,
+      );
+
+      recoveredExistingInstance = stateProbe.ok || stateProbe.status === 200;
+    }
+
+    if (!createRes.ok && !recoveredExistingInstance && !alreadyExists) {
       if (isLikelyColdStartHtml(createRes.raw, createRes.contentType)) {
         return json(
           {
@@ -115,6 +136,7 @@ Deno.serve(async (req) => {
     }
 
     let qrCode = extractQr(createRes.data);
+    let finalState: "connected" | "disconnected" = mapConnectionState(createRes.data);
 
     const connectRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
       method: "GET",
@@ -128,8 +150,9 @@ Deno.serve(async (req) => {
 
     console.log(`[create-whatsapp-instance] Evolution GET ${connectRes.endpoint} -> ${connectRes.status}`);
     qrCode = qrCode || extractQr(connectRes.data);
+    finalState = mapConnectionState(connectRes.data);
 
-    if (!qrCode) {
+    if (!qrCode && finalState !== "connected") {
       const qrRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
         method: "GET",
         endpoints: [
@@ -146,21 +169,23 @@ Deno.serve(async (req) => {
       qrCode = extractQr(qrRes.data);
     }
 
+    const persistedStatus = finalState === "connected" ? "connected" : qrCode ? "connecting" : "failed";
+
     await sc.from("whatsapp_instances").upsert(
       {
         tenant_id: tenantId,
         user_id: user.id,
         instance_name: instanceName,
-        status: qrCode ? "connecting" : "failed",
-        qr_code: qrCode,
+        status: persistedStatus,
+        qr_code: finalState === "connected" ? null : qrCode,
       },
       { onConflict: "instance_name" },
     );
 
     return json({
       instance_name: instanceName,
-      qr_code: qrCode,
-      status: qrCode ? "connecting" : "failed",
+      qr_code: finalState === "connected" ? null : qrCode,
+      status: persistedStatus,
       endpoint_used: createRes.endpoint,
     });
   } catch (err) {
