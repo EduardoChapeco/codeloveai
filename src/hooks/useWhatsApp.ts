@@ -27,15 +27,16 @@ export function useWhatsApp(userId: string, tenantId: string) {
 
         const d = data as any;
         setInstanceName(d.instance_name ?? null);
-        setQrCode(d.qr_code ?? null);
 
         if (d.status === "connected") {
           setStatus("connected");
           setQrCode(null);
         } else if (d.status === "connecting") {
-          setStatus("connecting");
+          setStatus(d.qr_code ? "connecting" : "waiting");
+          setQrCode(d.qr_code ?? null);
         } else {
           setStatus("disconnected");
+          setQrCode(null);
         }
       } catch (err: any) {
         console.error("[useWhatsApp] load error:", err);
@@ -55,14 +56,11 @@ export function useWhatsApp(userId: string, tenantId: string) {
       );
 
       if (fnErr) {
-        // Try to extract error message from response body
         let msg = "Falha ao criar instância";
         try {
           const parsed = JSON.parse((fnErr as any)?.context?.body || "{}");
           if (parsed?.error) msg = parsed.error;
-        } catch {
-          /* use default */
-        }
+        } catch { /* use default */ }
         throw new Error(msg);
       }
 
@@ -73,8 +71,13 @@ export function useWhatsApp(userId: string, tenantId: string) {
 
       if (data?.status === "connected") {
         setStatus("connected");
-      } else {
+      } else if (data?.status === "render_hibernating") {
+        setStatus("waiting");
+        setError(data.error);
+      } else if (data?.qr_code) {
         setStatus("connecting");
+      } else {
+        setStatus("waiting");
       }
     } catch (err: any) {
       setError(err?.message || "Erro ao criar instância");
@@ -86,7 +89,6 @@ export function useWhatsApp(userId: string, tenantId: string) {
 
   // ── Poll for status updates ──
   useEffect(() => {
-    // Only poll when we have an instance and are not yet connected/disconnected
     const shouldPoll =
       instanceName &&
       (status === "connecting" || status === "waiting");
@@ -121,12 +123,9 @@ export function useWhatsApp(userId: string, tenantId: string) {
           setStatus("disconnected");
           setQrCode(null);
         }
-      } catch {
-        /* ignore polling errors */
-      }
+      } catch { /* ignore polling errors */ }
     };
 
-    // Poll immediately, then every 8s
     void poll();
     intervalRef.current = setInterval(poll, 8000);
 
