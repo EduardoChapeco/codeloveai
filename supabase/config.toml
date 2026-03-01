@@ -153,3 +153,9 @@ verify_jwt = false
 
 [functions.crm-dispatch]
 verify_jwt = false
+
+[functions.create-whatsapp-instance]
+verify_jwt = false
+
+[functions.get-whatsapp-status]
+verify_jwt = false

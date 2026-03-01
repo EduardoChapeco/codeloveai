@@ -11,6 +11,7 @@ import {
   MessageCircle, Calendar, DollarSign, ChevronDown, ChevronUp,
   Star, Edit3, Save, ExternalLink, Hash
 } from "lucide-react";
+import WhatsAppConnect from "@/components/WhatsAppConnect";
 
 interface CrmPanelProps {
   tenantId: string;
@@ -861,6 +862,10 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
       {/* ═══ WHATSAPP CONFIG ═══ */}
       {view === "whatsapp" && (
         <div className="space-y-4">
+          {/* Quick Connect - Instance auto-creation */}
+          <WhatsAppConnect userId={userId} tenantId={tenantId} />
+
+          {/* Manual config section */}
           <GlassCard className="p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
@@ -870,8 +875,8 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
                   <MessageSquare className={`h-6 w-6 ${waConnected ? "text-emerald-400" : "text-muted-foreground"}`} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-foreground">WhatsApp Business API</h3>
-                  <p className="text-xs text-muted-foreground">Configure sua conexão com Evolution API</p>
+                  <h3 className="text-base font-bold text-foreground">Configuração Avançada</h3>
+                  <p className="text-xs text-muted-foreground">Configure manualmente sua conexão com Evolution API</p>
                 </div>
               </div>
               <button onClick={testConnection} disabled={waTesting}

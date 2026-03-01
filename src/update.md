@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T20:10:00Z
+updated_at: 2026-03-01T21:00:00Z
 status: done
-task: Fix TenantAdmin crash - React hooks declared after conditional return violating Rules of Hooks
+task: StarCRM WhatsApp integration - Evolution API instance creation, QR code connect, status polling
 ---
