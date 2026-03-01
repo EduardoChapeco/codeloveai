@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -34,7 +34,6 @@ Deno.serve(async (req) => {
       return json({ error: "instance_name required" }, 400);
     }
 
-    // Sanitize instance name
     const safeName = instanceName.replace(/[^a-zA-Z0-9_-]/g, "");
 
     const EVOLUTION_URL = (Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
@@ -44,21 +43,39 @@ Deno.serve(async (req) => {
       return json({ error: "Evolution API not configured" }, 500);
     }
 
-    // Check connection state
-    const stateRes = await fetch(`${EVOLUTION_URL}/instance/connectionState/${safeName}`, {
-      headers: { apikey: EVOLUTION_KEY },
-    });
-    const stateData = await stateRes.json().catch(() => ({}));
+    // Check connection state with timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    let stateData: any = {};
+    try {
+      const stateRes = await fetch(`${EVOLUTION_URL}/instance/connectionState/${safeName}`, {
+        headers: { apikey: EVOLUTION_KEY },
+        signal: controller.signal,
+      });
+      const stateText = await stateRes.text();
+      try { stateData = JSON.parse(stateText); } catch { /* ignore non-JSON */ }
+    } catch (e: any) {
+      clearTimeout(timeout);
+      if (e.name === "AbortError") {
+        return json({ status: "disconnected", qr_code: null, error: "timeout" });
+      }
+      return json({ status: "disconnected", qr_code: null, error: "connection_failed" });
+    }
+    clearTimeout(timeout);
+
     const state = stateData?.instance?.state || "disconnected";
 
     // If not connected, get fresh QR code
     let qrCode = null;
     if (state !== "open") {
-      const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${safeName}`, {
-        headers: { apikey: EVOLUTION_KEY },
-      });
-      const connectData = await connectRes.json().catch(() => ({}));
-      qrCode = connectData?.base64 || null;
+      try {
+        const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${safeName}`, {
+          headers: { apikey: EVOLUTION_KEY },
+        });
+        const connectData = await connectRes.json().catch(() => ({}));
+        qrCode = connectData?.base64 || null;
+      } catch { /* ignore */ }
     }
 
     // Update DB status
@@ -69,7 +86,11 @@ Deno.serve(async (req) => {
 
     const dbStatus = state === "open" ? "connected" : "connecting";
     await sc.from("whatsapp_instances")
-      .update({ status: dbStatus, qr_code: qrCode, ...(state === "open" ? { phone_number: stateData?.instance?.phoneNumber || null } : {}) })
+      .update({
+        status: dbStatus,
+        qr_code: qrCode,
+        ...(state === "open" ? { phone_number: stateData?.instance?.phoneNumber || null } : {}),
+      })
       .eq("instance_name", safeName);
 
     return json({
