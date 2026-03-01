@@ -113,7 +113,7 @@ export async function requestEvolution(
   baseUrl: string,
   apiKey: string,
   options: {
-    method: "GET" | "POST";
+    method: "GET" | "POST" | "DELETE";
     endpoints: string[];
     body?: Record<string, unknown>;
     timeoutMs?: number;

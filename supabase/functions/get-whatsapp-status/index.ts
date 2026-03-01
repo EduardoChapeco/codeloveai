@@ -52,78 +52,84 @@ Deno.serve(async (req) => {
 
     if (!EVOLUTION_URL || !EVOLUTION_KEY) return json({ error: "Evolution API not configured" }, 500);
 
+    // Step 1: Check connection state
     const stateRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
       method: "GET",
       endpoints: [
         `/instance/connectionState/${safeName}`,
         `/instance/connection-state/${safeName}`,
-        `/api/instance/connectionState/${safeName}`,
-        `/v2/instance/connectionState/${safeName}`,
       ],
       timeoutMs: 25000,
     });
 
-    console.log(`[get-whatsapp-status] Evolution GET ${stateRes.endpoint} -> ${stateRes.status}`);
+    console.log(`[get-whatsapp-status] connectionState ${stateRes.endpoint} -> ${stateRes.status} | raw: ${stateRes.raw.slice(0, 300)}`);
 
     let status = mapConnectionState(stateRes.data);
     let qrCode = extractQr(stateRes.data);
     let phone = pickPhone(stateRes.data);
-    let probeWorked = stateRes.ok || stateRes.status === 200;
 
-    if (status !== "connected") {
-      const connectRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
-        method: "GET",
-        endpoints: [
-          `/instance/connect/${safeName}`,
-          `/api/instance/connect/${safeName}`,
-          `/v2/instance/connect/${safeName}`,
-        ],
-        timeoutMs: 25000,
-      });
+    // Also check the raw "state" field for "connecting" (Evolution returns this before QR is ready)
+    const rawState = stateRes.data?.instance
+      ? (stateRes.data.instance as any)?.state
+      : null;
+    const isEvolutionConnecting = typeof rawState === "string" && rawState.toLowerCase() === "connecting";
 
-      console.log(`[get-whatsapp-status] Evolution GET ${connectRes.endpoint} -> ${connectRes.status}`);
-      probeWorked = probeWorked || connectRes.ok || connectRes.status === 200;
-      qrCode = qrCode || extractQr(connectRes.data);
-      if (mapConnectionState(connectRes.data) === "connected") status = "connected";
-      phone = phone || pickPhone(connectRes.data);
+    if (status === "connected") {
+      // Already connected, update DB and return
+      const sc = createClient(supabaseUrl, serviceRole);
+      await sc.from("whatsapp_instances").update({
+        status: "connected",
+        qr_code: null,
+        phone_number: phone,
+        updated_at: new Date().toISOString(),
+      }).eq("instance_name", safeName);
 
-      if (!qrCode) {
-        const qrRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
-          method: "GET",
-          endpoints: [
-            `/instance/qrcode/${safeName}`,
-            `/api/instance/qrcode/${safeName}`,
-            `/v2/instance/qrcode/${safeName}`,
-            `/instance/qrCode/${safeName}`,
-            `/api/instance/qrCode/${safeName}`,
-            `/v2/instance/qrCode/${safeName}`,
-          ],
-          timeoutMs: 20000,
-        });
-        console.log(`[get-whatsapp-status] Evolution GET ${qrRes.endpoint} -> ${qrRes.status}`);
-        probeWorked = probeWorked || qrRes.ok || qrRes.status === 200;
-        qrCode = extractQr(qrRes.data);
-      }
+      return json({ status: "connected", qr_code: null, phone_number: phone });
     }
 
-    const resolvedStatus = status === "connected" ? "connected" : qrCode || probeWorked ? "connecting" : "failed";
+    // Step 2: Try /instance/connect/ to get QR code
+    const connectRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
+      method: "GET",
+      endpoints: [
+        `/instance/connect/${safeName}`,
+        `/api/instance/connect/${safeName}`,
+      ],
+      timeoutMs: 25000,
+    });
+
+    console.log(`[get-whatsapp-status] connect ${connectRes.endpoint} -> ${connectRes.status} | raw: ${connectRes.raw.slice(0, 500)}`);
+    
+    qrCode = qrCode || extractQr(connectRes.data);
+    if (mapConnectionState(connectRes.data) === "connected") status = "connected";
+    phone = phone || pickPhone(connectRes.data);
+
+    // Step 3: If instance is "connecting" on Evolution side but no QR, it's stuck
+    // Mark as disconnected so user can click "Create Instance" again (which deletes + recreates)
+    let resolvedStatus: string;
+    if (status === "connected") {
+      resolvedStatus = "connected";
+    } else if (qrCode) {
+      resolvedStatus = "connecting";
+    } else if (isEvolutionConnecting) {
+      // Instance exists on Evolution but stuck with no QR - mark disconnected to allow retry
+      console.log(`[get-whatsapp-status] Instance ${safeName} is stuck in 'connecting' with no QR. Marking disconnected for retry.`);
+      resolvedStatus = "disconnected";
+    } else {
+      resolvedStatus = "connecting"; // API responded but we might just need to wait
+    }
 
     const sc = createClient(supabaseUrl, serviceRole);
-    await sc
-      .from("whatsapp_instances")
-      .update({
-        status: resolvedStatus,
-        qr_code: resolvedStatus === "connected" ? null : qrCode,
-        phone_number: resolvedStatus === "connected" ? phone : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("instance_name", safeName);
+    await sc.from("whatsapp_instances").update({
+      status: resolvedStatus,
+      qr_code: resolvedStatus === "connected" ? null : qrCode,
+      phone_number: status === "connected" ? phone : null,
+      updated_at: new Date().toISOString(),
+    }).eq("instance_name", safeName);
 
     return json({
       status: resolvedStatus,
       qr_code: resolvedStatus === "connected" ? null : qrCode,
       phone_number: phone,
-      endpoint_used: stateRes.endpoint,
     });
   } catch (err) {
     console.error("[get-whatsapp-status] fatal:", err);
