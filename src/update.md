@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T20:25:00Z
+updated_at: 2026-03-01T20:10:00Z
 status: done
-task: CRM Render integration guidance - confirmed existing WhatsApp config UI is ready
+task: Fix TenantAdmin crash - React hooks declared after conditional return violating Rules of Hooks
 ---
