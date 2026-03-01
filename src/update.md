@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T21:15:00Z
+updated_at: 2026-03-01T20:30:00Z
 status: done
-task: Analyzed extension edge function chain - send-message is the active proxy used by Speed extension
+task: Auditoria profunda e correção da criação de instância WhatsApp com melhorias de runtime/build
 ---

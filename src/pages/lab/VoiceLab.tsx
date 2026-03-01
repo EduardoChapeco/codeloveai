@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -27,8 +27,13 @@ export default function VoiceLab() {
   const [joined, setJoined] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (!loading && enabled) {
+      navigate("/brain");
+    }
+  }, [enabled, loading, navigate]);
+
   if (!loading && enabled) {
-    navigate("/brain");
     return null;
   }
 

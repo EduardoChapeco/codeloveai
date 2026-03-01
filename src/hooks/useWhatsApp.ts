@@ -12,13 +12,35 @@ export function useWhatsApp(userId: string, tenantId: string) {
   // Load existing instance on mount
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("whatsapp_instances" as any)
-        .select("*").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle();
-      if (data) {
+      try {
+        const { data, error: loadErr } = await supabase
+          .from("whatsapp_instances" as any)
+          .select("instance_name, status, qr_code")
+          .eq("tenant_id", tenantId)
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (loadErr) throw loadErr;
+        if (!data) return;
+
         const d = data as any;
-        setInstanceName(d.instance_name);
-        setStatus(d.status === "connected" ? "connected" : "disconnected");
-        if (d.qr_code && d.status !== "connected") setQrCode(d.qr_code);
+        setInstanceName(d.instance_name ?? null);
+
+        if (d.status === "connected") {
+          setStatus("connected");
+          setQrCode(null);
+        } else if (d.status === "connecting") {
+          setStatus("connecting");
+          setQrCode(d.qr_code ?? null);
+        } else if (d.status === "failed") {
+          setStatus("failed");
+          setQrCode(null);
+        } else {
+          setStatus("disconnected");
+          setQrCode(d.qr_code ?? null);
+        }
+      } catch (err: any) {
+        setError(err?.message || "Erro ao carregar status do WhatsApp");
       }
     })();
   }, [userId, tenantId]);
@@ -35,6 +57,7 @@ export function useWhatsApp(userId: string, tenantId: string) {
       if (data?.qr_code) setQrCode(data.qr_code);
       if (data?.instance_name) setInstanceName(data.instance_name);
       if (data?.status === "connected") setStatus("connected");
+      else if (data?.status === "failed") setStatus("failed");
       else setStatus("connecting");
     } catch (err: any) {
       setError(err?.message || "Erro ao criar instância");
@@ -45,7 +68,7 @@ export function useWhatsApp(userId: string, tenantId: string) {
 
   // Poll for connection status
   useEffect(() => {
-    if (!instanceName || status === "connected") {
+    if (!instanceName || status === "connected" || status === "failed") {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
@@ -61,6 +84,15 @@ export function useWhatsApp(userId: string, tenantId: string) {
           setStatus("connected");
           setQrCode(null);
           return;
+        }
+
+        if (data?.status === "failed") {
+          setStatus("failed");
+          return;
+        }
+
+        if (data?.status === "connecting") {
+          setStatus("connecting");
         }
 
         if (data?.qr_code) {
