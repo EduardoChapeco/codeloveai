@@ -32,9 +32,6 @@ export function useWhatsApp(userId: string, tenantId: string) {
         } else if (d.status === "connecting") {
           setStatus("connecting");
           setQrCode(d.qr_code ?? null);
-        } else if (d.status === "failed") {
-          setStatus("failed");
-          setQrCode(null);
         } else {
           setStatus("disconnected");
           setQrCode(d.qr_code ?? null);
@@ -55,23 +52,18 @@ export function useWhatsApp(userId: string, tenantId: string) {
       if (fnErr) {
         const rawBody = (fnErr as any)?.context?.body;
         let parsedError: string | null = null;
-
         if (typeof rawBody === "string") {
           try {
             const parsed = JSON.parse(rawBody);
             if (parsed?.error && typeof parsed.error === "string") parsedError = parsed.error;
-          } catch {
-            parsedError = null;
-          }
+          } catch { parsedError = null; }
         }
-
         throw new Error(parsedError || (fnErr as any)?.message || "Falha ao criar instância");
       }
       if (data?.error) throw new Error(data.error);
       if (data?.qr_code) setQrCode(data.qr_code);
       if (data?.instance_name) setInstanceName(data.instance_name);
       if (data?.status === "connected") setStatus("connected");
-      else if (data?.status === "failed") setStatus("failed");
       else setStatus("connecting");
     } catch (err: any) {
       setError(err?.message || "Erro ao criar instância");
@@ -82,7 +74,7 @@ export function useWhatsApp(userId: string, tenantId: string) {
 
   // Poll for connection status
   useEffect(() => {
-    if (!instanceName || status === "connected" || status === "failed" || status === "disconnected") {
+    if (!instanceName || status === "connected" || status === "disconnected") {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
@@ -92,39 +84,28 @@ export function useWhatsApp(userId: string, tenantId: string) {
         const { data, error: pollErr } = await supabase.functions.invoke("get-whatsapp-status", {
           body: { instance_name: instanceName },
         });
-
         if (pollErr) return;
+
         if (data?.status === "connected") {
           setStatus("connected");
           setQrCode(null);
           return;
         }
-
-        if (data?.status === "failed") {
-          setStatus("failed");
+        if (data?.status === "connecting" && data?.qr_code) {
+          setStatus("connecting");
+          setQrCode(data.qr_code);
           return;
         }
-
-        if (data?.status === "disconnected") {
-          setStatus("disconnected");
+        if (data?.status === "waiting") {
+          setStatus("waiting");
           setQrCode(null);
           return;
         }
-
-        if (data?.status === "connecting") {
-          setStatus("connecting");
-        }
-
-        if (data?.qr_code) {
-          setQrCode(data.qr_code);
-        }
-      } catch {
-        // ignore polling errors to keep retrying silently
-      }
+      } catch { /* ignore */ }
     };
 
     void poll();
-    intervalRef.current = setInterval(poll, 6000);
+    intervalRef.current = setInterval(poll, 8000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [instanceName, status]);
 

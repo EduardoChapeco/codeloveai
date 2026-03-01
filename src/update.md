@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T21:18:00Z
+updated_at: 2026-03-01T22:45:00Z
 status: done
-task: Correções de runtime do CRM WhatsApp com fallback de QR e escopo por usuário
+task: Correção Evolution API v2.2.3 - endpoint correto GET /instance/connect, campo base64, polling com status waiting
 ---
