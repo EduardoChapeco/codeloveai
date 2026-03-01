@@ -50,7 +50,7 @@ export default function WhatsAppConnect({ userId, tenantId }: Props) {
         </div>
       )}
 
-      {!qrCode && (
+      {status === "disconnected" && !qrCode && (
         <Button onClick={createInstance} disabled={loading} className="w-full">
           {loading ? (
             <>
@@ -61,6 +61,29 @@ export default function WhatsAppConnect({ userId, tenantId }: Props) {
             <>
               <QrCode className="h-4 w-4" />
               Criar Instância WhatsApp
+            </>
+          )}
+        </Button>
+      )}
+
+      {status === "connecting" && !qrCode && (
+        <div className="flex items-center justify-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Conectando instância e aguardando QR Code...
+        </div>
+      )}
+
+      {status === "failed" && !qrCode && (
+        <Button onClick={createInstance} disabled={loading} variant="outline" className="w-full">
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Tentando novamente...
+            </>
+          ) : (
+            <>
+              <QrCode className="h-4 w-4" />
+              Tentar novamente
             </>
           )}
         </Button>
