@@ -9,8 +9,10 @@ export function useWhatsApp(userId: string, tenantId: string) {
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load existing instance on mount
+  // ── Load existing instance on mount ──
   useEffect(() => {
+    if (!userId || !tenantId) return;
+
     (async () => {
       try {
         const { data, error: loadErr } = await supabase
@@ -25,88 +27,115 @@ export function useWhatsApp(userId: string, tenantId: string) {
 
         const d = data as any;
         setInstanceName(d.instance_name ?? null);
+        setQrCode(d.qr_code ?? null);
 
         if (d.status === "connected") {
           setStatus("connected");
           setQrCode(null);
         } else if (d.status === "connecting") {
           setStatus("connecting");
-          setQrCode(d.qr_code ?? null);
         } else {
           setStatus("disconnected");
-          setQrCode(d.qr_code ?? null);
         }
       } catch (err: any) {
-        setError(err?.message || "Erro ao carregar status do WhatsApp");
+        console.error("[useWhatsApp] load error:", err);
       }
     })();
   }, [userId, tenantId]);
 
+  // ── Create instance ──
   const createInstance = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("create-whatsapp-instance", {
-        body: { tenant_id: tenantId },
-      });
+      const { data, error: fnErr } = await supabase.functions.invoke(
+        "create-whatsapp-instance",
+        { body: { tenant_id: tenantId } },
+      );
+
       if (fnErr) {
-        const rawBody = (fnErr as any)?.context?.body;
-        let parsedError: string | null = null;
-        if (typeof rawBody === "string") {
-          try {
-            const parsed = JSON.parse(rawBody);
-            if (parsed?.error && typeof parsed.error === "string") parsedError = parsed.error;
-          } catch { parsedError = null; }
+        // Try to extract error message from response body
+        let msg = "Falha ao criar instância";
+        try {
+          const parsed = JSON.parse((fnErr as any)?.context?.body || "{}");
+          if (parsed?.error) msg = parsed.error;
+        } catch {
+          /* use default */
         }
-        throw new Error(parsedError || (fnErr as any)?.message || "Falha ao criar instância");
+        throw new Error(msg);
       }
+
       if (data?.error) throw new Error(data.error);
-      if (data?.qr_code) setQrCode(data.qr_code);
-      if (data?.instance_name) setInstanceName(data.instance_name);
-      if (data?.status === "connected") setStatus("connected");
-      else setStatus("connecting");
+
+      setInstanceName(data?.instance_name ?? null);
+      setQrCode(data?.qr_code ?? null);
+
+      if (data?.status === "connected") {
+        setStatus("connected");
+      } else {
+        setStatus("connecting");
+      }
     } catch (err: any) {
       setError(err?.message || "Erro ao criar instância");
       setStatus("disconnected");
     }
+
     setLoading(false);
   }, [tenantId]);
 
-  // Poll for connection status
+  // ── Poll for status updates ──
   useEffect(() => {
-    if (!instanceName || status === "connected" || status === "disconnected") {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    // Only poll when we have an instance and are not yet connected/disconnected
+    const shouldPoll =
+      instanceName &&
+      (status === "connecting" || status === "waiting");
+
+    if (!shouldPoll) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
     }
 
     const poll = async () => {
       try {
-        const { data, error: pollErr } = await supabase.functions.invoke("get-whatsapp-status", {
-          body: { instance_name: instanceName },
-        });
-        if (pollErr) return;
+        const { data, error: pollErr } = await supabase.functions.invoke(
+          "get-whatsapp-status",
+          { body: { instance_name: instanceName } },
+        );
 
-        if (data?.status === "connected") {
+        if (pollErr || !data) return;
+
+        if (data.status === "connected") {
           setStatus("connected");
           setQrCode(null);
-          return;
-        }
-        if (data?.status === "connecting" && data?.qr_code) {
+        } else if (data.status === "connecting" && data.qr_code) {
           setStatus("connecting");
           setQrCode(data.qr_code);
-          return;
-        }
-        if (data?.status === "waiting") {
+        } else if (data.status === "waiting") {
           setStatus("waiting");
           setQrCode(null);
-          return;
+        } else if (data.status === "disconnected") {
+          setStatus("disconnected");
+          setQrCode(null);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore polling errors */
+      }
     };
 
+    // Poll immediately, then every 8s
     void poll();
     intervalRef.current = setInterval(poll, 8000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [instanceName, status]);
 
   return { qrCode, status, loading, error, instanceName, createInstance };

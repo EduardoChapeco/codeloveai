@@ -2,7 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -14,63 +15,78 @@ function json(body: unknown, status = 200) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS")
+    return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
+    // ── Auth ──
     const authHeader = req.headers.get("Authorization") || "";
-    if (!authHeader.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+    if (!authHeader.startsWith("Bearer "))
+      return json({ error: "Unauthorized" }, 401);
 
-    const token = authHeader.replace("Bearer ", "").trim();
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-    const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-    if (!supabaseUrl || !anonKey || !serviceRole) return json({ error: "Backend not configured" }, 500);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const anonClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userErr } = await anonClient.auth.getUser(token);
-    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+    const {
+      data: { user },
+      error: authErr,
+    } = await anonClient.auth.getUser();
+    if (authErr || !user) return json({ error: "Unauthorized" }, 401);
 
+    // ── Input ──
     const body = await req.json().catch(() => ({}));
-    const instanceNameRaw = typeof body.instance_name === "string" ? body.instance_name : "";
-    if (!instanceNameRaw) return json({ error: "instance_name required" }, 400);
+    const rawName = String(body.instance_name || "").replace(
+      /[^a-zA-Z0-9_-]/g,
+      "",
+    );
+    if (!rawName) return json({ error: "instance_name required" }, 400);
 
-    const safeName = instanceNameRaw.replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!safeName) return json({ error: "instance_name invalid" }, 400);
-
+    // ── Ownership check ──
     const sc = createClient(supabaseUrl, serviceRole);
-    const { data: ownedInstance } = await sc
+    const { data: owned } = await sc
       .from("whatsapp_instances")
       .select("instance_name")
-      .eq("instance_name", safeName)
-      .eq("user_id", userData.user.id)
+      .eq("instance_name", rawName)
+      .eq("user_id", user.id)
       .maybeSingle();
+    if (!owned) return json({ error: "Forbidden" }, 403);
 
-    if (!ownedInstance) return json({ error: "Forbidden" }, 403);
+    // ── Evolution config ──
+    const EVO_URL = (Deno.env.get("EVOLUTION_API_URL") || "").replace(
+      /\/+$/,
+      "",
+    );
+    const EVO_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
+    if (!EVO_URL || !EVO_KEY)
+      return json({ error: "Evolution API not configured" }, 500);
 
-    const EVOLUTION_URL = (Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
-    const EVOLUTION_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
+    // ── v2.2.3: GET /instance/connect/{instanceName} ──
+    const res = await fetch(
+      `${EVO_URL}/instance/connect/${rawName}`,
+      { method: "GET", headers: { apikey: EVO_KEY } },
+    ).catch(() => null);
 
-    if (!EVOLUTION_URL || !EVOLUTION_KEY) return json({ error: "Evolution API not configured" }, 500);
-
-    // v2.2.3: GET /instance/connect/{instanceName}
-    const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${safeName}`, {
-      method: "GET",
-      headers: { "apikey": EVOLUTION_KEY },
-    }).catch(() => null);
-
-    const raw = await connectRes?.text().catch(() => "") || "";
-    console.log(`[get-whatsapp-status] connect -> ${connectRes?.status} | raw: ${raw.slice(0, 500)}`);
+    const text = await res?.text().catch(() => "") || "";
+    console.log(
+      `[get-wa-status] GET /instance/connect/${rawName} -> ${res?.status} | ${text.slice(0, 500)}`,
+    );
 
     let data: any = {};
-    try { data = JSON.parse(raw); } catch { /* ignore */ }
+    try {
+      data = JSON.parse(text);
+    } catch {
+      /* not json */
+    }
 
+    // ── Parse response ──
     const state = data?.instance?.state || "";
     const base64 = data?.base64 || null;
-    const count = data?.qrcode?.count;
+    const count = data?.qrcode?.count ?? data?.count;
 
     let resolvedStatus: string;
     let qrCode: string | null = null;
@@ -83,22 +99,32 @@ Deno.serve(async (req) => {
       resolvedStatus = "connecting";
       qrCode = base64;
     } else if (state === "connecting" || count === 0) {
+      // Baileys still initializing, no QR yet
       resolvedStatus = "waiting";
     } else {
       resolvedStatus = "disconnected";
     }
 
-    // Update DB
-    await sc.from("whatsapp_instances").update({
-      status: resolvedStatus === "waiting" ? "connecting" : resolvedStatus,
-      qr_code: qrCode,
-      phone_number: resolvedStatus === "connected" ? phone : null,
-      updated_at: new Date().toISOString(),
-    }).eq("instance_name", safeName).eq("user_id", userData.user.id);
+    // ── Update DB ──
+    const dbStatus = resolvedStatus === "waiting" ? "connecting" : resolvedStatus;
+    await sc
+      .from("whatsapp_instances")
+      .update({
+        status: dbStatus,
+        qr_code: qrCode,
+        phone_number: resolvedStatus === "connected" ? phone : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("instance_name", rawName)
+      .eq("user_id", user.id);
 
-    return json({ status: resolvedStatus, qr_code: qrCode, phone_number: phone });
+    return json({
+      status: resolvedStatus,
+      qr_code: qrCode,
+      phone_number: phone,
+    });
   } catch (err) {
-    console.error("[get-whatsapp-status] fatal:", err);
+    console.error("[get-wa-status] fatal:", err);
     return json({ error: "Internal error" }, 500);
   }
 });
