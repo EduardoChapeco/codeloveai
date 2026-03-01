@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T20:41:32Z
+updated_at: 2026-03-01T20:46:10Z
 status: done
-task: Corrigir falha 403 na criação de instância WhatsApp com recuperação de instância existente
+task: Corrigir status falso de falha na conexão WhatsApp e estabilizar retorno 2xx
 ---

@@ -169,7 +169,9 @@ Deno.serve(async (req) => {
       qrCode = extractQr(qrRes.data);
     }
 
-    const persistedStatus = finalState === "connected" ? "connected" : qrCode ? "connecting" : "failed";
+    const shouldKeepConnecting =
+      finalState !== "connected" && (connectRes.ok || Boolean(qrCode) || recoveredExistingInstance || alreadyExists || createRes.ok);
+    const persistedStatus = finalState === "connected" ? "connected" : shouldKeepConnecting ? "connecting" : "failed";
 
     await sc.from("whatsapp_instances").upsert(
       {
