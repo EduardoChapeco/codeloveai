@@ -82,7 +82,7 @@ export function useWhatsApp(userId: string, tenantId: string) {
 
   // Poll for connection status
   useEffect(() => {
-    if (!instanceName || status === "connected" || status === "failed") {
+    if (!instanceName || status === "connected" || status === "failed" || status === "disconnected") {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }

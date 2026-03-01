@@ -50,7 +50,7 @@ export default function WhatsAppConnect({ userId, tenantId }: Props) {
         </div>
       )}
 
-      {status === "disconnected" && !qrCode && (
+      {(status === "disconnected") && !qrCode && (
         <Button onClick={createInstance} disabled={loading} className="w-full">
           {loading ? (
             <>
