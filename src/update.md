@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T21:00:00Z
+updated_at: 2026-03-01T20:25:00Z
 status: done
-task: StarCRM WhatsApp integration - Evolution API instance creation, QR code connect, status polling
+task: Fix WhatsApp instance creation - CORS headers and Evolution API error handling
 ---

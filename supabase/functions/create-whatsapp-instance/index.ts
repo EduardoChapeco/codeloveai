@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -61,23 +61,44 @@ Deno.serve(async (req) => {
       return json({ instance_name: existing.instance_name, status: "connected", qr_code: null });
     }
 
-    // Create instance on Evolution API
-    const evoRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
-      body: JSON.stringify({
-        instanceName: instanceName,
-        qrcode: true,
-        integration: "WHATSAPP-BAILEYS",
-      }),
-    });
+    // Create instance on Evolution API with timeout for cold starts
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000);
 
-    const evoData = await evoRes.json().catch(() => ({}));
+    let evoRes: Response;
+    try {
+      evoRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
+        body: JSON.stringify({
+          instanceName: instanceName,
+          qrcode: true,
+          integration: "WHATSAPP-BAILEYS",
+        }),
+        signal: controller.signal,
+      });
+    } catch (fetchErr: any) {
+      clearTimeout(timeout);
+      if (fetchErr.name === "AbortError") {
+        return json({ error: "Evolution API timeout — servidor pode estar hibernando. Tente novamente em 30s." }, 504);
+      }
+      console.error("[create-whatsapp-instance] fetch error:", fetchErr.message);
+      return json({ error: "Falha ao conectar com Evolution API" }, 502);
+    }
+    clearTimeout(timeout);
+
+    const evoText = await evoRes.text();
+    let evoData: any = {};
+    try { evoData = JSON.parse(evoText); } catch {
+      // Evolution API may return HTML when cold starting
+      console.error("[create-whatsapp-instance] non-JSON response:", evoText.slice(0, 200));
+      return json({ error: "Evolution API retornou resposta inválida — servidor pode estar iniciando. Tente novamente em 30s." }, 502);
+    }
+
     const qrCode = evoData?.qrcode?.base64 || null;
 
-    // If instance already exists in Evolution, try to connect
-    if (!evoRes.ok && evoRes.status === 403) {
-      // Instance may already exist, try getting QR
+    // If instance already exists in Evolution (409 or 403), try to connect
+    if (!evoRes.ok && (evoRes.status === 403 || evoRes.status === 409)) {
       const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
         headers: { apikey: EVOLUTION_KEY },
       });
@@ -90,6 +111,11 @@ Deno.serve(async (req) => {
       }, { onConflict: "instance_name" });
 
       return json({ instance_name: instanceName, qr_code: existingQr, status: "connecting" });
+    }
+
+    if (!evoRes.ok) {
+      console.error("[create-whatsapp-instance] Evolution error:", evoRes.status, evoData);
+      return json({ error: `Evolution API error: ${evoData?.message || evoRes.status}` }, evoRes.status >= 500 ? 502 : 400);
     }
 
     // Save to DB
