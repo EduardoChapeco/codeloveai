@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T20:25:00Z
+updated_at: 2026-03-01T21:15:00Z
 status: done
-task: Fix WhatsApp instance creation - CORS headers and Evolution API error handling
+task: Analyzed extension edge function chain - send-message is the active proxy used by Speed extension
 ---
