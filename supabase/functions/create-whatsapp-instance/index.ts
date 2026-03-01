@@ -115,24 +115,29 @@ Deno.serve(async (req) => {
     }
 
     if (!createRes.ok && !recoveredExistingInstance && !alreadyExists) {
-      if (isLikelyColdStartHtml(createRes.raw, createRes.contentType)) {
-        return json(
-          {
-            error: "Servidor do WhatsApp iniciando (cold start). Aguarde 30-60s e tente novamente.",
-            endpoint: createRes.endpoint,
-          },
-          502,
-        );
-      }
+      const providerMessage = isLikelyColdStartHtml(createRes.raw, createRes.contentType)
+        ? "Servidor do WhatsApp iniciando (cold start). Aguarde 30-60s e tente novamente."
+        : `Evolution API indisponível no momento (${createRes.status}).`;
 
-      return json(
+      await sc.from("whatsapp_instances").upsert(
         {
-          error: `Evolution API error (${createRes.status})`,
-          endpoint: createRes.endpoint,
-          details: createRes.data || createRes.raw || null,
+          tenant_id: tenantId,
+          user_id: user.id,
+          instance_name: instanceName,
+          status: "failed",
+          qr_code: null,
         },
-        createRes.status >= 500 ? 502 : 400,
+        { onConflict: "instance_name" },
       );
+
+      return json({
+        instance_name: instanceName,
+        status: "failed",
+        qr_code: null,
+        error: providerMessage,
+        endpoint: createRes.endpoint,
+        details: createRes.data || createRes.raw || null,
+      });
     }
 
     let qrCode = extractQr(createRes.data);

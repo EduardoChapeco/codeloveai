@@ -52,7 +52,21 @@ export function useWhatsApp(userId: string, tenantId: string) {
       const { data, error: fnErr } = await supabase.functions.invoke("create-whatsapp-instance", {
         body: { tenant_id: tenantId },
       });
-      if (fnErr) throw new Error(fnErr.message);
+      if (fnErr) {
+        const rawBody = (fnErr as any)?.context?.body;
+        let parsedError: string | null = null;
+
+        if (typeof rawBody === "string") {
+          try {
+            const parsed = JSON.parse(rawBody);
+            if (parsed?.error && typeof parsed.error === "string") parsedError = parsed.error;
+          } catch {
+            parsedError = null;
+          }
+        }
+
+        throw new Error(parsedError || (fnErr as any)?.message || "Falha ao criar instância");
+      }
       if (data?.error) throw new Error(data.error);
       if (data?.qr_code) setQrCode(data.qr_code);
       if (data?.instance_name) setInstanceName(data.instance_name);
