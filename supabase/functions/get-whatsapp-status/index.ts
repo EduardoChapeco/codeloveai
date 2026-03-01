@@ -47,6 +47,16 @@ Deno.serve(async (req) => {
     const safeName = instanceNameRaw.replace(/[^a-zA-Z0-9_-]/g, "");
     if (!safeName) return json({ error: "instance_name invalid" }, 400);
 
+    const sc = createClient(supabaseUrl, serviceRole);
+    const { data: ownedInstance } = await sc
+      .from("whatsapp_instances")
+      .select("instance_name")
+      .eq("instance_name", safeName)
+      .eq("user_id", userData.user.id)
+      .maybeSingle();
+
+    if (!ownedInstance) return json({ error: "Forbidden" }, 403);
+
     const EVOLUTION_URL = (Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
     const EVOLUTION_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
@@ -82,7 +92,7 @@ Deno.serve(async (req) => {
         qr_code: null,
         phone_number: phone,
         updated_at: new Date().toISOString(),
-      }).eq("instance_name", safeName);
+      }).eq("instance_name", safeName).eq("user_id", userData.user.id);
 
       return json({ status: "connected", qr_code: null, phone_number: phone });
     }
@@ -92,16 +102,36 @@ Deno.serve(async (req) => {
       method: "GET",
       endpoints: [
         `/instance/connect/${safeName}`,
+        `/instance/connect/${safeName}/`,
         `/api/instance/connect/${safeName}`,
+        `/v2/instance/connect/${safeName}`,
       ],
       timeoutMs: 25000,
     });
 
     console.log(`[get-whatsapp-status] connect ${connectRes.endpoint} -> ${connectRes.status} | raw: ${connectRes.raw.slice(0, 500)}`);
-    
+
     qrCode = qrCode || extractQr(connectRes.data);
     if (mapConnectionState(connectRes.data) === "connected") status = "connected";
     phone = phone || pickPhone(connectRes.data);
+
+    // Step 2.1: dedicated QR endpoints (some Evolution builds only expose QR here)
+    if (!qrCode && status !== "connected") {
+      const qrRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
+        method: "GET",
+        endpoints: [
+          `/instance/qrcode/${safeName}`,
+          `/api/instance/qrcode/${safeName}`,
+          `/v2/instance/qrcode/${safeName}`,
+          `/instance/qrCode/${safeName}`,
+          `/v2/instance/qrCode/${safeName}`,
+        ],
+        timeoutMs: 20000,
+      });
+
+      console.log(`[get-whatsapp-status] qrcode ${qrRes.endpoint} -> ${qrRes.status} | raw: ${qrRes.raw.slice(0, 300)}`);
+      qrCode = qrCode || extractQr(qrRes.data);
+    }
 
     // Step 3: Resolve state without forcing false "disconnected" while Evolution is still bootstrapping QR
     const probeWorked = stateRes.ok || connectRes.ok;
@@ -126,7 +156,7 @@ Deno.serve(async (req) => {
       qr_code: resolvedStatus === "connected" ? null : qrCode,
       phone_number: resolvedStatus === "connected" ? phone : null,
       updated_at: new Date().toISOString(),
-    }).eq("instance_name", safeName);
+      }).eq("instance_name", safeName).eq("user_id", userData.user.id);
 
     return json({
       status: resolvedStatus,
