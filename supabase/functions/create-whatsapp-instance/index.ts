@@ -1,10 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import {
-  extractQr,
-  isLikelyColdStartHtml,
-  mapConnectionState,
-  requestEvolution,
-} from "../_shared/evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,25 +11,6 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-function sanitizeEvolutionRaw(raw: string): string {
-  if (!raw) return "";
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      const clone = structuredClone(parsed) as Record<string, unknown>;
-      if (typeof clone.hash === "string") clone.hash = "[redacted]";
-      if (typeof clone.token === "string") clone.token = "[redacted]";
-      if (typeof clone.accessTokenWaBusiness === "string" && clone.accessTokenWaBusiness) {
-        clone.accessTokenWaBusiness = "[redacted]";
-      }
-      return JSON.stringify(clone);
-    }
-    return raw;
-  } catch {
-    return raw;
-  }
 }
 
 Deno.serve(async (req) => {
@@ -85,10 +60,10 @@ Deno.serve(async (req) => {
 
     const instanceName = `starcrm_${user.id.replace(/-/g, "").slice(0, 8)}`;
 
-    // Check if instance already connected
+    // Check if already connected
     const { data: existing } = await sc
       .from("whatsapp_instances")
-      .select("instance_name, status, qr_code")
+      .select("instance_name, status")
       .eq("tenant_id", tenantId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -97,94 +72,69 @@ Deno.serve(async (req) => {
       return json({ instance_name: existing.instance_name, status: "connected", qr_code: null });
     }
 
-    // STEP 1: Always delete old instance from Evolution first to avoid stuck state
-    console.log(`[create-whatsapp-instance] Deleting old instance ${instanceName} from Evolution...`);
-    const deleteRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
-      method: "DELETE" as any,
-      endpoints: [
-        `/instance/delete/${instanceName}`,
-        `/api/instance/delete/${instanceName}`,
-        `/v2/instance/delete/${instanceName}`,
-      ],
-      timeoutMs: 15000,
-    });
-    console.log(`[create-whatsapp-instance] Delete ${deleteRes.endpoint} -> ${deleteRes.status}`);
+    // STEP 1: Delete old instance (ignore errors)
+    console.log(`[create-wa] Deleting ${instanceName}...`);
+    await fetch(`${EVOLUTION_URL}/instance/delete/${instanceName}`, {
+      method: "DELETE",
+      headers: { "apikey": EVOLUTION_KEY },
+    }).catch(() => {});
 
-    // Small delay to let Evolution clean up
+    // STEP 2: Wait 2s
     await new Promise(r => setTimeout(r, 2000));
 
-    // STEP 2: Create fresh instance
-    const createRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
+    // STEP 3: Create instance
+    console.log(`[create-wa] Creating ${instanceName}...`);
+    const createRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
       method: "POST",
-      endpoints: ["/instance/create", "/api/instance/create", "/v2/instance/create"],
-      timeoutMs: 58000,
-      body: {
+      headers: { "Content-Type": "application/json", "apikey": EVOLUTION_KEY },
+      body: JSON.stringify({
         instanceName,
         qrcode: true,
         integration: "WHATSAPP-BAILEYS",
-        token: EVOLUTION_KEY,
-      },
+      }),
     });
+    const createRaw = await createRes.text().catch(() => "");
+    console.log(`[create-wa] Create -> ${createRes.status} | ${createRaw.slice(0, 300)}`);
 
-    console.log(`[create-whatsapp-instance] Create ${createRes.endpoint} -> ${createRes.status} | raw: ${sanitizeEvolutionRaw(createRes.raw).slice(0, 500)}`);
+    // STEP 4: Wait 4s for Baileys to initialize
+    await new Promise(r => setTimeout(r, 4000));
 
-    if (!createRes.ok && createRes.status !== 409) {
-      if (isLikelyColdStartHtml(createRes.raw, createRes.contentType)) {
-        await sc.from("whatsapp_instances").upsert(
-          { tenant_id: tenantId, user_id: user.id, instance_name: instanceName, status: "failed", qr_code: null },
-          { onConflict: "instance_name" },
-        );
-        return json({
-          instance_name: instanceName, status: "failed", qr_code: null,
-          error: "Servidor do WhatsApp iniciando (cold start). Aguarde 30-60s e tente novamente.",
-        });
-      }
-    }
+    // STEP 5-8: Poll GET /instance/connect/{instanceName} up to 5 times
+    let qrCode: string | null = null;
+    let finalStatus = "connecting";
 
-    // STEP 3: Extract QR from create response
-    let qrCode = extractQr(createRes.data);
-    let finalState = mapConnectionState(createRes.data);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
 
-    // STEP 4: If no QR yet, retry /instance/connect/ a few times (Render cold starts can delay QR emission)
-    if (!qrCode && finalState !== "connected") {
-      for (let attempt = 0; attempt < 3 && !qrCode && finalState !== "connected"; attempt++) {
-        await new Promise(r => setTimeout(r, 1500));
-
-        const connectRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
-          method: "GET",
-          endpoints: [
-            `/instance/connect/${instanceName}`,
-            `/instance/connect/${instanceName}/`,
-            `/api/instance/connect/${instanceName}`,
-            `/v2/instance/connect/${instanceName}`,
-          ],
-          timeoutMs: 35000,
-        });
-
-        console.log(`[create-whatsapp-instance] Connect ${connectRes.endpoint} -> ${connectRes.status} | raw: ${sanitizeEvolutionRaw(connectRes.raw).slice(0, 500)}`);
-        qrCode = qrCode || extractQr(connectRes.data);
-        if (mapConnectionState(connectRes.data) === "connected") finalState = "connected";
-      }
-    }
-
-    // STEP 5: If still no QR, try dedicated QR endpoint
-    if (!qrCode && finalState !== "connected") {
-      const qrRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
+      console.log(`[create-wa] Connect attempt ${attempt + 1}...`);
+      const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
         method: "GET",
-        endpoints: [
-          `/instance/qrcode/${instanceName}`,
-          `/api/instance/qrcode/${instanceName}`,
-          `/v2/instance/qrcode/${instanceName}`,
-          `/instance/qrCode/${instanceName}`,
-          `/v2/instance/qrCode/${instanceName}`,
-        ],
-        timeoutMs: 20000,
-      });
-      console.log(`[create-whatsapp-instance] QR ${qrRes.endpoint} -> ${qrRes.status} | raw: ${sanitizeEvolutionRaw(qrRes.raw).slice(0, 300)}`);
-      qrCode = extractQr(qrRes.data);
+        headers: { "apikey": EVOLUTION_KEY },
+      }).catch(() => null);
+
+      const raw = await connectRes?.text().catch(() => "") || "";
+      console.log(`[create-wa] Connect -> ${connectRes?.status} | ${raw.slice(0, 300)}`);
+
+      let data: any = {};
+      try { data = JSON.parse(raw); } catch { /* ignore */ }
+
+      if (data?.instance?.state === "open") {
+        finalStatus = "connected";
+        qrCode = null;
+        break;
+      }
+
+      if (data?.base64) {
+        qrCode = data.base64;
+        finalStatus = "connecting";
+        break;
+      }
+
+      // count=0 means QR not ready yet, keep retrying
+      console.log(`[create-wa] No QR yet (count=${data?.qrcode?.count}), retrying...`);
     }
 
-    const persistedStatus = finalState === "connected" ? "connected" : qrCode ? "connecting" : "connecting";
+    const persistedStatus = finalStatus === "connected" ? "connected" : qrCode ? "connecting" : "connecting";
 
     await sc.from("whatsapp_instances").upsert(
       {
@@ -192,18 +142,18 @@ Deno.serve(async (req) => {
         user_id: user.id,
         instance_name: instanceName,
         status: persistedStatus,
-        qr_code: finalState === "connected" ? null : qrCode,
+        qr_code: finalStatus === "connected" ? null : qrCode,
       },
       { onConflict: "instance_name" },
     );
 
     return json({
       instance_name: instanceName,
-      qr_code: finalState === "connected" ? null : qrCode,
-      status: persistedStatus,
+      qr_code: finalStatus === "connected" ? null : qrCode,
+      status: finalStatus,
     });
   } catch (err) {
-    console.error("[create-whatsapp-instance] fatal:", err);
+    console.error("[create-wa] fatal:", err);
     return json({ error: "Internal error" }, 500);
   }
 });
