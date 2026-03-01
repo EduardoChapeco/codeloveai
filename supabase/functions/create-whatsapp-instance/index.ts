@@ -19,6 +19,25 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function sanitizeEvolutionRaw(raw: string): string {
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      const clone = structuredClone(parsed) as Record<string, unknown>;
+      if (typeof clone.hash === "string") clone.hash = "[redacted]";
+      if (typeof clone.token === "string") clone.token = "[redacted]";
+      if (typeof clone.accessTokenWaBusiness === "string" && clone.accessTokenWaBusiness) {
+        clone.accessTokenWaBusiness = "[redacted]";
+      }
+      return JSON.stringify(clone);
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -107,7 +126,7 @@ Deno.serve(async (req) => {
       },
     });
 
-    console.log(`[create-whatsapp-instance] Create ${createRes.endpoint} -> ${createRes.status} | raw: ${createRes.raw.slice(0, 500)}`);
+    console.log(`[create-whatsapp-instance] Create ${createRes.endpoint} -> ${createRes.status} | raw: ${sanitizeEvolutionRaw(createRes.raw).slice(0, 500)}`);
 
     if (!createRes.ok && createRes.status !== 409) {
       if (isLikelyColdStartHtml(createRes.raw, createRes.contentType)) {
@@ -140,7 +159,7 @@ Deno.serve(async (req) => {
         timeoutMs: 35000,
       });
 
-      console.log(`[create-whatsapp-instance] Connect ${connectRes.endpoint} -> ${connectRes.status} | raw: ${connectRes.raw.slice(0, 500)}`);
+      console.log(`[create-whatsapp-instance] Connect ${connectRes.endpoint} -> ${connectRes.status} | raw: ${sanitizeEvolutionRaw(connectRes.raw).slice(0, 500)}`);
       qrCode = qrCode || extractQr(connectRes.data);
       if (mapConnectionState(connectRes.data) === "connected") finalState = "connected";
     }
@@ -152,11 +171,13 @@ Deno.serve(async (req) => {
         endpoints: [
           `/instance/qrcode/${instanceName}`,
           `/api/instance/qrcode/${instanceName}`,
+          `/v2/instance/qrcode/${instanceName}`,
           `/instance/qrCode/${instanceName}`,
+          `/v2/instance/qrCode/${instanceName}`,
         ],
         timeoutMs: 20000,
       });
-      console.log(`[create-whatsapp-instance] QR ${qrRes.endpoint} -> ${qrRes.status} | raw: ${qrRes.raw.slice(0, 300)}`);
+      console.log(`[create-whatsapp-instance] QR ${qrRes.endpoint} -> ${qrRes.status} | raw: ${sanitizeEvolutionRaw(qrRes.raw).slice(0, 300)}`);
       qrCode = extractQr(qrRes.data);
     }
 

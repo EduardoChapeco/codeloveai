@@ -103,26 +103,28 @@ Deno.serve(async (req) => {
     if (mapConnectionState(connectRes.data) === "connected") status = "connected";
     phone = phone || pickPhone(connectRes.data);
 
-    // Step 3: If instance is "connecting" on Evolution side but no QR, it's stuck
-    // Mark as disconnected so user can click "Create Instance" again (which deletes + recreates)
-    let resolvedStatus: string;
+    // Step 3: Resolve state without forcing false "disconnected" while Evolution is still bootstrapping QR
+    const probeWorked = stateRes.ok || connectRes.ok;
+    let resolvedStatus: "connected" | "connecting" | "disconnected" | "failed";
+
     if (status === "connected") {
       resolvedStatus = "connected";
     } else if (qrCode) {
       resolvedStatus = "connecting";
-    } else if (isEvolutionConnecting) {
-      // Instance exists on Evolution but stuck with no QR - mark disconnected to allow retry
-      console.log(`[get-whatsapp-status] Instance ${safeName} is stuck in 'connecting' with no QR. Marking disconnected for retry.`);
-      resolvedStatus = "disconnected";
+    } else if (isEvolutionConnecting || probeWorked) {
+      // Evolution is alive and instance is still negotiating session/QR, keep waiting
+      resolvedStatus = "connecting";
+    } else if (stateRes.status >= 500 && connectRes.status >= 500) {
+      resolvedStatus = "failed";
     } else {
-      resolvedStatus = "connecting"; // API responded but we might just need to wait
+      resolvedStatus = "disconnected";
     }
 
     const sc = createClient(supabaseUrl, serviceRole);
     await sc.from("whatsapp_instances").update({
       status: resolvedStatus,
       qr_code: resolvedStatus === "connected" ? null : qrCode,
-      phone_number: status === "connected" ? phone : null,
+      phone_number: resolvedStatus === "connected" ? phone : null,
       updated_at: new Date().toISOString(),
     }).eq("instance_name", safeName);
 

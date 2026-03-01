@@ -105,6 +105,12 @@ export function useWhatsApp(userId: string, tenantId: string) {
           return;
         }
 
+        if (data?.status === "disconnected") {
+          setStatus("disconnected");
+          setQrCode(null);
+          return;
+        }
+
         if (data?.status === "connecting") {
           setStatus("connecting");
         }
