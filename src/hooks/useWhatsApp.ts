@@ -37,7 +37,8 @@ export function useWhatsApp(userId: string, tenantId: string) {
       if (data?.status === "connected") setStatus("connected");
       else setStatus("connecting");
     } catch (err: any) {
-      setError(err.message || "Erro ao criar instância");
+      setError(err?.message || "Erro ao criar instância");
+      setStatus("disconnected");
     }
     setLoading(false);
   }, [tenantId]);
@@ -51,18 +52,26 @@ export function useWhatsApp(userId: string, tenantId: string) {
 
     const poll = async () => {
       try {
-        const { data } = await supabase.functions.invoke("get-whatsapp-status", {
+        const { data, error: pollErr } = await supabase.functions.invoke("get-whatsapp-status", {
           body: { instance_name: instanceName },
         });
+
+        if (pollErr) return;
         if (data?.status === "connected") {
           setStatus("connected");
           setQrCode(null);
-        } else if (data?.qr_code) {
+          return;
+        }
+
+        if (data?.qr_code) {
           setQrCode(data.qr_code);
         }
-      } catch { /* ignore polling errors */ }
+      } catch {
+        // ignore polling errors to keep retrying silently
+      }
     };
 
+    void poll();
     intervalRef.current = setInterval(poll, 6000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [instanceName, status]);

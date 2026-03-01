@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, forwardRef, type HTMLAttributes } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -85,6 +85,22 @@ interface QueueMessage {
 }
 
 type CrmView = "kanban" | "contacts" | "campaigns" | "lists" | "whatsapp" | "metrics";
+
+const GlassCard = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+  ({ children, className = "", onClick, ...props }, ref) => (
+    <div
+      ref={ref}
+      onClick={onClick}
+      className={`rounded-2xl border border-white/[0.06] ${onClick ? "cursor-pointer hover:border-white/[0.12] hover:bg-white/[0.03]" : ""} transition-all ${className}`}
+      style={{ background: "rgba(255,255,255,0.02)", backdropFilter: "blur(40px) saturate(180%)" }}
+      {...props}
+    >
+      {children}
+    </div>
+  ),
+);
+
+GlassCard.displayName = "GlassCard";
 
 const PIPELINE_STAGES = [
   { id: "lead", label: "Leads", icon: Users, color: "from-blue-500/20 to-blue-600/10", accent: "text-blue-400", border: "border-blue-500/20", bg: "bg-blue-500/10" },
@@ -440,13 +456,6 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
     !search || c.phone.includes(search) || c.name?.toLowerCase().includes(search.toLowerCase()) || c.company?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ═══ Shared UI ═══
-  const GlassCard = ({ children, className = "", onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) => (
-    <div onClick={onClick} className={`rounded-2xl border border-white/[0.06] ${onClick ? "cursor-pointer hover:border-white/[0.12] hover:bg-white/[0.03]" : ""} transition-all ${className}`}
-      style={{ background: "rgba(255,255,255,0.02)", backdropFilter: "blur(40px) saturate(180%)" }}>
-      {children}
-    </div>
-  );
 
   const StageBadge = ({ stage }: { stage: string }) => {
     const s = PIPELINE_STAGES.find(p => p.id === stage) || PIPELINE_STAGES[0];
