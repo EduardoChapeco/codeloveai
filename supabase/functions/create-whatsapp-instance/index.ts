@@ -145,23 +145,26 @@ Deno.serve(async (req) => {
     let qrCode = extractQr(createRes.data);
     let finalState = mapConnectionState(createRes.data);
 
-    // STEP 4: If no QR yet, try /instance/connect/ endpoint
+    // STEP 4: If no QR yet, retry /instance/connect/ a few times (Render cold starts can delay QR emission)
     if (!qrCode && finalState !== "connected") {
-      await new Promise(r => setTimeout(r, 1500));
+      for (let attempt = 0; attempt < 3 && !qrCode && finalState !== "connected"; attempt++) {
+        await new Promise(r => setTimeout(r, 1500));
 
-      const connectRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
-        method: "GET",
-        endpoints: [
-          `/instance/connect/${instanceName}`,
-          `/api/instance/connect/${instanceName}`,
-          `/v2/instance/connect/${instanceName}`,
-        ],
-        timeoutMs: 35000,
-      });
+        const connectRes = await requestEvolution(EVOLUTION_URL, EVOLUTION_KEY, {
+          method: "GET",
+          endpoints: [
+            `/instance/connect/${instanceName}`,
+            `/instance/connect/${instanceName}/`,
+            `/api/instance/connect/${instanceName}`,
+            `/v2/instance/connect/${instanceName}`,
+          ],
+          timeoutMs: 35000,
+        });
 
-      console.log(`[create-whatsapp-instance] Connect ${connectRes.endpoint} -> ${connectRes.status} | raw: ${sanitizeEvolutionRaw(connectRes.raw).slice(0, 500)}`);
-      qrCode = qrCode || extractQr(connectRes.data);
-      if (mapConnectionState(connectRes.data) === "connected") finalState = "connected";
+        console.log(`[create-whatsapp-instance] Connect ${connectRes.endpoint} -> ${connectRes.status} | raw: ${sanitizeEvolutionRaw(connectRes.raw).slice(0, 500)}`);
+        qrCode = qrCode || extractQr(connectRes.data);
+        if (mapConnectionState(connectRes.data) === "connected") finalState = "connected";
+      }
     }
 
     // STEP 5: If still no QR, try dedicated QR endpoint
