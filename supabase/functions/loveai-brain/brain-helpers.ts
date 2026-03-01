@@ -309,7 +309,7 @@ async function injectSkills(
 
     try {
       // Route skill injection through venus-chat (task mode)
-      const result = await sendViaBrain(projectId, token, prompts[i], supabaseUrl, serviceKey);
+      const result = await sendViaBrain(projectId, token, prompts[i], supabaseUrl, serviceKey, { skipSuffix: true });
 
       if (!result.ok) {
         console.error(`[Brain] Skill phase ${phase} failed: ${result.status} ${result.error || ""}`);
@@ -486,6 +486,7 @@ export async function sendViaBrain(
   message: string,
   supabaseUrl: string,
   serviceKey: string,
+  options?: { skipSuffix?: boolean },
 ): Promise<{ ok: boolean; status?: number; error?: string }> {
   const url = `${supabaseUrl}/functions/v1/venus-chat`;
   const res = await fetch(url, {
@@ -499,6 +500,7 @@ export async function sendViaBrain(
       project_id: projectId,
       mode: "task",
       lovable_token: token,
+      skip_suffix: options?.skipSuffix ?? false,
     }),
   });
   const data = await res.json().catch(() => ({}));

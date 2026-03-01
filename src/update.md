@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-01T19:52:00Z
+updated_at: 2026-03-01T20:05:00Z
 status: done
-task: security scan review and build validation post-render deploy
+task: venus-chat skip_suffix flag para separar prompts de bootstrap vs user messages
 ---
