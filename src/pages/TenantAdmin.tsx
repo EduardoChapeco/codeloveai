@@ -328,21 +328,6 @@ export default function TenantAdmin() {
     toast.success("PIX gerado!");
   };
 
-  if (authLoading || tenantLoading || loading) {
-    return (
-      <AppLayout>
-        <div className="min-h-full flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            </div>
-            <p className="text-xs text-muted-foreground">Carregando painel...</p>
-          </div>
-        </div>
-      </AppLayout>
-    );
-  }
-
   const previewUrlRef = useRef("");
 
   const buildPreviewUrl = useCallback(() => {
@@ -386,6 +371,21 @@ export default function TenantAdmin() {
     setStablePreviewUrl(buildPreviewUrl());
     setPreviewKey(k => k + 1);
   };
+
+  if (authLoading || tenantLoading || loading) {
+    return (
+      <AppLayout>
+        <div className="min-h-full flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+            <p className="text-xs text-muted-foreground">Carregando painel...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   // ── Glass Card wrapper ──
   const GlassCard = ({ children, className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) => (
