@@ -220,6 +220,10 @@ Deno.serve(async (req: Request) => {
   const projectId = ((body.project_id as string) || (body.projectId as string) || "").trim();
   const mode = ((body.mode as string) || "task_error").trim();
   const files = Array.isArray(body.files) ? body.files : [];
+  // skip_suffix: when true, do NOT append UPDATE_MD_PROMPT (used by extension chat, ghost create)
+  const skipSuffix = body.skip_suffix === true || body.skipSuffix === true;
+  // skip_prefix: when true, do NOT prepend ANTI_Q (rare, for raw passthrough)
+  const skipPrefix = body.skip_prefix === true || body.skipPrefix === true;
 
   if (!task) return json({ ok: false, error: "task/message is required" }, 400);
   if (!projectId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId))
@@ -246,7 +250,7 @@ Deno.serve(async (req: Request) => {
 
   const payload = {
     id: msgId,
-    message: ANTI_Q + task + UPDATE_MD_PROMPT,
+    message: (skipPrefix ? "" : ANTI_Q) + task + (skipSuffix ? "" : UPDATE_MD_PROMPT),
     intent: modeConfig.intent,
     chat_only: modeConfig.chat_only,
     ai_message_id: aiMsgId,

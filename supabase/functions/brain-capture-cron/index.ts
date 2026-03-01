@@ -296,7 +296,7 @@ async function sendViaVenus(projectId: string, prompt: string, token: string, su
       method: "POST",
       signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({ task: prompt, project_id: projectId, mode: "task", lovable_token: token }),
+      body: JSON.stringify({ task: prompt, project_id: projectId, mode: "task", lovable_token: token, skip_suffix: true }),
     });
     clearTimeout(timer);
     const text = await res.text().catch(() => "{}");

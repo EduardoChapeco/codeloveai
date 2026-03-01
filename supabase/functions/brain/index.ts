@@ -910,6 +910,7 @@ async function sendViaVenus(
   projectId: string,
   prompt: string,
   token: string,
+  skipSuffix = true,
 ): Promise<{ ok: boolean; msgId?: string; error?: string }> {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -929,6 +930,7 @@ async function sendViaVenus(
         project_id: projectId,
         mode: "task",
         lovable_token: token,
+        skip_suffix: skipSuffix,
       }),
     });
     clearTimeout(timer);
@@ -1900,7 +1902,7 @@ Deno.serve(async (req) => {
       // Send via venus-chat
       let activeProjectId = brainProjectId;
       let activeLovableToken = lovableToken;
-      let venusResult = await sendViaVenus(activeProjectId, prompt, activeLovableToken);
+      let venusResult = await sendViaVenus(activeProjectId, prompt, activeLovableToken, false);
 
       if (!venusResult.ok) {
         const is404 = venusResult.error?.includes("404");
@@ -1915,14 +1917,14 @@ Deno.serve(async (req) => {
           activeProjectId = newBrain.projectId;
           if (convoId) await sc.from("loveai_conversations").update({ target_project_id: activeProjectId }).eq("id", convoId);
           await new Promise(r => setTimeout(r, 5000));
-          venusResult = await sendViaVenus(activeProjectId, prompt, activeLovableToken);
+          venusResult = await sendViaVenus(activeProjectId, prompt, activeLovableToken, false);
         }
 
         if (!venusResult.ok) {
           const refreshed = await refreshToken(sc, userId);
           if (refreshed) {
             activeLovableToken = refreshed;
-            const retry = await sendViaVenus(activeProjectId, prompt, activeLovableToken);
+            const retry = await sendViaVenus(activeProjectId, prompt, activeLovableToken, false);
             if (!retry.ok) {
               if (convoId) await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", convoId);
               return json({ error: `Erro ao enviar: ${retry.error}` }, 502);
