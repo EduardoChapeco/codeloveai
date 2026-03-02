@@ -1,296 +1,380 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Rocket, BarChart3, ShoppingCart, Settings, Briefcase, Puzzle,
+  Link as LinkIcon, ChevronDown, Zap, Database, Shield, CreditCard,
+  HardDrive, Clock, ArrowRight, Layers, Code2, Cpu, Globe,
+} from "lucide-react";
+import { classifyIntent, generatePRDTasks, type ProjectBlueprint, type PRDTask } from "@/lib/cirius/intentClassifier";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import {
-  ArrowUp, Loader2, CheckCircle2, Sparkles, Cpu,
-  Code2, Eye, Rocket, Github, FolderDown, X,
-} from "lucide-react";
-import "@/styles/cirius-editor.css";
 
-/* ─── Phases for the creation timeline ─── */
-type Phase = "idle" | "creating" | "prd" | "dispatching" | "generating" | "done";
-
-const PHASE_META: Record<Phase, { label: string; sub: string }> = {
-  idle: { label: "", sub: "" },
-  creating: { label: "Criando projeto", sub: "Inicializando ambiente..." },
-  prd: { label: "Gerando PRD", sub: "Analisando requisitos e planejando tarefas..." },
-  dispatching: { label: "Distribuindo tarefas", sub: "Enviando para Brains especializados..." },
-  generating: { label: "Gerando código", sub: "Brains trabalhando em paralelo..." },
-  done: { label: "Projeto criado!", sub: "Redirecionando para o editor..." },
+const ENGINE_LABELS: Record<string, { label: string; desc: string }> = {
+  brainchain: { label: "Brainchain", desc: "Pool rápido — geração instantânea" },
+  brain: { label: "Brain", desc: "IA pessoal — código especializado" },
+  orchestrator: { label: "Orchestrator", desc: "Multi-task — projetos complexos" },
 };
 
-const SUGGESTIONS = [
-  "Um SaaS de gestão de projetos com Kanban, auth, dashboard e dark mode",
-  "Landing page para startup de IA com hero animado, pricing e CTA",
-  "CRM completo com login OAuth, CRUD de contatos, pipeline de vendas e relatórios",
-  "E-commerce com catálogo, carrinho, checkout e painel admin",
+const INTENT_LABELS: Record<string, string> = {
+  landing_page: "Landing Page",
+  marketing_site: "Site Institucional",
+  crud_system: "Sistema CRUD",
+  dashboard: "Dashboard",
+  ecommerce: "E-commerce",
+  saas_app: "SaaS App",
+  api_only: "API / Backend",
+  component: "Componente UI",
+  custom: "Projeto Customizado",
+};
+
+const TEMPLATES = [
+  {
+    icon: Rocket,
+    label: "Landing Page",
+    prompt: "Crie uma landing page moderna e responsiva com hero section, features, depoimentos e CTA. Design clean e profissional.",
+  },
+  {
+    icon: BarChart3,
+    label: "Dashboard",
+    prompt: "Crie um dashboard de analytics com gráficos de vendas, métricas de usuários, tabelas de dados recentes e filtros por período.",
+  },
+  {
+    icon: ShoppingCart,
+    label: "E-commerce",
+    prompt: "Crie uma loja online com catálogo de produtos, carrinho de compras, checkout e painel de gerenciamento de pedidos.",
+  },
+  {
+    icon: Settings,
+    label: "Sistema CRUD",
+    prompt: "Crie um sistema de gerenciamento com cadastro, listagem, edição e exclusão. Inclua autenticação e filtros de busca.",
+  },
+  {
+    icon: Briefcase,
+    label: "SaaS App",
+    prompt: "Crie um aplicativo SaaS com autenticação, planos de assinatura, dashboard do usuário, billing e painel administrativo.",
+  },
+  {
+    icon: Puzzle,
+    label: "Componente UI",
+    prompt: "Crie um componente de UI reutilizável com variações, estados interativos, animações e documentação de uso.",
+  },
 ];
 
 export default function CiriusNew() {
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [prompt, setPrompt] = useState("");
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [projectName, setProjectName] = useState("");
-  const [taskCount, setTaskCount] = useState(0);
-  const [prdData, setPrdData] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [phaseHistory, setPhaseHistory] = useState<Phase[]>([]);
+  const [deployGithub, setDeployGithub] = useState(true);
+  const [deployVercel, setDeployVercel] = useState(false);
+  const [createSupabase, setCreateSupabase] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  const isRunning = phase !== "idle" && phase !== "done";
+  const [blueprint, setBlueprint] = useState<ProjectBlueprint | null>(null);
+  const [prdTasks, setPrdTasks] = useState<PRDTask[]>([]);
 
-  const advancePhase = useCallback((p: Phase) => {
-    setPhase(p);
-    setPhaseHistory(prev => [...prev, p]);
-  }, []);
+  // Debounced classification
+  useEffect(() => {
+    if (!prompt.trim() || prompt.trim().length < 5) {
+      setBlueprint(null);
+      setPrdTasks([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const bp = classifyIntent(prompt);
+      setBlueprint(bp);
+      setPrdTasks(generatePRDTasks(prompt, bp));
+      setCreateSupabase(bp.needsDatabase);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [prompt]);
 
-  /* ─── Auto-resize textarea ─── */
-  const handleInput = useCallback(() => {
-    const el = taRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 160) + "px";
-  }, []);
+  const estimatedTime = useMemo(() => {
+    if (!blueprint) return null;
+    const mins = blueprint.estimatedTasks * 1.5;
+    return mins < 2 ? "~1 min" : `~${Math.round(mins)} min`;
+  }, [blueprint]);
 
-  /* ─── Full auto pipeline ─── */
-  const handleCreate = useCallback(async (text: string) => {
-    if (!text.trim() || !user) return;
-    const msg = text.trim();
-    setPrompt(msg);
-    setError(null);
-    setPhaseHistory([]);
+  const handleGenerate = useCallback(async () => {
+    if (!prompt.trim()) return toast.error("Descreva o que você quer criar");
+    if (!user) return toast.error("Faça login para continuar");
 
-    // Derive name from prompt
-    const name = msg.length > 40 ? msg.slice(0, 40).replace(/\s+\S*$/, "") + "..." : msg;
-    setProjectName(name);
-
+    setLoading(true);
     try {
-      // Phase 1: Create project
-      advancePhase("creating");
+      const name = projectName.trim() || `Projeto ${new Date().toLocaleDateString("pt-BR")}`;
 
-      const { data: initData, error: initErr } = await supabase.functions.invoke("cirius-generate", {
+      const { data, error } = await supabase.functions.invoke("cirius-generate", {
         body: {
-          action: "init",
+          action: "start",
+          user_prompt: prompt,
+          project_name: name,
+          source_url: sourceUrl || undefined,
           config: {
-            name: name.slice(0, 60),
-            description: msg,
-            template_type: "app",
-            features: [],
+            deploy_github: deployGithub,
+            deploy_vercel: deployVercel,
+            create_supabase: createSupabase,
           },
         },
       });
 
-      if (initErr || !initData?.project_id) {
-        throw new Error(initData?.error || "Erro ao criar projeto");
-      }
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Erro ao iniciar geração");
 
-      const projectId = initData.project_id;
-
-      // Phase 2: Generate PRD
-      advancePhase("prd");
-
-      const { data: prdResult } = await supabase.functions.invoke("cirius-generate", {
-        body: { action: "generate_prd", project_id: projectId },
-      });
-
-      if (prdResult?.prd_json) {
-        const tc = prdResult.task_count || prdResult.prd_json?.tasks?.length || 0;
-        setTaskCount(tc);
-        setPrdData(prdResult.prd_json);
-
-        // Phase 3: Dispatch tasks
-        advancePhase("dispatching");
-        await new Promise(r => setTimeout(r, 800));
-
-        // Phase 4: Start code generation
-        advancePhase("generating");
-
-        const { data: codeData } = await supabase.functions.invoke("cirius-generate", {
-          body: { action: "generate_code", project_id: projectId },
-        });
-
-        if (codeData?.started) {
-          toast.success(`${tc} tarefas distribuídas para ${codeData.engine || "Brainchain"}`);
-        }
-
-        // Phase 5: Done — redirect
-        advancePhase("done");
-        await new Promise(r => setTimeout(r, 1200));
-        navigate(`/cirius/editor/${projectId}`);
-      } else {
-        // PRD failed, go to editor anyway
-        advancePhase("done");
-        toast.info("PRD pendente — continue no editor");
-        await new Promise(r => setTimeout(r, 600));
-        navigate(`/cirius/editor/${projectId}`);
-      }
+      toast.success("Projeto iniciado!");
+      const pid = data.project_id;
+      if (pid) navigate(`/cirius/editor/${pid}`);
+      else navigate("/cirius");
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : "Erro inesperado";
-      setError(errMsg);
-      setPhase("idle");
-      toast.error(errMsg);
+      toast.error((e as Error).message || "Erro ao gerar projeto");
+    } finally {
+      setLoading(false);
     }
-  }, [user, navigate, advancePhase]);
-
-  const handleKey = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleCreate(prompt);
-    }
-  }, [prompt, handleCreate]);
-
-  if (!user) { navigate("/login"); return null; }
-
-  const allPhases: Phase[] = ["creating", "prd", "dispatching", "generating", "done"];
+  }, [prompt, projectName, sourceUrl, deployGithub, deployVercel, createSupabase, user, navigate]);
 
   return (
-    <div className="cn-root">
-      {/* Ambient background */}
-      <div className="cn-bg">
-        <div className="cn-bg-glow" />
-      </div>
-
-      {/* Centered content */}
-      <div className="cn-center">
-        {/* Logo/brand */}
-        <div className="cn-logo">
-          <div className="cn-logo-icon">
-            <Sparkles size={20} />
+    <div className="min-h-screen" style={{ background: "#08080a" }}>
+      <div className="max-w-7xl mx-auto px-4 py-8 lg:py-12">
+        {/* Header */}
+        <div className="mb-8 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-blue-600/20 flex items-center justify-center">
+            <Zap className="h-5 w-5 text-blue-400" />
           </div>
-          <h1 className="cn-title">Cirius</h1>
-          <p className="cn-subtitle">Descreva o que quer construir</p>
+          <div>
+            <h1 className="text-xl font-semibold text-white tracking-tight" style={{ fontFamily: "Geist, sans-serif" }}>
+              Cirius — Gerador de Projetos
+            </h1>
+            <p className="text-xs text-neutral-500">Descreva sua ideia e gere código funcional em minutos</p>
+          </div>
         </div>
 
-        {/* Running state: timeline */}
-        {phase !== "idle" && (
-          <div className="cn-timeline">
-            <div className="cn-tl-header">
-              {phase === "done" ? (
-                <CheckCircle2 size={14} className="cn-tl-ico-done" />
-              ) : (
-                <Loader2 size={14} className="animate-spin cn-tl-ico-active" />
-              )}
-              <span className="cn-tl-name">{projectName}</span>
-              {taskCount > 0 && (
-                <span className="cn-tl-badge">{taskCount} tarefas</span>
-              )}
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* ── LEFT COLUMN ── */}
+          <div className="lg:col-span-3 space-y-5">
+            {/* Main prompt */}
+            <Card className="border-neutral-800/60 bg-neutral-900/50 p-5 backdrop-blur">
+              <Textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder={`Descreva o que você quer criar...\n\nEx: "Uma landing page moderna para minha startup de IA"\nEx: "Sistema de gerenciamento de clientes com CRUD completo"\nEx: "Dashboard de vendas com gráficos e relatórios"`}
+                className="min-h-[140px] bg-neutral-950/60 border-neutral-800/50 text-sm text-neutral-200 placeholder:text-neutral-600 resize-none focus-visible:ring-blue-500/40"
+              />
+            </Card>
 
-            <div className="cn-tl-steps">
-              {allPhases.map((p, i) => {
-                const meta = PHASE_META[p];
-                const isCurrent = p === phase;
-                const isPast = phaseHistory.includes(p) && !isCurrent;
-                const isFuture = !phaseHistory.includes(p) && !isCurrent;
-
-                return (
-                  <div key={p} className={`cn-tl-step ${isCurrent ? "active" : ""} ${isPast ? "past" : ""} ${isFuture ? "future" : ""}`}>
-                    <div className={`cn-tl-step-ico ${isPast ? "past" : isCurrent ? "active" : ""}`}>
-                      {isPast ? (
-                        <CheckCircle2 size={10} />
-                      ) : isCurrent ? (
-                        <Loader2 size={10} className="animate-spin" />
-                      ) : (
-                        <div className="cn-tl-step-dot" />
-                      )}
-                    </div>
-                    <div className="cn-tl-step-text">
-                      <span className="cn-tl-step-label">{meta.label}</span>
-                      {isCurrent && <span className="cn-tl-step-sub">{meta.sub}</span>}
-                    </div>
-                    {isPast && <span className="cn-tl-check">✓</span>}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* PRD summary */}
-            {prdData?.design && (
-              <div className="cn-tl-prd">
-                {prdData.design.pages?.length > 0 && (
-                  <span className="cn-tl-prd-item">📄 {prdData.design.pages.length} páginas</span>
-                )}
-                {prdData.design.tables?.length > 0 && (
-                  <span className="cn-tl-prd-item">🗃️ {prdData.design.tables.length} tabelas</span>
-                )}
-              </div>
-            )}
-
-            {/* Progress */}
-            <div className="cn-tl-progress">
-              <div
-                className={`cn-tl-progress-fill ${phase === "done" ? "done" : ""}`}
-                style={{
-                  width: `${phase === "creating" ? 15 : phase === "prd" ? 35 : phase === "dispatching" ? 55 : phase === "generating" ? 75 : 100}%`,
-                }}
+            {/* Source URL */}
+            <div className="relative">
+              <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-600" />
+              <Input
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                placeholder="https://site-que-quero-replicar.com (opcional)"
+                className="pl-9 bg-neutral-900/50 border-neutral-800/60 text-sm text-neutral-300 placeholder:text-neutral-600 focus-visible:ring-blue-500/40"
               />
             </div>
-          </div>
-        )}
 
-        {/* Error */}
-        {error && (
-          <div className="cn-error">
-            <X size={12} /> {error}
-          </div>
-        )}
+            {/* Config */}
+            <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-300 transition-colors w-full">
+                  <Settings className="h-3.5 w-3.5" />
+                  <span>Configurações</span>
+                  <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${configOpen ? "rotate-180" : ""}`} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3 space-y-3">
+                <Input
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="Nome do projeto (opcional)"
+                  className="bg-neutral-900/50 border-neutral-800/60 text-sm text-neutral-300 placeholder:text-neutral-600 focus-visible:ring-blue-500/40"
+                />
+                <div className="flex flex-col gap-2.5">
+                  <label className="flex items-center justify-between text-xs text-neutral-400">
+                    <span className="flex items-center gap-2"><Globe className="h-3.5 w-3.5" /> Deploy no GitHub</span>
+                    <Switch checked={deployGithub} onCheckedChange={setDeployGithub} />
+                  </label>
+                  <label className="flex items-center justify-between text-xs text-neutral-400">
+                    <span className="flex items-center gap-2"><Layers className="h-3.5 w-3.5" /> Deploy no Vercel</span>
+                    <Switch checked={deployVercel} onCheckedChange={setDeployVercel} />
+                  </label>
+                  <label className="flex items-center justify-between text-xs text-neutral-400">
+                    <span className="flex items-center gap-2"><Database className="h-3.5 w-3.5" /> Criar banco Supabase</span>
+                    <Switch checked={createSupabase} onCheckedChange={setCreateSupabase} />
+                  </label>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
-        {/* Chat input */}
-        <div className={`cn-input-card ${isRunning ? "disabled" : ""}`}>
-          <textarea
-            ref={taRef}
-            className="cn-textarea"
-            placeholder="Descreva seu projeto completo... ex: Um sistema de gestão com login, CRUD, dashboard e dark mode"
-            value={prompt}
-            onChange={e => { setPrompt(e.target.value); handleInput(); }}
-            onKeyDown={handleKey}
-            rows={1}
-            disabled={isRunning}
-          />
-          <div className="cn-input-footer">
-            <div className="cn-input-hints">
-              <span className="cn-hint">⌘↵ para criar</span>
+            {/* Templates */}
+            <div>
+              <p className="text-xs text-neutral-500 mb-3">Templates Rápidos</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {TEMPLATES.map((t) => (
+                  <button
+                    key={t.label}
+                    onClick={() => setPrompt(t.prompt)}
+                    className="group flex items-center gap-2.5 rounded-lg border border-neutral-800/50 bg-neutral-900/40 px-3 py-2.5 text-left transition hover:border-blue-600/40 hover:bg-blue-600/5"
+                  >
+                    <t.icon className="h-4 w-4 text-neutral-500 group-hover:text-blue-400 shrink-0 transition-colors" />
+                    <span className="text-xs text-neutral-400 group-hover:text-neutral-200 transition-colors">{t.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <button
-              className="cn-send-btn"
-              onClick={() => handleCreate(prompt)}
-              disabled={isRunning || !prompt.trim()}
+
+            {/* Generate button */}
+            <Button
+              onClick={handleGenerate}
+              disabled={loading || !prompt.trim()}
+              className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm gap-2 transition-colors disabled:opacity-40"
             >
-              {isRunning ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={14} />}
-            </button>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Gerando...
+                </span>
+              ) : (
+                <>
+                  Gerar Projeto
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* ── RIGHT COLUMN — Live Preview ── */}
+          <div className="lg:col-span-2 space-y-4">
+            {!blueprint ? (
+              <Card className="border-neutral-800/40 bg-neutral-900/30 p-6 flex flex-col items-center justify-center min-h-[260px] text-center backdrop-blur">
+                <Cpu className="h-8 w-8 text-neutral-700 mb-3" />
+                <p className="text-sm text-neutral-500">
+                  Comece a digitar para ver o blueprint em tempo real
+                </p>
+              </Card>
+            ) : (
+              <>
+                {/* Blueprint Card */}
+                <Card className="border-neutral-800/50 bg-neutral-900/40 p-4 backdrop-blur space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Blueprint Detectado</h3>
+                    {estimatedTime && (
+                      <span className="flex items-center gap-1 text-[11px] text-neutral-500">
+                        <Clock className="h-3 w-3" /> {estimatedTime}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="bg-blue-600/15 text-blue-400 border-blue-600/20 text-xs">
+                      {INTENT_LABELS[blueprint.intent] || blueprint.intent}
+                    </Badge>
+                    <Badge variant="outline" className="text-[11px] text-neutral-500 border-neutral-700/50">
+                      {ENGINE_LABELS[blueprint.suggestedEngine]?.label}
+                    </Badge>
+                  </div>
+
+                  <p className="text-[11px] text-neutral-600">
+                    {ENGINE_LABELS[blueprint.suggestedEngine]?.desc}
+                  </p>
+
+                  {/* Capabilities */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {blueprint.needsDatabase && (
+                      <span className="flex items-center gap-1 text-[11px] text-emerald-400/80 bg-emerald-600/10 rounded px-1.5 py-0.5">
+                        <Database className="h-3 w-3" /> Database
+                      </span>
+                    )}
+                    {blueprint.needsAuth && (
+                      <span className="flex items-center gap-1 text-[11px] text-amber-400/80 bg-amber-600/10 rounded px-1.5 py-0.5">
+                        <Shield className="h-3 w-3" /> Auth
+                      </span>
+                    )}
+                    {blueprint.needsPayments && (
+                      <span className="flex items-center gap-1 text-[11px] text-purple-400/80 bg-purple-600/10 rounded px-1.5 py-0.5">
+                        <CreditCard className="h-3 w-3" /> Payments
+                      </span>
+                    )}
+                    {blueprint.needsStorage && (
+                      <span className="flex items-center gap-1 text-[11px] text-cyan-400/80 bg-cyan-600/10 rounded px-1.5 py-0.5">
+                        <HardDrive className="h-3 w-3" /> Storage
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Tables */}
+                  {blueprint.supabaseTables.length > 0 && (
+                    <div>
+                      <p className="text-[11px] text-neutral-500 mb-1">Tabelas</p>
+                      <div className="flex flex-wrap gap-1">
+                        {blueprint.supabaseTables.map((t) => (
+                          <code key={t} className="text-[10px] bg-neutral-800/60 text-neutral-400 rounded px-1.5 py-0.5">{t}</code>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Features */}
+                  {blueprint.features.length > 0 && (
+                    <div>
+                      <p className="text-[11px] text-neutral-500 mb-1">Features</p>
+                      <div className="flex flex-wrap gap-1">
+                        {blueprint.features.map((f) => (
+                          <Badge key={f} variant="outline" className="text-[10px] text-neutral-500 border-neutral-700/40">{f}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+
+                {/* PRD Tasks */}
+                {prdTasks.length > 0 && (
+                  <Card className="border-neutral-800/50 bg-neutral-900/40 p-4 backdrop-blur space-y-2.5">
+                    <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">O que será gerado</h3>
+                    <div className="space-y-1.5">
+                      {prdTasks.map((task, i) => (
+                        <div key={i} className="flex items-start gap-2.5 text-xs">
+                          <span className="mt-0.5 h-5 w-5 rounded bg-neutral-800/60 flex items-center justify-center text-[10px] text-neutral-500 font-mono shrink-0">
+                            {i + 1}
+                          </span>
+                          <span className="text-neutral-400 leading-relaxed">{task.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Tech Stack */}
+                <Card className="border-neutral-800/50 bg-neutral-900/40 p-4 backdrop-blur space-y-2.5">
+                  <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Stack Técnica</h3>
+                  <div className="space-y-1.5">
+                    {[
+                      { icon: Code2, label: "React + Vite + TypeScript" },
+                      { icon: Layers, label: "Tailwind CSS + shadcn/ui" },
+                      ...(blueprint.needsDatabase ? [{ icon: Database, label: "Supabase (Postgres + Auth)" }] : []),
+                      ...(deployGithub ? [{ icon: Globe, label: "GitHub Repository" }] : []),
+                      ...(deployVercel ? [{ icon: Layers, label: "Vercel Hosting" }] : []),
+                    ].map((s, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-neutral-400">
+                        <s.icon className="h-3.5 w-3.5 text-neutral-600" />
+                        <span>{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </>
+            )}
           </div>
         </div>
-
-        {/* Suggestions */}
-        {phase === "idle" && (
-          <div className="cn-suggestions">
-            {SUGGESTIONS.map((s, i) => (
-              <button
-                key={i}
-                className="cn-sug-btn"
-                onClick={() => {
-                  setPrompt(s);
-                  taRef.current?.focus();
-                  setTimeout(handleInput, 10);
-                }}
-              >
-                <Sparkles size={10} className="cn-sug-ico" />
-                <span>{s.length > 70 ? s.slice(0, 70) + "..." : s}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* GitHub import link */}
-        {phase === "idle" && (
-          <button className="cn-gh-link" onClick={() => navigate("/cirius/new?mode=github")}>
-            <Github size={12} /> Importar do GitHub
-          </button>
-        )}
       </div>
     </div>
   );
