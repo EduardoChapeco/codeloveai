@@ -511,6 +511,7 @@ export type Database = {
         Row: {
           api_key_encrypted: string
           created_at: string
+          extra_config: Json | null
           id: string
           is_active: boolean
           label: string
@@ -522,6 +523,7 @@ export type Database = {
         Insert: {
           api_key_encrypted: string
           created_at?: string
+          extra_config?: Json | null
           id?: string
           is_active?: boolean
           label?: string
@@ -533,6 +535,7 @@ export type Database = {
         Update: {
           api_key_encrypted?: string
           created_at?: string
+          extra_config?: Json | null
           id?: string
           is_active?: boolean
           label?: string
