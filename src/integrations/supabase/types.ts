@@ -718,6 +718,152 @@ export type Database = {
           },
         ]
       }
+      brainchain_accounts: {
+        Row: {
+          access_expires_at: string | null
+          access_token: string | null
+          brain_project_id: string | null
+          brain_type: string
+          busy_since: string | null
+          busy_user_id: string | null
+          created_at: string | null
+          email: string | null
+          error_count: number | null
+          id: string
+          is_active: boolean | null
+          is_busy: boolean | null
+          label: string | null
+          last_used_at: string | null
+          refresh_token: string
+          request_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          access_expires_at?: string | null
+          access_token?: string | null
+          brain_project_id?: string | null
+          brain_type?: string
+          busy_since?: string | null
+          busy_user_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          error_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_busy?: boolean | null
+          label?: string | null
+          last_used_at?: string | null
+          refresh_token: string
+          request_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          access_expires_at?: string | null
+          access_token?: string | null
+          brain_project_id?: string | null
+          brain_type?: string
+          busy_since?: string | null
+          busy_user_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          error_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_busy?: boolean | null
+          label?: string | null
+          last_used_at?: string | null
+          refresh_token?: string
+          request_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      brainchain_queue: {
+        Row: {
+          account_id: string | null
+          brain_type: string
+          completed_at: string | null
+          created_at: string | null
+          error_msg: string | null
+          expires_at: string | null
+          id: string
+          message: string
+          response: string | null
+          started_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          brain_type?: string
+          completed_at?: string | null
+          created_at?: string | null
+          error_msg?: string | null
+          expires_at?: string | null
+          id?: string
+          message: string
+          response?: string | null
+          started_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          brain_type?: string
+          completed_at?: string | null
+          created_at?: string | null
+          error_msg?: string | null
+          expires_at?: string | null
+          id?: string
+          message?: string
+          response?: string | null
+          started_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brainchain_queue_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "brainchain_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brainchain_usage: {
+        Row: {
+          account_id: string | null
+          brain_type: string
+          created_at: string | null
+          duration_ms: number | null
+          id: string
+          queue_id: string | null
+          success: boolean | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          brain_type: string
+          created_at?: string | null
+          duration_ms?: number | null
+          id?: string
+          queue_id?: string | null
+          success?: boolean | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          brain_type?: string
+          created_at?: string | null
+          duration_ms?: number | null
+          id?: string
+          queue_id?: string | null
+          success?: boolean | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_conversations: {
         Row: {
           created_at: string
@@ -6461,6 +6607,8 @@ export type Database = {
         Args: { p_date: string; p_license_id: string }
         Returns: number
       }
+      increment_errors: { Args: { acc_id: string }; Returns: number }
+      increment_requests: { Args: { acc_id: string }; Returns: number }
       is_admin:
         | { Args: never; Returns: boolean }
         | { Args: { _user_id: string }; Returns: boolean }
