@@ -10,7 +10,7 @@ import {
   Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon, ExternalLink,
   MessageSquare, ChevronLeft, RotateCcw, Trash2, Shield, Server, BarChart3,
   Zap, Bot, ArrowDown, FileText, Layers, PenTool, Lightbulb, Workflow, GitBranch,
-  SkipForward, Terminal,
+  SkipForward, Terminal, Eye, RefreshCw, Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
@@ -89,52 +89,81 @@ function ProcessingIndicator({ startTime }: { startTime: number }) {
   );
 }
 
-/* ── Typing dots animation ── */
-function TypingDots() {
+/* ── Creation Steps — reflects real backend phases ── */
+type CreationPhase = "reserving" | "workspace" | "creating_project" | "configuring" | "ready" | "error";
+
+function BrainCreationProgress({ phase, name, skillCount, errorMsg }: { phase: CreationPhase; name: string; skillCount: number; errorMsg?: string }) {
+  const phases: { key: CreationPhase; label: string; sub: string }[] = [
+    { key: "reserving", label: "Reservando Brain", sub: "Verificando locks e conflitos..." },
+    { key: "workspace", label: "Conectando Workspace", sub: "Obtendo workspace Lovable..." },
+    { key: "creating_project", label: "Criando Projeto", sub: "Provisionando projeto dedicado na Lovable..." },
+    { key: "configuring", label: "Configurando Skills", sub: "Ativando especializações e salvando..." },
+    { key: "ready", label: "Pronto!", sub: "Brain criado com sucesso." },
+  ];
+
+  const currentIdx = phases.findIndex(p => p.key === phase);
+  const totalProgress = phase === "ready" ? 100 : phase === "error" ? 0 : Math.max(5, ((currentIdx + 0.5) / (phases.length - 1)) * 100);
+
   return (
-    <div className="flex items-center gap-1.5 py-2 px-1">
-      {[0, 1, 2].map(i => (
-        <div
-          key={i}
-          className="h-2 w-2 rounded-full bg-primary/50"
-          style={{
-            animation: `typing-dot 1.4s infinite`,
-            animationDelay: `${i * 0.2}s`,
-          }}
-        />
-      ))}
-      <style>{`
-        @keyframes typing-dot {
-          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-          30% { transform: translateY(-6px); opacity: 1; }
-        }
-      `}</style>
+    <div className="h-full flex items-center justify-center p-4">
+      <div className="max-w-xl w-full animate-fade-in">
+        <div className="text-center mb-8">
+          <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent flex items-center justify-center mx-auto mb-5 shadow-xl shadow-primary/10 relative">
+            {phase === "error" ? <XCircle className="h-10 w-10 text-destructive" /> : phase === "ready" ? <CheckCircle className="h-10 w-10 text-primary" /> : <BrainIcon className="h-10 w-10 text-primary animate-pulse" />}
+          </div>
+          <h1 className="text-xl font-black tracking-tight mb-1">
+            {phase === "error" ? "Erro ao criar Brain" : phase === "ready" ? "Brain Criado!" : "Criando Star AI Brain"}
+          </h1>
+          <p className="text-xs text-muted-foreground">{name || "Novo Brain"} • {skillCount} skill(s)</p>
+        </div>
+
+        {phase === "error" && errorMsg && (
+          <div className="text-center text-sm text-destructive mb-6 px-4">{errorMsg}</div>
+        )}
+
+        {/* Step list */}
+        <div className="space-y-2 mb-6">
+          {phases.map((p, i) => {
+            const isActive = p.key === phase;
+            const isDone = currentIdx > i || phase === "ready";
+            const isPending = currentIdx < i && phase !== "ready";
+            return (
+              <div key={p.key} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${isActive ? "bg-primary/5" : ""}`} style={isActive ? { border: '1px solid hsl(var(--primary) / 0.15)' } : { border: '1px solid transparent' }}>
+                <div className="shrink-0">
+                  {isDone ? <CheckCircle className="h-4 w-4 text-primary" /> : isActive ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <div className="h-4 w-4 rounded-full border border-border/40" />}
+                </div>
+                <div className="min-w-0">
+                  <p className={`text-sm font-semibold ${isDone ? "text-primary" : isActive ? "text-foreground" : "text-muted-foreground/50"}`}>{p.label}</p>
+                  <p className={`text-[10px] ${isActive ? "text-muted-foreground" : "text-muted-foreground/30"}`}>{p.sub}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-1.5 rounded-full bg-border/20 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700 ease-out"
+            style={{
+              width: `${totalProgress}%`,
+              background: phase === "error" ? "hsl(var(--destructive))" : phase === "ready" ? "hsl(var(--primary))" : "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.6))",
+              boxShadow: "0 0 8px hsl(var(--primary) / 0.3)",
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
-
-/* ── Creation Steps Config ── */
-const CREATION_STEPS = [
-  { label: "Inicializando Brain", sub: "Preparando ambiente de execução...", icon: Power, duration: 3000 },
-  { label: "Criando Projeto", sub: "Provisionando projeto dedicado...", icon: Code2, duration: 5000 },
-  { label: "Injetando Memória", sub: "Carregando base de conhecimento...", icon: Database, duration: 4000 },
-  { label: "Configurando Skills", sub: "Ativando especializações selecionadas...", icon: Sparkles, duration: 4500 },
-  { label: "Melhorando Skills", sub: "Otimizando perfis PhD/Sênior...", icon: Zap, duration: 3500 },
-  { label: "Proteção & Regras", sub: "Injetando auto-proteção (Regra Zero)...", icon: Shield, duration: 3000 },
-  { label: "Templates de Resposta", sub: "Configurando formatos de output...", icon: FileText, duration: 3000 },
-  { label: "Calibrando Webhooks", sub: "Preparando captura de respostas...", icon: Server, duration: 2500 },
-  { label: "Gerando Update.md", sub: "Finalizando e notificando scraper...", icon: CheckCircle, duration: 2000 },
-];
 
 /* ── Onboarding Step ── */
 function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brainId?: string; projectId?: string; projectUrl?: string }) => void; creating: boolean }) {
   const [selectedSkills, setSelectedSkills] = useState<BrainSkill[]>(["general"]);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [creationStarted, setCreationStarted] = useState(false);
-  const [currentStep, setCurrentStep] = useState(-1);
-  const [stepProgress, setStepProgress] = useState(0);
-  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [creationPhase, setCreationPhase] = useState<CreationPhase | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | undefined>();
 
   const toggleSkill = (skill: BrainSkill) => {
     setSelectedSkills(prev =>
@@ -142,47 +171,29 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
     );
   };
 
-  // Animated step progression
-  useEffect(() => {
-    if (!creationStarted || currentStep < 0) return;
-    if (currentStep >= CREATION_STEPS.length) return;
-
-    const step = CREATION_STEPS[currentStep];
-    const tick = 50;
-    let elapsed = 0;
-
-    const interval = setInterval(() => {
-      elapsed += tick;
-      setStepProgress(Math.min((elapsed / step.duration) * 100, 100));
-      if (elapsed >= step.duration) {
-        clearInterval(interval);
-        if (currentStep < CREATION_STEPS.length - 1) {
-          setCurrentStep(prev => prev + 1);
-          setStepProgress(0);
-        }
-      }
-    }, tick);
-
-    return () => clearInterval(interval);
-  }, [creationStarted, currentStep]);
-
   const handleCreate = async () => {
     if (selectedSkills.length === 0) { toast.error("Selecione ao menos uma skill."); return; }
     setLoading(true);
+    setErrorMsg(undefined);
 
     try {
-      // Start visual creation animation
-      setCreationStarted(true);
-      setCurrentStep(0);
-      setStepProgress(0);
+      setCreationPhase("reserving");
+
+      // Small delay so user sees first phase
+      await new Promise(r => setTimeout(r, 600));
+      setCreationPhase("workspace");
 
       const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "setup", skills: selectedSkills, name: name.trim() || undefined },
       });
+
       if (error || data?.error) {
-        setCreationStarted(false);
+        setCreationPhase("error");
+        setErrorMsg(data?.error || error?.message || "Erro ao criar Brain");
         throw new Error(data?.error || error?.message || "Erro ao criar Brain");
       }
+
+      setCreationPhase("creating_project");
 
       let brainId = typeof data?.brain_id === "string" ? data.brain_id : undefined;
       let projectId = typeof data?.project_id === "string" ? data.project_id : undefined;
@@ -190,7 +201,7 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
         ? data.project_url
         : projectId ? `https://lovable.dev/projects/${projectId}` : undefined;
 
-      // Another tab/request may hold the lock; wait and recover instead of failing UX.
+      // If still creating, poll for completion
       if (!projectId || data?.creating || data?.code === "brain_creating") {
         const startedAt = Date.now();
         while (Date.now() - startedAt < 30_000) {
@@ -208,104 +219,40 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
       }
 
       if (!brainId || !projectId) {
+        setCreationPhase("error");
+        setErrorMsg("Projeto criado mas ainda sincronizando; tente novamente em alguns segundos.");
         throw new Error("Projeto criado mas ainda sincronizando; tente novamente em alguns segundos.");
       }
+
+      setCreationPhase("configuring");
+      await new Promise(r => setTimeout(r, 800));
+      setCreationPhase("ready");
+      await new Promise(r => setTimeout(r, 1200));
 
       toast.success("Brain criado com sucesso! 🧠");
       onCreated({ brainId, projectId, projectUrl });
     } catch (e: any) {
-      setCreationStarted(false);
-      setCurrentStep(-1);
+      if (creationPhase !== "error") {
+        setCreationPhase("error");
+        setErrorMsg(e.message);
+      }
       toast.error(e.message);
+      // Reset after 3s so user can retry
+      setTimeout(() => { setCreationPhase(null); }, 3000);
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Creation Steps UI ──
-  if (creationStarted) {
-    const totalProgress = currentStep >= 0
-      ? ((currentStep + stepProgress / 100) / CREATION_STEPS.length) * 100
-      : 0;
-
+  // ── Creation Progress UI ──
+  if (creationPhase) {
     return (
-      <div className="h-full flex items-center justify-center p-4">
-        <div className="max-w-xl w-full animate-fade-in">
-          <div className="text-center mb-8">
-            <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent flex items-center justify-center mx-auto mb-5 shadow-xl shadow-primary/10 relative">
-              <BrainIcon className="h-10 w-10 text-primary animate-pulse" />
-            </div>
-            <h1 className="text-xl font-black tracking-tight mb-1">Criando Star AI Brain</h1>
-            <p className="text-xs text-muted-foreground">{name || "Novo Brain"} • {selectedSkills.length} skill(s)</p>
-          </div>
-
-          {/* Evolving central badge */}
-          <div className="flex flex-col items-center gap-5 mb-6">
-            <div
-              className="relative h-44 w-44 rounded-full flex items-center justify-center"
-              style={{
-                background: `conic-gradient(hsl(var(--primary)) ${totalProgress}%, hsl(var(--border)) ${totalProgress}% 100%)`,
-              }}
-            >
-              <div className="h-[88%] w-[88%] rounded-full bg-background/90 backdrop-blur-xl flex items-center justify-center border border-border/60 shadow-2xl">
-                <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent flex items-center justify-center relative">
-                  {currentStep >= CREATION_STEPS.length - 1 && stepProgress >= 100 ? (
-                    <CheckCircle className="h-12 w-12 text-primary" />
-                  ) : (
-                    <BrainIcon className="h-12 w-12 text-primary animate-pulse" />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="text-center min-h-[70px]">
-              <p className="text-base font-bold">{CREATION_STEPS[Math.max(0, currentStep)]?.label || "Inicializando"}</p>
-              <p className="text-xs text-muted-foreground mt-1">{CREATION_STEPS[Math.max(0, currentStep)]?.sub || "Preparando"}</p>
-              <p className="text-[10px] text-muted-foreground/60 mt-2">
-                {currentStep >= CREATION_STEPS.length - 1 && stepProgress >= 100
-                  ? "Concluído! Abrindo projeto..."
-                  : `Etapa ${Math.max(1, currentStep + 1)} de ${CREATION_STEPS.length}`}
-              </p>
-            </div>
-          </div>
-
-          {/* Step chips */}
-          <div className="flex flex-wrap justify-center gap-1.5 mb-6">
-            {CREATION_STEPS.map((step, i) => {
-              const isActive = i === currentStep;
-              const isDone = i < currentStep || (i === currentStep && stepProgress >= 100);
-              return (
-                <span
-                  key={i}
-                  className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
-                    isDone
-                      ? "border-primary/30 bg-primary/10 text-primary"
-                      : isActive
-                        ? "border-primary/20 bg-primary/5 text-foreground"
-                        : "border-border/60 text-muted-foreground/50"
-                  }`}
-                >
-                  {step.label}
-                </span>
-              );
-            })}
-          </div>
-
-          {/* Progress bar */}
-          <div className="h-1.5 rounded-full bg-border/20 overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500 ease-out"
-              style={{
-                width: `${totalProgress}%`,
-                background: totalProgress >= 100
-                  ? "hsl(var(--primary))"
-                  : "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.6))",
-                boxShadow: "0 0 8px hsl(var(--primary) / 0.3)",
-              }}
-            />
-          </div>
-        </div>
-      </div>
+      <BrainCreationProgress
+        phase={creationPhase}
+        name={name || "Novo Brain"}
+        skillCount={selectedSkills.length}
+        errorMsg={errorMsg}
+      />
     );
   }
 
@@ -496,7 +443,7 @@ export default function BrainPage() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [genMode, setGenMode] = useState<GenMode>("chat");
   const [terminalView, setTerminalView] = useState(true);
-  const bootstrapStuckRef = useRef<number>(0);
+  const [reviewingCode, setReviewingCode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -529,7 +476,6 @@ export default function BrainPage() {
     try {
       const { data, error } = await supabase.functions.invoke("brain", { body: { action: "status" } });
       if (error || !data) {
-        // Only set disconnected on first load or after multiple consecutive failures
         statusRetryCount.current += 1;
         if (statusRetryCount.current >= 3 && !hasEverLoadedBrains.current) {
           setLovableConnected(false);
@@ -550,7 +496,6 @@ export default function BrainPage() {
         }
         setShowOnboarding(false);
       } else {
-        // No active brains — show onboarding
         hasEverLoadedBrains.current = false;
         setShowOnboarding(true);
         setCreating(false);
@@ -579,10 +524,8 @@ export default function BrainPage() {
       const { data, error } = await supabase.functions.invoke("brain", { body: { action: "delete", brain_id: brainId } });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       toast.success("Brain removido.");
-      // Remove from local state immediately
       setBrains(prev => prev.filter(b => b.id !== brainId));
       if (activeBrainId === brainId) setActiveBrainId(null);
-      // Check if this was the last brain
       const remaining = brains.filter(b => b.id !== brainId);
       if (remaining.length === 0) {
         hasEverLoadedBrains.current = false;
@@ -591,6 +534,78 @@ export default function BrainPage() {
       }
       loadStatus();
     } catch (e: any) { toast.error(e.message); }
+  };
+
+  const clearHistory = async () => {
+    if (!activeBrainId) return;
+    try {
+      // Delete conversations for this brain's project
+      const brain = brains.find(b => b.id === activeBrainId);
+      if (!brain?.project_id) return;
+      
+      const { error } = await supabase
+        .from("loveai_conversations")
+        .delete()
+        .eq("user_id", user!.id)
+        .eq("target_project_id", brain.project_id);
+      
+      if (error) throw error;
+      setAllConversations([]);
+      toast.success("Histórico limpo.");
+    } catch (e: any) {
+      toast.error("Erro ao limpar histórico: " + (e.message || ""));
+    }
+  };
+
+  const retryMessage = async (convo: Conversation) => {
+    // Re-send the original user message
+    setMessage(convo.user_message);
+    // Remove the failed conversation
+    setAllConversations(prev => prev.filter(c => c.id !== convo.id));
+    // Focus textarea
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
+  };
+
+  const reviewCode = async () => {
+    if (!activeBrainId || reviewingCode) return;
+    const brain = brains.find(b => b.id === activeBrainId);
+    if (!brain?.project_id) return;
+
+    setReviewingCode(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("brain", {
+        body: {
+          action: "review_code",
+          project_id: brain.project_id,
+          project_name: brain.name,
+        },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Erro ao iniciar review");
+      
+      if (data?.conversation_id) {
+        // Add as a conversation
+        const tempConvo: Conversation = {
+          id: data.conversation_id,
+          user_message: `🔍 Code Review do projeto "${brain.name}"`,
+          ai_response: data.response || null,
+          brain_type: "code",
+          status: data.response ? "completed" : "processing",
+          created_at: new Date().toISOString(),
+          target_project_id: brain.project_id,
+        };
+        setAllConversations(prev => [...prev, tempConvo]);
+        if (!data.response) {
+          setProcessingIds(prev => new Set(prev).add(data.conversation_id));
+        }
+      }
+      toast.success("Code review iniciado!");
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setReviewingCode(false);
+    }
   };
 
   // Track temp IDs that haven't been confirmed by the server yet
@@ -606,7 +621,6 @@ export default function BrainPage() {
         const count = (pollCountRef.current[pc.id] || 0) + 1;
         pollCountRef.current[pc.id] = count;
         
-        // Give up after 40 polls (~2 min)
         if (count > 40) {
           setAllConversations(prev =>
             prev.map(c => c.id === pc.id ? { ...c, status: "timeout" as ConvoStatus } : c)
@@ -617,7 +631,6 @@ export default function BrainPage() {
         }
 
         try {
-          // Use active capture action — this triggers server-side mining
           const { data } = await supabase.functions.invoke("brain", {
             body: { action: "capture", conversation_id: pc.id },
           });
@@ -694,7 +707,6 @@ export default function BrainPage() {
       });
       if (error || data?.error) {
         if (data?.code === "no_token" && !hasEverLoadedBrains.current) setLovableConnected(false);
-        // Handle rate limit with retry suggestion
         const errMsg = data?.error || error?.message || "";
         if (errMsg.toLowerCase().includes("rate") || errMsg.includes("429") || errMsg.toLowerCase().includes("limit")) {
           toast.error("Rate limit atingido. Aguarde 30s e tente novamente.", { duration: 8000 });
@@ -710,7 +722,6 @@ export default function BrainPage() {
         prev.map(c => c.id === tempId ? { ...c, id: realId, ai_response: data.response || null, status: finalStatus as ConvoStatus } : c)
       );
       
-      // If still processing, keep tracking; if done, remove
       setProcessingIds(prev => {
         const n = new Set(prev);
         n.delete(tempId);
@@ -740,7 +751,6 @@ export default function BrainPage() {
     return <AppLayout><div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
 
-  // Show loading spinner while initial status is unknown
   if (lovableConnected === null) {
     return <AppLayout><div className="flex items-center justify-center h-full"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
@@ -774,7 +784,6 @@ export default function BrainPage() {
             hasEverLoadedBrains.current = true;
             setCreating(false);
 
-            // Immediately populate brain in local state so UI doesn't hang
             if (payload?.brainId && payload?.projectId) {
               const newBrain: BrainEntry = {
                 id: payload.brainId,
@@ -794,7 +803,6 @@ export default function BrainPage() {
               setActiveBrainId(payload.brainId);
             }
 
-            // Also refresh from server in background
             loadStatus();
           }}
         />
@@ -804,9 +812,7 @@ export default function BrainPage() {
 
   return (
     <AppLayout>
-      {/* Full-height container that fills the main area without scrolling */}
       <div className="flex h-[calc(100vh-4rem)] md:h-screen relative">
-        {/* Sidebar overlay (mobile) */}
         {sidebarOpen && <div className="absolute inset-0 z-20 bg-black/40 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
         {/* ── Sidebar ── */}
@@ -815,11 +821,8 @@ export default function BrainPage() {
           absolute lg:relative z-30 lg:z-auto w-72 lg:w-72 h-full
           flex flex-col shrink-0 transition-all duration-300
         `}
-          style={{
-            background: 'transparent',
-          }}
+          style={{ background: 'transparent' }}
         >
-          {/* Sidebar header */}
           <div className="p-3 shrink-0">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -854,22 +857,17 @@ export default function BrainPage() {
               )}
             </div>
           </div>
-
-          {/* Spacer */}
           <div className="flex-1" />
         </div>
 
         {/* ── Main chat area ── */}
         <div className="flex-1 flex flex-col min-w-0 h-full">
           {/* Header */}
-          <div
-            className="px-4 py-3 flex items-center gap-3 shrink-0"
-          >
+          <div className="px-4 py-3 flex items-center gap-3 shrink-0">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-muted/50 transition-colors shrink-0">
               {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <Clock className="h-4 w-4 text-muted-foreground" />}
             </button>
             
-            {/* Avatar with gradient ring */}
             <div className="relative shrink-0">
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary via-primary/80 to-primary/60 p-[2px]">
                 <div className="h-full w-full rounded-full bg-background flex items-center justify-center">
@@ -884,23 +882,51 @@ export default function BrainPage() {
               <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">online</span>
             </div>
 
-            {activeBrain?.project_url && (
-              <a href={activeBrain.project_url} target="_blank" rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold hover:bg-muted/50 transition-colors shrink-0 text-muted-foreground hover:text-foreground"
-                style={{ border: '0.5px solid var(--clf-border)' }}
-              >
-                <ExternalLink className="h-3.5 w-3.5" /> Projeto
-              </a>
-            )}
+            {/* Action buttons */}
+            <div className="hidden sm:flex items-center gap-1">
+              {/* Code Review */}
+              {activeBrain && (
+                <button
+                  onClick={reviewCode}
+                  disabled={reviewingCode}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold hover:bg-muted/50 transition-colors shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  style={{ border: '0.5px solid var(--clf-border)' }}
+                  title="Code Review do projeto"
+                >
+                  {reviewingCode ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />} Review
+                </button>
+              )}
 
-            {activeBrain && !(activeBrain.bootstrap_started ?? ((activeBrain.skill_phase || 0) > 0)) && (
-              <button
-                onClick={activateChain}
-                className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity shrink-0"
-              >
-                <Workflow className="h-3.5 w-3.5" /> Ativar encadeamento
-              </button>
-            )}
+              {/* Clear History */}
+              {allConversations.length > 0 && (
+                <button
+                  onClick={clearHistory}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold hover:bg-destructive/10 transition-colors shrink-0 text-muted-foreground hover:text-destructive"
+                  style={{ border: '0.5px solid var(--clf-border)' }}
+                  title="Limpar histórico"
+                >
+                  <Eraser className="h-3.5 w-3.5" /> Limpar
+                </button>
+              )}
+
+              {activeBrain?.project_url && (
+                <a href={activeBrain.project_url} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold hover:bg-muted/50 transition-colors shrink-0 text-muted-foreground hover:text-foreground"
+                  style={{ border: '0.5px solid var(--clf-border)' }}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Projeto
+                </a>
+              )}
+
+              {activeBrain && !(activeBrain.bootstrap_started ?? ((activeBrain.skill_phase || 0) > 0)) && (
+                <button
+                  onClick={activateChain}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity shrink-0"
+                >
+                  <Workflow className="h-3.5 w-3.5" /> Ativar encadeamento
+                </button>
+              )}
+            </div>
 
             {/* Terminal/Chat view toggle */}
             <button
@@ -936,8 +962,24 @@ export default function BrainPage() {
             </div>
           </div>
 
-          {/* Mobile skill selector */}
+          {/* Mobile skill selector + actions */}
           <div className="sm:hidden flex items-center gap-1 px-3 py-2 overflow-x-auto shrink-0 no-scrollbar">
+            {activeBrain && (
+              <>
+                <button onClick={reviewCode} disabled={reviewingCode}
+                  className="h-8 px-3 rounded-full text-[11px] font-semibold flex items-center gap-1.5 shrink-0 text-muted-foreground hover:bg-muted/50"
+                >
+                  {reviewingCode ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />} Review
+                </button>
+                {allConversations.length > 0 && (
+                  <button onClick={clearHistory}
+                    className="h-8 px-3 rounded-full text-[11px] font-semibold flex items-center gap-1.5 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Eraser className="h-3 w-3" /> Limpar
+                  </button>
+                )}
+              </>
+            )}
             {activeSkills.map(s => {
               const meta = ALL_SKILLS.find(sk => sk.id === s);
               if (!meta) return null;
@@ -953,19 +995,16 @@ export default function BrainPage() {
             })}
           </div>
 
-          {/* Bootstrap progress banner */}
+          {/* Bootstrap progress banner — real phase display */}
           {isBootstrapping && (
             <div className="mx-4 sm:mx-6 mb-2 mt-1 px-4 py-3 rounded-2xl animate-fade-in flex items-center gap-3"
               style={{ background: 'hsl(var(--primary) / 0.06)', border: '1px solid hsl(var(--primary) / 0.15)' }}
             >
               <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-primary">Configurando Brain — Fase {activeBrain?.skill_phase || 1} de 13</p>
+                <p className="text-sm font-semibold text-primary">Configurando Brain</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {(activeBrain?.skill_phase || 1) <= 10
-                    ? "Injetando memória, skills e protocolos de resposta."
-                    : "Criando interface visual terminal do Brain."
-                  }
+                  Injetando memória e configurando skills. Aguarde ou force a conclusão.
                 </p>
               </div>
               <button
@@ -976,15 +1015,10 @@ export default function BrainPage() {
               >
                 <SkipForward className="h-3.5 w-3.5" /> Forçar
               </button>
-              <div className="shrink-0">
-                <div className="h-1.5 w-20 rounded-full bg-border/30 overflow-hidden">
-                  <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${Math.round(((activeBrain?.skill_phase || 1) / 13) * 100)}%` }} />
-                </div>
-              </div>
             </div>
           )}
 
-          {/* ── Chat messages area — scrollable ── */}
+          {/* ── Chat messages area ── */}
           {(!activeBrainId || (activeBrainId && allConversations.length === 0 && processingIds.size === 0)) ? (
             <EmptyChat hasActiveBrain={!!activeBrainId} />
           ) : terminalView ? (
@@ -993,6 +1027,7 @@ export default function BrainPage() {
               processingIds={processingIds}
               messagesEndRef={messagesEndRef}
               chatContainerRef={chatContainerRef}
+              onRetry={retryMessage}
             />
           ) : (
             <div
@@ -1007,7 +1042,7 @@ export default function BrainPage() {
             >
               {allConversations.map(convo => (
                 <div key={convo.id} className="space-y-3 max-w-3xl mx-auto animate-fade-in">
-                  {/* User bubble — right side */}
+                  {/* User bubble */}
                   <div className="flex justify-end">
                     <div className="max-w-[85%] sm:max-w-[70%]">
                       <div className="rounded-2xl rounded-tr-sm bg-gradient-to-br from-primary to-primary/90 text-primary-foreground px-4 py-3 shadow-lg shadow-primary/15">
@@ -1021,7 +1056,7 @@ export default function BrainPage() {
                     </div>
                   </div>
 
-                  {/* AI bubble — left side */}
+                  {/* AI bubble */}
                   <div className="flex justify-start gap-2.5">
                     <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 mt-1 shadow-sm ring-1 ring-primary/10">
                       <BrainIcon className="h-3.5 w-3.5 text-primary" />
@@ -1036,12 +1071,27 @@ export default function BrainPage() {
                         }}
                       >
                         {convo.status === "processing" && <ProcessingIndicator startTime={new Date(convo.created_at).getTime()} />}
+                        
                         {convo.status === "timeout" && (
-                          <div className="flex items-center gap-2 text-amber-500"><AlertTriangle className="h-4 w-4" /><span className="text-sm">Tempo esgotado. Tente novamente.</span></div>
+                          <div className="flex items-center gap-2 text-amber-500">
+                            <AlertTriangle className="h-4 w-4" />
+                            <span className="text-sm">Tempo esgotado.</span>
+                            <button onClick={() => retryMessage(convo)} className="ml-auto flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                              <RefreshCw className="h-3 w-3" /> Reenviar
+                            </button>
+                          </div>
                         )}
+                        
                         {convo.status === "failed" && (
-                          <div className="flex items-center gap-2 text-destructive"><XCircle className="h-4 w-4" /><span className="text-sm">{convo.ai_response || "Falha ao processar."}</span></div>
+                          <div className="flex items-center gap-2 text-destructive">
+                            <XCircle className="h-4 w-4" />
+                            <span className="text-sm flex-1">{convo.ai_response || "Falha ao processar."}</span>
+                            <button onClick={() => retryMessage(convo)} className="ml-auto flex items-center gap-1 text-xs font-semibold text-primary hover:underline shrink-0">
+                              <RefreshCw className="h-3 w-3" /> Reenviar
+                            </button>
+                          </div>
                         )}
+                        
                         {convo.status === "completed" && convo.ai_response && (() => {
                           let cleaned = convo.ai_response;
                           cleaned = cleaned.replace(/^---[\s\S]*?---\s*/m, "").trim();
@@ -1079,6 +1129,12 @@ export default function BrainPage() {
                               >
                                 📋 Copiar
                               </button>
+                              <button
+                                onClick={() => retryMessage(convo)}
+                                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 hover:bg-muted/30 px-2 py-1 rounded-lg"
+                              >
+                                <RefreshCw className="h-3 w-3" /> Reenviar
+                              </button>
                               <span className="text-[10px] text-muted-foreground/40 ml-auto">
                                 {new Date(convo.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                               </span>
@@ -1109,7 +1165,7 @@ export default function BrainPage() {
             </div>
           )}
 
-          {/* ── Generation modes + Input bar — pinned to bottom ── */}
+          {/* ── Generation modes + Input bar ── */}
           {activeBrainId && (
             <div className="px-4 sm:px-6 py-3 shrink-0 space-y-2">
               <div className="max-w-3xl mx-auto">
