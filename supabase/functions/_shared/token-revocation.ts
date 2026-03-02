@@ -13,7 +13,7 @@ interface RevokeResult {
 }
 
 export async function revokeTokenEverywhere(token: string): Promise<RevokeResult> {
-  const adminSecret = Deno.env.get("Starble_ADMIN_SECRET");
+  const adminSecret = Deno.env.get("CODELOVE_ADMIN_SECRET");
   const result: RevokeResult = {
     ok: false,
     attempts: 0,
@@ -27,7 +27,7 @@ export async function revokeTokenEverywhere(token: string): Promise<RevokeResult
   }
 
   if (!adminSecret) {
-    result.errors.push("Starble_ADMIN_SECRET ausente");
+    result.errors.push("CODELOVE_ADMIN_SECRET ausente");
     return result;
   }
 
