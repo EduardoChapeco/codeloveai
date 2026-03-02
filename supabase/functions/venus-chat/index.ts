@@ -262,7 +262,11 @@ Deno.serve(async (req: Request) => {
     client_logs: [],
     network_requests: [],
     runtime_errors: runtimeErrors,
-    files,
+    files: files.map((f: Record<string, unknown>) => ({
+      name: f.name || "file",
+      content_type: f.content_type || f.type || "application/octet-stream",
+      data: f.data || "",
+    })),
     selected_elements: [],
     optimisticImageUrls: [],
     debug_mode: false,
