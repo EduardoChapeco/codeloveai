@@ -75,7 +75,16 @@ export default function CiriusEditor() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "cirius_generation_log", filter: `project_id=eq.${id}` },
         (payload) => { setLogs(prev => [payload.new, ...prev].slice(0, 50)); })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "cirius_projects", filter: `id=eq.${id}` },
-        (payload) => { setProject(payload.new); })
+        (payload) => {
+          const updated = payload.new as any;
+          setProject(updated);
+          // Extract preview HTML from updated source files in realtime
+          if (updated.source_files_json) {
+            const files = updated.source_files_json;
+            const indexHtml = files?.["index.html"] || files?.["dist/index.html"];
+            if (indexHtml) setPreviewHtml(indexHtml);
+          }
+        })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [id]);
