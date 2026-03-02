@@ -1,30 +1,30 @@
 /**
- * Agentic Orchestrator — Engine v3 (Clean rewrite)
+ * Agentic Orchestrator — Engine v4 (Brainchain-powered)
  *
- * Key fixes from v2:
- *  - executeTask is FIRE-AND-FORGET (no 180s polling loop that exceeds edge fn timeout)
- *  - Completion detection delegated to orchestrator-tick
- *  - PRD generation inline (not async IIFE that gets killed)
- *  - Simplified ghost-create flow
+ * Key change from v3:
+ *  - Uses brainchain_accounts pool instead of single lovable_accounts token
+ *  - Each brainchain account has its own brain_project_id (no ghost-create needed)
+ *  - Auto-refresh tokens via Firebase SecureToken API
+ *  - Round-robin account selection with busy/error tracking
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { generateTypeId } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const EXT_API = "https://api.lovable.dev";
+const AQ_PREFIX = `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n`;
 
-const AQ_PREFIX = `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\nIMPORTANTE: Execute diretamente, sem perguntas ou planos.\n\n`;
+const FIREBASE_KEY_ENV = "FIREBASE_API_KEY";
+const C = "0123456789abcdefghjkmnpqrstvwxyz";
+const rb32 = (n: number) => Array.from({ length: n }, () => C[Math.floor(Math.random() * 32)]).join("");
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
@@ -39,30 +39,100 @@ async function getUserId(req: Request, anonSc: SupabaseClient, body?: Record<str
   } catch { return null; }
 }
 
-async function getUserToken(sc: SupabaseClient, userId: string): Promise<string | null> {
-  const { data } = await sc
-    .from("lovable_accounts")
-    .select("token_encrypted")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .limit(1)
-    .maybeSingle();
-  return (data?.token_encrypted as string) || null;
+// ─── Brainchain Account Pool ──────────────────────────────────
+async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "general"): Promise<{
+  id: string; accessToken: string; brainProjectId: string;
+} | null> {
+  // Release stuck accounts (busy > 3 min)
+  const stuckThreshold = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+  await sc.from("brainchain_accounts")
+    .update({ is_busy: false, busy_since: null, busy_user_id: null })
+    .eq("is_busy", true)
+    .lt("busy_since", stuckThreshold);
+
+  // Try specific type, then general
+  for (const type of [brainType, "general"]) {
+    const { data: accounts } = await sc
+      .from("brainchain_accounts")
+      .select("id, access_token, access_expires_at, refresh_token, brain_project_id, brain_type")
+      .eq("is_active", true)
+      .eq("is_busy", false)
+      .eq("brain_type", type)
+      .lt("error_count", 5)
+      .not("brain_project_id", "is", null)
+      .order("last_used_at", { ascending: true, nullsFirst: true })
+      .limit(1);
+
+    if (!accounts?.length) continue;
+    const account = accounts[0];
+    if (!account.brain_project_id) continue;
+
+    // Ensure valid token
+    const token = await ensureValidToken(sc, account);
+    if (!token) continue;
+
+    // Mark busy
+    await sc.from("brainchain_accounts").update({
+      is_busy: true,
+      busy_since: new Date().toISOString(),
+      busy_user_id: "orchestrator",
+      last_used_at: new Date().toISOString(),
+    }).eq("id", account.id);
+
+    return { id: account.id, accessToken: token, brainProjectId: account.brain_project_id };
+  }
+  return null;
 }
 
-// ─── Lovable API helper ───────────────────────────────────────
-async function extFetch(url: string, opts: RequestInit, token: string) {
-  return fetch(url, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-      "Origin": "https://lovable.dev",
-      "Referer": "https://lovable.dev/",
-      "X-Client-Git-SHA": "3d7a3673c6f02b606137a12ddc0ab88f6b775113",
-      ...(opts.headers || {}),
-    },
-  });
+async function releaseBrainchainAccount(sc: SupabaseClient, accountId: string, success: boolean) {
+  await sc.from("brainchain_accounts").update({
+    is_busy: false, busy_since: null, busy_user_id: null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", accountId);
+  if (success) {
+    await sc.rpc("increment_requests", { acc_id: accountId });
+  } else {
+    await sc.rpc("increment_errors", { acc_id: accountId });
+  }
+}
+
+async function ensureValidToken(sc: SupabaseClient, account: Record<string, any>): Promise<string | null> {
+  const expiresAt = account.access_expires_at ? new Date(account.access_expires_at).getTime() : 0;
+  const isExpired = expiresAt < Date.now() + 60000;
+
+  if (!isExpired && account.access_token) return account.access_token;
+  if (!account.refresh_token) return null;
+
+  const firebaseKey = Deno.env.get(FIREBASE_KEY_ENV) || "";
+  if (!firebaseKey) return account.access_token || null; // best effort
+
+  try {
+    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${firebaseKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(account.refresh_token)}`,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const newToken = data.id_token || data.access_token;
+    if (!newToken) return null;
+
+    let expiresAtStr = new Date(Date.now() + 3600000).toISOString();
+    try {
+      const payload = JSON.parse(atob(newToken.split(".")[1]));
+      expiresAtStr = new Date(payload.exp * 1000).toISOString();
+    } catch { /* use default */ }
+
+    await sc.from("brainchain_accounts").update({
+      access_token: newToken,
+      refresh_token: data.refresh_token || account.refresh_token,
+      access_expires_at: expiresAtStr,
+      error_count: 0,
+      updated_at: new Date().toISOString(),
+    }).eq("id", account.id);
+
+    return newToken;
+  } catch { return null; }
 }
 
 // ─── Logging ─────────────────────────────────────────────────
@@ -110,8 +180,7 @@ Rules:
             { role: "system", content: "Return only valid JSON, no markdown fences." },
             { role: "user", content: architectPrompt },
           ],
-          temperature: 0.2,
-          max_tokens: 3000,
+          temperature: 0.2, max_tokens: 3000,
         }),
       });
       if (res.ok) {
@@ -120,9 +189,7 @@ Rules:
         const parsed = extractJSON(content);
         if (parsed) return parsed;
       }
-    } catch (e) {
-      console.error("[PRD] Gateway error:", (e as Error).message);
-    }
+    } catch (e) { console.error("[PRD] Gateway error:", (e as Error).message); }
   }
 
   // Strategy 2: OpenRouter fallback
@@ -150,9 +217,7 @@ Rules:
         const parsed = extractJSON(content);
         if (parsed) return parsed;
       }
-    } catch (e) {
-      console.error("[PRD] OpenRouter error:", (e as Error).message);
-    }
+    } catch (e) { console.error("[PRD] OpenRouter error:", (e as Error).message); }
   }
 
   return null;
@@ -174,118 +239,92 @@ function extractJSON(content: string): { tasks: Array<{ title: string; intent: s
   return null;
 }
 
-// ─── Ghost Create (quick — no polling) ───────────────────────
-async function ghostCreate(
-  sc: SupabaseClient, projectId: string, token: string
-): Promise<{ lovableProjectId: string } | { error: string }> {
-  // Get workspace
-  const wsRes = await extFetch(`${EXT_API}/user/workspaces`, { method: "GET" }, token);
-  if (!wsRes.ok) return { error: `Workspace fetch failed: ${wsRes.status}` };
-
-  let wsBody: any;
-  try { wsBody = await wsRes.json(); } catch { return { error: "Workspace parse error" }; }
-  const wsList = Array.isArray(wsBody) ? wsBody : (wsBody?.workspaces || wsBody?.data || []);
-  const workspaceId = wsList?.[0]?.id || wsBody?.id;
-  if (!workspaceId) return { error: "No workspace found" };
-
-  // Create project
-  const createRes = await extFetch(
-    `${EXT_API}/workspaces/${workspaceId}/projects`,
-    { method: "POST", body: JSON.stringify({ name: `starble-orch-${Date.now()}`, initial_message: "setup", visibility: "private" }) },
-    token
-  );
-  if (!createRes.ok) return { error: `Create failed: ${createRes.status}` };
-
-  const created = await createRes.json() as Record<string, unknown>;
-  const lovableProjectId = (created.id || created.project_id) as string;
-  if (!lovableProjectId) return { error: "No project ID returned" };
-
-  // Ghost cancel (fire-and-forget)
-  const initMsgId = (created.message_id || created.initial_message_id) as string | undefined;
-  if (initMsgId) {
-    extFetch(`${EXT_API}/projects/${lovableProjectId}/chat/${initMsgId}/cancel`, { method: "POST" }, token).catch(() => {});
-  } else {
-    // Try to get latest message and cancel it after a short delay
-    setTimeout(async () => {
-      try {
-        const latestRes = await extFetch(`${EXT_API}/projects/${lovableProjectId}/latest-message`, { method: "GET" }, token);
-        if (latestRes.ok) {
-          const latest = await latestRes.json() as Record<string, unknown>;
-          const latestId = (latest?.id || latest?.message_id) as string;
-          if (latestId) await extFetch(`${EXT_API}/projects/${lovableProjectId}/chat/${latestId}/cancel`, { method: "POST" }, token);
-        }
-      } catch { /* ok */ }
-    }, 1000);
-  }
-
-  await sc.from("orchestrator_projects").update({
-    lovable_project_id: lovableProjectId, ghost_created: true,
-  }).eq("id", projectId);
-
-  await addLog(sc, projectId, `👻 Ghost created: ${lovableProjectId}`, "info");
-  return { lovableProjectId };
-}
-
-// ─── Execute Task (FIRE-AND-FORGET — no polling!) ────────────
-// Sends the message via venus-chat and returns immediately.
-// Completion detection is handled by orchestrator-tick.
-async function executeTask(
+// ─── Execute Task via Brainchain Account ─────────────────────
+// Uses a brainchain account's brain_project_id to send the task.
+// Fire-and-forget: completion detection by orchestrator-tick.
+async function executeTaskViaBrainchain(
   sc: SupabaseClient,
   task: { id: string; prompt: string; intent: string; task_index: number },
   projectId: string,
-  lovableProjectId: string,
-  lovableToken: string
+  account: { id: string; accessToken: string; brainProjectId: string },
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   await sc.from("orchestrator_tasks").update({
     status: "running", started_at: new Date().toISOString(),
   }).eq("id", task.id);
 
-  await addLog(sc, projectId, `▶ Task #${task.task_index} — sending via venus-chat`, "info", undefined, task.id);
-
-  // Capture fingerprint BEFORE sending
-  try {
-    const fpRes = await extFetch(`${EXT_API}/projects/${lovableProjectId}/source-code`, { method: "GET" }, lovableToken);
-    if (fpRes.ok) {
-      const fpData = await fpRes.json() as Record<string, unknown>;
-      const files = (fpData.files || []) as Array<{ path: string; size?: number }>;
-      const fp = files.map(f => `${f.path}:${f.size ?? 0}`).sort().join("|");
-      await sc.from("orchestrator_projects").update({ source_fingerprint: fp }).eq("id", projectId);
-    }
-  } catch { /* non-critical */ }
+  await addLog(sc, projectId, `▶ Task #${task.task_index} — sending via Brainchain account ${account.id.slice(0, 8)}`, "info", undefined, task.id);
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const msgId = "usermsg_" + rb32(26);
+    const aiMsgId = "aimsg_" + rb32(26);
 
-    const venusRes = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
+    const lvPayload = {
+      id: msgId,
+      message: AQ_PREFIX + task.prompt,
+      chat_only: false,
+      ai_message_id: aiMsgId,
+      thread_id: "main",
+      view: "editor",
+      view_description: "Orchestrator task execution.",
+      model: null,
+      session_replay: "[]",
+      client_logs: [],
+      network_requests: [],
+      runtime_errors: [],
+      files: [],
+      integration_metadata: {
+        browser: { preview_viewport_width: 1280, preview_viewport_height: 854, auth_token: account.accessToken },
+        supabase: { auth_token: account.accessToken },
+      },
+    };
+
+    const lvRes = await fetch(`https://api.lovable.dev/projects/${account.brainProjectId}/chat`, {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${account.accessToken}`,
         "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
+        Origin: "https://lovable.dev",
+        Referer: "https://lovable.dev/",
+        "X-Client-Git-SHA": "3d7a3673c6f02b606137a12ddc0ab88f6b775113",
       },
-      body: JSON.stringify({
-        task: AQ_PREFIX + task.prompt,
-        project_id: lovableProjectId,
-        mode: "task",
-        lovable_token: lovableToken,
-      }),
+      body: JSON.stringify(lvPayload),
     });
 
-    const venusData = await venusRes.json().catch(() => ({})) as Record<string, unknown>;
-
-    if (!venusRes.ok || !venusData?.ok) {
-      const errMsg = (venusData?.error as string) || `HTTP ${venusRes.status}`;
-      await addLog(sc, projectId, `Task #${task.task_index} venus-chat error: ${errMsg}`, "error", venusData, task.id);
-      return { success: false, error: errMsg };
+    if (lvRes.status === 429) {
+      await releaseBrainchainAccount(sc, account.id, false);
+      return { success: false, error: "Rate limit on brainchain account" };
+    }
+    if (lvRes.status === 401) {
+      await releaseBrainchainAccount(sc, account.id, false);
+      return { success: false, error: "Token expired on brainchain account" };
+    }
+    if (lvRes.status !== 202 && !lvRes.ok) {
+      await releaseBrainchainAccount(sc, account.id, false);
+      const d = await lvRes.json().catch(() => ({}));
+      return { success: false, error: (d as any).error || `HTTP ${lvRes.status}` };
     }
 
-    const messageId = (venusData.msgId as string) || undefined;
-    await sc.from("orchestrator_tasks").update({ lovable_message_id: messageId || null }).eq("id", task.id);
-    await addLog(sc, projectId, `Task #${task.task_index} sent (msgId: ${messageId}). Tick will detect completion.`, "info", undefined, task.id);
+    // Store which account is running this task (for tick to poll)
+    await sc.from("orchestrator_tasks").update({
+      lovable_message_id: msgId,
+    }).eq("id", task.id);
 
-    return { success: true, messageId };
+    // Store brainchain info on project for tick to use
+    await sc.from("orchestrator_projects").update({
+      lovable_project_id: account.brainProjectId,
+      ghost_created: true,
+    }).eq("id", projectId);
+
+    await addLog(sc, projectId, `Task #${task.task_index} sent to brain ${account.brainProjectId.slice(0, 8)}. Tick will detect completion.`, "info", {
+      brainchain_account_id: account.id,
+      brain_project_id: account.brainProjectId,
+    }, task.id);
+
+    // NOTE: We do NOT release the account here — tick will release it when task completes
+    return { success: true, messageId: msgId };
   } catch (e) {
     const err = (e as Error).message;
+    await releaseBrainchainAccount(sc, account.id, false);
     await addLog(sc, projectId, `Task #${task.task_index} exception: ${err}`, "error", undefined, task.id);
     return { success: false, error: err };
   }
@@ -319,9 +358,6 @@ Deno.serve(async (req: Request) => {
       const brainId = (body.brain_id as string) || undefined;
       if (!clientPrompt) return json({ error: "client_prompt required" }, 400);
 
-      const adminToken = await getUserToken(sc, userId);
-      if (!adminToken) return json({ error: "Token Lovable não encontrado. Reconecte via /lovable/connect." }, 503);
-
       // Resolve Brain skills
       let brainSkills: string[] = [];
       let brainName = "";
@@ -346,7 +382,7 @@ Deno.serve(async (req: Request) => {
 
       await addLog(sc, projectId, `🚀 Orchestrator started${brainName ? ` (Brain: ${brainName})` : ""}: "${clientPrompt.slice(0, 80)}…"`, "info");
 
-      // Generate PRD INLINE (not async — avoids edge fn timeout killing the IIFE)
+      // Generate PRD INLINE
       await addLog(sc, projectId, "🧠 Generating PRD…", "info");
       const prd = await generatePRD(clientPrompt, brainSkills);
 
@@ -371,7 +407,7 @@ Deno.serve(async (req: Request) => {
             prompt: t.prompt, stop_condition: t.stop_condition || null,
           }))
         );
-        await addLog(sc, projectId, `✅ PRD ready: ${prd.tasks.length} tasks. Status: paused — click Execute or let cron handle it.`, "info");
+        await addLog(sc, projectId, `✅ PRD ready: ${prd.tasks.length} tasks. Brainchain pool will execute.`, "info");
       }
 
       return json({ success: true, project_id: projectId, status: "paused" });
@@ -392,33 +428,14 @@ Deno.serve(async (req: Request) => {
       if (project.status === "failed") return json({ status: "failed", error: project.last_error });
       if (project.status === "executing") return json({ status: "already_executing" });
 
-      const adminTk = await getUserToken(sc, project.user_id as string);
-      if (!adminTk) {
-        await addLog(sc, projectId, "❌ Token indisponível — marcando como falho", "error");
+      // Acquire a brainchain account from the pool
+      const account = await acquireBrainchainAccount(sc);
+      if (!account) {
+        await addLog(sc, projectId, "⚠️ No brainchain accounts available — will retry on next tick", "warn");
         await sc.from("orchestrator_projects").update({
-          status: "failed",
-          last_error: "Token Lovable não encontrado. Reconecte em /lovable/connect.",
+          next_tick_at: new Date(Date.now() + 30_000).toISOString(),
         }).eq("id", projectId);
-        return json({ error: "Token Lovable não encontrado." }, 503);
-      }
-
-      // Ghost-create if needed
-      if (!project.lovable_project_id) {
-        const result = await ghostCreate(sc, projectId, adminTk);
-        if ("error" in result) {
-          await addLog(sc, projectId, `❌ Ghost create failed: ${result.error}`, "error");
-          // If 401, mark as failed immediately
-          if (result.error.includes("401") || result.error.includes("Unauthorized")) {
-            await sc.from("orchestrator_projects").update({
-              status: "failed",
-              last_error: "Token Lovable expirado. Reconecte em /lovable/connect.",
-            }).eq("id", projectId);
-          }
-          return json({ error: result.error }, 502);
-        }
-        project.lovable_project_id = result.lovableProjectId;
-        // Wait for project to stabilize
-        await new Promise(r => setTimeout(r, 3000));
+        return json({ error: "No brainchain accounts available", retry_after: 30 }, 503);
       }
 
       // Get next pending task
@@ -427,6 +444,7 @@ Deno.serve(async (req: Request) => {
         .order("task_index", { ascending: true }).limit(1).maybeSingle();
 
       if (!task) {
+        await releaseBrainchainAccount(sc, account.id, true);
         await sc.from("orchestrator_projects").update({ status: "completed" }).eq("id", projectId);
         await addLog(sc, projectId, "🎉 All tasks completed!", "info");
         return json({ status: "completed" });
@@ -435,13 +453,13 @@ Deno.serve(async (req: Request) => {
       // Set to executing BEFORE sending
       await sc.from("orchestrator_projects").update({
         status: "executing", current_task_index: task.task_index as number,
-        next_tick_at: new Date(Date.now() + 30_000).toISOString(), // tick checks in 30s
+        next_tick_at: new Date(Date.now() + 30_000).toISOString(),
       }).eq("id", projectId);
 
-      const result = await executeTask(
+      const result = await executeTaskViaBrainchain(
         sc,
         { id: task.id as string, prompt: task.prompt as string, intent: task.intent as string, task_index: task.task_index as number },
-        projectId, project.lovable_project_id as string, adminTk
+        projectId, account,
       );
 
       if (!result.success) {
@@ -461,7 +479,9 @@ Deno.serve(async (req: Request) => {
         task_index: task.task_index,
         task_title: task.title,
         message_id: result.messageId,
-        message: "Task dispatched. Tick will detect completion.",
+        brainchain_account: account.id.slice(0, 8),
+        brain_project: account.brainProjectId.slice(0, 8),
+        message: "Task dispatched via Brainchain. Tick will detect completion.",
       });
     }
 
@@ -500,53 +520,6 @@ Deno.serve(async (req: Request) => {
       await sc.from("orchestrator_projects").update({ lovable_project_id: lovableProjectId, status: "paused" }).eq("id", projectId).eq("user_id", userId);
       await addLog(sc, projectId, `🔗 Linked: ${lovableProjectId}`, "info");
       return json({ success: true });
-    }
-
-    // ─── ACTION: check_completion (used by tick) ──────────────
-    if (action === "check_completion") {
-      const projectId = (body.project_id as string) || "";
-      if (!projectId) return json({ error: "project_id required" }, 400);
-
-      const isInternal = req.headers.get("x-orchestrator-internal") === "true";
-      let q = sc.from("orchestrator_projects").select("*").eq("id", projectId);
-      if (!isInternal) q = q.eq("user_id", userId);
-      const { data: project } = await q.maybeSingle();
-      if (!project) return json({ error: "Not found" }, 404);
-
-      const lovableProjectId = project.lovable_project_id as string;
-      if (!lovableProjectId) return json({ completed: false, reason: "no_project" });
-
-      const adminTk = await getUserToken(sc, project.user_id as string);
-      if (!adminTk) return json({ completed: false, reason: "no_token" });
-
-      // Check fingerprint change
-      let fpChanged = false;
-      try {
-        const fpRes = await extFetch(`${EXT_API}/projects/${lovableProjectId}/source-code`, { method: "GET" }, adminTk);
-        if (fpRes.ok) {
-          const fpData = await fpRes.json() as Record<string, unknown>;
-          const files = (fpData.files || []) as Array<{ path: string; size?: number }>;
-          const fpNow = files.map(f => `${f.path}:${f.size ?? 0}`).sort().join("|");
-          const fpBefore = project.source_fingerprint as string | null;
-          fpChanged = !!fpBefore && fpNow !== fpBefore;
-          if (fpChanged) {
-            await sc.from("orchestrator_projects").update({ source_fingerprint: fpNow }).eq("id", projectId);
-          }
-        }
-      } catch { /* non-critical */ }
-
-      // Check latest-message streaming status
-      let streamingDone = false;
-      try {
-        const pollRes = await extFetch(`${EXT_API}/projects/${lovableProjectId}/latest-message`, { method: "GET" }, adminTk);
-        if (pollRes.ok) {
-          const pollData = await pollRes.json() as Record<string, unknown>;
-          streamingDone = !!(pollData && !pollData.is_streaming && pollData.content);
-        }
-      } catch { /* non-critical */ }
-
-      const completed = fpChanged || streamingDone;
-      return json({ completed, fp_changed: fpChanged, streaming_done: streamingDone });
     }
 
     return json({ error: "Unknown action" }, 400);

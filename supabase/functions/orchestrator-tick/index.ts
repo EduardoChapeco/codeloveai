@@ -1,11 +1,11 @@
 /**
- * orchestrator-tick v3 — Handles BOTH "paused" and "executing" projects.
+ * orchestrator-tick v4 — Brainchain-powered polling
  *
- * Key fixes:
- *  - Processes "executing" projects by polling for task completion
- *  - On completion: marks task done, sets project to "paused" for next task
- *  - Timeout: 5 minutes of executing → force complete
- *  - Paused projects: dispatches next task via execute_next
+ * Key change from v3:
+ *  - Uses brainchain_accounts pool tokens (not lovable_accounts)
+ *  - Polls brain_project_id from the account used for the task
+ *  - Releases brainchain account when task completes
+ *  - No dependency on user's personal Lovable token
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -18,19 +18,65 @@ const corsHeaders = {
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
 const LOVABLE_API = "https://api.lovable.dev";
-const LOVABLE_HEADERS = { "Origin": "https://lovable.dev", "Referer": "https://lovable.dev/" };
+const LOVABLE_HEADERS = { Origin: "https://lovable.dev", Referer: "https://lovable.dev/" };
 const ORCHESTRATOR_FN = "/functions/v1/agentic-orchestrator";
 
-// Max time a task can be in "executing" before force-completing (5 min)
 const EXECUTING_TIMEOUT_MS = 5 * 60 * 1000;
-// Delay between task completion and next dispatch (40s breathing room)
 const INTER_TASK_DELAY_MS = 40 * 1000;
+
+async function extFetch(url: string, token: string) {
+  return fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...LOVABLE_HEADERS,
+      "X-Client-Git-SHA": "3d7a3673c6f02b606137a12ddc0ab88f6b775113",
+    },
+  });
+}
+
+/** Find the brainchain account that's currently busy for this project (the one running the task) */
+async function getBusyAccountForProject(sc: ReturnType<typeof createClient>, brainProjectId: string): Promise<{
+  id: string; accessToken: string;
+} | null> {
+  const { data: accounts } = await sc
+    .from("brainchain_accounts")
+    .select("id, access_token, brain_project_id")
+    .eq("brain_project_id", brainProjectId)
+    .eq("is_busy", true)
+    .limit(1);
+
+  if (accounts?.length && accounts[0].access_token) {
+    return { id: accounts[0].id, accessToken: accounts[0].access_token };
+  }
+
+  // Fallback: any active account with this brain_project_id
+  const { data: fallback } = await sc
+    .from("brainchain_accounts")
+    .select("id, access_token")
+    .eq("brain_project_id", brainProjectId)
+    .eq("is_active", true)
+    .not("access_token", "is", null)
+    .limit(1);
+
+  if (fallback?.length && fallback[0].access_token) {
+    return { id: fallback[0].id, accessToken: fallback[0].access_token };
+  }
+  return null;
+}
+
+async function releaseBrainchainAccount(sc: ReturnType<typeof createClient>, accountId: string) {
+  await sc.from("brainchain_accounts").update({
+    is_busy: false, busy_since: null, busy_user_id: null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", accountId);
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -39,10 +85,9 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const sc = createClient(supabaseUrl, serviceKey);
 
-  const now = new Date().toISOString();
+  const tickLog: string[] = [];
   let processed = 0;
   let skipped = 0;
-  const tickLog: string[] = [];
 
   try {
     // ═══════════════════════════════════════════════════════
@@ -56,54 +101,27 @@ Deno.serve(async (req: Request) => {
 
     for (const project of (executingProjects || [])) {
       try {
-        tickLog.push(`→ [executing] Project ${project.id}`);
-
-        // Get user token
-        const { data: account } = await sc
-          .from("lovable_accounts")
-          .select("token_encrypted, status")
-          .eq("user_id", project.user_id)
-          .eq("status", "active")
-          .limit(1)
-          .maybeSingle();
-
-        if (!account?.token_encrypted) {
-          // Circuit breaker: count consecutive token failures
-          const failCount = ((project.quality_score as number) || 0) + 1;
-          await sc.from("orchestrator_projects").update({ quality_score: failCount }).eq("id", project.id);
-          
-          if (failCount >= 5) {
-            // Auto-fail after 5 consecutive token failures
-            await sc.from("orchestrator_projects").update({
-              status: "failed",
-              last_error: "Token Lovable expirado. Reconecte em /lovable/connect e re-execute.",
-            }).eq("id", project.id);
-            await sc.from("orchestrator_logs").insert({
-              project_id: project.id, level: "error",
-              message: `❌ Auto-failed: token unavailable after ${failCount} attempts`,
-            });
-            tickLog.push(`  ❌ Auto-failed (no token x${failCount})`);
-            processed++;
-          } else {
-            tickLog.push(`  ⚠️ No token (attempt ${failCount}/5), skipping`);
-            skipped++;
-          }
-          continue;
-        }
-
-        // Reset failure counter on successful token retrieval
-        if ((project.quality_score as number) > 0) {
-          await sc.from("orchestrator_projects").update({ quality_score: 0 }).eq("id", project.id);
-        }
-
-        const token = account.token_encrypted as string;
         const lovableProjectId = project.lovable_project_id as string;
         if (!lovableProjectId) {
-          tickLog.push(`  ⚠️ No lovable project, skipping`);
+          await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", project.id);
+          tickLog.push(`→ [executing] ${project.id}: no project ID, reset to paused`);
+          processed++;
           continue;
         }
 
-        // Check how long it's been executing
+        tickLog.push(`→ [executing] Project ${(project.id as string).slice(0, 8)} via brain ${lovableProjectId.slice(0, 8)}`);
+
+        // Get the brainchain account token for this brain project
+        const account = await getBusyAccountForProject(sc, lovableProjectId);
+        if (!account) {
+          tickLog.push(`  ⚠️ No brainchain account found for brain ${lovableProjectId.slice(0, 8)}, skipping`);
+          skipped++;
+          continue;
+        }
+
+        const token = account.accessToken;
+
+        // Get running task
         const { data: runningTask } = await sc.from("orchestrator_tasks")
           .select("*")
           .eq("project_id", project.id)
@@ -113,9 +131,9 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (!runningTask) {
-          // No running task but status is executing — fix: set to paused
+          await releaseBrainchainAccount(sc, account.id);
           await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", project.id);
-          tickLog.push(`  🔧 No running task found, reset to paused`);
+          tickLog.push(`  🔧 No running task, released account, reset to paused`);
           processed++;
           continue;
         }
@@ -127,9 +145,9 @@ Deno.serve(async (req: Request) => {
         if (elapsed > EXECUTING_TIMEOUT_MS) {
           tickLog.push(`  ⏰ Task #${runningTask.task_index} timed out (${Math.round(elapsed / 1000)}s)`);
           await sc.from("orchestrator_tasks").update({
-            status: "completed",
-            completed_at: new Date().toISOString(),
+            status: "completed", completed_at: new Date().toISOString(),
           }).eq("id", runningTask.id);
+          await releaseBrainchainAccount(sc, account.id);
           await sc.from("orchestrator_projects").update({
             status: "paused",
             next_tick_at: new Date(Date.now() + INTER_TASK_DELAY_MS).toISOString(),
@@ -142,15 +160,13 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Check completion via fingerprint + streaming
+        // Check completion
         let completed = false;
         let reason = "";
 
         // 1. Fingerprint check
         try {
-          const fpRes = await fetch(`${LOVABLE_API}/projects/${lovableProjectId}/source-code`, {
-            headers: { Authorization: `Bearer ${token}`, ...LOVABLE_HEADERS },
-          });
+          const fpRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/source-code`, token);
           if (fpRes.ok) {
             const fpData = await fpRes.json() as Record<string, unknown>;
             const files = (fpData.files || []) as Array<{ path: string; size?: number }>;
@@ -161,31 +177,13 @@ Deno.serve(async (req: Request) => {
               reason = "fingerprint changed";
               await sc.from("orchestrator_projects").update({ source_fingerprint: fpNow }).eq("id", project.id);
             }
-          } else if (fpRes.status === 401) {
-            // Token expired mid-execution — increment failure counter
-            const failCount = ((project.quality_score as number) || 0) + 1;
-            await sc.from("orchestrator_projects").update({ quality_score: failCount }).eq("id", project.id);
-            tickLog.push(`  ⚠️ Token 401 during fingerprint check (attempt ${failCount})`);
-            if (failCount >= 3) {
-              await sc.from("orchestrator_projects").update({
-                status: "failed",
-                last_error: "Token Lovable expirado durante execução.",
-              }).eq("id", project.id);
-              tickLog.push(`  ❌ Auto-failed (token expired during execution)`);
-              processed++;
-              continue;
-            }
-            skipped++;
-            continue;
           }
         } catch { /* non-critical */ }
 
-        // 2. Streaming check (only if fingerprint didn't change yet)
+        // 2. Streaming check
         if (!completed) {
           try {
-            const pollRes = await fetch(`${LOVABLE_API}/projects/${lovableProjectId}/latest-message`, {
-              headers: { Authorization: `Bearer ${token}`, ...LOVABLE_HEADERS },
-            });
+            const pollRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/latest-message`, token);
             if (pollRes.ok) {
               const pollData = await pollRes.json() as Record<string, unknown>;
               if (pollData && !pollData.is_streaming && pollData.content && elapsed > 15_000) {
@@ -201,6 +199,7 @@ Deno.serve(async (req: Request) => {
           await sc.from("orchestrator_tasks").update({
             status: "completed", completed_at: new Date().toISOString(),
           }).eq("id", runningTask.id);
+          await releaseBrainchainAccount(sc, account.id);
           await sc.from("orchestrator_projects").update({
             status: "paused",
             next_tick_at: new Date(Date.now() + INTER_TASK_DELAY_MS).toISOString(),
@@ -222,6 +221,7 @@ Deno.serve(async (req: Request) => {
     // ═══════════════════════════════════════════════════════
     // PHASE 2: Process "paused" projects — dispatch next task
     // ═══════════════════════════════════════════════════════
+    const now = new Date().toISOString();
     const { data: pausedProjects } = await sc
       .from("orchestrator_projects")
       .select("*")
@@ -231,44 +231,7 @@ Deno.serve(async (req: Request) => {
 
     for (const project of (pausedProjects || [])) {
       try {
-        tickLog.push(`→ [paused] Project ${project.id}`);
-
-        // Circuit breaker: check if token is available before dispatching
-        const { data: tokenCheck } = await sc
-          .from("lovable_accounts")
-          .select("id")
-          .eq("user_id", project.user_id)
-          .eq("status", "active")
-          .limit(1)
-          .maybeSingle();
-
-        if (!tokenCheck) {
-          const failCount = ((project.quality_score as number) || 0) + 1;
-          await sc.from("orchestrator_projects").update({ quality_score: failCount }).eq("id", project.id);
-          
-          if (failCount >= 5) {
-            await sc.from("orchestrator_projects").update({
-              status: "failed",
-              last_error: "Token Lovable expirado. Reconecte em /lovable/connect.",
-            }).eq("id", project.id);
-            tickLog.push(`  ❌ Auto-failed: no token (${failCount} attempts)`);
-            processed++;
-          } else {
-            // Exponential backoff: delay next check
-            const backoffMs = Math.min(failCount * 60_000, 5 * 60_000);
-            await sc.from("orchestrator_projects").update({
-              next_tick_at: new Date(Date.now() + backoffMs).toISOString(),
-            }).eq("id", project.id);
-            tickLog.push(`  ⚠️ No token (attempt ${failCount}/5), backoff ${Math.round(backoffMs/1000)}s`);
-            skipped++;
-          }
-          continue;
-        }
-
-        // Reset failure counter
-        if ((project.quality_score as number) > 0) {
-          await sc.from("orchestrator_projects").update({ quality_score: 0 }).eq("id", project.id);
-        }
+        tickLog.push(`→ [paused] Project ${(project.id as string).slice(0, 8)}`);
 
         // Check if there are pending tasks
         const { data: nextTask } = await sc
@@ -281,7 +244,6 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (!nextTask) {
-          // All done!
           await sc.from("orchestrator_projects").update({ status: "completed" }).eq("id", project.id);
           await sc.from("orchestrator_logs").insert({
             project_id: project.id, level: "info", message: "🎉 All tasks completed!",
@@ -291,12 +253,12 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Dispatch execute_next via the orchestrator function
+        // Dispatch execute_next — the orchestrator will acquire a brainchain account
         const execRes = await fetch(`${supabaseUrl}${ORCHESTRATOR_FN}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceKey}`,
+            Authorization: `Bearer ${serviceKey}`,
             "x-orchestrator-internal": "true",
           },
           body: JSON.stringify({
@@ -307,20 +269,19 @@ Deno.serve(async (req: Request) => {
         });
 
         const execData = await execRes.json().catch(() => ({})) as Record<string, unknown>;
-        
-        // If execute_next failed with token error, apply backoff
-        if (execRes.status === 503 || execRes.status === 502) {
-          const failCount = ((project.quality_score as number) || 0) + 1;
-          const backoffMs = Math.min(failCount * 60_000, 5 * 60_000);
+
+        if (execRes.status === 503) {
+          // No brainchain accounts available — backoff
+          const backoffMs = 60_000;
           await sc.from("orchestrator_projects").update({
-            quality_score: failCount,
             next_tick_at: new Date(Date.now() + backoffMs).toISOString(),
           }).eq("id", project.id);
-          tickLog.push(`  ⚠️ execute_next failed (${execRes.status}), backoff ${Math.round(backoffMs/1000)}s`);
+          tickLog.push(`  ⚠️ No brainchain accounts, backoff 60s`);
+          skipped++;
         } else {
           tickLog.push(`  📤 execute_next: ${execData.status || execRes.status}`);
+          processed++;
         }
-        processed++;
       } catch (e) {
         tickLog.push(`  ❌ Error: ${(e as Error).message}`);
         await sc.from("orchestrator_projects").update({
