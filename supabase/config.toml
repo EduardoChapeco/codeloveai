@@ -198,3 +198,6 @@ verify_jwt = false
 
 [functions.cirius-ai-chat]
 verify_jwt = false
+
+[functions.brain-memory]
+verify_jwt = false

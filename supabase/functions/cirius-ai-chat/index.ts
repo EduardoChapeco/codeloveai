@@ -105,6 +105,7 @@ serve(async (req) => {
 
     // Load project files for context
     let projectFiles: Record<string, string> = {};
+    let projectMemory = "";
     if (project_id) {
       const { data: proj } = await supabase
         .from("cirius_projects")
@@ -113,10 +114,16 @@ serve(async (req) => {
         .maybeSingle();
       if (proj?.source_files_json) {
         projectFiles = proj.source_files_json as Record<string, string>;
+        // Extract project memory if exists
+        projectMemory = (projectFiles[".cirius/knowledge/base.md"] || "").trim();
       }
     }
 
-    const systemPrompt = SYSTEM_PROMPT.replace("{PROJECT_FILES}", formatFilesForPrompt(projectFiles));
+    const memorySection = projectMemory
+      ? `\n\n[PROJECT MEMORY — Previous decisions, PRD, and context]\n${projectMemory.slice(0, 8000)}\n\nUse this memory to maintain consistency with previous architectural decisions.\n`
+      : "";
+
+    const systemPrompt = SYSTEM_PROMPT.replace("{PROJECT_FILES}", formatFilesForPrompt(projectFiles)) + memorySection;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
@@ -213,6 +220,16 @@ serve(async (req) => {
               role: "assistant",
               content: fullContent,
             });
+
+            // Append interaction summary to project memory
+            const summary = `**User:** ${messages[messages.length - 1]?.content?.slice(0, 200) || "..."}\n**Assistant:** ${fullContent.slice(0, 300)}...`;
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+            fetch(`${supabaseUrl}/functions/v1/brain-memory`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${svcKey}` },
+              body: JSON.stringify({ action: "append", project_id, user_id: userId, content: `## Chat Interaction\n\n${summary}` }),
+            }).catch(() => {});
           }
         } catch (e) {
           console.error("Post-stream merge error:", e);

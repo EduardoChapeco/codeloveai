@@ -640,10 +640,20 @@ Deno.serve(async (req) => {
     }
 
     // Save PRD and set status to awaiting_approval (user must approve before code gen)
+    // Also save PRD as .cirius/prd/prd.md in source_files_json
+    const prdMarkdown = `# PRD — ${project.name}\n\n**Descrição:** ${prompt}\n\n## Tasks\n\n${prd.tasks.map((t: any, i: number) => `### ${i + 1}. ${t.title}\n- Skill: ${t.skill || "code"}\n- Prompt: ${t.prompt}\n`).join("\n")}\n\n## Design\n${JSON.stringify(prd.design || {}, null, 2)}`;
+    const existingFiles = (project.source_files_json || {}) as Record<string, string>;
+    const updatedFiles = {
+      ...existingFiles,
+      ".cirius/prd/prd.md": prdMarkdown,
+      ".cirius/knowledge/base.md": `# Project Memory\n_Created: ${new Date().toISOString()}_\n\n## PRD Aprovado\n\n${prdMarkdown}`,
+    };
+
     await sc.from("cirius_projects").update({
       prd_json: prd, status: "draft", progress_pct: 15,
+      source_files_json: updatedFiles,
     }).eq("id", projectId);
-    await logEntry(sc, projectId, "prd", "completed", `PRD gerado via build_prompt (${prd.tasks?.length || 0} tasks) — aguardando aprovação`);
+    await logEntry(sc, projectId, "prd", "completed", `PRD gerado via build_prompt (${prd.tasks?.length || 0} tasks) — salvo em .cirius/prd/prd.md e base.md`);
 
     return json({
       status: "awaiting_approval",
@@ -968,7 +978,20 @@ Deno.serve(async (req) => {
       metadata: { prd_task_count: (project.prd_json as any).tasks?.length, brain_project: brainProjectId },
     });
 
-    const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string; intent?: string; stop_condition?: string }> };
+    const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string; intent?: string; stop_condition?: string; skill?: string }> };
+
+    // Build context block from PRD + project metadata for injection into each task
+    const prdContext = `[CONTEXTO DO PROJETO]\nNome: ${project.name}\nDescrição: ${project.description || ""}\nStack: React + Tailwind + shadcn/ui + Supabase\nTemplate: ${project.template_type || "custom"}\n\n[PRD BASE]\n${prd.tasks.map((t, i) => `${i + 1}. ${t.title}: ${t.prompt?.slice(0, 200)}`).join("\n")}\n\n`;
+
+    // Save tasks as individual .cirius/skills/task-{n}.md files
+    const taskFiles: Record<string, string> = {};
+    prd.tasks.forEach((t, i) => {
+      taskFiles[`.cirius/skills/task-${i + 1}.md`] = `# Task ${i + 1}: ${t.title}\n\n**Skill:** ${t.skill || "code"}\n**Brain Type:** ${t.brain_type || "code"}\n\n## Prompt\n\n${t.prompt}\n`;
+    });
+    const existingFilesForTasks = (project.source_files_json || {}) as Record<string, string>;
+    await sc.from("cirius_projects").update({
+      source_files_json: { ...existingFilesForTasks, ...taskFiles },
+    }).eq("id", projectId);
 
     const clientPrompt = project.description || project.name || "Cirius project";
     const { data: orchProject, error: orchErr } = await sc.from("orchestrator_projects").insert({
@@ -989,7 +1012,8 @@ Deno.serve(async (req) => {
       project_id: orchProject.id, task_index: i,
       title: t.title || `Task ${i + 1}`,
       intent: t.intent || "security_fix_v2",
-      prompt: t.prompt, stop_condition: t.stop_condition || null,
+      prompt: prdContext + `[SUA ESPECIALIDADE: ${t.title}]\n\n${t.prompt}`,
+      stop_condition: t.stop_condition || null,
       brain_type: t.brain_type || "code",
     }));
     const { error: taskErr } = await sc.from("orchestrator_tasks").insert(taskInserts);
