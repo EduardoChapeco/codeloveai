@@ -46,6 +46,14 @@ const adminOperationalTabs = [
   { id: "support", label: "Suporte", icon: Headphones, desc: "Tickets de suporte" },
 ];
 
+// Admin sub-pages accessible via navigation (not tabs)
+const adminNavPages = [
+  { to: "/admin/integrations", label: "Integrações", icon: Key, desc: "API Keys & Email" },
+  { to: "/admin/brainchain", label: "Brainchain", icon: Brain, desc: "Pool de contas" },
+  { to: "/admin/cloud", label: "Lovable Cloud", icon: CloudLightning, desc: "Infra & deploy" },
+  { to: "/admin/global", label: "Admin Global", icon: Building2, desc: "Multi-tenant" },
+];
+
 const adminGlobalTabs = [
   { id: "tenants", label: "Tenants", icon: Building2, desc: "Multi-tenant" },
   { id: "plans", label: "Planos", icon: DollarSign, desc: "Pricing & billing" },
@@ -194,6 +202,7 @@ function AdminContextualSidebar({
   title,
   backTo,
   backLabel,
+  navPages,
 }: {
   tabs: typeof adminOperationalTabs;
   currentTab: string;
@@ -201,8 +210,10 @@ function AdminContextualSidebar({
   title: string;
   backTo: string;
   backLabel: string;
+  navPages?: typeof adminNavPages;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signOut } = useAuth();
   const { toggleChat, isChatOpen } = useChatContext();
   const { toggleSupport, isOpen: isSupportOpen, unreadCount } = useSupportChat();
@@ -210,6 +221,8 @@ function AdminContextualSidebar({
   const collapsed = sidebarState === "collapsed";
   const { tenant } = useTenant();
   const brandName = tenant?.name || "Starble";
+
+  const isNavActive = (path: string) => location.pathname === path;
 
   return (
     <Sidebar collapsible="icon" className="clf-glass-sidebar">
@@ -263,6 +276,40 @@ function AdminContextualSidebar({
             )}
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Nav pages (links to other admin sub-pages) */}
+        {navPages && navPages.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Páginas</SidebarGroupLabel>
+            <SidebarGroupContent>
+              {collapsed ? (
+                <SidebarMenu>
+                  {navPages.map(item => (
+                    <SidebarMenuItem key={item.to}>
+                      <SidebarMenuButton asChild isActive={isNavActive(item.to)} tooltip={item.label}>
+                        <NavLink to={item.to}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.label}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              ) : (
+                <div className="space-y-1.5 px-1">
+                  {navPages.map(item => (
+                    <GlassNavButton
+                      key={item.to}
+                      item={item}
+                      isActive={isNavActive(item.to)}
+                      collapsed={false}
+                    />
+                  ))}
+                </div>
+              )}
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-none">
@@ -344,6 +391,7 @@ export default function AppSidebar() {
         title="Admin Operacional"
         backTo="/dashboard"
         backLabel="Voltar"
+        navPages={adminNavPages}
       />
     );
   }
