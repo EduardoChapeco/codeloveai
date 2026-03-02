@@ -39,7 +39,7 @@ export default function StarCrawlLab() {
     try {
       await (supabase as any).from("lab_waitlist").insert({ email: email.trim(), feature: "starcrawl" });
       setJoined(true);
-      toast.success("🎉 Você está na lista!");
+      toast.success("Você está na lista!");
     } catch {
       setJoined(true);
       toast.success("Já estamos com você na lista!");

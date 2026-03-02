@@ -558,11 +558,11 @@ export default function OrchestratorProjectPanel() {
     setActionLoading("publish");
     try {
       await invoke({ route: `/projects/${lovableId}/publish`, method: "POST", payload: {} });
-      toast.success("🚀 Projeto publicado!");
+      toast.success("Projeto publicado!");
       setChatMessages(prev => [...prev, {
         id: crypto.randomUUID(),
         role: "system",
-        content: "🚀 **Projeto publicado com sucesso!**",
+        content: "**Projeto publicado com sucesso!**",
         timestamp: new Date().toISOString(),
         status: "sent",
       }]);

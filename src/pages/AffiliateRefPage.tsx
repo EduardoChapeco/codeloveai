@@ -142,7 +142,7 @@ export default function AffiliateRefPage() {
       <section className="px-6 py-24 max-w-4xl mx-auto text-center">
         <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-primary">⚡ Venus God Mode</span>
+          <span className="text-sm font-medium text-primary">Venus God Mode</span>
         </div>
         <h1 className="lv-heading-xl mb-6">Envios ilimitados sem descontar créditos</h1>
         <p className="lv-body text-base max-w-2xl mx-auto mb-10">

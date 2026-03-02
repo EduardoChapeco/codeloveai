@@ -310,7 +310,7 @@ export default function OrchestratorDashboard() {
                 <option value="">Sem Brain (IA direta)</option>
                 {brains.map(b => (
                   <option key={b.id} value={b.id}>
-                    🧠 {b.name || "Brain"} ({(b.brain_skills || []).join(", ") || "geral"})
+                    {b.name || "Brain"} ({(b.brain_skills || []).join(", ") || "geral"})
                   </option>
                 ))}
               </select>
@@ -336,7 +336,7 @@ export default function OrchestratorDashboard() {
           </button>
         </div>
         <p className="lv-caption text-muted-foreground">
-          {selectedBrainId ? "🧠 Brain selecionado influencia PRD e routing de tarefas" : "⌘+Enter para iniciar"}
+          {selectedBrainId ? "Brain selecionado influencia PRD e routing de tarefas" : "Cmd+Enter para iniciar"}
         </p>
       </div>
 

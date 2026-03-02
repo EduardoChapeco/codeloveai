@@ -105,7 +105,7 @@ export default function Register() {
             {/* Brain opt-in checkbox */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={wantBrain} onChange={(e) => setWantBrain(e.target.checked)} className="rounded border-border" />
-              <span className="lv-body">🧠 Ativar Star AI Brain (assistente IA dedicado)</span>
+              <span className="lv-body">Ativar Star AI Brain (assistente IA dedicado)</span>
             </label>
             {/* Affiliate checkbox */}
             <label className="flex items-center gap-2 cursor-pointer">

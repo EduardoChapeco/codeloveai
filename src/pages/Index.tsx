@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useSearchParams, Navigate } from "react-router-dom";
-import { Zap, Clock, MessageSquare, Shield, ChevronDown, Puzzle, Code2, Sparkles, Users, Building2, ArrowRight, Check } from "lucide-react";
+import { Zap, Clock, MessageSquare, Shield, ChevronDown, Puzzle, Code2, Sparkles, Users, Building2, ArrowRight, Check, Heart } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
@@ -159,7 +159,7 @@ export default function Index() {
       <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center animate-fade-in">
         <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-primary">⚡ Venus God Mode — poder máximo!</span>
+          <span className="text-sm font-medium text-primary">Venus God Mode — poder máximo</span>
         </div>
         <h1 className="lv-heading-xl mb-6">
           {isDefaultTenant
@@ -322,7 +322,9 @@ export default function Index() {
         <div className="clf-liquid-glass p-8 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-orange-500/5 pointer-events-none" />
           <div className="relative z-10">
-            <span className="text-4xl mb-4 block">☕</span>
+            <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
+              <Heart className="h-6 w-6 text-amber-500" />
+            </div>
             <h3 className="lv-heading-sm mb-2">Gostou do projeto?</h3>
             <p className="lv-body mb-5">Doe um cafezinho via PIX pelo Mercado Pago e ajude a manter o projeto vivo!</p>
             <a
@@ -331,9 +333,9 @@ export default function Index() {
               rel="noopener noreferrer"
               className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2"
             >
-              ☕ Doe um cafezinho
+              <Heart className="h-4 w-4" /> Doe um cafezinho
             </a>
-            <p className="lv-caption mt-3 opacity-60">Qualquer valor é bem-vindo 💛</p>
+            <p className="lv-caption mt-3 opacity-60">Qualquer valor é bem-vindo</p>
           </div>
         </div>
       </section>

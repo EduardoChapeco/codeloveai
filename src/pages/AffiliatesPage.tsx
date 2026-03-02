@@ -56,7 +56,7 @@ export default function AffiliatesPage() {
       });
       if (error) throw error;
       if (data?.status === "created") {
-        toast.success("🎉 Você agora é um afiliado! Redirecionando...");
+        toast.success("Você agora é um afiliado! Redirecionando...");
         setTimeout(() => navigate("/affiliate"), 1500);
       } else if (data?.error) {
         toast.error(data.error);

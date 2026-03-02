@@ -652,7 +652,7 @@ export default function AffiliateDashboard() {
           <p className="lv-overline mb-3">Desconto de afiliado</p>
           {referrals.filter(r => r.confirmed).length > 0 ? (
             <p className="lv-body mb-4">
-              Você tem <strong className="text-foreground">{affiliateData?.discount_percent}% de desconto</strong> em todos os planos porque possui indicações ativas! 🎉
+              Você tem <strong className="text-foreground">{affiliateData?.discount_percent}% de desconto</strong> em todos os planos porque possui indicações ativas!
             </p>
           ) : (
             <p className="lv-body mb-4">
