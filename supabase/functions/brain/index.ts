@@ -1260,7 +1260,14 @@ async function createFreshBrain(
       return { error: "Nenhum workspace encontrado. Reconecte em /lovable/connect." };
     }
 
-    const skillLabel = SKILL_PROFILES[primarySkill].title.replace(/Star AI — /, "").toLowerCase().replace(/\s+/g, "-");
+    const skillLabel = SKILL_PROFILES[primarySkill].title
+      .replace(/Star AI — /, "")
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // strip diacritics
+      .replace(/[^a-z0-9\s-]/g, "") // remove non-ascii
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 40);
     const projectName = `core-brain-${skillLabel}-${Date.now()}`;
 
     console.log(`[Brain] Creating project=${projectName} skills=${skills.join(",")}`);
