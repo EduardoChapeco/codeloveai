@@ -221,7 +221,8 @@ export default function CiriusDashboard() {
         {!loading && filtered.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((p) => {
-              const intent = INTENT_BADGE[(p.prd_json as any)?.intent || "custom"] || INTENT_BADGE.custom;
+              const intentKey = p.template_type || (p.prd_json as any)?.intent || "custom";
+              const intent = INTENT_BADGE[intentKey] || INTENT_BADGE.custom;
               const IntentIcon = intent.Icon;
               const statusKey = p.status || "draft";
               const gen = isGenerating(statusKey);

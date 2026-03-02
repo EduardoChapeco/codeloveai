@@ -21,9 +21,9 @@ const statusLabels: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
-  generating_prd: "bg-[hsl(var(--orange-d))] text-amber-400 border border-amber-500/20",
-  generating_code: "bg-[hsl(var(--blue-d))] text-blue-400 border border-blue-500/20",
-  deploying: "bg-[hsl(var(--purple-d))] text-purple-400 border border-purple-500/20",
+  generating_prd: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+  generating_code: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  deploying: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
   live: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
   failed: "bg-destructive/10 text-destructive border border-destructive/20",
   paused: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
@@ -185,7 +185,7 @@ export default function CiriusProject() {
                 <Badge variant="outline" className="text-[10px] gap-1 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
                   <CheckCircle2 className="h-3 w-3" /> Deployed
                 </Badge>
-              ) : project.source_files_json ? (
+              ) : project.has_files ? (
                 <Badge variant="outline" className="text-[10px] gap-1 border-blue-500/30 text-blue-400 bg-blue-500/10">
                   <CheckCircle2 className="h-3 w-3" /> Código gerado
                 </Badge>
@@ -468,7 +468,7 @@ export default function CiriusProject() {
         </div>
 
         {/* Deploy Panel */}
-        {(project.status === "live" || project.source_files_json) && (
+        {(project.status === "live" || project.has_files) && (
           <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
             <div className="px-4 py-3 border-b border-border/30 flex items-center gap-2">
               <Rocket className="h-4 w-4 text-primary" />
