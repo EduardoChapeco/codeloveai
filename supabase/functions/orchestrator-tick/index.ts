@@ -68,9 +68,32 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (!account?.token_encrypted) {
-          tickLog.push(`  ⚠️ No token, skipping`);
-          skipped++;
+          // Circuit breaker: count consecutive token failures
+          const failCount = ((project.quality_score as number) || 0) + 1;
+          await sc.from("orchestrator_projects").update({ quality_score: failCount }).eq("id", project.id);
+          
+          if (failCount >= 5) {
+            // Auto-fail after 5 consecutive token failures
+            await sc.from("orchestrator_projects").update({
+              status: "failed",
+              last_error: "Token Lovable expirado. Reconecte em /lovable/connect e re-execute.",
+            }).eq("id", project.id);
+            await sc.from("orchestrator_logs").insert({
+              project_id: project.id, level: "error",
+              message: `❌ Auto-failed: token unavailable after ${failCount} attempts`,
+            });
+            tickLog.push(`  ❌ Auto-failed (no token x${failCount})`);
+            processed++;
+          } else {
+            tickLog.push(`  ⚠️ No token (attempt ${failCount}/5), skipping`);
+            skipped++;
+          }
           continue;
+        }
+
+        // Reset failure counter on successful token retrieval
+        if ((project.quality_score as number) > 0) {
+          await sc.from("orchestrator_projects").update({ quality_score: 0 }).eq("id", project.id);
         }
 
         const token = account.token_encrypted as string;
@@ -138,6 +161,22 @@ Deno.serve(async (req: Request) => {
               reason = "fingerprint changed";
               await sc.from("orchestrator_projects").update({ source_fingerprint: fpNow }).eq("id", project.id);
             }
+          } else if (fpRes.status === 401) {
+            // Token expired mid-execution — increment failure counter
+            const failCount = ((project.quality_score as number) || 0) + 1;
+            await sc.from("orchestrator_projects").update({ quality_score: failCount }).eq("id", project.id);
+            tickLog.push(`  ⚠️ Token 401 during fingerprint check (attempt ${failCount})`);
+            if (failCount >= 3) {
+              await sc.from("orchestrator_projects").update({
+                status: "failed",
+                last_error: "Token Lovable expirado durante execução.",
+              }).eq("id", project.id);
+              tickLog.push(`  ❌ Auto-failed (token expired during execution)`);
+              processed++;
+              continue;
+            }
+            skipped++;
+            continue;
           }
         } catch { /* non-critical */ }
 
@@ -194,6 +233,43 @@ Deno.serve(async (req: Request) => {
       try {
         tickLog.push(`→ [paused] Project ${project.id}`);
 
+        // Circuit breaker: check if token is available before dispatching
+        const { data: tokenCheck } = await sc
+          .from("lovable_accounts")
+          .select("id")
+          .eq("user_id", project.user_id)
+          .eq("status", "active")
+          .limit(1)
+          .maybeSingle();
+
+        if (!tokenCheck) {
+          const failCount = ((project.quality_score as number) || 0) + 1;
+          await sc.from("orchestrator_projects").update({ quality_score: failCount }).eq("id", project.id);
+          
+          if (failCount >= 5) {
+            await sc.from("orchestrator_projects").update({
+              status: "failed",
+              last_error: "Token Lovable expirado. Reconecte em /lovable/connect.",
+            }).eq("id", project.id);
+            tickLog.push(`  ❌ Auto-failed: no token (${failCount} attempts)`);
+            processed++;
+          } else {
+            // Exponential backoff: delay next check
+            const backoffMs = Math.min(failCount * 60_000, 5 * 60_000);
+            await sc.from("orchestrator_projects").update({
+              next_tick_at: new Date(Date.now() + backoffMs).toISOString(),
+            }).eq("id", project.id);
+            tickLog.push(`  ⚠️ No token (attempt ${failCount}/5), backoff ${Math.round(backoffMs/1000)}s`);
+            skipped++;
+          }
+          continue;
+        }
+
+        // Reset failure counter
+        if ((project.quality_score as number) > 0) {
+          await sc.from("orchestrator_projects").update({ quality_score: 0 }).eq("id", project.id);
+        }
+
         // Check if there are pending tasks
         const { data: nextTask } = await sc
           .from("orchestrator_tasks")
@@ -231,7 +307,19 @@ Deno.serve(async (req: Request) => {
         });
 
         const execData = await execRes.json().catch(() => ({})) as Record<string, unknown>;
-        tickLog.push(`  📤 execute_next: ${execData.status || execRes.status}`);
+        
+        // If execute_next failed with token error, apply backoff
+        if (execRes.status === 503 || execRes.status === 502) {
+          const failCount = ((project.quality_score as number) || 0) + 1;
+          const backoffMs = Math.min(failCount * 60_000, 5 * 60_000);
+          await sc.from("orchestrator_projects").update({
+            quality_score: failCount,
+            next_tick_at: new Date(Date.now() + backoffMs).toISOString(),
+          }).eq("id", project.id);
+          tickLog.push(`  ⚠️ execute_next failed (${execRes.status}), backoff ${Math.round(backoffMs/1000)}s`);
+        } else {
+          tickLog.push(`  📤 execute_next: ${execData.status || execRes.status}`);
+        }
         processed++;
       } catch (e) {
         tickLog.push(`  ❌ Error: ${(e as Error).message}`);
