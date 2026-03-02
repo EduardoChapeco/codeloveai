@@ -12,7 +12,7 @@ import { ArrowLeft, Github, Globe, Database, Check, ExternalLink } from "lucide-
 
 const PROVIDERS = [
   { id: "github", name: "GitHub", icon: Github, desc: "Push código + criar repos", scopes: "repo, read:user", isOAuth: true },
-  { id: "vercel", name: "Vercel", icon: Globe, desc: "Deploy automático de apps", scopes: "deployments, projects", isOAuth: true },
+  { id: "vercel", name: "Vercel", icon: Globe, desc: "Deploy automático de apps", scopes: "API Token", isOAuth: false, tokenField: true },
   { id: "netlify", name: "Netlify", icon: Globe, desc: "Deploy por ZIP ou Git", scopes: "all", isOAuth: true },
   { id: "supabase", name: "Supabase", icon: Database, desc: "Aplicar migrations SQL", scopes: "service_role", isOAuth: false },
 ];
@@ -28,6 +28,10 @@ export default function CiriusIntegrations() {
   const [sbUrl, setSbUrl] = useState("");
   const [sbKey, setSbKey] = useState("");
   const [savingSb, setSavingSb] = useState(false);
+
+  // Vercel manual fields
+  const [vercelToken, setVercelToken] = useState("");
+  const [savingVercel, setSavingVercel] = useState(false);
 
   useEffect(() => {
     const connected = searchParams.get("connected");
@@ -90,6 +94,22 @@ export default function CiriusIntegrations() {
     setSavingSb(false);
   }
 
+  async function saveVercel() {
+    if (!vercelToken.trim()) { toast.error("API Token é obrigatório"); return; }
+    setSavingVercel(true);
+    const { data, error } = await supabase.functions.invoke("cirius-generate", {
+      body: { action: "save_vercel_integration", vercel_token: vercelToken.trim() },
+    });
+    if (error || data?.error) {
+      toast.error(data?.error || "Falha ao salvar integração Vercel");
+    } else {
+      toast.success("Vercel conectado!");
+      setVercelToken("");
+      await loadIntegrations();
+    }
+    setSavingVercel(false);
+  }
+
   if (!user) { navigate("/login"); return null; }
 
   return (
@@ -131,6 +151,17 @@ export default function CiriusIntegrations() {
                     </Button>
                   ) : null}
                 </CardContent>
+
+                {/* Vercel manual form */}
+                {p.id === "vercel" && !connected && (
+                  <CardContent className="pt-0 space-y-3 border-t mt-2">
+                    <Input placeholder="Vercel API Token" type="password" value={vercelToken} onChange={e => setVercelToken(e.target.value)} />
+                    <p className="text-xs text-muted-foreground">Gere em vercel.com → Settings → Tokens</p>
+                    <Button onClick={saveVercel} disabled={savingVercel} size="sm">
+                      {savingVercel ? "Salvando..." : "Salvar Vercel"}
+                    </Button>
+                  </CardContent>
+                )}
 
                 {/* Supabase manual form */}
                 {p.id === "supabase" && !connected && (
