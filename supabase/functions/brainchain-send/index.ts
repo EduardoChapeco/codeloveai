@@ -17,6 +17,7 @@ const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 async function resolveRequester(req: Request, requestedUserId?: string) {
+  // 1. Admin key header bypass
   const adminBypass = req.headers.get('x-brainchain-admin-key');
   if (BRAINCHAIN_ADMIN_KEY && adminBypass === BRAINCHAIN_ADMIN_KEY) {
     if (!requestedUserId || !isUuid(requestedUserId)) {
@@ -30,6 +31,16 @@ async function resolveRequester(req: Request, requestedUserId?: string) {
     return { ok: false as const, status: 401, error: 'Unauthorized' };
   }
 
+  // 2. Service role key bypass (internal service-to-service calls from cirius-generate, orchestrator-tick, etc.)
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (serviceKey && authHeader === `Bearer ${serviceKey}`) {
+    if (!requestedUserId || !isUuid(requestedUserId)) {
+      return { ok: false as const, status: 400, error: 'Invalid or missing user_id for service call' };
+    }
+    return { ok: true as const, userId: requestedUserId };
+  }
+
+  // 3. Standard user JWT auth
   const authClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_PUBLISHABLE_KEY')!,
