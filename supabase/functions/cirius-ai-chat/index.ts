@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { extractFilesFromMarkdown, mergeFileMaps as mergeFileMapsMd } from "../_shared/md-assembly.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -212,7 +213,15 @@ serve(async (req) => {
 
     let filesUpdated = 0;
     if (project_id) {
-      const newFiles = extractFileBlocks(assistantContent);
+      // Try <file> tag extraction first, then markdown code fence extraction as fallback
+      let newFiles = extractFileBlocks(assistantContent);
+      if (Object.keys(newFiles).length === 0) {
+        // Brain responds in .md format with code fences — use md-assembly parser
+        newFiles = extractFilesFromMarkdown(assistantContent);
+        if (Object.keys(newFiles).length > 0) {
+          console.log(`[cirius-ai-chat] Extracted ${Object.keys(newFiles).length} files via md-assembly (Brain .md format)`);
+        }
+      }
       filesUpdated = Object.keys(newFiles).length;
 
       if (filesUpdated > 0) {
