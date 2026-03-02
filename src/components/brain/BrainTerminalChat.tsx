@@ -1,5 +1,5 @@
 import { useRef, useEffect } from "react";
-import { CheckCircle, XCircle, AlertTriangle, Loader2, Copy } from "lucide-react";
+import { CheckCircle, XCircle, AlertTriangle, Loader2, Copy, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 type ConvoStatus = "pending" | "processing" | "completed" | "timeout" | "failed";
@@ -43,11 +43,13 @@ export default function BrainTerminalChat({
   processingIds,
   messagesEndRef,
   chatContainerRef,
+  onRetry,
 }: {
   conversations: Conversation[];
   processingIds: Set<string>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   chatContainerRef: React.RefObject<HTMLDivElement>;
+  onRetry?: (convo: Conversation) => void;
 }) {
   return (
     <div
@@ -93,7 +95,12 @@ export default function BrainTerminalChat({
               {convo.status === "timeout" && (
                 <div className="text-amber-400 flex items-center gap-1.5">
                   <AlertTriangle className="h-3 w-3" />
-                  <span>[{time}] TIMEOUT — Response not captured. Retry.</span>
+                  <span>[{time}] TIMEOUT — Response not captured.</span>
+                  {onRetry && (
+                    <button onClick={() => onRetry(convo)} className="ml-2 text-cyan-400 hover:text-cyan-300 flex items-center gap-1 underline underline-offset-2">
+                      <RefreshCw className="h-3 w-3" /> retry
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -101,6 +108,11 @@ export default function BrainTerminalChat({
                 <div className="text-red-400 flex items-center gap-1.5">
                   <XCircle className="h-3 w-3" />
                   <span>[{time}] ERROR — {convo.ai_response || "Failed to process."}</span>
+                  {onRetry && (
+                    <button onClick={() => onRetry(convo)} className="ml-2 text-cyan-400 hover:text-cyan-300 flex items-center gap-1 underline underline-offset-2">
+                      <RefreshCw className="h-3 w-3" /> retry
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -131,6 +143,14 @@ export default function BrainTerminalChat({
                       >
                         <Copy className="h-3 w-3" /> copy
                       </button>
+                      {onRetry && (
+                        <button
+                          onClick={() => onRetry(convo)}
+                          className="text-green-500/40 hover:text-cyan-400 transition-colors flex items-center gap-1"
+                        >
+                          <RefreshCw className="h-3 w-3" /> resend
+                        </button>
+                      )}
                       <CheckCircle className="h-3 w-3 text-green-500/40" />
                     </div>
                   </div>
