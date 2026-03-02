@@ -1,5 +1,5 @@
-// venus-chat v2.0.0 — Multi-mode FREE messaging endpoint
-// Supports: task_error, task, chat, security, build_error
+// venus-chat v3.0.0 — Multi-mode FREE messaging endpoint
+// Supports: task_error, task, chat, security, build_error, amplify, upload
 // Token resolution: explicit > JWT user > CLF1 license
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -79,6 +79,12 @@ function json(body: Record<string, unknown>, status = 200) {
 
 function makeAiMsgId(): string {
   return generateTypeId("aimsg");
+}
+
+// Base32 ID generator (Lovable format)
+const B32 = "0123456789abcdefghjkmnpqrstvwxyz";
+function rb32(n: number): string {
+  return Array.from({ length: n }, () => B32[Math.floor(Math.random() * 32)]).join("");
 }
 
 // ─── Token resolution (same pattern as speed-chat/lovable-proxy) ───
@@ -204,6 +210,34 @@ async function resolveLovableToken(
   return null;
 }
 
+// ─── Rate limiting ───
+async function checkRateLimit(licenseKey: string, action: string, maxPerMinute = 30): Promise<boolean> {
+  if (!licenseKey) return true; // no key = no rate limit (token-based auth)
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const windowStart = new Date();
+    windowStart.setSeconds(0, 0);
+
+    const { data } = await supabase
+      .from("venus_rate_limits")
+      .upsert(
+        { license_key: licenseKey, action, window_start: windowStart.toISOString(), request_count: 1 },
+        { onConflict: "license_key,action,window_start" }
+      )
+      .select("request_count")
+      .single();
+
+    if (data && data.request_count > maxPerMinute) return false;
+
+    // Increment if already existed
+    if (data && data.request_count > 1) return true;
+    await supabase.rpc("increment_rate_limit_noop").catch(() => {});
+    return true;
+  } catch {
+    return true; // fail open
+  }
+}
+
 // ─── Main handler ───
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -216,13 +250,168 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Invalid JSON" }, 400);
   }
 
+  // ─── ACTION: amplify ───
+  const action = ((body.action as string) || "").trim();
+
+  if (action === "amplify") {
+    const message = ((body.message as string) || "").trim();
+    const lovableToken = ((body.lovable_token as string) || (body.lovableToken as string) || "").trim();
+    const projectId = ((body.project_id as string) || (body.projectId as string) || "").trim();
+
+    if (!message || !lovableToken || !projectId) {
+      return json({ error: "message, lovable_token e project_id obrigatórios" }, 400);
+    }
+
+    // Fetch last AI message for view_description context
+    let lastAiMsgId: string | null = null;
+    let lastTools = "lov-view, lov-copy, screenshot";
+
+    try {
+      const latestRes = await fetch(
+        `${LOVABLE_API}/projects/${projectId}/latest-message`,
+        { headers: { Authorization: `Bearer ${lovableToken}`, Origin: "https://lovable.dev" } }
+      );
+      if (latestRes.ok) {
+        const latestData = await latestRes.json();
+        lastAiMsgId = latestData?.id ?? latestData?.ai_message_id ?? null;
+        if (latestData?.tools_executed) lastTools = latestData.tools_executed;
+      } else {
+        await latestRes.text().catch(() => {});
+      }
+    } catch { /* use fallback without lastAiMsgId */ }
+
+    const msgId = "usermsg_" + rb32(26);
+    const aiMsgId = "aimsg_" + rb32(26);
+
+    const viewDescription = lastAiMsgId
+      ? `The Details view shows the full trajectory of agent actions for a message, including thinking content and tool calls. The user is viewing the Timeline tab on the Activity view. This tab shows the agent's step-by-step activity: tool calls, plans, text responses, and errors. Users can expand tool items to see details like file diffs, generated images or videos, browser screenshots, or HITL inputs. Message ID: ${lastAiMsgId}. Tools executed: ${lastTools}.`
+      : `The Details view shows the full trajectory of agent actions for a message, including thinking content and tool calls. The user is viewing the Timeline tab on the Activity view.`;
+
+    const amplifyPayload = {
+      id: msgId,
+      message,
+      chat_only: false,
+      ai_message_id: aiMsgId,
+      thread_id: "main",
+      view: "activity",
+      view_description: viewDescription,
+      model: null,
+      session_replay: "[]",
+      client_logs: [],
+      network_requests: [],
+      runtime_errors: [],
+      integration_metadata: {
+        browser: { preview_viewport_width: 1280, preview_viewport_height: 854, auth_token: lovableToken },
+        supabase: { auth_token: lovableToken },
+      },
+    };
+
+    try {
+      const lvRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${lovableToken}`,
+          "Content-Type": "application/json",
+          Origin: "https://lovable.dev",
+          Referer: "https://lovable.dev/",
+        },
+        body: JSON.stringify(amplifyPayload),
+      });
+
+      const lvBody = await lvRes.text().catch(() => "");
+
+      if (lvRes.status === 202 || lvRes.ok) {
+        return json({ ok: true, msg_id: msgId, ai_msg_id: aiMsgId });
+      }
+
+      return json(
+        { error: "Lovable retornou " + lvRes.status, detail: lvBody.slice(0, 200) },
+        lvRes.status >= 500 ? 502 : lvRes.status
+      );
+    } catch (e) {
+      return json({ ok: false, error: "Connection failed: " + (e as Error).message }, 502);
+    }
+  }
+
+  // ─── ACTION: upload ───
+  if (action === "upload") {
+    const fileBase64 = (body.file_base64 as string) || "";
+    const fileName = (body.file_name as string) || "";
+    const fileType = (body.file_type as string) || "";
+    const lovableToken = ((body.lovable_token as string) || (body.lovableToken as string) || "").trim();
+
+    if (!fileBase64 || !fileName || !lovableToken) {
+      return json({ error: "file_base64, file_name e lovable_token obrigatórios" }, 400);
+    }
+
+    const ext = fileName.split(".").pop() || "bin";
+    const uid = crypto.randomUUID();
+    const today = new Date().toISOString().split("T")[0].replace(/-/g, "/");
+    const dirName = `tool-images/${today}`;
+    const gcsName = `${uid}.${ext}`;
+
+    // Step 1: Get presigned URL
+    let presignRes: Response;
+    try {
+      presignRes = await fetch(`${LOVABLE_API}/files/generate-download-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableToken}` },
+        body: JSON.stringify({ dir_name: dirName, file_name: gcsName }),
+      });
+    } catch (e) {
+      return json({ error: "Falha ao conectar ao serviço de upload: " + (e as Error).message }, 502);
+    }
+
+    if (!presignRes.ok) {
+      const errText = await presignRes.text().catch(() => "");
+      return json({ error: "Falha ao gerar URL de upload", status: presignRes.status, detail: errText.slice(0, 200) }, 502);
+    }
+
+    const presignData = await presignRes.json();
+    const uploadUrl = presignData.url || presignData.upload_url || presignData.signed_url;
+    const publicUrl = presignData.public_url || presignData.download_url ||
+      `https://storage.googleapis.com/gpt-engineer-file-uploads/${dirName}/${gcsName}`;
+
+    if (!uploadUrl) {
+      return json({ error: "URL de upload não retornada" }, 502);
+    }
+
+    // Step 2: Decode base64 and PUT to GCS
+    let fileBuffer: Uint8Array;
+    try {
+      fileBuffer = Uint8Array.from(atob(fileBase64), (c) => c.charCodeAt(0));
+    } catch {
+      return json({ error: "Base64 inválido" }, 400);
+    }
+
+    // Try without Content-Type first (most compatible with GCS signed URLs)
+    let putRes = await fetch(uploadUrl, { method: "PUT", body: fileBuffer });
+
+    // If fails, retry with Content-Type for images
+    if (!putRes.ok && fileType?.startsWith("image/")) {
+      await putRes.text().catch(() => {}); // consume body
+      putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": fileType },
+        body: fileBuffer,
+      });
+    }
+
+    if (!putRes.ok) {
+      const errText = await putRes.text().catch(() => "");
+      return json({ error: "Falha no upload para GCS", status: putRes.status, detail: errText.slice(0, 200) }, 502);
+    }
+    await putRes.text().catch(() => {}); // consume body
+
+    return json({ ok: true, public_url: publicUrl, name: fileName });
+  }
+
+  // ─── Standard message flow ───
   const task = ((body.task as string) || (body.message as string) || "").trim();
   const projectId = ((body.project_id as string) || (body.projectId as string) || "").trim();
   const mode = ((body.mode as string) || "task_error").trim();
   const files = Array.isArray(body.files) ? body.files : [];
-  // skip_suffix: when true, do NOT append UPDATE_MD_PROMPT (used by extension chat, ghost create)
   const skipSuffix = body.skip_suffix === true || body.skipSuffix === true;
-  // skip_prefix: when true, do NOT prepend ANTI_Q (rare, for raw passthrough)
   const skipPrefix = body.skip_prefix === true || body.skipPrefix === true;
 
   if (!task) return json({ ok: false, error: "task/message is required" }, 400);

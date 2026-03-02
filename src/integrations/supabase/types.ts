@@ -5596,6 +5596,7 @@ export type Database = {
           project_id: string
           text: string
           ts: number | null
+          updated_at: string | null
           x: number | null
           y: number | null
         }
@@ -5607,6 +5608,7 @@ export type Database = {
           project_id: string
           text: string
           ts?: number | null
+          updated_at?: string | null
           x?: number | null
           y?: number | null
         }
@@ -5618,6 +5620,7 @@ export type Database = {
           project_id?: string
           text?: string
           ts?: number | null
+          updated_at?: string | null
           x?: number | null
           y?: number | null
         }
@@ -5662,6 +5665,30 @@ export type Database = {
           tasks?: Json | null
           total_tasks?: number | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      venus_rate_limits: {
+        Row: {
+          action: string
+          id: string
+          license_key: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          action: string
+          id?: string
+          license_key: string
+          request_count?: number
+          window_start?: string
+        }
+        Update: {
+          action?: string
+          id?: string
+          license_key?: string
+          request_count?: number
+          window_start?: string
         }
         Relationships: []
       }
