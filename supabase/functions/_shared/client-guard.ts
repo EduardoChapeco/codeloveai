@@ -11,7 +11,10 @@
  * Window: ±5 minutes (accounts for clock drift)
  */
 
-const CLIENT_SIG_KEY = Deno.env.get("CLIENT_SIG_KEY") || Deno.env.get("CLF_TOKEN_SECRET") || ""; // loaded from environment
+// Client fingerprint key — NOT a security secret (embedded in browser bundle + extensions).
+// This is a fingerprinting mechanism to filter non-app traffic, not authentication.
+// Real auth is handled via JWT Bearer tokens validated per-function.
+const CLIENT_SIG_KEY = Deno.env.get("CLIENT_SIG_KEY") || "stbl_c8f2a91d4e7b3c6a0f5e8d2b1a9c7f4e";
 const ALLOWED_APPS = new Set(["ext", "spd", "web", "venus"]);
 const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
