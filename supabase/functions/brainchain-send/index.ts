@@ -1,4 +1,3 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -27,6 +26,7 @@ async function selectAccount(supabase: ReturnType<typeof createClient>, brainTyp
       .eq('is_busy', false)
       .eq('brain_type', type)
       .lt('error_count', 5)
+      .not('brain_project_id', 'is', null)
       .order('last_used_at', { ascending: true, nullsFirst: true })
       .limit(1);
 
@@ -71,7 +71,18 @@ async function ensureValidToken(supabase: ReturnType<typeof createClient>, accou
   } catch (_) { return null; }
 }
 
-serve(async (req) => {
+async function getInitialLatestMessageId(projectId: string, token: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://api.lovable.dev/projects/${projectId}/chat/latest-message`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Origin': 'https://lovable.dev' },
+    });
+    if (!res.ok) return null;
+    const latest = await res.json();
+    return latest?.id || null;
+  } catch { return null; }
+}
+
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   const supabase = createClient(
@@ -133,6 +144,9 @@ serve(async (req) => {
     const projectId = account.brain_project_id;
     if (!projectId) throw new Error('Brain project não configurado para esta conta');
 
+    // Snapshot the current latest message ID BEFORE sending
+    const initialMsgId = await getInitialLatestMessageId(projectId, token);
+
     const msgId = 'usermsg_' + rb32(26);
     const aiMsgId = 'aimsg_' + rb32(26);
 
@@ -175,19 +189,20 @@ serve(async (req) => {
       throw new Error(d.error || 'Lovable retornou HTTP ' + lvRes.status);
     }
 
-    // Poll for response
+    // Poll for response using correct URL
     let response: string | null = null;
     for (let i = 0; i < 15; i++) {
       await new Promise(r => setTimeout(r, 3000));
       try {
         const latestRes = await fetch(
-          `https://api.lovable.dev/projects/${projectId}/latest-message`,
+          `https://api.lovable.dev/projects/${projectId}/chat/latest-message`,
           { headers: { 'Authorization': `Bearer ${token}`, 'Origin': 'https://lovable.dev' } }
         );
         if (latestRes.ok) {
           const latest = await latestRes.json();
           const content = latest?.content || latest?.message || latest?.text || '';
-          if (content && content.length > 20 && latest?.id !== msgId) {
+          // Compare with initial snapshot to detect NEW responses
+          if (content && content.length > 20 && latest?.id && latest.id !== initialMsgId) {
             response = content;
             break;
           }

@@ -446,56 +446,7 @@ Regras:
   return null;
 }
 
-// ─── Code Generation via Brainchain + Fallback ───
-
-async function executeCodeTask(
-  sc: SupabaseClient, userId: string, projectId: string,
-  taskPrompt: string, taskIndex: number, brainType = "code"
-): Promise<{ engine: string; ok: boolean; error?: string; queueId?: string }> {
-  const prefix = `IMPORTANTE: Execute diretamente, sem perguntas.\n\n`;
-
-  // 1. Brainchain (pool)
-  const bcResult = await sendViaBrainchain(sc, userId, prefix + taskPrompt, brainType);
-  await logEntry(sc, projectId, `code_task_${taskIndex}_brainchain`, bcResult.ok ? "started" : "failed",
-    bcResult.ok ? `Task ${taskIndex + 1} sent via Brainchain${bcResult.queueId ? ` (queue: ${bcResult.queueId.slice(0, 8)})` : ""}` : `Brainchain failed: ${bcResult.error}`, {
-    duration_ms: bcResult.durationMs, error_msg: bcResult.error,
-    metadata: { queue_id: bcResult.queueId, engine: "brainchain" },
-  });
-  if (bcResult.ok) return { engine: "brainchain", ok: true, queueId: bcResult.queueId };
-
-  // 2. OpenRouter (Claude) fallback
-  const orResult = await sendViaOpenRouter(prefix + taskPrompt, "You are a senior developer. Implement the requested changes.");
-  await logEntry(sc, projectId, `code_task_${taskIndex}_openrouter`, orResult.content && orResult.content.length > 50 ? "completed" : "failed",
-    orResult.content && orResult.content.length > 50 ? `Task ${taskIndex + 1} via OpenRouter (${orResult.content.length} chars)` : `OpenRouter failed: ${orResult.error || "short response"}`, {
-    duration_ms: orResult.durationMs, error_msg: orResult.error,
-    metadata: { response_length: orResult.content?.length, engine: "openrouter" },
-  });
-  if (orResult.content && orResult.content.length > 50) return { engine: "openrouter", ok: true };
-
-  // 3. Brain pessoal
-  const brain = await getUserBrain(sc, userId);
-  const token = await getUserToken(sc, userId);
-  if (brain && token) {
-    const sendResult = await sendViaBrainProject(brain.projectId, token, prefix + taskPrompt);
-    await logEntry(sc, projectId, `code_task_${taskIndex}_brain`, sendResult.ok ? "started" : "failed",
-      sendResult.ok ? `Task ${taskIndex + 1} sent via personal Brain` : `Brain failed: ${sendResult.error}`, {
-      duration_ms: sendResult.durationMs, error_msg: sendResult.error,
-      metadata: { brain_project: brain.projectId, engine: "brain" },
-    });
-    if (sendResult.ok) return { engine: "brain", ok: true };
-  } else {
-    await logEntry(sc, projectId, `code_task_${taskIndex}_brain`, "failed",
-      `Personal Brain unavailable: ${!brain ? "no brain project" : "no token"}`, {
-      metadata: { has_brain: !!brain, has_token: !!token, engine: "brain" },
-    });
-  }
-
-  await logEntry(sc, projectId, `code_task_${taskIndex}_all_failed`, "failed",
-    `ALL engines failed for task ${taskIndex + 1}`, {
-    metadata: { tried: ["brainchain", "openrouter", "brain"] },
-  });
-  return { engine: "none", ok: false, error: "All engines failed" };
-}
+// ─── Code Generation (handled by agentic-orchestrator) ───
 
 // ─── Post-orchestration AI refinement ───
 async function refineSourceFiles(
@@ -624,7 +575,6 @@ async function syncFilesFromLatestMessage(sc: SupabaseClient, projectId: string,
   await sc.from("cirius_projects").update({
     source_files_json: merged,
     files_fingerprint: fingerprint,
-    lovable_project_id: lovableProjectId,
     progress_pct: 80,
     generation_ended_at: new Date().toISOString(),
   }).eq("id", projectId);
@@ -656,10 +606,13 @@ Deno.serve(async (req) => {
     if (!prompt || prompt.length < 3) return json({ error: "prompt required (min 3 chars)" }, 400);
     if (prompt.length > 10_000) return json({ error: "prompt too long (max 10000 chars)" }, 400);
 
+    const effectiveBuildUserId = user?.id || (isServiceKey ? body.user_id : null);
+    if (!effectiveBuildUserId) return json({ error: "user_id required" }, 400);
+
     const { data: project } = await sc.from("cirius_projects")
       .select("*")
       .eq("id", projectId)
-      .eq("user_id", user.id)
+      .eq("user_id", effectiveBuildUserId)
       .single();
 
     if (!project) return json({ error: "Project not found" }, 404);
@@ -925,8 +878,8 @@ Deno.serve(async (req) => {
     let brainProjectId = bcAccounts?.[0]?.brain_project_id || null;
 
     // Fallback: try user's personal Brain
-    if (!brainProjectId) {
-      const brain = await getUserBrain(sc, user.id);
+    if (!brainProjectId && effectiveUserId) {
+      const brain = await getUserBrain(sc, effectiveUserId);
       brainProjectId = brain?.projectId || null;
     }
 
@@ -1036,9 +989,11 @@ Deno.serve(async (req) => {
   if (action === "status") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
+    const statusUserId = user?.id || (isServiceKey ? body.user_id : null);
+    if (!statusUserId) return json({ error: "user_id required" }, 400);
     const { data: project } = await sc.from("cirius_projects")
-      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at, orchestrator_project_id, source_files_json, lovable_project_id, brain_project_id")
-      .eq("id", projectId).eq("user_id", user.id).single();
+      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at, orchestrator_project_id, lovable_project_id, brain_project_id")
+      .eq("id", projectId).eq("user_id", statusUserId).single();
     if (!project) return json({ error: "Not found" }, 404);
 
     // Get cirius logs
