@@ -25,6 +25,7 @@ function json(data: unknown, status = 200) {
   });
 }
 
+/** Extract and validate PRD JSON with strict quality checks */
 function extractJSON(content: string): any {
   if (!content || content.length < 10) return null;
   let s = content.trim();
@@ -36,9 +37,72 @@ function extractJSON(content: string): any {
   if (j >= 0) s = s.slice(0, j + 1);
   try {
     const parsed = JSON.parse(s);
-    if (parsed.tasks && Array.isArray(parsed.tasks) && parsed.tasks.length > 0) return parsed;
+    return validatePRD(parsed);
   } catch { /* invalid */ }
   return null;
+}
+
+/** Validate PRD structure and completeness */
+function validatePRD(prd: any): any | null {
+  if (!prd || typeof prd !== "object") return null;
+  if (!Array.isArray(prd.tasks) || prd.tasks.length === 0) return null;
+  if (prd.tasks.length > 15) return null; // sanity cap
+
+  // Validate each task has required fields with substance
+  const validTasks = prd.tasks.filter((t: any) => {
+    if (!t || typeof t !== "object") return false;
+    const title = typeof t.title === "string" ? t.title.trim() : "";
+    const prompt = typeof t.prompt === "string" ? t.prompt.trim() : "";
+    // Title must be 3+ chars, prompt must be 20+ chars (substantive)
+    return title.length >= 3 && prompt.length >= 20;
+  });
+
+  if (validTasks.length === 0) return null;
+
+  // Normalize tasks — ensure required fields
+  const normalizedTasks = validTasks.map((t: any, i: number) => ({
+    title: String(t.title).trim().slice(0, 200),
+    skill: typeof t.skill === "string" ? t.skill.slice(0, 30) : "code",
+    intent: typeof t.intent === "string" ? t.intent.slice(0, 30) : "security_fix_v2",
+    prompt: String(t.prompt).trim().slice(0, 5000),
+    stop_condition: typeof t.stop_condition === "string" ? t.stop_condition.slice(0, 200) : null,
+    brain_type: typeof t.brain_type === "string" ? t.brain_type.slice(0, 30) : "code",
+  }));
+
+  // Validate design object if present
+  let design = null;
+  if (prd.design && typeof prd.design === "object") {
+    design = {
+      primary_color: typeof prd.design.primary_color === "string" ? prd.design.primary_color.slice(0, 20) : "#6366f1",
+      font: typeof prd.design.font === "string" ? prd.design.font.slice(0, 50) : "Geist",
+      style: typeof prd.design.style === "string" ? prd.design.style.slice(0, 50) : "modern_minimal",
+      pages: Array.isArray(prd.design.pages) ? prd.design.pages.filter((p: any) => typeof p === "string").slice(0, 20).map((p: string) => p.slice(0, 60)) : [],
+      tables: Array.isArray(prd.design.tables) ? prd.design.tables.filter((t: any) => typeof t === "string").slice(0, 30).map((t: string) => t.slice(0, 60)) : [],
+    };
+  }
+
+  return { tasks: normalizedTasks, design };
+}
+
+/** Validate captured Brain/AI response quality */
+function validateCapturedResponse(response: string): string | null {
+  if (!response || typeof response !== "string") return null;
+  const trimmed = response.trim();
+  // Must be substantive (not just whitespace/boilerplate)
+  if (trimmed.length < 50) return null;
+  // Reject obvious error pages or empty templates
+  const rejectPatterns = [
+    /^<!DOCTYPE/i,
+    /^<html/i,
+    /^{"error"/i,
+    /^404\s/i,
+    /^500\s/i,
+    /aguardando instrucoes/i,
+    /brain ativado\.\s*credenciais/i,
+  ];
+  if (rejectPatterns.some(r => r.test(trimmed))) return null;
+  // Cap response size (prevent memory issues)
+  return trimmed.slice(0, 100_000);
 }
 
 async function getUser(req: Request) {
@@ -166,7 +230,8 @@ async function captureBrainResponse(
         const msg = await res.json().catch(() => null);
         if (msg && msg.role !== "user" && !msg.is_streaming && msg.id !== initialMsgId) {
           const content = (msg.content || msg.text || "").trim();
-          if (content.length > 30) return content;
+          const validated = validateCapturedResponse(content);
+          if (validated) return validated;
         }
       }
     } catch { /* continue */ }
@@ -183,7 +248,8 @@ async function captureBrainResponse(
               const parts = c.split("---");
               if (parts.length >= 3) {
                 const body = parts.slice(2).join("---").trim();
-                if (body.length > 20) return body;
+                const validatedBody = validateCapturedResponse(body);
+                if (validatedBody) return validatedBody;
               }
             }
           }
@@ -463,10 +529,11 @@ Deno.serve(async (req) => {
 
   // ─── BUILD_PROMPT (single-entry real pipeline trigger) ───
   if (action === "build_prompt") {
-    const projectId = body.project_id as string;
-    const prompt = (body.prompt as string || "").trim();
-    if (!projectId) return json({ error: "project_id required" }, 400);
-    if (!prompt) return json({ error: "prompt required" }, 400);
+    const projectId = typeof body.project_id === "string" ? body.project_id.trim() : "";
+    const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+    if (!projectId || projectId.length < 10) return json({ error: "project_id required" }, 400);
+    if (!prompt || prompt.length < 3) return json({ error: "prompt required (min 3 chars)" }, 400);
+    if (prompt.length > 10_000) return json({ error: "prompt too long (max 10000 chars)" }, 400);
 
     const { data: project } = await sc.from("cirius_projects")
       .select("*")
@@ -597,11 +664,17 @@ Deno.serve(async (req) => {
 
   // ─── SAVE_SUPABASE_INTEGRATION ───
   if (action === "save_supabase_integration") {
-    const sbUrl = (body.supabase_url as string || "").trim();
-    const serviceKey = (body.service_key as string || "").trim();
+    const sbUrl = typeof body.supabase_url === "string" ? body.supabase_url.trim() : "";
+    const serviceKey = typeof body.service_key === "string" ? body.service_key.trim() : "";
     if (!sbUrl || !serviceKey) return json({ error: "URL e Service Key são obrigatórios" }, 400);
+    if (sbUrl.length > 500) return json({ error: "URL muito longa" }, 400);
+    if (serviceKey.length > 500) return json({ error: "Service key muito longa" }, 400);
+    // Validate URL format — must be a valid Supabase URL
+    if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(sbUrl)) {
+      return json({ error: "URL deve ser no formato https://xxxxx.supabase.co" }, 400);
+    }
     const ref = sbUrl.match(/https:\/\/([^.]+)/)?.[1] || "";
-    if (!ref) return json({ error: "URL inválida" }, 400);
+    if (!ref || ref.length < 10) return json({ error: "URL inválida — referência do projeto não encontrada" }, 400);
     try {
       const testClient = createClient(sbUrl, serviceKey);
       const { error: testErr } = await testClient.from("_test_nonexistent_table_").select("id").limit(1);
@@ -619,14 +692,23 @@ Deno.serve(async (req) => {
   // ─── INIT ───
   if (action === "init") {
     const config = body.config || {};
-    if (!config.name) return json({ error: "config.name required" }, 400);
+    const name = typeof config.name === "string" ? config.name.trim() : "";
+    if (!name || name.length < 2) return json({ error: "config.name required (min 2 chars)" }, 400);
+    if (name.length > 200) return json({ error: "config.name too long (max 200 chars)" }, 400);
+    const description = typeof config.description === "string" ? config.description.trim().slice(0, 5000) : null;
+    const templateType = typeof config.template_type === "string" ? config.template_type.slice(0, 50) : "custom";
+    const sourceUrl = typeof config.source_url === "string" ? config.source_url.slice(0, 500) : null;
+    // Validate source_url if present
+    if (sourceUrl && !/^https?:\/\/.+/i.test(sourceUrl)) return json({ error: "source_url must be a valid HTTP(S) URL" }, 400);
+    const features = Array.isArray(config.features) ? config.features.filter((f: any) => typeof f === "string").slice(0, 20).map((f: string) => f.slice(0, 100)) : [];
+
     const { data: project, error } = await sc.from("cirius_projects").insert({
-      user_id: user.id, name: config.name,
-      description: config.description || null,
-      template_type: config.template_type || "custom",
-      source_url: config.source_url || null,
+      user_id: user.id, name,
+      description,
+      template_type: templateType,
+      source_url: sourceUrl,
       tech_stack: config.tech_stack || { framework: "react", css: "tailwind", ui: "shadcn" },
-      features: config.features || [],
+      features,
       deploy_config: config.deploy_config || {},
       status: "draft",
     }).select("id, status").single();
@@ -634,8 +716,8 @@ Deno.serve(async (req) => {
       console.error("[cirius] init error:", error);
       return json({ error: "Failed to create project" }, 500);
     }
-    await logEntry(sc, project.id, "init", "completed", `Projeto criado: "${config.name}"`, {
-      metadata: { template: config.template_type, features: config.features, source_url: config.source_url },
+    await logEntry(sc, project.id, "init", "completed", `Projeto criado: "${name}"`, {
+      metadata: { template: templateType, features, source_url: sourceUrl },
     });
     return json({ project_id: project.id, status: "draft" });
   }
