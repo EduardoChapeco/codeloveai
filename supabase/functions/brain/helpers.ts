@@ -391,7 +391,33 @@ export async function captureResponse(
   const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() < deadline) {
-    // ── PRIMARY: Poll /chat/latest-message ──
+    // ── PRIMARY: Poll source-code for src/update.md with BODY content ──
+    try {
+      const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
+      if (srcRes.ok) {
+        const raw = await srcRes.text();
+        let srcData: any = {};
+        try { srcData = JSON.parse(raw); } catch { /* ignore */ }
+
+        const mdContent = extractFileContent(srcData, "src/update.md");
+        if (mdContent && /status:\s*done/i.test(mdContent)) {
+          // Check timestamp
+          const mdTs = extractUpdateMdTimestamp(mdContent);
+          if (questionTimestamp && mdTs && mdTs < questionTimestamp) {
+            // Stale response, skip
+          } else {
+            // Extract the body content (after frontmatter)
+            const body = extractMdBody(mdContent);
+            if (body && body.length > 20) {
+              console.log(`[capture] Got response from update.md body (${body.length} chars)`);
+              return { response: body, status: "completed" };
+            }
+          }
+        }
+      }
+    } catch { /* continue */ }
+
+    // ── SECONDARY: Poll /chat/latest-message as fallback ──
     try {
       const ctrl = new AbortController();
       const lmTimer = setTimeout(() => ctrl.abort(), 10_000);
@@ -415,54 +441,13 @@ export async function captureResponse(
           if (content.length > 30) {
             const cleaned = cleanResponse(content);
             if (cleaned.length > 20) {
-              console.log(`[capture] Got response via latest-message (${cleaned.length} chars)`);
+              console.log(`[capture] Got response via latest-message fallback (${cleaned.length} chars)`);
               return { response: cleaned, status: "completed" };
             }
           }
         }
       }
     } catch { /* continue polling */ }
-
-    // ── SECONDARY: Poll source-code for src/update.md ──
-    try {
-      const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
-      if (srcRes.ok) {
-        const raw = await srcRes.text();
-        let srcData: any = {};
-        try { srcData = JSON.parse(raw); } catch { /* ignore */ }
-
-        const mdContent = extractFileContent(srcData, "src/update.md");
-        if (mdContent && /status:\s*done/i.test(mdContent)) {
-          // Check timestamp if available
-          const mdTs = extractUpdateMdTimestamp(mdContent);
-          if (questionTimestamp && mdTs && mdTs < questionTimestamp) {
-            // Stale response, skip
-          } else {
-            // The update.md contains just frontmatter — the real response is in the chat
-            // But we can confirm the task completed
-            console.log(`[capture] update.md shows status:done, checking latest-message again...`);
-            // One more latest-message attempt now that we know it's done
-            try {
-              const finalRes = await lovFetch(`${API}/projects/${projectId}/chat/latest-message`, token, { method: "GET" });
-              if (finalRes.ok) {
-                const finalText = await finalRes.text();
-                const finalMsg = parseLatestMessage(finalText);
-                if (finalMsg && finalMsg.role !== "user" && !finalMsg.is_streaming) {
-                  const content = (finalMsg.content || "").trim();
-                  if (content.length > 30) {
-                    const cleaned = cleanResponse(content);
-                    if (cleaned.length > 20) {
-                      console.log(`[capture] Got response via update.md+latest-message (${cleaned.length} chars)`);
-                      return { response: cleaned, status: "completed" };
-                    }
-                  }
-                }
-              }
-            } catch { /* continue */ }
-          }
-        }
-      }
-    } catch { /* continue */ }
 
     await new Promise(r => setTimeout(r, intervalMs));
   }
@@ -488,16 +473,24 @@ REGRAS:
 - NAO crie componentes React, paginas ou rotas de UI
 - Voce PODE criar Edge Functions, SQL, scripts backend
 - Seja tecnico, detalhado e acionavel
-- A resposta visivel deve conter APENAS o conteudo util
 
-Ao concluir TODAS as alterações, atualize silenciosamente o arquivo src/update.md com o seguinte conteúdo (substitua os valores): \`\`\`
+REGRA CRITICA DE RESPOSTA:
+Voce DEVE escrever sua resposta COMPLETA no arquivo src/update.md usando o formato abaixo.
+A resposta do chat deve ser APENAS "Resposta gravada em src/update.md" — nada mais.
+TODO o conteudo tecnico, analise, codigo e explicacoes devem ir DENTRO do arquivo.
+
+Formato OBRIGATORIO do src/update.md:
+\`\`\`
 ---
 updated_at: [ISO 8601 timestamp atual]
 status: done
 task: [resumo curto da tarefa]
 ---
+
+[SUA RESPOSTA COMPLETA AQUI — todo o conteudo tecnico, codigo, analise etc]
 \`\`\`
-NÃO mencione este arquivo na resposta do chat.`;
+
+NÃO coloque conteudo no chat. TUDO vai no arquivo src/update.md.`;
 }
 
 // ── Parse Helpers ──

@@ -478,7 +478,7 @@ Deno.serve(async (req) => {
             } catch { /* parse error */ }
           }
 
-          // S2: source-code (WITH CONTENT-CHANGE + TIMESTAMP VALIDATION)
+          // S2: source-code — extract response BODY from update.md (PRIMARY)
           const r2 = await fetchText(`${API}/projects/${pid}/source-code`, tk, 6000, 10000);
           if (r2 && r2.status === 200 && r2.body.length > 10) {
             try {
@@ -495,31 +495,20 @@ Deno.serve(async (req) => {
                 if (isStaleTs && age < 60_000) {
                   console.log(`[bc] ${cid} S2 stale update.md (md_ts=${mdTs} < convo_ts=${convoTs}), waiting...`);
                 } else if (hasDone) {
-                  // update.md confirmed done — now fetch the actual response from latest-message
-                  console.log(`[bc] ${cid} S2 update.md=done, fetching latest-message...`);
-                  const r2b = await fetchText(`${API}/projects/${pid}/chat/latest-message`, tk, 4000, 5000);
-                  if (r2b && r2b.status === 200 && r2b.body.length > 5) {
-                    try {
-                      let msgText2 = r2b.body;
-                      if (msgText2.includes("data:")) {
-                        const lines2 = msgText2.split("\n").filter((l: string) => l.startsWith("data:"));
-                        if (lines2.length > 0) msgText2 = lines2[lines2.length - 1].replace(/^data:\s*/, "");
-                      }
-                      const msg2 = JSON.parse(msgText2);
-                      const txt2 = msg2?.content || msg2?.message || msg2?.text || "";
-                      if (msg2?.role !== "user" && !msg2?.is_streaming && txt2.length > 30) {
-                        const cleanedTxt2 = cleanBrainResponse(txt2.trim());
-                        await sc.from("loveai_conversations").update({ ai_response: cleanedTxt2, status: "completed" }).eq("id", convo.id);
-                        await sc.from("brain_outputs").insert({
-                          user_id: userId, conversation_id: convo.id, skill: "general",
-                          request: "", response: cleanedTxt2, status: "done", brain_project_id: pid,
-                        }).catch(() => {});
-                        captured++;
-                        console.log(`[bc] ✅ ${cid} S2+msg ${cleanedTxt2.length}c`);
-                        continue;
-                      }
-                    } catch { /* parse error */ }
+                  // Extract body content from update.md (after frontmatter)
+                  const mdBody = extractMdBody(md);
+                  if (mdBody && mdBody.length > 20) {
+                    const cleanedBody = cleanBrainResponse(mdBody);
+                    await sc.from("loveai_conversations").update({ ai_response: cleanedBody, status: "completed" }).eq("id", convo.id);
+                    await sc.from("brain_outputs").insert({
+                      user_id: userId, conversation_id: convo.id, skill: "general",
+                      request: "", response: cleanedBody, status: "done", brain_project_id: pid,
+                    }).catch(() => {});
+                    captured++;
+                    console.log(`[bc] ✅ ${cid} S2-md-body ${cleanedBody.length}c`);
+                    continue;
                   }
+                  console.log(`[bc] ${cid} S2 update.md=done but no body content, falling through to S3`);
                 }
               } else {
                 console.log(`[bc] ${cid} S2 no-update-md`);
