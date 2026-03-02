@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-02T02:30:00Z
+updated_at: 2026-03-02T12:45:00Z
 status: done
-task: Rebuild Brain edge functions - fix chat/latest-message endpoint and capture strategy
+task: Fix brain capture - wrong /latest-message endpoint and SSE parsing in cron
 ---
