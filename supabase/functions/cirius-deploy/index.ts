@@ -159,16 +159,26 @@ Deno.serve(async (req) => {
 
       await logDeploy(sc, projectId, "deploy_github", "completed", `${pushed} arquivos pushados para ${repoUrl}`);
 
-      // Chain: auto-deploy to Vercel if integration is active
-      const vercelIntegration = await getIntegration(sc, projectUserId, "vercel");
-      if (vercelIntegration?.access_token_enc) {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      // Chain: auto-deploy to Netlify first (primary), then Vercel as fallback
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const netlifyIntegration = await getIntegration(sc, projectUserId, "netlify");
+      if (netlifyIntegration?.access_token_enc) {
         fetch(`${supabaseUrl}/functions/v1/cirius-deploy`, {
           method: "POST",
           headers: { Authorization: `Bearer ${svcKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "vercel", project_id: projectId }),
+          body: JSON.stringify({ action: "netlify", project_id: projectId }),
         }).catch(console.error);
+      } else {
+        // Fallback to Vercel if Netlify not connected
+        const vercelIntegration = await getIntegration(sc, projectUserId, "vercel");
+        if (vercelIntegration?.access_token_enc) {
+          fetch(`${supabaseUrl}/functions/v1/cirius-deploy`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${svcKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "vercel", project_id: projectId }),
+          }).catch(console.error);
+        }
       }
 
       return json({ repo_url: repoUrl, files_pushed: pushed });
