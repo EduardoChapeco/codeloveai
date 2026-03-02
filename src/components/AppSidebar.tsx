@@ -433,6 +433,7 @@ export default function AppSidebar() {
     { to: "/extensoes/venus", label: "Venus AI", icon: Sparkles, desc: "Extensão God Mode", badge: "Pro" },
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos" },
     { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
+    { to: "/cirius", label: "Cirius Editor", icon: Rocket, desc: "Criador de apps com IA" },
     { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de projetos" },
     { to: "/automation", label: "Automação", icon: Zap, desc: "Regras automáticas" },
     { to: "/notes", label: "Notas", icon: StickyNote, desc: "Anotações rápidas" },
@@ -440,6 +441,7 @@ export default function AppSidebar() {
 
   const lovableItems = [
     { to: "/lovable/connect", label: "Conectar", icon: Link2, desc: "Vincular conta" },
+    { to: "/cirius/integrations", label: "Integrações Cirius", icon: Key, desc: "GitHub, Vercel, Supabase" },
   ];
 
   const accountItems = [
