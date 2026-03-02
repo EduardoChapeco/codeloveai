@@ -511,7 +511,7 @@ export default function CiriusEditor() {
         onCmdOpen={() => setCmdOpen(true)} onChainOpen={() => toggleDrawer("chain")}
       />
 
-      <TaskBubbles bubbles={bubbles} onRemove={removeBubble} />
+      {/* TaskBubbles moved inline into chat panel */}
 
       {cmdOpen && (
         <CmdPanel mode={cmdMode} onModeChange={setCmdMode} onClose={() => setCmdOpen(false)}
