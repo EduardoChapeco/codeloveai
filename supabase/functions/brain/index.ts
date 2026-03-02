@@ -20,6 +20,8 @@ import {
 } from "./helpers.ts";
 import { obfuscate } from "../_shared/crypto.ts";
 
+const API = "https://api.lovable.dev";
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -120,10 +122,31 @@ Deno.serve(async (req) => {
     if (action === "reset") {
       const brainId = typeof body?.brain_id === "string" ? body.brain_id : null;
       if (brainId) {
+        // Get project ID before deleting
+        const { data: brainRow } = await sc.from("user_brain_projects")
+          .select("lovable_project_id").eq("id", brainId).eq("user_id", userId).maybeSingle();
         await sc.from("user_brain_projects").delete().eq("id", brainId).eq("user_id", userId);
+        // Delete Lovable project
+        if (brainRow?.lovable_project_id && !brainRow.lovable_project_id.startsWith("creating")) {
+          const tok = await getValidToken(sc, userId);
+          if (tok) {
+            lovFetch(`${API}/projects/${brainRow.lovable_project_id}`, tok, { method: "DELETE" }).catch(() => {});
+          }
+        }
       } else {
+        // Delete all brains + their projects
+        const { data: allBrains } = await sc.from("user_brain_projects")
+          .select("lovable_project_id").eq("user_id", userId);
         await sc.from("user_brain_projects").delete().eq("user_id", userId);
         await sc.from("loveai_conversations").delete().eq("user_id", userId);
+        const tok = await getValidToken(sc, userId);
+        if (tok && allBrains?.length) {
+          for (const b of allBrains) {
+            if (b.lovable_project_id && !b.lovable_project_id.startsWith("creating")) {
+              lovFetch(`${API}/projects/${b.lovable_project_id}`, tok, { method: "DELETE" }).catch(() => {});
+            }
+          }
+        }
       }
       return json({ success: true });
     }
@@ -132,7 +155,17 @@ Deno.serve(async (req) => {
     if (action === "delete") {
       const brainId = typeof body?.brain_id === "string" ? body.brain_id : "";
       if (!brainId) return json({ error: "brain_id obrigatório" }, 400);
+      // Get project ID before deleting
+      const { data: brainRow } = await sc.from("user_brain_projects")
+        .select("lovable_project_id").eq("id", brainId).eq("user_id", userId).maybeSingle();
       await sc.from("user_brain_projects").delete().eq("id", brainId).eq("user_id", userId);
+      // Delete Lovable project
+      if (brainRow?.lovable_project_id && !brainRow.lovable_project_id.startsWith("creating")) {
+        const tok = await getValidToken(sc, userId);
+        if (tok) {
+          lovFetch(`${API}/projects/${brainRow.lovable_project_id}`, tok, { method: "DELETE" }).catch(() => {});
+        }
+      }
       return json({ success: true });
     }
 

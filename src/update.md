@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-02T15:10:00Z
+updated_at: 2026-03-02T15:25:00Z
 status: done
-task: Fix brain to write full response in update.md body instead of chat
+task: Delete Lovable project when brain is deleted or reset
 ---
