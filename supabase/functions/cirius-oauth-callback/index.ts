@@ -12,8 +12,10 @@ const CORS = {
 };
 
 function errorHtml(msg: string) {
+  // Escape HTML to prevent XSS
+  const safe = msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   return new Response(
-    `<!DOCTYPE html><html><body><p>Erro: ${msg}</p><script>setTimeout(()=>window.close(),3000)</script></body></html>`,
+    `<!DOCTYPE html><html><body><p>Erro: ${safe}</p><script>setTimeout(()=>window.close(),3000)</script></body></html>`,
     { status: 400, headers: { "Content-Type": "text/html" } }
   );
 }
