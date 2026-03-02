@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Loader2, CheckCircle2, AlertCircle, Clock, Wrench, Cpu } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Cpu } from "lucide-react";
 import type { Bubble } from "@/components/cirius-editor/types";
 
 interface Props {
@@ -7,91 +7,110 @@ interface Props {
   onRemove: (id: string) => void;
 }
 
-function BubbleTimer({ startTime }: { startTime: number }) {
+function ElapsedTimer({ startTime }: { startTime: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const iv = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
     return () => clearInterval(iv);
   }, [startTime]);
-  return <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--mono)" }}>{elapsed}s</span>;
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return <span className="tb-timer">{m > 0 ? `${m}m ${s}s` : `${s}s`}</span>;
 }
 
-const BRAIN_COLORS: Record<string, string> = {
-  code: "var(--indigo-l, #818cf8)",
-  design: "var(--pink-l, #f472b6)",
-  prd: "var(--amber-l, #fbbf24)",
-  general: "var(--blue-l, #60a5fa)",
-};
-
 export default function TaskBubbles({ bubbles, onRemove }: Props) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  const stats = useMemo(() => {
+    const total = bubbles.length;
+    const done = bubbles.filter(b => b.phase === "done").length;
+    const errors = bubbles.filter(b => b.phase === "error").length;
+    const running = bubbles.filter(b => b.phase === "running").length;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const earliest = bubbles.reduce((min, b) => Math.min(min, b.startTime), Date.now());
+    return { total, done, errors, running, pct, earliest };
+  }, [bubbles]);
+
   if (!bubbles.length) return null;
 
+  const allDone = stats.done === stats.total;
+
   return (
-    <div className="ce-bubbles">
-      {bubbles.map((b) => (
-        <div key={b.id} className={`task-bubble ${b.phase === "done" ? "bubble-done" : ""}`}>
-          {/* Brain type indicator */}
-          {b.brainType && (
-            <div className="tb-brain-type" style={{ color: BRAIN_COLORS[b.brainType] || BRAIN_COLORS.general }}>
-              <Cpu size={9} />
-              <span>{b.brainType}</span>
-            </div>
+    <div className="tb-unified-card">
+      {/* Header */}
+      <div className="tb-uc-header" onClick={() => setCollapsed(c => !c)}>
+        <div className="tb-uc-status">
+          {allDone ? (
+            <CheckCircle2 size={14} className="tb-uc-ico done" />
+          ) : stats.running > 0 ? (
+            <Loader2 size={14} className="tb-uc-ico running animate-spin" />
+          ) : stats.errors > 0 ? (
+            <AlertCircle size={14} className="tb-uc-ico error" />
+          ) : (
+            <Loader2 size={14} className="tb-uc-ico running animate-spin" />
           )}
-
-          {/* Thinking indicator */}
-          {b.phase === "running" && (
-            <div className="tb-thinking">
-              <Clock size={10} />
-              <span>Pensando há </span>
-              <BubbleTimer startTime={b.startTime} />
-            </div>
-          )}
-
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <div className={`tb-phase-ico ${b.phase}`}>
-              {b.phase === "running" && <Loader2 size={13} className="animate-spin" />}
-              {b.phase === "done" && <CheckCircle2 size={13} />}
-              {b.phase === "error" && <AlertCircle size={13} />}
-            </div>
-            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{b.title}</span>
-            {b.phase === "done" && (
-              <button
-                onClick={() => onRemove(b.id)}
-                style={{ background: "none", border: "none", color: "var(--text-quaternary)", cursor: "pointer", fontSize: 10 }}
-              >✕</button>
-            )}
-          </div>
-
-          {/* Steps */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginLeft: 4 }}>
-            {b.steps.map((step, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: step.s === "done" ? "var(--text-secondary)" : "var(--text-quaternary)" }}>
-                <span className={`tb-step-dot ${step.s}`} />
-                {step.t}
-                {step.s === "run" && <Loader2 size={9} className="animate-spin" style={{ marginLeft: "auto", color: "var(--blue-l)" }} />}
-              </div>
-            ))}
-          </div>
-
-          {/* Tool count */}
-          {b.steps.filter(s => s.s === "done").length > 0 && (
-            <div className="tb-tool-count">
-              <Wrench size={9} />
-              {b.steps.filter(s => s.s === "done").length} tools used
-            </div>
-          )}
-
-          {/* Progress */}
-          <div className="tb-progress">
-            <div className="tb-progress-bar" style={{ width: `${b.pct}%` }} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
-            <span style={{ fontSize: 9, color: "var(--text-quaternary)", fontFamily: "var(--mono)" }}>{Math.round(b.pct)}%</span>
-            <BubbleTimer startTime={b.startTime} />
-          </div>
+          <span className="tb-uc-title">
+            {allDone ? "Tarefas concluídas" : `Executando tarefas`}
+          </span>
         </div>
-      ))}
+        <div className="tb-uc-meta">
+          <span className="tb-uc-count">{stats.done}/{stats.total}</span>
+          <ElapsedTimer startTime={stats.earliest} />
+          {collapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="tb-uc-progress">
+        <div
+          className={`tb-uc-progress-bar ${allDone ? "complete" : ""}`}
+          style={{ width: `${stats.pct}%` }}
+        />
+      </div>
+
+      {/* Task list */}
+      {!collapsed && (
+        <div className="tb-uc-tasks">
+          {bubbles.map((b, idx) => (
+            <div key={b.id} className={`tb-uc-task ${b.phase}`}>
+              <div className="tb-uc-task-row">
+                <span className="tb-uc-task-num">{idx + 1}</span>
+                <div className="tb-uc-task-ico">
+                  {b.phase === "running" && <Loader2 size={11} className="animate-spin" />}
+                  {b.phase === "done" && <CheckCircle2 size={11} />}
+                  {b.phase === "error" && <AlertCircle size={11} />}
+                </div>
+                <span className="tb-uc-task-title">{b.title}</span>
+                {b.brainType && (
+                  <span className="tb-uc-brain">
+                    <Cpu size={8} /> {b.brainType}
+                  </span>
+                )}
+              </div>
+
+              {/* Sub-steps for active task */}
+              {b.phase === "running" && b.steps.length > 0 && (
+                <div className="tb-uc-steps">
+                  {b.steps.map((step, i) => (
+                    <div key={i} className={`tb-uc-step ${step.s}`}>
+                      <span className={`tb-uc-step-dot ${step.s}`} />
+                      <span>{step.t}</span>
+                      {step.s === "run" && <Loader2 size={8} className="animate-spin" style={{ marginLeft: "auto" }} />}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Footer */}
+      {allDone && (
+        <button className="tb-uc-dismiss" onClick={() => bubbles.forEach(b => onRemove(b.id))}>
+          Limpar
+        </button>
+      )}
     </div>
   );
 }
