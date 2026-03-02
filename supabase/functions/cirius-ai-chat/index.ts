@@ -37,9 +37,7 @@ CURRENT PROJECT FILES:
 
 function formatFilesForPrompt(files: Record<string, string>): string {
   if (!files || Object.keys(files).length === 0) return "(empty project)";
-  const entries = Object.entries(files);
-  // Limit context to avoid token overflow — send first 30 files, truncate large ones
-  return entries
+  return Object.entries(files)
     .slice(0, 30)
     .map(([path, content]) => {
       const trimmed = content.length > 2000 ? content.slice(0, 2000) + "\n// ... (truncated)" : content;
@@ -48,17 +46,17 @@ function formatFilesForPrompt(files: Record<string, string>): string {
     .join("\n\n");
 }
 
-// Extract <file path="...">content</file> blocks from AI response
 function extractFileBlocks(text: string): Record<string, string> {
   const files: Record<string, string> = {};
   const re = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
   let m: RegExpExecArray | null;
+
   while ((m = re.exec(text)) !== null) {
     const path = m[1].trim().replace(/^\.\//, "");
     const content = m[2].replace(/^\n/, "").replace(/\s+$/, "") + "\n";
     if (path && content.trim().length > 1) files[path] = content;
   }
-  // Fallback: ```lang path\ncontent```
+
   if (Object.keys(files).length === 0) {
     const cbRe = /```(?:\w+)?\s+((?:src|public|index|vite|tailwind|tsconfig|package)[^\n]*)\n([\s\S]*?)```/g;
     while ((m = cbRe.exec(text)) !== null) {
@@ -67,7 +65,57 @@ function extractFileBlocks(text: string): Record<string, string> {
       if (path.includes(".") && content.trim().length > 1) files[path] = content;
     }
   }
+
   return files;
+}
+
+function buildConversationPayload(messages: Array<{ role: string; content: string }>, systemPrompt: string): string {
+  const history = messages
+    .slice(-20)
+    .map((m) => `${m.role.toUpperCase()}:\n${String(m.content || "").slice(0, 8000)}`)
+    .join("\n\n");
+
+  return [
+    "[SYSTEM INSTRUCTIONS]",
+    systemPrompt,
+    "",
+    "[CONVERSATION CONTEXT]",
+    history,
+    "",
+    "Generate the response now strictly in the required file-block format.",
+  ].join("\n");
+}
+
+async function gatewayFallback(systemPrompt: string, messages: Array<{ role: string; content: string }>): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+  const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+      ],
+      stream: false,
+      max_tokens: 16000,
+    }),
+  });
+
+  if (!aiResp.ok) {
+    const status = aiResp.status;
+    if (status === 429) throw new Error("Rate limit exceeded. Try again shortly.");
+    if (status === 402) throw new Error("AI credits exhausted. Add funds in workspace settings.");
+    throw new Error("AI gateway error");
+  }
+
+  const json = await aiResp.json();
+  return json?.choices?.[0]?.message?.content || "";
 }
 
 serve(async (req) => {
@@ -77,44 +125,47 @@ serve(async (req) => {
     const { messages, project_id } = await req.json();
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "messages array required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Auth
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     let userId: string | null = null;
-    if (authHeader) {
+    if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.replace("Bearer ", "");
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
       const userClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: `Bearer ${token}` } },
       });
       const { data: { user } } = await userClient.auth.getUser();
       userId = user?.id || null;
     }
+
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Load project files for context
     let projectFiles: Record<string, string> = {};
     let projectMemory = "";
+
     if (project_id) {
       const { data: proj } = await supabase
         .from("cirius_projects")
         .select("source_files_json")
         .eq("id", project_id)
         .maybeSingle();
-      if (proj?.source_files_json) {
+
+      if (proj?.source_files_json && typeof proj.source_files_json === "object") {
         projectFiles = proj.source_files_json as Record<string, string>;
-        // Extract project memory if exists
         projectMemory = (projectFiles[".cirius/knowledge/base.md"] || "").trim();
       }
     }
@@ -124,128 +175,90 @@ serve(async (req) => {
       : "";
 
     const systemPrompt = SYSTEM_PROMPT.replace("{PROJECT_FILES}", formatFilesForPrompt(projectFiles)) + memorySection;
+    const composedMessage = buildConversationPayload(messages, systemPrompt);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    let assistantContent = "";
+    let provider: "brainchain" | "gateway_fallback" = "brainchain";
 
-    // Call Lovable AI Gateway with streaming
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const brainchainResp = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: anonKey,
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages.map((m: any) => ({ role: m.role, content: m.content })),
-        ],
-        stream: true,
-        max_tokens: 16000,
+        user_id: userId,
+        brain_type: "code",
+        message: composedMessage,
       }),
     });
 
-    if (!aiResp.ok) {
-      const status = aiResp.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Add funds in workspace settings." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errText = await aiResp.text();
-      console.error("AI gateway error:", status, errText);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const brainchainData = await brainchainResp.json().catch(() => ({}));
+
+    if (brainchainResp.ok && brainchainData?.ok && typeof brainchainData?.response === "string" && brainchainData.response.length > 0) {
+      assistantContent = brainchainData.response;
+    } else {
+      provider = "gateway_fallback";
+      assistantContent = await gatewayFallback(systemPrompt, messages);
+    }
+
+    if (!assistantContent || assistantContent.trim().length < 2) {
+      return new Response(JSON.stringify({ error: "Empty AI response" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // We need to collect the full response to extract files AND stream to client
-    // Strategy: use a TransformStream to tee the response
-    const { readable, writable } = new TransformStream();
-    const writer = writable.getWriter();
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
+    let filesUpdated = 0;
+    if (project_id) {
+      const newFiles = extractFileBlocks(assistantContent);
+      filesUpdated = Object.keys(newFiles).length;
 
-    let fullContent = "";
-
-    // Process in background
-    (async () => {
-      try {
-        const reader = aiResp.body!.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          // Pass through to client
-          await writer.write(value);
-          // Also collect for file extraction
-          const chunk = decoder.decode(value, { stream: true });
-          // Parse SSE lines to extract content
-          for (const line of chunk.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            const json = line.slice(6).trim();
-            if (json === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(json);
-              const delta = parsed.choices?.[0]?.delta?.content;
-              if (delta) fullContent += delta;
-            } catch { /* partial json */ }
-          }
-        }
-      } catch (e) {
-        console.error("Stream processing error:", e);
-      } finally {
-        // After stream completes, extract files and merge into project
-        try {
-          if (project_id && fullContent.length > 10) {
-            const newFiles = extractFileBlocks(fullContent);
-            if (Object.keys(newFiles).length > 0) {
-              const merged = { ...projectFiles, ...newFiles };
-              await supabase
-                .from("cirius_projects")
-                .update({ source_files_json: merged, updated_at: new Date().toISOString() })
-                .eq("id", project_id);
-              console.log(`Merged ${Object.keys(newFiles).length} files into project ${project_id}`);
-            }
-
-            // Persist assistant message
-            await supabase.from("cirius_chat_messages").insert({
-              project_id,
-              user_id: userId,
-              role: "assistant",
-              content: fullContent,
-            });
-
-            // Append interaction summary to project memory
-            const summary = `**User:** ${messages[messages.length - 1]?.content?.slice(0, 200) || "..."}\n**Assistant:** ${fullContent.slice(0, 300)}...`;
-            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-            const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-            fetch(`${supabaseUrl}/functions/v1/brain-memory`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${svcKey}` },
-              body: JSON.stringify({ action: "append", project_id, user_id: userId, content: `## Chat Interaction\n\n${summary}` }),
-            }).catch(() => {});
-          }
-        } catch (e) {
-          console.error("Post-stream merge error:", e);
-        }
-        await writer.close();
+      if (filesUpdated > 0) {
+        const merged = { ...projectFiles, ...newFiles };
+        await supabase
+          .from("cirius_projects")
+          .update({ source_files_json: merged, updated_at: new Date().toISOString() })
+          .eq("id", project_id);
       }
-    })();
 
-    return new Response(readable, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      await supabase.from("cirius_chat_messages").insert({
+        project_id,
+        user_id: userId,
+        role: "assistant",
+        content: assistantContent,
+      });
+
+      const summary = `**User:** ${messages[messages.length - 1]?.content?.slice(0, 200) || "..."}\n**Assistant:** ${assistantContent.slice(0, 300)}...`;
+      fetch(`${supabaseUrl}/functions/v1/brain-memory`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          action: "append",
+          project_id,
+          user_id: userId,
+          content: `## Chat Interaction\n\n${summary}`,
+        }),
+      }).catch(() => {});
+    }
+
+    return new Response(JSON.stringify({
+      ok: true,
+      content: assistantContent,
+      provider,
+      files_updated: filesUpdated,
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("cirius-ai-chat error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
