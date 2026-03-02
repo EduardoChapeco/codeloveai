@@ -465,8 +465,12 @@ export default function Admin() {
         fetchChatUsers();
         if (selectedChatUser) fetchChatMessages(selectedChatUser);
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_notifications" }, () => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_notifications" }, (payload: any) => {
         fetchNotifications();
+        const n = payload?.new;
+        if (n?.title) {
+          toast.info(n.title, { description: n.description?.slice(0, 120), duration: 8000 });
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
