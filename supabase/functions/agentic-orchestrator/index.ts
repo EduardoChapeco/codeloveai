@@ -18,6 +18,17 @@ const corsHeaders = {
 
 const AQ_PREFIX = `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n`;
 
+// ─── Brain Specialization Context ─────────────────────────────
+// Injected as system context prefix per brain_type so each brain stays in its lane
+const BRAIN_CONTEXT: Record<string, string> = {
+  frontend: "[FRONTEND SPECIALIST] You are an expert in React, TypeScript, Tailwind CSS, responsive design, and animations. Focus ONLY on UI components, pages, and user experience. ",
+  backend: "[BACKEND SPECIALIST] You are an expert in Supabase Edge Functions, API design, authentication, server-side validation, and integrations. Focus ONLY on backend logic. ",
+  database: "[DATABASE SPECIALIST] You are an expert in PostgreSQL, Supabase migrations, RLS policies, triggers, indexes, and data modeling. Focus ONLY on database schema and security. ",
+  design: "[DESIGN SPECIALIST] You are an expert in design systems, CSS architecture, color theory, typography, and visual consistency. Focus ONLY on design tokens, themes, and visual components. ",
+  review: "[HOLISTIC REVIEWER] You are a senior integration specialist. Review ALL files across the entire project for consistency: validate imports, exports, component props, database queries, naming conventions, and ensure everything compiles correctly. Fix ALL integration issues. ",
+  code: "[FULL-STACK DEVELOPER] You are a senior full-stack developer. Implement features end-to-end with React, TypeScript, Supabase, and Tailwind. ",
+};
+
 const FIREBASE_KEY_ENV = "FIREBASE_API_KEY";
 const C = "0123456789abcdefghjkmnpqrstvwxyz";
 const rb32 = (n: number) => Array.from({ length: n }, () => C[Math.floor(Math.random() * 32)]).join("");
@@ -43,6 +54,21 @@ async function getUserId(req: Request, anonSc: SupabaseClient, body?: Record<str
 async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "code"): Promise<{
   id: string; accessToken: string; brainProjectId: string;
 } | null> {
+  // Map specialized brain_types to available pool types
+  // frontend/backend/review → code pool, database → code pool (all can handle it)
+  const TYPE_FALLBACK: Record<string, string[]> = {
+    frontend: ["design", "code"],
+    backend: ["code"],
+    database: ["code"],
+    review: ["code"],
+    design: ["design", "code"],
+    code: ["code"],
+    prd: ["prd", "code"],
+  };
+
+  const typesToTry = [brainType, ...(TYPE_FALLBACK[brainType] || []), "general"]
+    .filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+
   // Release stuck accounts (busy > 3 min)
   const stuckThreshold = new Date(Date.now() - 3 * 60 * 1000).toISOString();
   await sc.from("brainchain_accounts")
@@ -50,8 +76,8 @@ async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "code"):
     .eq("is_busy", true)
     .lt("busy_since", stuckThreshold);
 
-  // Try specific type, then general
-  for (const type of [brainType, "general"]) {
+  // Try each type in priority order
+  for (const type of typesToTry) {
     const { data: accounts } = await sc
       .from("brainchain_accounts")
       .select("id, access_token, access_expires_at, refresh_token, brain_project_id, brain_type")
@@ -151,19 +177,32 @@ async function addLog(
 async function generatePRD(
   clientPrompt: string,
   brainSkills: string[] = []
-): Promise<{ tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string }> } | null> {
+): Promise<{ tasks: Array<{ title: string; intent: string; prompt: string; brain_type?: string; stop_condition?: string; depends_on?: number[] }> } | null> {
   const skillContext = brainSkills.length > 0
     ? `\nBrain skills available: ${brainSkills.join(", ")}. Assign brain_skill to each task.`
     : "";
 
-  const architectPrompt = `You are a senior software architect. A client wants: "${clientPrompt}"${skillContext}
+  const architectPrompt = `You are a senior software architect that decomposes projects into specialized brain tasks.
 
-Break into 3-7 sequential tasks. Return ONLY valid JSON:
-{"tasks":[{"title":"Short title","intent":"security_fix_v2","prompt":"Detailed prompt","stop_condition":"source_contains:keyword"}]}
+Available brain_type specializations:
+- "database": Schema design, migrations, RLS policies, triggers, indexes
+- "design": Design system, colors, typography, Tailwind config, CSS variables
+- "frontend": React components, pages, UI/UX, responsive design, animations
+- "backend": Edge functions, API routes, auth logic, server-side validation
+- "code": General full-stack (use when task spans multiple areas)
+- "review": Holistic code review, cross-file validation, integration check
+
+A client wants: "${clientPrompt}"${skillContext}
+
+Break into 3-8 specialized tasks. Return ONLY valid JSON:
+{"tasks":[{"title":"Short title","brain_type":"frontend","intent":"security_fix_v2","prompt":"Detailed prompt for the specialized brain","depends_on":[],"stop_condition":"source_contains:keyword"}]}
 
 Rules:
-- intent: security_fix_v2 | seo_fix | error_fix | chat
-- stop_condition: file_exists:/path OR source_contains:keyword
+- ALWAYS start with "database" if project needs data storage
+- ALWAYS include "design" early for visual system
+- ALWAYS end with "review" for holistic integration check
+- Each brain is SPECIALIZED — prompts must be targeted to that expertise
+- depends_on: array of task indexes this task depends on (for parallel execution)
 - Prompts must be self-contained, detailed, implementation-ready
 - No questions, no clarifications`;
 
@@ -244,7 +283,7 @@ function extractJSON(content: string): { tasks: Array<{ title: string; intent: s
 // Fire-and-forget: completion detection by orchestrator-tick.
 async function executeTaskViaBrainchain(
   sc: SupabaseClient,
-  task: { id: string; prompt: string; intent: string; task_index: number },
+  task: { id: string; prompt: string; intent: string; task_index: number; brain_type?: string },
   projectId: string,
   account: { id: string; accessToken: string; brainProjectId: string },
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
@@ -277,9 +316,12 @@ async function executeTaskViaBrainchain(
     // ★ Create a unique output marker so miner targets exact response
     const outputMarker = `cirius-out-${Date.now()}-${task.task_index}`;
 
+    // Inject brain specialization context
+    const brainContext = BRAIN_CONTEXT[task.brain_type || "code"] || BRAIN_CONTEXT.code;
+
     const lvPayload = {
       id: msgId,
-      message: AQ_PREFIX + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`,
+      message: AQ_PREFIX + brainContext + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`,
       chat_only: false,
       ai_message_id: aiMsgId,
       thread_id: "main",
@@ -469,10 +511,12 @@ Deno.serve(async (req: Request) => {
             project_id: projectId, task_index: i,
             title: t.title, intent: t.intent || "chat",
             prompt: t.prompt, stop_condition: t.stop_condition || null,
+            brain_type: t.brain_type || "code",
           }))
         );
-        await addLog(sc, projectId, `✅ PRD ready: ${prd.tasks.length} tasks in ${prdDuration}ms. Brainchain pool will execute.`, "info",
-          { prd_duration_ms: prdDuration, task_count: prd.tasks.length,
+        const brainTypes = [...new Set(prd.tasks.map(t => t.brain_type || "code"))];
+        await addLog(sc, projectId, `✅ PRD ready: ${prd.tasks.length} tasks in ${prdDuration}ms. Specialized brains: ${brainTypes.join(", ")}`, "info",
+          { prd_duration_ms: prdDuration, task_count: prd.tasks.length, brain_types: brainTypes,
             task_titles: prd.tasks.map(t => t.title) });
       }
 
@@ -521,6 +565,7 @@ Deno.serve(async (req: Request) => {
       // Acquire a brainchain account from the pool (using task's brain_type)
       const acqT0 = Date.now();
       const taskBrainType = (task as any).brain_type || "code";
+      await addLog(sc, projectId, `🧠 Task #${task.task_index} requires brain_type="${taskBrainType}" — acquiring specialized account`, "info");
       const account = await acquireBrainchainAccount(sc, taskBrainType);
       const acqDuration = Date.now() - acqT0;
 
@@ -547,7 +592,7 @@ Deno.serve(async (req: Request) => {
       const execT0 = Date.now();
       const result = await executeTaskViaBrainchain(
         sc,
-        { id: task.id as string, prompt: task.prompt as string, intent: task.intent as string, task_index: task.task_index as number },
+        { id: task.id as string, prompt: task.prompt as string, intent: task.intent as string, task_index: task.task_index as number, brain_type: taskBrainType },
         projectId, account,
       );
       const execDuration = Date.now() - execT0;

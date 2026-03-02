@@ -342,7 +342,17 @@ async function generatePRD(sc: SupabaseClient, userId: string, project: Record<s
   const features = Array.isArray(project.features) ? project.features : [];
   const prompt = `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
 
-Você é um arquiteto de software sênior. Um cliente quer construir:
+Você é um arquiteto de software sênior. Decomponha o projeto em tarefas atribuídas a brains ESPECIALIZADOS.
+
+Brains disponíveis:
+- "database": Schema, migrations, RLS, triggers, indexes
+- "design": Design system, cores, tipografia, Tailwind config
+- "frontend": Componentes React, páginas, UI/UX, responsividade
+- "backend": Edge Functions, APIs, autenticação, validação server-side
+- "code": Full-stack geral (quando a tarefa abrange múltiplas áreas)
+- "review": Revisão holística, validação cross-file, checagem de integração
+
+Projeto:
 Nome: ${project.name}
 Tipo: ${project.template_type || "app"}
 Descrição: ${project.description || ""}
@@ -350,16 +360,19 @@ Features: ${features.join(", ") || "basic"}
 URL de referência: ${project.source_url || "none"}
 Stack: React + Tailwind + shadcn/ui + Supabase
 
-Quebre em 3-7 tarefas sequenciais de implementação. Retorne APENAS JSON válido, sem markdown fences:
-{"tasks":[{"title":"Título curto","skill":"code","intent":"security_fix_v2","prompt":"Prompt detalhado de implementação","stop_condition":"file_exists:src/App.tsx","brain_type":"code"}],"design":{"primary_color":"#6366f1","font":"Geist","style":"modern_minimal","pages":["Home","Dashboard","Login"],"tables":["users","projects"]}}
+Retorne APENAS JSON válido:
+{"tasks":[{"title":"Título","brain_type":"frontend","skill":"code","intent":"security_fix_v2","prompt":"Prompt detalhado para o brain especialista","depends_on":[],"stop_condition":"file_exists:src/App.tsx"}],"design":{"primary_color":"#6366f1","font":"Geist","style":"modern_minimal","pages":["Home","Dashboard","Login"],"tables":["users","projects"]}}
 
 Regras:
 - intent DEVE ser security_fix_v2
-- Prompts devem ser auto-contidos, detalhados, prontos para implementação
-- Sem perguntas, sem clarificações
-- Máximo 7 tarefas
-- Inclua o objeto "design" com cores, fonte, estilo, páginas e tabelas
-- Retorne SOMENTE o JSON, nada mais`;
+- SEMPRE comece com "database" se o projeto precisa de dados
+- SEMPRE inclua "design" cedo para o sistema visual
+- SEMPRE termine com "review" para checagem holística
+- depends_on: array de índices de tarefas das quais depende
+- Cada brain é ESPECIALISTA — prompts devem ser direcionados
+- Máximo 8 tarefas
+- Inclua o objeto "design" com cores, fonte, estilo, páginas e tabelas`;
+
 
   const engineAttempts: Array<{ engine: string; ok: boolean; durationMs: number; error?: string; taskCount?: number }> = [];
 

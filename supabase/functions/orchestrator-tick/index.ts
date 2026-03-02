@@ -589,13 +589,27 @@ Deno.serve(async (req: Request) => {
         const slotsAvailable = MAX_PARALLEL - currentRunning;
 
         // Get pending tasks (up to available slots)
-        const { data: pendingTasks } = await sc
+        // Check dependency satisfaction: only dispatch tasks whose depends_on are all completed
+        const { data: allTasks } = await sc
           .from("orchestrator_tasks")
-          .select("id, task_index, title")
+          .select("id, task_index, title, status, brain_type, depends_on, prompt")
           .eq("project_id", project.id)
-          .eq("status", "pending")
-          .order("task_index", { ascending: true })
-          .limit(Math.max(slotsAvailable, 1));
+          .order("task_index", { ascending: true });
+
+        const completedIndexes = new Set(
+          (allTasks || []).filter(t => t.status === "completed").map(t => t.task_index as number)
+        );
+        const runningIndexes = new Set(
+          (allTasks || []).filter(t => t.status === "running").map(t => t.task_index as number)
+        );
+
+        const pendingTasks = (allTasks || [])
+          .filter(t => t.status === "pending")
+          .filter(t => {
+            const deps = (t.depends_on as number[]) || [];
+            return deps.every(d => completedIndexes.has(d));
+          })
+          .slice(0, Math.max(slotsAvailable, 1));
 
         if (!pendingTasks || pendingTasks.length === 0) {
           // No pending tasks — check if there are still running ones
@@ -657,6 +671,24 @@ Deno.serve(async (req: Request) => {
         let anyBackoff = false;
 
         for (const nextTask of tasksToDispatch) {
+          // ★ For "review" brain tasks, enrich the prompt with current file inventory
+          if ((nextTask as any).brain_type === "review") {
+            const { data: ciriusPrj } = await sc.from("cirius_projects")
+              .select("source_files_json")
+              .eq("orchestrator_project_id", project.id)
+              .maybeSingle();
+            const filesMap = (ciriusPrj?.source_files_json || {}) as Record<string, string>;
+            const fileList = Object.keys(filesMap);
+            if (fileList.length > 0) {
+              const fileSummary = fileList.map(f => `- ${f} (${filesMap[f].length} chars)`).join("\n");
+              const enrichedPrompt = (nextTask as any).prompt + `\n\n--- CURRENT PROJECT FILES (${fileList.length} files) ---\n${fileSummary}\n\nReview ALL these files holistically. Ensure imports, exports, types, and component composition are consistent across the entire codebase.`;
+              await sc.from("orchestrator_tasks").update({ prompt: enrichedPrompt }).eq("id", nextTask.id);
+              await addLog(sc, project.id as string,
+                `🔍 [tick] Enriched review task #${nextTask.task_index} with ${fileList.length} file inventory`, "info",
+                { phase: "paused", file_count: fileList.length, brain_type: "review" }, nextTask.id as string);
+            }
+          }
+
           const dispatchT0 = Date.now();
           const execRes = await fetch(`${supabaseUrl}${ORCHESTRATOR_FN}`, {
             method: "POST",
