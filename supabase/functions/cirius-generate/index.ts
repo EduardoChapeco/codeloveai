@@ -1,10 +1,12 @@
 /**
- * Cirius Generate v2.0 — Multi-engine pipeline orchestrator
+ * Cirius Generate v2.1 — Multi-engine pipeline orchestrator
  * Actions: init, generate_prd, generate_code, capture, status, pause, resume, cancel,
- *          oauth_state, save_supabase_integration
+ *          oauth_state, save_supabase_integration, debug_log
  * 
  * Engine priority: Brainchain → OpenRouter (Claude) → AI Gateway
  * PRD generation: Brain system (send + capture/mining) → AI Gateway → OpenRouter
+ * 
+ * v2.1: Comprehensive internal logging for debugging all errors/failures/pauses
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -51,12 +53,26 @@ async function getUser(req: Request) {
   return user;
 }
 
-async function logEntry(sc: SupabaseClient, projectId: string, step: string, status: string, message: string, extra?: Record<string, unknown>) {
-  await sc.from("cirius_generation_log").insert({
+// ─── Enhanced Logging ─────────────────────────────────────────
+async function logEntry(
+  sc: SupabaseClient, projectId: string, step: string, status: string,
+  message: string, extra?: Record<string, unknown>
+) {
+  const payload: Record<string, unknown> = {
     project_id: projectId, step, status, message,
     level: status === "failed" ? "error" : status === "retrying" ? "warning" : "info",
-    ...extra,
-  });
+    metadata: {
+      timestamp_ms: Date.now(),
+      fn: "cirius-generate",
+      ...(extra?.metadata as Record<string, unknown> || {}),
+    },
+  };
+  if (extra?.duration_ms) payload.duration_ms = extra.duration_ms;
+  if (extra?.output_json) payload.output_json = extra.output_json;
+  if (extra?.input_json) payload.input_json = extra.input_json;
+  if (extra?.error_msg) payload.error_msg = extra.error_msg;
+  if (extra?.retry_count) payload.retry_count = extra.retry_count;
+  await sc.from("cirius_generation_log").insert(payload);
 }
 
 /** HMAC-SHA256 sign */
@@ -95,11 +111,12 @@ async function getUserToken(sc: SupabaseClient, userId: string): Promise<string 
 /** Send prompt via venus-chat */
 async function sendViaBrainProject(
   projectId: string, token: string, message: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; durationMs?: number }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30_000);
+  const t0 = Date.now();
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
       method: "POST", signal: ctrl.signal,
@@ -107,16 +124,17 @@ async function sendViaBrainProject(
       body: JSON.stringify({ task: message, project_id: projectId, mode: "task", lovable_token: token, skip_suffix: true }),
     });
     clearTimeout(timer);
+    const durationMs = Date.now() - t0;
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data?.ok === false) return { ok: false, error: data?.error || `HTTP ${res.status}` };
-    return { ok: true };
+    if (!res.ok || data?.ok === false) return { ok: false, error: data?.error || `HTTP ${res.status}`, durationMs };
+    return { ok: true, durationMs };
   } catch (e) {
     clearTimeout(timer);
-    return { ok: false, error: String(e).slice(0, 80) };
+    return { ok: false, error: String(e).slice(0, 120), durationMs: Date.now() - t0 };
   }
 }
 
-/** Capture response from Brain project (polls latest-message + update.md) */
+/** Capture response from Brain project */
 async function captureBrainResponse(
   projectId: string, token: string,
   maxWaitMs = 60_000, intervalMs = 5_000, initialDelayMs = 8_000,
@@ -181,9 +199,10 @@ async function captureBrainResponse(
 /** Send via Brainchain pool */
 async function sendViaBrainchain(
   sc: SupabaseClient, userId: string, message: string, brainType = "code"
-): Promise<{ ok: boolean; queueId?: string; response?: string; error?: string }> {
+): Promise<{ ok: boolean; queueId?: string; response?: string; error?: string; durationMs?: number }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const t0 = Date.now();
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
       method: "POST",
@@ -191,18 +210,20 @@ async function sendViaBrainchain(
       body: JSON.stringify({ message, brain_type: brainType, user_id: userId }),
     });
     const data = await res.json();
-    if (data.queued) return { ok: true, queueId: data.queue_id };
-    if (data.ok && data.response) return { ok: true, response: data.response };
-    return { ok: false, error: data.error || "Brainchain unavailable" };
+    const durationMs = Date.now() - t0;
+    if (data.queued) return { ok: true, queueId: data.queue_id, durationMs };
+    if (data.ok && data.response) return { ok: true, response: data.response, durationMs };
+    return { ok: false, error: data.error || "Brainchain unavailable", durationMs };
   } catch (e) {
-    return { ok: false, error: (e as Error).message.slice(0, 80) };
+    return { ok: false, error: (e as Error).message.slice(0, 120), durationMs: Date.now() - t0 };
   }
 }
 
 /** Send via OpenRouter (Claude fallback) */
-async function sendViaOpenRouter(prompt: string, systemPrompt?: string): Promise<string | null> {
+async function sendViaOpenRouter(prompt: string, systemPrompt?: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
   const key = Deno.env.get("OPENROUTER_API_KEY");
-  if (!key) return null;
+  const t0 = Date.now();
+  if (!key) return { content: null, durationMs: 0, error: "OPENROUTER_API_KEY not set" };
   try {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -219,18 +240,23 @@ async function sendViaOpenRouter(prompt: string, systemPrompt?: string): Promise
         temperature: 0.2, max_tokens: 4000,
       }),
     });
+    const durationMs = Date.now() - t0;
     if (res.ok) {
       const result = await res.json();
-      return result?.choices?.[0]?.message?.content || null;
+      return { content: result?.choices?.[0]?.message?.content || null, durationMs };
     }
-  } catch (e) { console.error("[cirius] OpenRouter error:", (e as Error).message); }
-  return null;
+    const errBody = await res.text().catch(() => "");
+    return { content: null, durationMs, error: `HTTP ${res.status}: ${errBody.slice(0, 100)}` };
+  } catch (e) {
+    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) };
+  }
 }
 
 /** Send via AI Gateway */
-async function sendViaGateway(prompt: string, systemPrompt?: string): Promise<string | null> {
+async function sendViaGateway(prompt: string, systemPrompt?: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
   const key = Deno.env.get("LOVABLE_API_KEY");
-  if (!key) return null;
+  const t0 = Date.now();
+  if (!key) return { content: null, durationMs: 0, error: "LOVABLE_API_KEY not set" };
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -244,17 +270,21 @@ async function sendViaGateway(prompt: string, systemPrompt?: string): Promise<st
         temperature: 0.2, max_tokens: 3000,
       }),
     });
+    const durationMs = Date.now() - t0;
     if (res.ok) {
       const result = await res.json();
-      return result?.choices?.[0]?.message?.content || null;
+      return { content: result?.choices?.[0]?.message?.content || null, durationMs };
     }
-  } catch (e) { console.error("[cirius] Gateway error:", (e as Error).message); }
-  return null;
+    const errBody = await res.text().catch(() => "");
+    return { content: null, durationMs, error: `HTTP ${res.status}: ${errBody.slice(0, 100)}` };
+  } catch (e) {
+    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) };
+  }
 }
 
-// ─── PRD Generation ───
+// ─── PRD Generation with full logging ───
 
-async function generatePRD(sc: SupabaseClient, userId: string, project: Record<string, any>): Promise<any> {
+async function generatePRD(sc: SupabaseClient, userId: string, project: Record<string, any>, projectId: string): Promise<any> {
   const features = Array.isArray(project.features) ? project.features : [];
   const prompt = `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
 
@@ -277,28 +307,92 @@ Regras:
 - Inclua o objeto "design" com cores, fonte, estilo, páginas e tabelas
 - Retorne SOMENTE o JSON, nada mais`;
 
+  const engineAttempts: Array<{ engine: string; ok: boolean; durationMs: number; error?: string; taskCount?: number }> = [];
+
   // 1. Try Brain system first (preferred — uses mining/capture)
   const brain = await getUserBrain(sc, userId);
   const token = await getUserToken(sc, userId);
+
+  await logEntry(sc, projectId, "prd_engine_check", "info", `Brain: ${brain ? `found (${brain.brainId.slice(0, 8)})` : "NOT FOUND"}, Token: ${token ? "present" : "MISSING"}`, {
+    metadata: { brain_id: brain?.brainId, brain_project: brain?.projectId, has_token: !!token },
+  });
+
   if (brain && token) {
-    console.log(`[cirius] PRD via Brain ${brain.brainId.slice(0, 8)}`);
     const sendResult = await sendViaBrainProject(brain.projectId, token, prompt);
+    await logEntry(sc, projectId, "prd_brain_send", sendResult.ok ? "completed" : "failed",
+      `Brain send: ${sendResult.ok ? "OK" : sendResult.error}`, {
+      duration_ms: sendResult.durationMs, error_msg: sendResult.error,
+      metadata: { brain_project: brain.projectId },
+    });
+
     if (sendResult.ok) {
+      const t0 = Date.now();
       const response = await captureBrainResponse(brain.projectId, token, 60_000, 4_000, 6_000);
+      const captureDuration = Date.now() - t0;
+
       if (response) {
         const parsed = extractJSON(response);
-        if (parsed) { console.log(`[cirius] PRD mined from Brain: ${parsed.tasks?.length} tasks`); return parsed; }
+        await logEntry(sc, projectId, "prd_brain_capture", parsed ? "completed" : "failed",
+          parsed ? `Brain PRD mined: ${parsed.tasks?.length} tasks` : `Brain response not parseable (len=${response.length})`, {
+          duration_ms: captureDuration,
+          metadata: { response_length: response.length, parsed_ok: !!parsed, task_count: parsed?.tasks?.length },
+        });
+        engineAttempts.push({ engine: "brain", ok: !!parsed, durationMs: captureDuration, taskCount: parsed?.tasks?.length });
+        if (parsed) return parsed;
+      } else {
+        await logEntry(sc, projectId, "prd_brain_capture", "failed", `Brain capture timeout (${captureDuration}ms) — no response mined`, {
+          duration_ms: captureDuration,
+        });
+        engineAttempts.push({ engine: "brain", ok: false, durationMs: captureDuration, error: "capture timeout" });
       }
+    } else {
+      engineAttempts.push({ engine: "brain", ok: false, durationMs: sendResult.durationMs || 0, error: sendResult.error });
     }
+  } else {
+    engineAttempts.push({ engine: "brain", ok: false, durationMs: 0, error: !brain ? "no brain project" : "no lovable token" });
   }
 
   // 2. AI Gateway
-  const gwContent = await sendViaGateway(prompt);
-  if (gwContent) { const p = extractJSON(gwContent); if (p) return p; }
+  const gwResult = await sendViaGateway(prompt);
+  if (gwResult.content) {
+    const p = extractJSON(gwResult.content);
+    await logEntry(sc, projectId, "prd_gateway", p ? "completed" : "failed",
+      p ? `Gateway PRD: ${p.tasks?.length} tasks` : `Gateway response not parseable (len=${gwResult.content.length})`, {
+      duration_ms: gwResult.durationMs,
+      metadata: { response_length: gwResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
+    });
+    engineAttempts.push({ engine: "gateway", ok: !!p, durationMs: gwResult.durationMs, taskCount: p?.tasks?.length });
+    if (p) return p;
+  } else {
+    await logEntry(sc, projectId, "prd_gateway", "failed", `Gateway failed: ${gwResult.error || "empty response"}`, {
+      duration_ms: gwResult.durationMs, error_msg: gwResult.error,
+    });
+    engineAttempts.push({ engine: "gateway", ok: false, durationMs: gwResult.durationMs, error: gwResult.error });
+  }
 
   // 3. OpenRouter (Claude) fallback
-  const orContent = await sendViaOpenRouter(prompt);
-  if (orContent) { const p = extractJSON(orContent); if (p) return p; }
+  const orResult = await sendViaOpenRouter(prompt);
+  if (orResult.content) {
+    const p = extractJSON(orResult.content);
+    await logEntry(sc, projectId, "prd_openrouter", p ? "completed" : "failed",
+      p ? `OpenRouter PRD: ${p.tasks?.length} tasks` : `OpenRouter response not parseable (len=${orResult.content.length})`, {
+      duration_ms: orResult.durationMs,
+      metadata: { response_length: orResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
+    });
+    engineAttempts.push({ engine: "openrouter", ok: !!p, durationMs: orResult.durationMs, taskCount: p?.tasks?.length });
+    if (p) return p;
+  } else {
+    await logEntry(sc, projectId, "prd_openrouter", "failed", `OpenRouter failed: ${orResult.error || "empty response"}`, {
+      duration_ms: orResult.durationMs, error_msg: orResult.error,
+    });
+    engineAttempts.push({ engine: "openrouter", ok: false, durationMs: orResult.durationMs, error: orResult.error });
+  }
+
+  // ALL engines failed — log comprehensive summary
+  await logEntry(sc, projectId, "prd_all_failed", "failed",
+    `ALL PRD engines failed. Attempts: ${engineAttempts.map(a => `${a.engine}(${a.ok ? "ok" : a.error})`).join(", ")}`, {
+    metadata: { engine_attempts: engineAttempts },
+  });
 
   return null;
 }
@@ -313,30 +407,44 @@ async function executeCodeTask(
 
   // 1. Brainchain (pool)
   const bcResult = await sendViaBrainchain(sc, userId, prefix + taskPrompt, brainType);
-  if (bcResult.ok) {
-    await logEntry(sc, projectId, `code_task_${taskIndex}`, "started", `Tarefa ${taskIndex + 1} enviada via Brainchain`);
-    return { engine: "brainchain", ok: true, queueId: bcResult.queueId };
-  }
-  console.warn(`[cirius] Brainchain failed for task ${taskIndex}: ${bcResult.error}`);
+  await logEntry(sc, projectId, `code_task_${taskIndex}_brainchain`, bcResult.ok ? "started" : "failed",
+    bcResult.ok ? `Task ${taskIndex + 1} sent via Brainchain${bcResult.queueId ? ` (queue: ${bcResult.queueId.slice(0, 8)})` : ""}` : `Brainchain failed: ${bcResult.error}`, {
+    duration_ms: bcResult.durationMs, error_msg: bcResult.error,
+    metadata: { queue_id: bcResult.queueId, engine: "brainchain" },
+  });
+  if (bcResult.ok) return { engine: "brainchain", ok: true, queueId: bcResult.queueId };
 
   // 2. OpenRouter (Claude) fallback
-  const orContent = await sendViaOpenRouter(prefix + taskPrompt, "You are a senior developer. Implement the requested changes.");
-  if (orContent && orContent.length > 50) {
-    await logEntry(sc, projectId, `code_task_${taskIndex}`, "completed", `Tarefa ${taskIndex + 1} gerada via OpenRouter (Claude)`);
-    return { engine: "openrouter", ok: true };
-  }
+  const orResult = await sendViaOpenRouter(prefix + taskPrompt, "You are a senior developer. Implement the requested changes.");
+  await logEntry(sc, projectId, `code_task_${taskIndex}_openrouter`, orResult.content && orResult.content.length > 50 ? "completed" : "failed",
+    orResult.content && orResult.content.length > 50 ? `Task ${taskIndex + 1} via OpenRouter (${orResult.content.length} chars)` : `OpenRouter failed: ${orResult.error || "short response"}`, {
+    duration_ms: orResult.durationMs, error_msg: orResult.error,
+    metadata: { response_length: orResult.content?.length, engine: "openrouter" },
+  });
+  if (orResult.content && orResult.content.length > 50) return { engine: "openrouter", ok: true };
 
   // 3. Brain pessoal
   const brain = await getUserBrain(sc, userId);
   const token = await getUserToken(sc, userId);
   if (brain && token) {
     const sendResult = await sendViaBrainProject(brain.projectId, token, prefix + taskPrompt);
-    if (sendResult.ok) {
-      await logEntry(sc, projectId, `code_task_${taskIndex}`, "started", `Tarefa ${taskIndex + 1} enviada via Brain pessoal`);
-      return { engine: "brain", ok: true };
-    }
+    await logEntry(sc, projectId, `code_task_${taskIndex}_brain`, sendResult.ok ? "started" : "failed",
+      sendResult.ok ? `Task ${taskIndex + 1} sent via personal Brain` : `Brain failed: ${sendResult.error}`, {
+      duration_ms: sendResult.durationMs, error_msg: sendResult.error,
+      metadata: { brain_project: brain.projectId, engine: "brain" },
+    });
+    if (sendResult.ok) return { engine: "brain", ok: true };
+  } else {
+    await logEntry(sc, projectId, `code_task_${taskIndex}_brain`, "failed",
+      `Personal Brain unavailable: ${!brain ? "no brain project" : "no token"}`, {
+      metadata: { has_brain: !!brain, has_token: !!token, engine: "brain" },
+    });
   }
 
+  await logEntry(sc, projectId, `code_task_${taskIndex}_all_failed`, "failed",
+    `ALL engines failed for task ${taskIndex + 1}`, {
+    metadata: { tried: ["brainchain", "openrouter", "brain"] },
+  });
   return { engine: "none", ok: false, error: "All engines failed" };
 }
 
@@ -417,8 +525,13 @@ Deno.serve(async (req) => {
       deploy_config: config.deploy_config || {},
       status: "draft",
     }).select("id, status").single();
-    if (error) return json({ error: "Failed to create project" }, 500);
-    await logEntry(sc, project.id, "init", "completed", "Projeto criado");
+    if (error) {
+      console.error("[cirius] init error:", error);
+      return json({ error: "Failed to create project" }, 500);
+    }
+    await logEntry(sc, project.id, "init", "completed", `Projeto criado: "${config.name}"`, {
+      metadata: { template: config.template_type, features: config.features, source_url: config.source_url },
+    });
     return json({ project_id: project.id, status: "draft" });
   }
 
@@ -432,7 +545,10 @@ Deno.serve(async (req) => {
 
     // ★ Skip if PRD already exists
     if (project.prd_json && (project.prd_json as any).tasks?.length > 0) {
-      console.log(`[cirius] PRD already exists for ${projectId}, skipping generation`);
+      await logEntry(sc, projectId, "prd_cache_hit", "completed",
+        `PRD already exists (${(project.prd_json as any).tasks.length} tasks), skipping generation`, {
+        metadata: { cached: true, task_count: (project.prd_json as any).tasks.length },
+      });
       const existingPrd = project.prd_json as any;
       return json({
         prd_json: existingPrd,
@@ -444,27 +560,30 @@ Deno.serve(async (req) => {
     }
 
     await sc.from("cirius_projects").update({ status: "generating_prd" }).eq("id", projectId);
-    await logEntry(sc, projectId, "prd", "started", "Gerando PRD...");
+    await logEntry(sc, projectId, "prd", "started", `Gerando PRD para "${project.name}"...`, {
+      input_json: { name: project.name, template: project.template_type, features: project.features },
+    });
 
     const startMs = Date.now();
-    const prd = await generatePRD(sc, user.id, project);
+    const prd = await generatePRD(sc, user.id, project, projectId);
     const durationMs = Date.now() - startMs;
 
     if (!prd) {
-      await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao gerar PRD" }).eq("id", projectId);
-      await logEntry(sc, projectId, "prd", "failed", "PRD generation failed", { duration_ms: durationMs });
+      await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao gerar PRD — todos os engines falharam" }).eq("id", projectId);
+      await logEntry(sc, projectId, "prd", "failed", `PRD generation FAILED after ${durationMs}ms — all engines exhausted`, {
+        duration_ms: durationMs, error_msg: "All PRD engines failed",
+      });
       return json({ error: "PRD generation failed" }, 500);
     }
 
-    // Always use brainchain as primary engine now
     const engine = "brainchain";
-
     await sc.from("cirius_projects").update({
       prd_json: prd, generation_engine: engine, status: "draft", progress_pct: 15,
     }).eq("id", projectId);
 
-    await logEntry(sc, projectId, "prd", "completed", `PRD gerado: ${prd.tasks.length} tasks`, {
-      duration_ms: durationMs, output_json: { task_count: prd.tasks.length, engine, design: prd.design || null },
+    await logEntry(sc, projectId, "prd", "completed", `PRD gerado: ${prd.tasks.length} tasks em ${durationMs}ms`, {
+      duration_ms: durationMs,
+      output_json: { task_count: prd.tasks.length, engine, design: prd.design || null, task_titles: prd.tasks.map((t: any) => t.title) },
     });
 
     return json({ prd_json: prd, engine_selected: engine, task_count: prd.tasks.length, design: prd.design || null });
@@ -479,16 +598,14 @@ Deno.serve(async (req) => {
     if (!project) return json({ error: "Project not found" }, 404);
     if (!project.prd_json) return json({ error: "PRD not generated yet" }, 400);
 
-    // ★ Skip if already linked to orchestrator (avoid duplicate registrations)
+    // ★ Skip if already linked to orchestrator
     if (project.orchestrator_project_id) {
-      console.log(`[cirius] Already linked to orchestrator ${project.orchestrator_project_id}, skipping re-registration`);
-      // Reset orchestrator project to allow retry
-      await sc.from("orchestrator_projects").update({
-        status: "paused", quality_score: 0,
-      }).eq("id", project.orchestrator_project_id);
-      await sc.from("cirius_projects").update({
-        status: "generating_code", error_message: null, progress_pct: 25,
-      }).eq("id", projectId);
+      await logEntry(sc, projectId, "code_orchestrator_reuse", "info",
+        `Already linked to orchestrator ${(project.orchestrator_project_id as string).slice(0, 8)}, resetting for retry`, {
+        metadata: { orchestrator_id: project.orchestrator_project_id, action: "reset_to_paused" },
+      });
+      await sc.from("orchestrator_projects").update({ status: "paused", quality_score: 0 }).eq("id", project.orchestrator_project_id);
+      await sc.from("cirius_projects").update({ status: "generating_code", error_message: null, progress_pct: 25 }).eq("id", projectId);
       return json({
         started: true, engine: "orchestrator",
         orchestrator_project_id: project.orchestrator_project_id,
@@ -500,52 +617,58 @@ Deno.serve(async (req) => {
     await sc.from("cirius_projects").update({
       status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20,
     }).eq("id", projectId);
-    await logEntry(sc, projectId, "code", "started", "Registrando tarefas no orquestrador");
+    await logEntry(sc, projectId, "code", "started", "Registrando tarefas no orquestrador...", {
+      metadata: { prd_task_count: (project.prd_json as any).tasks?.length },
+    });
 
     const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string; intent?: string; stop_condition?: string }> };
 
-    // Bridge: register in orchestrator_projects + orchestrator_tasks
-    // so orchestrator-tick handles ghost-create, execution, and completion detection
     const clientPrompt = project.description || project.name || "Cirius project";
     const { data: orchProject, error: orchErr } = await sc.from("orchestrator_projects").insert({
-      user_id: user.id,
-      client_prompt: clientPrompt,
-      status: "paused",
-      total_tasks: prd.tasks.length,
-      prd_json: project.prd_json,
+      user_id: user.id, client_prompt: clientPrompt,
+      status: "paused", total_tasks: prd.tasks.length, prd_json: project.prd_json,
     }).select("id").single();
 
     if (orchErr || !orchProject) {
       await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao registrar no orquestrador" }).eq("id", projectId);
-      await logEntry(sc, projectId, "code", "failed", "Failed to create orchestrator project");
+      await logEntry(sc, projectId, "code", "failed", `Orchestrator project creation failed: ${orchErr?.message || "unknown"}`, {
+        error_msg: orchErr?.message,
+      });
       return json({ error: "Orchestrator registration failed" }, 500);
     }
 
-    // Insert all tasks into orchestrator_tasks
     const taskInserts = prd.tasks.map((t, i) => ({
-      project_id: orchProject.id,
-      task_index: i,
+      project_id: orchProject.id, task_index: i,
       title: t.title || `Task ${i + 1}`,
       intent: t.intent || "security_fix_v2",
-      prompt: t.prompt,
-      stop_condition: t.stop_condition || null,
+      prompt: t.prompt, stop_condition: t.stop_condition || null,
     }));
-    await sc.from("orchestrator_tasks").insert(taskInserts);
+    const { error: taskErr } = await sc.from("orchestrator_tasks").insert(taskInserts);
 
-    // Link cirius project to orchestrator project
+    if (taskErr) {
+      await logEntry(sc, projectId, "code", "failed", `Task insertion failed: ${taskErr.message}`, {
+        error_msg: taskErr.message,
+      });
+    }
+
     await sc.from("cirius_projects").update({
       orchestrator_project_id: orchProject.id, progress_pct: 25,
     }).eq("id", projectId);
 
-    await logEntry(sc, projectId, "code", "started", `Orquestrador iniciado: ${prd.tasks.length} tarefas registradas (orch: ${orchProject.id.slice(0, 8)})`);
+    await logEntry(sc, projectId, "code", "started",
+      `Orquestrador iniciado: ${prd.tasks.length} tarefas registradas (orch: ${orchProject.id.slice(0, 8)})`, {
+      metadata: {
+        orchestrator_id: orchProject.id,
+        task_count: prd.tasks.length,
+        task_titles: prd.tasks.map(t => t.title || "untitled"),
+      },
+    });
 
     return json({
-      started: true,
-      engine: "orchestrator",
+      started: true, engine: "orchestrator",
       orchestrator_project_id: orchProject.id,
-      task_count: prd.tasks.length,
-      total_tasks: prd.tasks.length,
-      note: "Tasks registered. orchestrator-tick will ghost-create a project and execute sequentially.",
+      task_count: prd.tasks.length, total_tasks: prd.tasks.length,
+      note: "Tasks registered. orchestrator-tick will execute sequentially via Brainchain.",
     });
   }
 
@@ -554,15 +677,95 @@ Deno.serve(async (req) => {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
     const { data: project } = await sc.from("cirius_projects")
-      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at")
+      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at, orchestrator_project_id")
       .eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Not found" }, 404);
+
+    // Get cirius logs
     const { data: logs } = await sc.from("cirius_generation_log")
-      .select("step, status, level, message, created_at, duration_ms")
+      .select("step, status, level, message, created_at, duration_ms, error_msg, metadata")
       .eq("project_id", projectId)
       .order("created_at", { ascending: false })
-      .limit(10);
-    return json({ project, logs: logs || [] });
+      .limit(30);
+
+    // Get orchestrator status if linked
+    let orchestrator: Record<string, unknown> | null = null;
+    if (project.orchestrator_project_id) {
+      const [{ data: orchProj }, { data: orchTasks }, { data: orchLogs }] = await Promise.all([
+        sc.from("orchestrator_projects").select("*").eq("id", project.orchestrator_project_id).maybeSingle(),
+        sc.from("orchestrator_tasks").select("*").eq("project_id", project.orchestrator_project_id).order("task_index"),
+        sc.from("orchestrator_logs").select("*").eq("project_id", project.orchestrator_project_id).order("created_at", { ascending: false }).limit(30),
+      ]);
+      orchestrator = { project: orchProj, tasks: orchTasks, logs: orchLogs };
+    }
+
+    return json({ project, logs: logs || [], orchestrator });
+  }
+
+  // ─── DEBUG_LOG — Comprehensive pipeline state dump ───
+  if (action === "debug_log") {
+    const projectId = body.project_id;
+    if (!projectId) return json({ error: "project_id required" }, 400);
+
+    const { data: project } = await sc.from("cirius_projects")
+      .select("*").eq("id", projectId).eq("user_id", user.id).single();
+    if (!project) return json({ error: "Not found" }, 404);
+
+    const [
+      { data: ciriusLogs },
+      { data: orchProject },
+      { data: orchTasks },
+      { data: orchLogs },
+      { data: bcAccounts },
+      { data: bcQueue },
+    ] = await Promise.all([
+      sc.from("cirius_generation_log")
+        .select("*").eq("project_id", projectId)
+        .order("created_at", { ascending: false }).limit(50),
+      project.orchestrator_project_id
+        ? sc.from("orchestrator_projects").select("*").eq("id", project.orchestrator_project_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      project.orchestrator_project_id
+        ? sc.from("orchestrator_tasks").select("*").eq("project_id", project.orchestrator_project_id).order("task_index")
+        : Promise.resolve({ data: null }),
+      project.orchestrator_project_id
+        ? sc.from("orchestrator_logs").select("*").eq("project_id", project.orchestrator_project_id).order("created_at", { ascending: false }).limit(50)
+        : Promise.resolve({ data: null }),
+      sc.from("brainchain_accounts").select("id, email, brain_type, brain_project_id, is_active, is_busy, busy_since, error_count, request_count, last_used_at, access_expires_at").order("last_used_at", { ascending: false }).limit(10),
+      sc.from("brainchain_queue").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(10),
+    ]);
+
+    // Compute pipeline health diagnostics
+    const diagnostics: Record<string, unknown> = {
+      cirius_status: project.status,
+      cirius_error: project.error_message,
+      cirius_progress: project.progress_pct,
+      has_prd: !!(project.prd_json as any)?.tasks?.length,
+      prd_task_count: (project.prd_json as any)?.tasks?.length || 0,
+      has_orchestrator: !!project.orchestrator_project_id,
+      orchestrator_status: orchProject?.status || "none",
+      orchestrator_last_error: orchProject?.last_error || null,
+      tasks_pending: orchTasks?.filter((t: any) => t.status === "pending").length || 0,
+      tasks_running: orchTasks?.filter((t: any) => t.status === "running").length || 0,
+      tasks_completed: orchTasks?.filter((t: any) => t.status === "completed").length || 0,
+      tasks_failed: orchTasks?.filter((t: any) => t.status === "failed").length || 0,
+      brainchain_active: bcAccounts?.filter((a: any) => a.is_active).length || 0,
+      brainchain_busy: bcAccounts?.filter((a: any) => a.is_busy).length || 0,
+      brainchain_errored: bcAccounts?.filter((a: any) => (a.error_count || 0) >= 5).length || 0,
+      errors_in_logs: ciriusLogs?.filter((l: any) => l.level === "error").length || 0,
+      warnings_in_logs: ciriusLogs?.filter((l: any) => l.level === "warning").length || 0,
+    };
+
+    return json({
+      diagnostics,
+      cirius_project: project,
+      cirius_logs: ciriusLogs || [],
+      orchestrator: orchProject || null,
+      orchestrator_tasks: orchTasks || [],
+      orchestrator_logs: orchLogs || [],
+      brainchain_accounts: bcAccounts || [],
+      brainchain_queue: bcQueue || [],
+    });
   }
 
   // ─── PAUSE / RESUME / CANCEL ───
@@ -577,7 +780,10 @@ Deno.serve(async (req) => {
       })
       .eq("id", projectId).eq("user_id", user.id);
     if (error) return json({ error: "Operation failed" }, 500);
-    await logEntry(sc, projectId, action, "completed", `Pipeline ${action === "cancel" ? "cancelado" : action === "pause" ? "pausado" : "retomado"}`);
+    await logEntry(sc, projectId, action, "completed",
+      `Pipeline ${action === "cancel" ? "cancelado" : action === "pause" ? "pausado" : "retomado"} pelo usuário`, {
+      metadata: { user_action: action, user_id: user.id },
+    });
     return json({ [action === "cancel" ? "cancelled" : action === "pause" ? "paused" : "resumed"]: true });
   }
 
@@ -590,10 +796,17 @@ Deno.serve(async (req) => {
       .select("*").eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Not found" }, 404);
     const targetProjectId = lovableProjectId || project.lovable_project_id;
-    if (!targetProjectId) return json({ error: "No lovable_project_id" }, 400);
+    if (!targetProjectId) {
+      await logEntry(sc, projectId, "capture", "failed", "No lovable_project_id available for capture");
+      return json({ error: "No lovable_project_id" }, 400);
+    }
     const { data: account } = await sc.from("lovable_accounts")
       .select("token_encrypted").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
-    if (!account?.token_encrypted) return json({ error: "No Lovable token" }, 503);
+    if (!account?.token_encrypted) {
+      await logEntry(sc, projectId, "capture", "failed", "No Lovable token available for capture");
+      return json({ error: "No Lovable token" }, 503);
+    }
+    const t0 = Date.now();
     const scRes = await fetch(`${EXT_API}/projects/${targetProjectId}/source-code`, {
       headers: {
         Authorization: `Bearer ${account.token_encrypted}`,
@@ -601,7 +814,13 @@ Deno.serve(async (req) => {
         "X-Client-Git-SHA": GIT_SHA,
       },
     });
-    if (!scRes.ok) return json({ error: "Source-code fetch failed" }, 500);
+    const captureDuration = Date.now() - t0;
+    if (!scRes.ok) {
+      await logEntry(sc, projectId, "capture", "failed", `Source-code fetch failed: HTTP ${scRes.status}`, {
+        duration_ms: captureDuration, error_msg: `HTTP ${scRes.status}`,
+      });
+      return json({ error: "Source-code fetch failed" }, 500);
+    }
     const scData = await scRes.json();
     const files = scData.files || [];
     const filesJson: Record<string, string> = {};
@@ -614,7 +833,10 @@ Deno.serve(async (req) => {
       lovable_project_id: targetProjectId, progress_pct: 80,
       generation_ended_at: new Date().toISOString(),
     }).eq("id", projectId);
-    await logEntry(sc, projectId, "capture", "completed", `${Object.keys(filesJson).length} arquivos capturados`);
+    await logEntry(sc, projectId, "capture", "completed", `${Object.keys(filesJson).length} arquivos capturados em ${captureDuration}ms`, {
+      duration_ms: captureDuration,
+      metadata: { file_count: Object.keys(filesJson).length, target_project: targetProjectId },
+    });
     return json({ files_json: filesJson, fingerprint, file_count: Object.keys(filesJson).length });
   }
 
