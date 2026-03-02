@@ -194,22 +194,28 @@ export default function CiriusEditor() {
     const stageStatus: BuildStage["status"] = isError ? "error" : isDone ? "done" : "running";
     setBuildStages(prev => {
       const existing = prev.find(s => s.id === stepId);
+      let next: BuildStage[];
       if (existing) {
-        return prev.map(s => s.id === stepId ? { ...s, status: stageStatus, detail: log?.message } : s);
+        next = prev.map(s => s.id === stepId ? { ...s, status: stageStatus, detail: log?.message } : s);
+      } else {
+        next = [...prev, { id: stepId, label: stepId.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "), status: stageStatus, icon: stepId.includes("deploy") ? "deploy" : stepId.includes("refine") ? "refine" : stepId.includes("prd") ? "prd" : "code", detail: log?.message }];
       }
-      return [...prev, { id: stepId, label: stepId.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "), status: stageStatus, icon: stepId.includes("deploy") ? "deploy" : stepId.includes("refine") ? "refine" : stepId.includes("prd") ? "prd" : "code", detail: log?.message }];
-    });
 
-    // Update overall progress
-    setBuildStages(prev => {
-      const done = prev.filter(s => s.status === "done").length;
-      const total = Math.max(prev.length, 1);
-      setBuildProgress(Math.round((done / total) * 100));
-      const allDone = prev.length > 0 && prev.every(s => s.status === "done");
-      const anyError = prev.some(s => s.status === "error");
-      setBuildComplete(allDone);
-      setBuildError(anyError && !allDone);
-      return prev;
+      // Compute progress inline — avoids cascading state updates
+      const done = next.filter(s => s.status === "done").length;
+      const total = Math.max(next.length, 1);
+      const pctVal = Math.round((done / total) * 100);
+      const allDone = next.length > 0 && next.every(s => s.status === "done");
+      const anyError = next.some(s => s.status === "error");
+
+      // Use queueMicrotask to batch these updates after render
+      queueMicrotask(() => {
+        setBuildProgress(pctVal);
+        setBuildComplete(allDone);
+        setBuildError(anyError && !allDone);
+      });
+
+      return next;
     });
   }, []);
 
@@ -222,7 +228,9 @@ export default function CiriusEditor() {
     if (data?.project) {
       setProject(data.project);
       setLogs(data.logs || []);
-      (data.logs || []).slice().reverse().forEach((log: any) => upsertBubbleFromLog(log));
+      // Process only the latest 5 logs to avoid flooding state updates on initial load
+      const recentLogs = (data.logs || []).slice(0, 5);
+      recentLogs.reverse().forEach((log: any) => upsertBubbleFromLog(log));
 
       // Priority: vercel > netlify > custom_domain > any non-lovable preview_url
       const deployedUrl = data.project.vercel_url || data.project.netlify_url || data.project.custom_domain;
