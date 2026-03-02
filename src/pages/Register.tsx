@@ -22,6 +22,7 @@ export default function Register() {
   const isAffiliate = searchParams.get("tipo") === "afiliado";
   const refCode = searchParams.get("ref");
   const [wantAffiliate, setWantAffiliate] = useState(isAffiliate);
+  const [wantBrain, setWantBrain] = useState(true);
 
   useEffect(() => {
     if (!authLoading && user) navigate("/dashboard", { replace: true });
@@ -38,7 +39,7 @@ export default function Register() {
       email,
       password,
       options: {
-        data: { name, want_affiliate: wantAffiliate, ref_code: refCode || undefined },
+        data: { name, want_affiliate: wantAffiliate, want_brain: wantBrain, ref_code: refCode || undefined },
         emailRedirectTo: window.location.origin,
       },
     });
@@ -101,6 +102,11 @@ export default function Register() {
                 required
               />
             </div>
+            {/* Brain opt-in checkbox */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={wantBrain} onChange={(e) => setWantBrain(e.target.checked)} className="rounded border-border" />
+              <span className="lv-body">🧠 Ativar Star AI Brain (assistente IA dedicado)</span>
+            </label>
             {/* Affiliate checkbox */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={wantAffiliate} onChange={(e) => setWantAffiliate(e.target.checked)} className="rounded border-border" />

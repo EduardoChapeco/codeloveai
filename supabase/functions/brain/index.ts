@@ -27,7 +27,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const VALID_ACTIONS = new Set(["status", "setup", "send", "capture", "history", "reset", "delete", "list", "bootstrap", "review_code"]);
+const VALID_ACTIONS = new Set(["status", "setup", "send", "capture", "history", "reset", "delete", "list", "bootstrap", "force_complete_bootstrap", "review_code"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -238,6 +238,20 @@ Deno.serve(async (req) => {
       return json({ success: true, started: !alreadyRunning, brain_id: brain.id, project_id: brain.lovable_project_id });
     }
 
+    // ── FORCE_COMPLETE_BOOTSTRAP ──
+    if (action === "force_complete_bootstrap") {
+      const brainId = typeof body?.brain_id === "string" ? body.brain_id : undefined;
+      const brain = await getBrainRaw(sc, userId, brainId) || await getBrainRaw(sc, userId);
+      if (!brain?.id) return json({ error: "Brain não encontrado." }, 404);
+
+      await sc.from("user_brain_projects")
+        .update({ skill_phase: 0, status: "active" })
+        .eq("id", brain.id);
+
+      console.log(`[Brain] Force-completed bootstrap for brain=${brain.id.slice(0, 8)}`);
+      return json({ success: true, brain_id: brain.id });
+    }
+
     // ── SEND ──
     if (action === "send") {
       const message = typeof body?.message === "string" ? body.message.trim() : "";
@@ -351,6 +365,18 @@ Deno.serve(async (req) => {
 
       const projectId = convo.target_project_id;
       if (!projectId) return json({ response: null, status: "processing" });
+
+      // Validate project still belongs to an active brain (prevents polling deleted projects)
+      const { data: brainForProject } = await sc.from("user_brain_projects")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("lovable_project_id", projectId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!brainForProject) {
+        await sc.from("loveai_conversations").update({ status: "failed" }).eq("id", conversationId);
+        return json({ response: null, status: "failed", error: "Brain project no longer exists" });
+      }
 
       const convoTs = convo.created_at ? new Date(convo.created_at).getTime() : undefined;
       const capture = await captureResponse(projectId, lovableToken, 20_000, 3_000, 0, convoTs);
