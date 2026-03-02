@@ -427,6 +427,17 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  // ─── Rate limiting (enforce on standard message flow) ───
+  const headerClf = (req.headers.get("x-clf-token") || "").trim();
+  const bodyClf = ((body.licenseKey as string) || (body.clf_license as string) || (body.clfToken as string) || "").trim();
+  const rateLimitKey = headerClf.startsWith("CLF1.") ? headerClf : bodyClf.startsWith("CLF1.") ? bodyClf : "";
+  if (rateLimitKey) {
+    const allowed = await checkRateLimit(rateLimitKey, "message", 30);
+    if (!allowed) {
+      return json({ ok: false, error: "Rate limit exceeded. Aguarde 1 minuto." }, 429);
+    }
+  }
+
   // Build payload
   const modeConfig = FREE_MODES[mode] || FREE_MODES.task_error;
   const msgId = (body.msgId as string) || crypto.randomUUID();
