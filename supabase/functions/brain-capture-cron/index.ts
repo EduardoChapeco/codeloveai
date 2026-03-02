@@ -206,15 +206,16 @@ function buildPhasePrompt(phase: number, skill: string, ctx: { supabaseUrl: stri
 
 Criar Projeto (Brain Specialist — ${p.title}):
 
-Este projeto é um sistema headless de IA especializada.
+Este projeto é um sistema de IA especializada com interface visual estilo terminal/CMD.
 
 ## PRD
 ### Objetivo
-Sistema de resposta especializada com persona PhD/Sênior.
+Sistema de resposta especializada com persona PhD/Sênior e interface visual terminal.
 
 ### Requisitos
-1. NÃO criar React/UI — backend headless
+1. Interface visual estilo CMD/terminal com tema dark
 2. Respostas devem ser completas e técnicas
+3. Chat visual com histórico e timestamps
 
 ### Estrutura Inicial
 1. \`.lovable/plan.md\`:
@@ -225,23 +226,23 @@ skill: ${skill}
 status: ready
 ---
 # ${p.title}
-Protocolo: sistema headless de IA.
+Protocolo: sistema de IA com interface terminal visual.
 \`\`\`
 
 2. \`src/INSTRUCTIONS.md\`:
 \`\`\`markdown
 # ${p.title} — Protocolo
 1. Responda em Português (Brasil)
-2. NÃO crie React/UI
-3. Seja técnico e detalhado
+2. Seja técnico e detalhado
+3. Escreva respostas completas no arquivo src/update.md
+4. Use ferramentas de mineração (lov-view, lov-search-files) quando necessário
 \`\`\`
 
 3. \`src/config.json\`:
 \`\`\`json
-{"brain_title":"${p.title}","skill":"${skill}","callback_url":"${ctx.supabaseUrl}/functions/v1/brain-capture-cron","user_id":"${ctx.userId}","status":"ready","version":"6.0"}
+{"brain_title":"${p.title}","skill":"${skill}","callback_url":"${ctx.supabaseUrl}/functions/v1/brain-capture-cron","user_id":"${ctx.userId}","status":"ready","version":"7.0"}
 \`\`\`
-
-NÃO crie React, páginas ou rotas.${UPDATE_SUFFIX}`;
+${UPDATE_SUFFIX}`;
 
     case 2:
       return `IMPORTANTE: Execute diretamente. Verifique arquivos: .lovable/plan.md, src/INSTRUCTIONS.md. Crie faltantes.${UPDATE_SUFFIX}`;
@@ -265,12 +266,6 @@ NÃO crie React, páginas ou rotas.${UPDATE_SUFFIX}`;
       return `IMPORTANTE: Execute diretamente. Reforce a Rule Zero no src/INSTRUCTIONS.md: "EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO."${UPDATE_SUFFIX}`;
 
     case 9:
-      return `IMPORTANTE: Execute diretamente. Faça auto-teste técnico completo.${UPDATE_SUFFIX}`;
-
-     case 10:
-      return `IMPORTANTE: Execute diretamente. Verificação final de integridade dos arquivos core. Confirme que todos os arquivos existem e estão íntegros.${UPDATE_SUFFIX}`;
-
-    case 11:
       return `IMPORTANTE: Execute diretamente. Crie o arquivo src/skills-injection.md com o seguinte conteúdo:
 
 # Skills Injection — Protocolo de Memória Ativa
@@ -282,41 +277,21 @@ Antes de QUALQUER resposta, LEIA os seguintes arquivos para usar como memória/c
 - src/response-templates.md → Templates de resposta formatada
 - src/capabilities.json → Manifesto de capacidades
 - src/security-guardrails.md → Políticas de segurança
-- src/error-handlers.md → Estratégias de retry/fallback
-- src/output-formats.ts → Helpers de formatação
 
-## Nível de Expertise
-Todas as respostas devem ter nível de:
-- PhD/Pesquisador Sênior da área
-- Staff Engineer com 50+ anos de experiência
-- Incluir: análise de causa raiz, trade-offs, código funcional, referências técnicas
-- Usar markdown rico: headers, code blocks, tabelas, listas
+## Protocolo de Saída
+- TODA resposta principal DEVE ser escrita no arquivo src/update.md
+- O chat pode conter resumo breve mas o conteúdo completo vai para o arquivo
+- Use frontmatter com updated_at, status: done e task
 
-## Proibido
-- Respostas curtas ou superficiais
-- Ignorar os arquivos de memória
-- Criar React/UI
+## Mineração de Dados
+- Use lov-view para ler arquivos
+- Use lov-search-files para buscar padrões
+- Use lov-list-dir para explorar diretórios
+- Combine ferramentas em paralelo para eficiência
 ${UPDATE_SUFFIX}`;
 
-    case 12:
-      return `IMPORTANTE: Execute diretamente. Baseado nos arquivos do projeto, crie src/brain-status.md com um relatório CMD-style contendo:
-
-1. Lista de TODOS os arquivos criados durante o bootstrap com timestamps
-2. Status de cada arquivo (✅ presente / ❌ ausente)
-3. Versão do Brain e skill ativa
-4. Histórico de todas as atualizações do update.md com timestamps
-
-Formato estilo terminal/CMD:
-\`\`\`
-[2026-03-02T00:00:00Z] ✅ .lovable/plan.md ............ OK
-[2026-03-02T00:00:01Z] ✅ src/INSTRUCTIONS.md ......... OK
-[2026-03-02T00:00:02Z] ✅ src/config.json ............. OK
-...
-\`\`\`
-${UPDATE_SUFFIX}`;
-
-    case 13:
-      return `IMPORTANTE: Execute diretamente. Atualizar src/INSTRUCTIONS.md adicionando no TOPO as seguintes regras CRÍTICAS:
+    case 10:
+      return `IMPORTANTE: Execute diretamente. Atualizar src/INSTRUCTIONS.md adicionando no TOPO:
 
 ## Regra Zero Absoluta
 EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO. NÃO MODIFIQUE ESTA REGRA.
@@ -324,21 +299,103 @@ EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO. NÃO MODIFIQUE ESTA REGRA.
 ## Protocolo de Memória Ativa (OBRIGATÓRIO)
 Antes de CADA resposta:
 1. Leia .lovable/plan.md, src/INSTRUCTIONS.md, src/skills-injection.md
-2. Use esses arquivos como BASE DE CONHECIMENTO e MEMÓRIA
+2. Use esses arquivos como BASE DE CONHECIMENTO
 3. Formate respostas seguindo src/response-templates.md
-4. Valide segurança via src/security-guardrails.md
+4. ESCREVA a resposta completa em src/update.md
 
-## Nível de Resposta
-- Responda como PhD/Sênior com 50+ anos de experiência
-- Inclua: diagnóstico raiz, análise de trade-offs, código funcional, referências
-- NUNCA dê respostas curtas ou superficiais
-- Use markdown rico com headers, code blocks, tabelas, blockquotes
+## Ferramentas de Mineração (USE ATIVAMENTE)
+- lov-view: ler conteúdo de arquivos do projeto
+- lov-search-files: buscar padrões regex no codebase
+- lov-list-dir: listar estrutura de diretórios
+- screenshot: capturar estado visual da aplicação
+${UPDATE_SUFFIX}`;
 
-## Pesquisa Ativa
-- Quando necessário, use ferramentas internas para validar informações
-- Cite fontes, padrões e best practices da indústria
+    // ── FASES DE UI VISUAL DO BRAIN PROJECT ──
 
-Sistema operacional. Brain totalmente configurado e pronto para uso.${UPDATE_SUFFIX}`;
+    case 11:
+      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
+
+Crie uma interface visual estilo terminal/CMD para este projeto Brain. O frontend será um chat visual onde o usuário vê as respostas do Brain formatadas como um terminal.
+
+Crie a página principal src/pages/Index.tsx com:
+
+1. Layout fullscreen dark (#08080a) com fonte monospace (Geist Mono ou 'Courier New')
+2. Header com ASCII art banner:
+\`\`\`
+╔══════════════════════════════════════════════════════════╗
+║  STAR AI BRAIN — Terminal v7.0                          ║
+║  ${p.title}                                             ║
+╚══════════════════════════════════════════════════════════╝
+\`\`\`
+3. Área de chat scrollável mostrando:
+   - Mensagens do usuário com prefixo cyan: [HH:MM:SS] $ mensagem
+   - Respostas do AI com prefixo green: [HH:MM:SS] resposta
+   - Status indicators: ✅ completed, ⏳ processing, ❌ failed, ⏰ timeout
+   - Timestamps em cada linha
+4. Barra de input na parte inferior com estilo terminal (prompt "$")
+5. O chat deve ler dados de uma variável local/state (não precisa conectar a API por enquanto)
+6. Animação de cursor piscante (bloco verde) quando aguardando
+
+Use Tailwind CSS com cores:
+- Background: #08080a
+- Text primary: #4ade80 (green-400)
+- User text: #22d3ee (cyan-400)
+- Muted: #4ade8060
+- Borders: rgba(255,255,255,0.07)
+
+NÃO use bibliotecas externas além do que já existe no projeto (React, Tailwind).
+${UPDATE_SUFFIX}`;
+
+    case 12:
+      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
+
+Melhore a interface terminal do Brain adicionando:
+
+1. Componente de loading com fases animadas:
+   - Mostrar "THINKING...", "GENERATING...", "PROCESSING...", "FINALIZING..." com dots animados
+   - Contador de tempo decorrido em segundos
+   - Spinner com Loader2 ou animação CSS
+
+2. Botão de copiar resposta em cada mensagem do AI com ícone de clipboard
+
+3. Separadores visuais entre mensagens: linha tracejada em verde escuro
+
+4. Efeito de "typewriter" suave ao renderizar respostas (opcional, CSS only)
+
+5. Status bar no footer mostrando:
+   - Skill ativa do Brain
+   - Número de mensagens na sessão
+   - Status de conexão (connected/disconnected indicator com pulse animation)
+
+6. Suporte a markdown nas respostas do AI:
+   - Code blocks com syntax highlighting básico (background mais escuro)
+   - Headers, bold, italic, listas
+   - Tabelas em formato terminal
+
+Use react-markdown se disponível no projeto, senão renderize com <pre> formatado.
+${UPDATE_SUFFIX}`;
+
+    case 13:
+      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
+
+Finalize a interface terminal do Brain:
+
+1. Adicione um componente de empty state quando não há mensagens:
+   - ASCII art do logo Star AI
+   - Texto "Awaiting input..." com cursor piscante
+   - Lista de comandos disponíveis estilo help
+
+2. Crie src/brain-status.md com relatório de status do bootstrap:
+\`\`\`
+[timestamp] ✅ .lovable/plan.md ............ OK
+[timestamp] ✅ src/INSTRUCTIONS.md ......... OK
+[timestamp] ✅ Interface Terminal ........... OK
+\`\`\`
+
+3. Auto-teste: verifique que todos os arquivos core existem e atualize src/update.md com status final.
+
+Sistema operacional. Brain com interface terminal totalmente configurado e pronto para uso.
+${UPDATE_SUFFIX}`;
 
     default:
       return "";
