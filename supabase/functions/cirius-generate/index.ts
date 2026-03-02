@@ -498,6 +498,36 @@ Deno.serve(async (req) => {
     return json({ auth_url: authUrl });
   }
 
+  // ─── SAVE_VERCEL_INTEGRATION ───
+  if (action === "save_vercel_integration") {
+    const vToken = (body.vercel_token as string || "").trim();
+    if (!vToken) return json({ error: "API Token é obrigatório" }, 400);
+    // Validate token by fetching user info
+    let accountLogin = "";
+    let accountId = "";
+    try {
+      const res = await fetch("https://api.vercel.com/v2/user", {
+        headers: { Authorization: `Bearer ${vToken}` },
+      });
+      if (!res.ok) {
+        await res.text().catch(() => {});
+        return json({ error: "Token inválido — verifique em vercel.com/account/tokens" }, 400);
+      }
+      const userData = await res.json();
+      accountLogin = userData.user?.username || userData.user?.email || "";
+      accountId = userData.user?.uid || "";
+    } catch {
+      return json({ error: "Falha ao validar token Vercel" }, 400);
+    }
+    const { error } = await sc.from("cirius_integrations").upsert({
+      user_id: user.id, provider: "vercel", access_token_enc: vToken,
+      account_login: accountLogin, account_id: accountId,
+      is_active: true, updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,provider" });
+    if (error) return json({ error: "Failed to save integration" }, 500);
+    return json({ ok: true, account: accountLogin });
+  }
+
   // ─── SAVE_SUPABASE_INTEGRATION ───
   if (action === "save_supabase_integration") {
     const sbUrl = (body.supabase_url as string || "").trim();
@@ -517,6 +547,7 @@ Deno.serve(async (req) => {
     if (error) return json({ error: "Failed to save integration" }, 500);
     return json({ ok: true });
   }
+
 
   // ─── INIT ───
   if (action === "init") {
