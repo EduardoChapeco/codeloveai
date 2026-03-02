@@ -11,7 +11,7 @@ import {
   ArrowLeft, Play, Pause, X, Github, Globe, Database,
   RefreshCw, Rocket, CheckCircle2, Clock, Loader2,
   Circle, ChevronDown, ChevronRight, FileCode, Wrench, Shield,
-  Eye, EyeOff, Search, ExternalLink, XCircle,
+  Eye, EyeOff, Search, ExternalLink,
 } from "lucide-react";
 
 const statusLabels: Record<string, string> = {
@@ -172,19 +172,23 @@ export default function CiriusProject() {
                   <Wrench className="h-3 w-3" /> {project.generation_engine}
                 </Badge>
               )}
-              {project.lovable_project_id ? (
+              {(project.vercel_url || project.netlify_url || project.github_url) ? (
                 <Badge variant="outline" className="text-[10px] gap-1 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
-                  <CheckCircle2 className="h-3 w-3" /> Projeto ativo
+                  <CheckCircle2 className="h-3 w-3" /> Deployed
+                </Badge>
+              ) : project.source_files_json ? (
+                <Badge variant="outline" className="text-[10px] gap-1 border-blue-500/30 text-blue-400 bg-blue-500/10">
+                  <CheckCircle2 className="h-3 w-3" /> Código gerado
                 </Badge>
               ) : (
-                <Badge variant="outline" className="text-[10px] gap-1 border-destructive/30 text-destructive bg-destructive/10">
-                  <XCircle className="h-3 w-3" /> Sem projeto
+                <Badge variant="outline" className="text-[10px] gap-1 border-muted-foreground/30 text-muted-foreground">
+                  Aguardando geração
                 </Badge>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {project.lovable_project_id && (
+            {(project.vercel_url || project.netlify_url || (project.preview_url && !String(project.preview_url).includes("lovable.app"))) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -208,31 +212,41 @@ export default function CiriusProject() {
           </div>
         </div>
 
-        {/* Live Preview */}
-        {showPreview && project.lovable_project_id && (
-          <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-border/30">
-              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Preview
-              </span>
-              <a
-                href={`https://id-preview--${project.lovable_project_id}.lovable.app`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Abrir <ExternalLink className="h-3 w-3" />
-              </a>
+        {/* Live Preview — only show for actual deployed URLs, never the Brain project */}
+        {showPreview && (() => {
+          const deployedUrl = project.vercel_url || project.netlify_url || project.custom_domain;
+          const previewUrl = deployedUrl
+            ? (deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`)
+            : (project.preview_url && !String(project.preview_url).includes("lovable.app") ? project.preview_url : null);
+          return previewUrl ? (
+            <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border/30">
+                <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Preview
+                </span>
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Abrir <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <iframe
+                src={previewUrl}
+                className="w-full h-[420px] border-0"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                title="Live Preview"
+              />
             </div>
-            <iframe
-              src={`https://id-preview--${project.lovable_project_id}.lovable.app`}
-              className="w-full h-[420px] border-0"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-              title="Live Preview"
-            />
-          </div>
-        )}
+          ) : (
+            <div className="rounded-xl border border-border/50 bg-card p-6 text-center text-sm text-muted-foreground">
+              Preview disponível após deploy (GitHub → Vercel/Netlify)
+            </div>
+          );
+        })()}
         {/* Thinking indicator */}
         {isActive && (
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 border border-border/50">
@@ -354,7 +368,7 @@ export default function CiriusProject() {
               >
                 <FileCode className="h-3.5 w-3.5" /> Abrir Editor
               </Button>
-              {project.lovable_project_id ? (
+              {(project.vercel_url || project.netlify_url) ? (
                 <Button
                   size="sm"
                   className="flex-1 text-xs gap-1.5"

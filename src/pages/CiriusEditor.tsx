@@ -142,15 +142,23 @@ export default function CiriusEditor() {
       if (deployedUrl) {
         setLivePreviewUrl(deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`);
       } else if (data.project.preview_url && !data.project.preview_url.includes("lovable.app")) {
-        // Only use preview_url if it's a real deployed URL, not a Brain/Lovable preview
         setLivePreviewUrl(data.project.preview_url);
       } else {
         setLivePreviewUrl(null);
       }
 
-      // Primary preview: build from source_files_json (the assembled code)
-      if (data.project.source_files_json) {
-        setPreviewHtml(buildPreviewFromFiles(data.project.source_files_json as Record<string, string>));
+      // Load source_files_json directly from DB for preview (cirius-status doesn't return it for security)
+      if (data.project.has_files) {
+        const { data: filesData } = await supabase
+          .from("cirius_projects" as any)
+          .select("source_files_json")
+          .eq("id", id)
+          .maybeSingle();
+        const fd = filesData as any;
+        if (fd?.source_files_json) {
+          setPreviewHtml(buildPreviewFromFiles(fd.source_files_json as Record<string, string>));
+          setProject((prev: any) => ({ ...prev, source_files_json: fd.source_files_json }));
+        }
       } else {
         setPreviewHtml(null);
       }
