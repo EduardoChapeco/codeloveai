@@ -376,7 +376,77 @@ Regras:
 
   const engineAttempts: Array<{ engine: string; ok: boolean; durationMs: number; error?: string; taskCount?: number }> = [];
 
-  // 1. Try Brain system first (preferred — uses mining/capture)
+  // 1. AI Gateway (fastest, most reliable — no token dependency)
+  const gwResult = await sendViaGateway(prompt);
+  if (gwResult.content) {
+    const p = extractJSON(gwResult.content);
+    await logEntry(sc, projectId, "prd_gateway", p ? "completed" : "failed",
+      p ? `Gateway PRD: ${p.tasks?.length} tasks` : `Gateway response not parseable (len=${gwResult.content.length})`, {
+      duration_ms: gwResult.durationMs,
+      metadata: { response_length: gwResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
+    });
+    engineAttempts.push({ engine: "gateway", ok: !!p, durationMs: gwResult.durationMs, taskCount: p?.tasks?.length });
+    if (p) return p;
+  } else {
+    await logEntry(sc, projectId, "prd_gateway", "failed", `Gateway failed: ${gwResult.error || "empty response"}`, {
+      duration_ms: gwResult.durationMs, error_msg: gwResult.error,
+    });
+    engineAttempts.push({ engine: "gateway", ok: false, durationMs: gwResult.durationMs, error: gwResult.error });
+  }
+
+  // 2. OpenRouter (Claude) fallback
+  const orResult = await sendViaOpenRouter(prompt);
+  if (orResult.content) {
+    const p = extractJSON(orResult.content);
+    await logEntry(sc, projectId, "prd_openrouter", p ? "completed" : "failed",
+      p ? `OpenRouter PRD: ${p.tasks?.length} tasks` : `OpenRouter response not parseable (len=${orResult.content.length})`, {
+      duration_ms: orResult.durationMs,
+      metadata: { response_length: orResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
+    });
+    engineAttempts.push({ engine: "openrouter", ok: !!p, durationMs: orResult.durationMs, taskCount: p?.tasks?.length });
+    if (p) return p;
+  } else {
+    await logEntry(sc, projectId, "prd_openrouter", "failed", `OpenRouter failed: ${orResult.error || "empty response"}`, {
+      duration_ms: orResult.durationMs, error_msg: orResult.error,
+    });
+    engineAttempts.push({ engine: "openrouter", ok: false, durationMs: orResult.durationMs, error: orResult.error });
+  }
+
+  // 3. Brainchain pool (uses pool accounts — no user token needed)
+  const bcResult = await sendViaBrainchain(sc, userId, prompt, "prd");
+  if (bcResult.ok && bcResult.response) {
+    const p = extractJSON(bcResult.response);
+    await logEntry(sc, projectId, "prd_brainchain", p ? "completed" : "failed",
+      p ? `Brainchain PRD: ${p.tasks?.length} tasks` : `Brainchain response not parseable`, {
+      duration_ms: bcResult.durationMs,
+    });
+    engineAttempts.push({ engine: "brainchain", ok: !!p, durationMs: bcResult.durationMs || 0, taskCount: p?.tasks?.length });
+    if (p) return p;
+  } else if (bcResult.ok && bcResult.queueId) {
+    // Queued — poll for result
+    const t0 = Date.now();
+    let pollResult: string | null = null;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      const { data: q } = await sc.from("brainchain_queue").select("status, response").eq("id", bcResult.queueId).maybeSingle();
+      if (q?.status === "done" && q.response) { pollResult = q.response; break; }
+      if (q?.status === "error") break;
+    }
+    if (pollResult) {
+      const p = extractJSON(pollResult);
+      const dur = Date.now() - t0;
+      await logEntry(sc, projectId, "prd_brainchain", p ? "completed" : "failed",
+        p ? `Brainchain PRD (polled): ${p.tasks?.length} tasks` : `Brainchain polled response not parseable`, { duration_ms: dur });
+      engineAttempts.push({ engine: "brainchain", ok: !!p, durationMs: dur, taskCount: p?.tasks?.length });
+      if (p) return p;
+    } else {
+      engineAttempts.push({ engine: "brainchain", ok: false, durationMs: Date.now() - t0, error: "poll timeout" });
+    }
+  } else {
+    engineAttempts.push({ engine: "brainchain", ok: false, durationMs: bcResult.durationMs || 0, error: bcResult.error });
+  }
+
+  // 4. Brain system last (requires user Lovable token — may be expired)
   const brain = await getUserBrain(sc, userId);
   const token = await getUserToken(sc, userId);
 
@@ -419,41 +489,7 @@ Regras:
     engineAttempts.push({ engine: "brain", ok: false, durationMs: 0, error: !brain ? "no brain project" : "no lovable token" });
   }
 
-  // 2. AI Gateway
-  const gwResult = await sendViaGateway(prompt);
-  if (gwResult.content) {
-    const p = extractJSON(gwResult.content);
-    await logEntry(sc, projectId, "prd_gateway", p ? "completed" : "failed",
-      p ? `Gateway PRD: ${p.tasks?.length} tasks` : `Gateway response not parseable (len=${gwResult.content.length})`, {
-      duration_ms: gwResult.durationMs,
-      metadata: { response_length: gwResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
-    });
-    engineAttempts.push({ engine: "gateway", ok: !!p, durationMs: gwResult.durationMs, taskCount: p?.tasks?.length });
-    if (p) return p;
-  } else {
-    await logEntry(sc, projectId, "prd_gateway", "failed", `Gateway failed: ${gwResult.error || "empty response"}`, {
-      duration_ms: gwResult.durationMs, error_msg: gwResult.error,
-    });
-    engineAttempts.push({ engine: "gateway", ok: false, durationMs: gwResult.durationMs, error: gwResult.error });
-  }
-
-  // 3. OpenRouter (Claude) fallback
-  const orResult = await sendViaOpenRouter(prompt);
-  if (orResult.content) {
-    const p = extractJSON(orResult.content);
-    await logEntry(sc, projectId, "prd_openrouter", p ? "completed" : "failed",
-      p ? `OpenRouter PRD: ${p.tasks?.length} tasks` : `OpenRouter response not parseable (len=${orResult.content.length})`, {
-      duration_ms: orResult.durationMs,
-      metadata: { response_length: orResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
-    });
-    engineAttempts.push({ engine: "openrouter", ok: !!p, durationMs: orResult.durationMs, taskCount: p?.tasks?.length });
-    if (p) return p;
-  } else {
-    await logEntry(sc, projectId, "prd_openrouter", "failed", `OpenRouter failed: ${orResult.error || "empty response"}`, {
-      duration_ms: orResult.durationMs, error_msg: orResult.error,
-    });
-    engineAttempts.push({ engine: "openrouter", ok: false, durationMs: orResult.durationMs, error: orResult.error });
-  }
+  // (Gateway, OpenRouter, and Brainchain already tried above — Brain was last resort)
 
   // ALL engines failed — log comprehensive summary
   await logEntry(sc, projectId, "prd_all_failed", "failed",
