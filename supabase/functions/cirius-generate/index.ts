@@ -1287,18 +1287,39 @@ Deno.serve(async (req) => {
         .eq("is_active", true)
         .maybeSingle();
 
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
       if (ghIntegration) {
-        await logEntry(sc, projectId, "auto_deploy", "started", "Auto-deploy GitHub triggered after refinement");
-        fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/cirius-deploy`, {
+        // Set status to deploying before triggering
+        await sc.from("cirius_projects").update({
+          status: "deploying",
+          current_step: "deploy_github",
+          progress_pct: 90,
+        }).eq("id", projectId);
+
+        await logEntry(sc, projectId, "auto_deploy", "started", "Refinamento concluído. Auto-deploy GitHub triggered.");
+
+        fetch(`${supabaseUrl}/functions/v1/cirius-deploy`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+            Authorization: `Bearer ${serviceKey}`,
           },
           body: JSON.stringify({ action: "github", project_id: projectId }),
         }).catch((e) => {
           console.error("[cirius-generate] auto-deploy failed:", e.message);
         });
+      } else {
+        // No GitHub integration: mark as live directly
+        await sc.from("cirius_projects").update({
+          status: "live",
+          current_step: "done",
+          progress_pct: 100,
+          generation_ended_at: new Date().toISOString(),
+        }).eq("id", projectId);
+
+        await logEntry(sc, projectId, "auto_deploy", "completed", "Sem integração GitHub ativa — projeto marcado como live direto.");
       }
 
       return json({ ok: true, file_count: Object.keys(refined).length, refined: true, auto_deploy: !!ghIntegration });
