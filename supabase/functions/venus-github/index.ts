@@ -73,12 +73,75 @@ Deno.serve(async (req) => {
   if (!valid) return json({ error: licErr || "invalid_key" }, 401);
 
   const postAction = (body.action as string) || "";
+
+  // ── TEST connection ──
+  if (postAction === "test") {
+    const githubToken = (body.gh_token as string) || (body.github_token as string) || "";
+    if (!githubToken) return json({ error: "gh_token required" }, 400);
+    try {
+      const testRes = await fetch(`${GITHUB_API}/user`, {
+        headers: { Authorization: `Bearer ${githubToken}`, "User-Agent": "Venus-Starble" },
+      });
+      if (!testRes.ok) {
+        await testRes.text().catch(() => {});
+        return json({ ok: false, error: "Token inválido" });
+      }
+      const user = await testRes.json();
+      return json({ ok: true, github_user: user.login, github_name: user.name });
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message });
+    }
+  }
+
+  // ── GET SETUP TUTORIAL ──
+  if (postAction === "get_setup_tutorial") {
+    const supabaseProjectId = Deno.env.get("SUPABASE_URL")?.match(/https:\/\/([^.]+)/)?.[1] || "";
+    return json({
+      tutorial: {
+        title: "Configurar integração GitHub",
+        steps: [
+          {
+            step: 1,
+            title: "Criar OAuth App no GitHub",
+            url: "https://github.com/settings/applications/new",
+            instructions: [
+              "Acesse GitHub → Settings → Developer Settings → OAuth Apps",
+              'Clique em "New OAuth App"',
+              "Application name: Venus™ Starble",
+              "Homepage URL: https://starble.lovable.app",
+              `Authorization callback URL: https://${supabaseProjectId}.supabase.co/functions/v1/venus-github?action=oauth_callback`,
+              'Clique "Register application"',
+              "Copie o Client ID e gere um Client Secret",
+            ],
+          },
+          {
+            step: 2,
+            title: "Configurar secrets",
+            instructions: [
+              "Adicione: GITHUB_CLIENT_ID = [seu Client ID]",
+              "Adicione: GITHUB_CLIENT_SECRET = [seu Client Secret]",
+            ],
+          },
+          {
+            step: 3,
+            title: "Alternativa: Token pessoal",
+            instructions: [
+              "Acesse github.com/settings/tokens",
+              "Gere um Fine-grained token com acesso repo",
+              "Use a action 'test' para verificar a conexão",
+            ],
+            is_autoconfig: true,
+          },
+        ],
+      },
+    });
+  }
+
+  // ── PUSH / CREATE_MD / CREATE_TASK ──
   const ghToken = (body.gh_token as string) || "";
   if (!ghToken) return json({ error: "gh_token required" }, 400);
 
-  // Helper: push file to GitHub
   async function pushFile(owner: string, repo: string, path: string, content: string, message: string, branch = "main") {
-    // Check if file exists to get sha
     const existRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
       headers: { Authorization: `Bearer ${ghToken}` },
     });
@@ -86,6 +149,8 @@ Deno.serve(async (req) => {
     if (existRes.ok) {
       const existing = await existRes.json();
       sha = existing.sha;
+    } else {
+      await existRes.text().catch(() => {});
     }
 
     const putRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/contents/${path}`, {
@@ -105,7 +170,6 @@ Deno.serve(async (req) => {
     const { filename, content, message, branch } = body as Record<string, string>;
     if (!filename || !content) return json({ error: "filename and content required" }, 400);
 
-    // Extract owner/repo - user must provide or we get from projectId mapping
     const owner = (body.owner as string) || "";
     const repo = (body.repo as string) || "";
     if (!owner || !repo) return json({ error: "owner and repo required" }, 400);
