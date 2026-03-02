@@ -728,6 +728,14 @@ export default function BrainPage() {
 
   const activeBrain = brains.find(b => b.id === activeBrainId);
   const activeSkills = activeBrain?.skills || [brainType];
+  const isBootstrapping = activeBrain && (activeBrain.skill_phase || 0) > 0;
+
+  // Auto-poll status during bootstrap to detect completion
+  useEffect(() => {
+    if (!isBootstrapping) return;
+    const interval = setInterval(() => loadStatus(), 5000);
+    return () => clearInterval(interval);
+  }, [isBootstrapping, loadStatus]);
 
   return (
     <AppLayout>
@@ -867,6 +875,24 @@ export default function BrainPage() {
               );
             })}
           </div>
+
+          {/* Bootstrap progress banner */}
+          {isBootstrapping && (
+            <div className="mx-4 sm:mx-6 mb-2 mt-1 px-4 py-3 rounded-2xl animate-fade-in flex items-center gap-3"
+              style={{ background: 'hsl(var(--primary) / 0.06)', border: '1px solid hsl(var(--primary) / 0.15)' }}
+            >
+              <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-primary">Configurando Brain — Fase {activeBrain?.skill_phase || 1} de 13</p>
+                <p className="text-[11px] text-muted-foreground">Injetando memória, skills e protocolos de resposta. O chat será liberado após conclusão.</p>
+              </div>
+              <div className="ml-auto shrink-0">
+                <div className="h-1.5 w-20 rounded-full bg-border/30 overflow-hidden">
+                  <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${Math.round(((activeBrain?.skill_phase || 1) / 13) * 100)}%` }} />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Chat messages area — scrollable ── */}
           {(!activeBrainId || (activeBrainId && allConversations.length === 0 && processingIds.size === 0)) ? (
@@ -1034,13 +1060,15 @@ export default function BrainPage() {
                       value={message}
                       onChange={e => setMessage(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
-                      placeholder={genMode === "chat"
-                        ? `Mensagem para ${ALL_SKILLS.find(b => b.id === brainType)?.label || "Star AI"}...`
-                        : `${GEN_MODES.find(m => m.id === genMode)?.desc} — edite o template e envie`
+                      placeholder={isBootstrapping
+                        ? "⏳ Aguarde a configuração do Brain..."
+                        : genMode === "chat"
+                          ? `Mensagem para ${ALL_SKILLS.find(b => b.id === brainType)?.label || "Star AI"}...`
+                          : `${GEN_MODES.find(m => m.id === genMode)?.desc} — edite o template e envie`
                       }
                       rows={1}
-                      disabled={false}
-                      className="w-full min-h-[44px] max-h-[140px] py-3 px-4 resize-none text-[13px] bg-transparent focus:outline-none placeholder:text-muted-foreground/40 disabled:opacity-50"
+                      disabled={!!isBootstrapping}
+                      className="w-full min-h-[44px] max-h-[140px] py-3 px-4 resize-none text-[13px] bg-transparent focus:outline-none placeholder:text-muted-foreground/40 disabled:opacity-50 disabled:cursor-not-allowed"
                       onInput={e => {
                         const t = e.currentTarget;
                         t.style.height = "auto";
@@ -1050,7 +1078,7 @@ export default function BrainPage() {
                   </div>
                   <button
                     onClick={sendMsg}
-                    disabled={!message.trim()}
+                    disabled={!message.trim() || !!isBootstrapping}
                     className={`h-11 w-11 flex items-center justify-center shrink-0 rounded-full transition-all active:scale-90 ${
                       message.trim()
                         ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:scale-105"

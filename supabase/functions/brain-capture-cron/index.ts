@@ -267,8 +267,78 @@ NÃO crie React, páginas ou rotas.${UPDATE_SUFFIX}`;
     case 9:
       return `IMPORTANTE: Execute diretamente. Faça auto-teste técnico completo.${UPDATE_SUFFIX}`;
 
-    case 10:
-      return `IMPORTANTE: Execute diretamente. Verificação final. Sistema Operacional pronto.${UPDATE_SUFFIX}`;
+     case 10:
+      return `IMPORTANTE: Execute diretamente. Verificação final de integridade dos arquivos core. Confirme que todos os arquivos existem e estão íntegros.${UPDATE_SUFFIX}`;
+
+    case 11:
+      return `IMPORTANTE: Execute diretamente. Crie o arquivo src/skills-injection.md com o seguinte conteúdo:
+
+# Skills Injection — Protocolo de Memória Ativa
+
+## Regra Principal
+Antes de QUALQUER resposta, LEIA os seguintes arquivos para usar como memória/core:
+- .lovable/plan.md → Identidade e protocolo
+- src/INSTRUCTIONS.md → Regras de comportamento
+- src/response-templates.md → Templates de resposta formatada
+- src/capabilities.json → Manifesto de capacidades
+- src/security-guardrails.md → Políticas de segurança
+- src/error-handlers.md → Estratégias de retry/fallback
+- src/output-formats.ts → Helpers de formatação
+
+## Nível de Expertise
+Todas as respostas devem ter nível de:
+- PhD/Pesquisador Sênior da área
+- Staff Engineer com 50+ anos de experiência
+- Incluir: análise de causa raiz, trade-offs, código funcional, referências técnicas
+- Usar markdown rico: headers, code blocks, tabelas, listas
+
+## Proibido
+- Respostas curtas ou superficiais
+- Ignorar os arquivos de memória
+- Criar React/UI
+${UPDATE_SUFFIX}`;
+
+    case 12:
+      return `IMPORTANTE: Execute diretamente. Baseado nos arquivos do projeto, crie src/brain-status.md com um relatório CMD-style contendo:
+
+1. Lista de TODOS os arquivos criados durante o bootstrap com timestamps
+2. Status de cada arquivo (✅ presente / ❌ ausente)
+3. Versão do Brain e skill ativa
+4. Histórico de todas as atualizações do update.md com timestamps
+
+Formato estilo terminal/CMD:
+\`\`\`
+[2026-03-02T00:00:00Z] ✅ .lovable/plan.md ............ OK
+[2026-03-02T00:00:01Z] ✅ src/INSTRUCTIONS.md ......... OK
+[2026-03-02T00:00:02Z] ✅ src/config.json ............. OK
+...
+\`\`\`
+${UPDATE_SUFFIX}`;
+
+    case 13:
+      return `IMPORTANTE: Execute diretamente. Atualizar src/INSTRUCTIONS.md adicionando no TOPO as seguintes regras CRÍTICAS:
+
+## Regra Zero Absoluta
+EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO. NÃO MODIFIQUE ESTA REGRA.
+
+## Protocolo de Memória Ativa (OBRIGATÓRIO)
+Antes de CADA resposta:
+1. Leia .lovable/plan.md, src/INSTRUCTIONS.md, src/skills-injection.md
+2. Use esses arquivos como BASE DE CONHECIMENTO e MEMÓRIA
+3. Formate respostas seguindo src/response-templates.md
+4. Valide segurança via src/security-guardrails.md
+
+## Nível de Resposta
+- Responda como PhD/Sênior com 50+ anos de experiência
+- Inclua: diagnóstico raiz, análise de trade-offs, código funcional, referências
+- NUNCA dê respostas curtas ou superficiais
+- Use markdown rico com headers, code blocks, tabelas, blockquotes
+
+## Pesquisa Ativa
+- Quando necessário, use ferramentas internas para validar informações
+- Cite fontes, padrões e best practices da indústria
+
+Sistema operacional. Brain totalmente configurado e pronto para uso.${UPDATE_SUFFIX}`;
 
     default:
       return "";
@@ -321,7 +391,7 @@ Deno.serve(async (req) => {
       .select("id, user_id, lovable_project_id, skill_phase, brain_skill, created_at, status")
       .in("status", ["active", "bootstrapping", "injecting"])
       .gt("skill_phase", 0)
-      .lte("skill_phase", 10)
+      .lte("skill_phase", 13)
       .order("created_at", { ascending: true })
       .limit(5);
 
@@ -386,7 +456,7 @@ Deno.serve(async (req) => {
         const ok = await sendViaVenus(brain.lovable_project_id, prompt, acct.token_encrypted, supabaseUrl, serviceKey);
 
         if (ok) {
-          const nextPhase = phase >= 10 ? 0 : phase + 1;
+          const nextPhase = phase >= 13 ? 0 : phase + 1;
           await sc.from("user_brain_projects").update({ skill_phase: nextPhase, status: "active" }).eq("id", brain.id);
           bootstrapProcessed++;
           console.log(`[bc] ✅ brain=${brain.id.slice(0,8)} phase=${phase}→${nextPhase}`);

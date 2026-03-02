@@ -247,6 +247,12 @@ Deno.serve(async (req) => {
 
       if (!message || message.length > 10_000) return json({ error: "Mensagem inválida (1-10000 chars)" }, 400);
 
+      // Get brain raw (including those with skill_phase > 0) to check bootstrap status
+      const brainRaw = await getBrainRaw(sc, userId, brainId) || await getBrainRaw(sc, userId);
+      if (brainRaw && (brainRaw.skill_phase || 0) > 0) {
+        return json({ error: "Brain está sendo configurado. Aguarde a conclusão de todas as fases.", code: "brain_bootstrapping" }, 503);
+      }
+
       let brain = await getBrain(sc, userId, brainId) || await getBrain(sc, userId);
       if (!brain) return json({ error: "Star AI não está ativo. Crie um Brain primeiro.", code: "brain_inactive" }, 400);
 
