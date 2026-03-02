@@ -278,7 +278,7 @@ export default function CiriusEditor() {
     });
   }, [id, user]);
 
-  // ─── AI CHAT MODE: streaming via cirius-ai-chat ───
+  // ─── AI CHAT MODE: Brain pipeline via cirius-ai-chat ───
   const sendAiChat = useCallback(async (msg: string) => {
     if (!msg.trim() || !id || !user) return;
 
@@ -286,8 +286,6 @@ export default function CiriusEditor() {
     setChatMessages(prev => [...prev, userMsg]);
     persistMsg(userMsg);
     setChatLoading(true);
-
-    let assistantContent = "";
 
     try {
       // Persist user message on server
@@ -312,66 +310,36 @@ export default function CiriusEditor() {
         body: JSON.stringify({ messages: historyMsgs, project_id: id }),
       });
 
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.error || `Error ${resp.status}`);
-      }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || `Error ${resp.status}`);
 
-      if (!resp.body) throw new Error("No stream body");
+      const assistantContent = String(data?.content || "");
+      if (!assistantContent) throw new Error("Resposta vazia da IA");
 
-      // Stream SSE
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      const cleanText = stripFileBlocks(assistantContent);
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: cleanText || "✅ Resposta processada.",
+        timestamp: Date.now(),
+      };
+      setChatMessages(prev => [...prev, assistantMsg]);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let nlIdx: number;
-        while ((nlIdx = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, nlIdx);
-          buffer = buffer.slice(nlIdx + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6).trim();
-          if (json === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(json);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              assistantContent += delta;
-              // Update assistant message in real-time
-              setChatMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last?.role === "assistant" && !last.prdData) {
-                  return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: stripFileBlocks(assistantContent) } : m);
-                }
-                return [...prev, { id: crypto.randomUUID(), role: "assistant", content: stripFileBlocks(assistantContent), timestamp: Date.now() }];
-              });
-            }
-          } catch { /* partial JSON */ }
-        }
-      }
-
-      // After stream: extract files and merge locally
-      if (assistantContent.length > 0) {
-        const newFiles = extractFileBlocks(assistantContent);
-        if (Object.keys(newFiles).length > 0) {
-          const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
-          setSourceFiles(merged);
-          sourceFilesRef.current = merged;
-          setPreviewHtml(buildPreviewFromFiles(merged));
-          setProject((prev: any) => ({ ...prev, source_files_json: merged }));
-          addToast(`${Object.keys(newFiles).length} arquivo(s) atualizado(s)`, "success");
-        }
+      const newFiles = extractFileBlocks(assistantContent);
+      if (Object.keys(newFiles).length > 0) {
+        const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
+        setSourceFiles(merged);
+        sourceFilesRef.current = merged;
+        setPreviewHtml(buildPreviewFromFiles(merged));
+        setProject((prev: any) => ({ ...prev, source_files_json: merged }));
+        addToast(`${Object.keys(newFiles).length} arquivo(s) atualizado(s)`, "success");
       }
     } catch (e) {
       const errText = e instanceof Error ? e.message : "Erro";
       const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `❌ ${errText}`, timestamp: Date.now() };
       setChatMessages(prev => [...prev, errMsg]);
     }
+
     setChatLoading(false);
   }, [id, user, chatMessages, persistMsg, addToast]);
 
