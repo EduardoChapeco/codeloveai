@@ -8,7 +8,7 @@ import PRDCard from "./PRDCard";
 import BuildProgressCard from "./BuildProgressCard";
 import type { ChatMessage, ActiveMode, Bubble } from "./types";
 import type { BuildStage } from "./BuildProgressCard";
-import TaskBubbles from "./TaskBubbles";
+
 
 interface Props {
   messages: ChatMessage[];
@@ -229,12 +229,7 @@ export default function SplitChatPanel({
           </div>
         )}
 
-        {/* Task Bubbles inline in chat */}
-        {bubbles && bubbles.length > 0 && (
-          <div className="sp-chat-bubbles">
-            <TaskBubbles bubbles={bubbles} onRemove={onRemoveBubble || (() => {})} />
-          </div>
-        )}
+        {/* Task bubbles removed — BuildProgressCard handles all task progress inline */}
       </div>
 
       {/* Input area */}
