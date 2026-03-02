@@ -472,7 +472,11 @@ Deno.serve(async (req: Request) => {
 
       if (!task) {
         await releaseBrainchainAccount(sc, account.id, true);
-        await sc.from("orchestrator_projects").update({ status: "completed" }).eq("id", projectId);
+        await sc.from("orchestrator_projects").update({
+          status: "completed",
+          current_task_index: project.total_tasks as number,
+          quality_score: 100,
+        }).eq("id", projectId);
         await addLog(sc, projectId, "🎉 All tasks completed! Released account.", "info",
           { account_id: account.id });
         return json({ status: "completed" });
