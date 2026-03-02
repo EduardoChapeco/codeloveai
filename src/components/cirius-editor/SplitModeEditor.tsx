@@ -28,15 +28,12 @@ export default function SplitModeEditor({
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
   const [chatWidth, setChatWidth] = useState(400);
-  const [isGenerating, setIsGenerating] = useState(false);
+  
 
   const projectName = project?.name || "Novo Projeto";
 
   const handleSend = useCallback((msg: string) => {
-    setIsGenerating(true);
     onSendMsg(msg);
-    // Reset after timeout (the parent will handle actual completion)
-    setTimeout(() => setIsGenerating(false), 3000);
   }, [onSendMsg]);
 
   const handleClear = useCallback(() => {
@@ -62,7 +59,7 @@ export default function SplitModeEditor({
           <SplitChatPanel
             messages={chatMessages}
             onSend={handleSend}
-            isGenerating={isGenerating || chatLoading}
+            isGenerating={chatLoading}
             activeMode={activeMode}
             setActiveMode={setActiveMode}
             onClear={handleClear}

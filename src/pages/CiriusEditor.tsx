@@ -210,21 +210,29 @@ export default function CiriusEditor() {
     });
   }, []);
 
+  // ─── Unified vibecoding send: chat + build pipeline in one ───
   const sendMsg = useCallback(async (msg: string) => {
     if (!msg.trim() || !id) return;
 
+    // 1. Add user message to chat immediately
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatLoading(true);
+
+    // 2. Create task bubble for visual progress
     const bubbleId = `prompt_${Date.now()}`;
     const bubble: Bubble = {
       id: bubbleId,
       title: msg.length > 36 ? msg.slice(0, 36) + "..." : msg,
       phase: "running",
-      steps: [{ s: "run", t: "Enviando prompt para geração" }],
+      steps: [{ s: "run", t: "Processando comando..." }],
       pct: 20,
       startTime: Date.now(),
     };
     setBubbles(prev => [...prev, bubble]);
 
     try {
+      // 3. Send to build pipeline
       const { data, error } = await supabase.functions.invoke("cirius-generate", {
         body: { action: "build_prompt", project_id: id, prompt: msg.trim() },
       });
@@ -233,31 +241,43 @@ export default function CiriusEditor() {
         throw new Error(data?.error || error?.message || "Falha na geração");
       }
 
+      // 4. Show AI acknowledgment in chat
+      const taskCount = data?.task_count || 0;
+      const previewUrl = data?.preview_url || null;
+      const aiReply = taskCount > 0
+        ? `✅ Pipeline iniciado com ${taskCount} tarefa(s). ${previewUrl ? `Preview: ${previewUrl}` : "O preview será atualizado automaticamente."}`
+        : "✅ Comando aceito, pipeline em execução.";
+
+      const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: aiReply, timestamp: Date.now() };
+      setChatMessages(prev => [...prev, aiMsg]);
+
       setBubbles(prev => prev.map(b => b.id === bubbleId ? {
-        ...b,
-        phase: "done",
-        pct: 100,
-        steps: [{ s: "done", t: "Prompt aceito, pipeline iniciado" }],
+        ...b, phase: "done", pct: 100,
+        steps: [{ s: "done", t: `Pipeline iniciado (${taskCount} tasks)` }],
       } : b));
 
       addToast("Pipeline iniciado", "success");
       await loadProject();
       setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 4000);
     } catch (e) {
+      // Show error in chat
+      const errText = e instanceof Error ? e.message : "Erro ao processar";
+      const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `❌ ${errText}`, timestamp: Date.now() };
+      setChatMessages(prev => [...prev, errMsg]);
+
       setBubbles(prev => prev.map(b => b.id === bubbleId ? {
-        ...b,
-        phase: "error",
-        pct: 100,
-        steps: [{ s: "wait", t: e instanceof Error ? e.message : "Erro ao processar" }],
+        ...b, phase: "error", pct: 100,
+        steps: [{ s: "wait", t: errText }],
       } : b));
       addToast("Erro ao processar", "info");
     }
+    setChatLoading(false);
   }, [id, loadProject, addToast]);
-
   const removeBubble = useCallback((bubbleId: string) => {
     setBubbles(prev => prev.filter(b => b.id !== bubbleId));
   }, []);
 
+  // ─── Chat-only conversation (for non-build queries via CMD panel) ───
   const sendChatMsg = useCallback(async (msg: string) => {
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
     setChatMessages(prev => [...prev, userMsg]);
