@@ -404,7 +404,7 @@ function ProviderSection({
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="font-mono text-[11px] text-muted-foreground">
-                        {showKeys[k.id] ? k.key_encrypted : k.key_encrypted.slice(0, 6) + "••••••••" + k.key_encrypted.slice(-4)}
+                        {showKeys[k.id] ? (k.key_encrypted || "••••") : (k.key_encrypted ? k.key_encrypted.slice(0, 6) + "••••••••" + k.key_encrypted.slice(-4) : "••••••••")}
                       </span>
                       <button onClick={() => setShowKeys(s => ({ ...s, [k.id]: !s[k.id] }))}>
                         {showKeys[k.id] ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-muted-foreground" />}

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Code, CheckSquare, Link2, Shield, Info, MessageCircle, Paperclip, Pencil, Mic, ArrowUp, ListOrdered, X } from "lucide-react";
-import type { ActiveMode } from "@/pages/CiriusEditor";
+import type { ActiveMode } from "@/components/cirius-editor/types";
 
 interface Props {
   modesOpen: boolean;

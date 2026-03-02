@@ -1,5 +1,5 @@
 import { CheckCircle2, Info } from "lucide-react";
-import type { EditorToast } from "@/pages/CiriusEditor";
+import type { EditorToast } from "@/components/cirius-editor/types";
 
 interface Props {
   toasts: EditorToast[];
