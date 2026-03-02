@@ -1120,6 +1120,7 @@ export type Database = {
       }
       cirius_projects: {
         Row: {
+          blueprint_json: Json | null
           brain_project_id: string | null
           brainchain_queue_id: string | null
           created_at: string | null
@@ -1160,6 +1161,7 @@ export type Database = {
           vercel_url: string | null
         }
         Insert: {
+          blueprint_json?: Json | null
           brain_project_id?: string | null
           brainchain_queue_id?: string | null
           created_at?: string | null
@@ -1200,6 +1202,7 @@ export type Database = {
           vercel_url?: string | null
         }
         Update: {
+          blueprint_json?: Json | null
           brain_project_id?: string | null
           brainchain_queue_id?: string | null
           created_at?: string | null
