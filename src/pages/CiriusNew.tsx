@@ -116,7 +116,7 @@ export default function CiriusNew() {
 
       // Navigate to project page
       await new Promise(r => setTimeout(r, 800));
-      navigate(`/cirius/project/${projectId}`);
+      navigate(`/cirius/editor/${projectId}`);
     } catch (e) {
       toast.error("Erro inesperado");
       console.error(e);
