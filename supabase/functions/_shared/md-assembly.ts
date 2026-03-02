@@ -5,26 +5,44 @@ export type LatestMessage = {
   is_streaming: boolean;
 };
 
+// ─── Path detection patterns ─────────────────────────────────
+// Matches: file:path, arquivo:path, path:path, // file: path, <!-- file: path -->
 const FILE_HINT_RE = /(?:file|arquivo|path)\s*[:=]\s*([\w./-]+\.[\w.-]+)/i;
-const INLINE_PATH_RE = /\b(src\/[\w./-]+|public\/[\w./-]+|supabase\/[\w./-]+|extensions?\/[\w./-]+|index\.html|package\.json|vite\.config\.[\w.-]+|tailwind\.config\.[\w.-]+|tsconfig\.[\w.-]+)\b/i;
+const INLINE_PATH_RE = /\b(src\/[\w./-]+|public\/[\w./-]+|supabase\/[\w./-]+|extensions?\/[\w./-]+|pages\/[\w./-]+|components\/[\w./-]+|hooks\/[\w./-]+|lib\/[\w./-]+|styles\/[\w./-]+|assets\/[\w./-]+|index\.html|package\.json|vite\.config\.[\w.-]+|tailwind\.config\.[\w.-]+|tsconfig\.[\w.-]+|\.env[\w.-]*)\b/i;
+
+// Additional patterns for code-first-line detection
+const CODE_FILE_HINT_RE = /^\s*(?:\/\/|#|--|\/\*+|<!--)\s*(?:file|arquivo|path|filename)\s*[:=]?\s*([\w./-]+\.[\w.-]+)/i;
 
 function normalizePath(raw: string): string | null {
-  const clean = raw.replace(/["'`]/g, "").replace(/^\.\//, "").trim();
+  const clean = raw.replace(/["'`]/g, "").replace(/^\.\//, "").replace(/\s+$/, "").trim();
   if (!clean) return null;
   if (clean.startsWith("/") || clean.includes("..") || clean.length > 180) return null;
   if (!/[a-z0-9]/i.test(clean)) return null;
+  // Reject obvious non-paths
+  if (/^(https?:|data:|blob:)/i.test(clean)) return null;
   return clean;
 }
 
 function pathFromFenceInfo(info: string): string | null {
-  const hint = info.match(FILE_HINT_RE)?.[1] || info.match(INLINE_PATH_RE)?.[1] || null;
-  return hint ? normalizePath(hint) : null;
+  // Try explicit file hint first
+  const hintMatch = info.match(FILE_HINT_RE);
+  if (hintMatch) return normalizePath(hintMatch[1]);
+
+  // Try inline path detection
+  const inlineMatch = info.match(INLINE_PATH_RE);
+  if (inlineMatch) return normalizePath(inlineMatch[1]);
+
+  // Try: ```tsx src/App.tsx or ```typescript src/utils.ts
+  const langPathMatch = info.match(/^(?:tsx?|jsx?|css|html?|json|md|yaml|toml|sh)\s+([\w./-]+\.[\w.-]+)/i);
+  if (langPathMatch) return normalizePath(langPathMatch[1]);
+
+  return null;
 }
 
 function pathFromCodeFirstLine(code: string): { path: string | null; stripped: string } {
   const lines = code.split("\n");
   const first = lines[0] || "";
-  const m = first.match(/^\s*(?:\/\/|#|--|\/\*+|<!--)\s*(?:file|arquivo|path)\s*[:=]\s*([\w./-]+\.[\w.-]+)/i);
+  const m = first.match(CODE_FILE_HINT_RE);
   if (!m) return { path: null, stripped: code };
   const path = normalizePath(m[1]);
   const stripped = lines.slice(1).join("\n");
@@ -32,10 +50,22 @@ function pathFromCodeFirstLine(code: string): { path: string | null; stripped: s
 }
 
 function pathFromContext(md: string, fenceIndex: number): string | null {
-  const context = md.slice(Math.max(0, fenceIndex - 220), fenceIndex);
-  const m = context.match(/(?:^|\n)\s{0,3}(?:#{1,6}\s*(?:file|arquivo)\s*[:\-]?\s*([\w./-]+\.[\w.-]+)|([\w./-]+\.[\w.-]+)\s*$)/im);
-  const raw = m?.[1] || m?.[2] || null;
-  return raw ? normalizePath(raw) : null;
+  const context = md.slice(Math.max(0, fenceIndex - 300), fenceIndex);
+
+  // Try heading with file path: ### src/App.tsx or ## file: src/App.tsx
+  const headingMatch = context.match(/(?:^|\n)\s{0,3}(?:#{1,6}\s*(?:file|arquivo)\s*[:\-]?\s*([\w./-]+\.[\w.-]+)|([\w./-]+\.[\w.-]+)\s*$)/im);
+  const headingPath = headingMatch?.[1] || headingMatch?.[2] || null;
+  if (headingPath) return normalizePath(headingPath);
+
+  // Try bold path: **src/App.tsx** or `src/App.tsx`
+  const boldMatch = context.match(/(?:\*\*|`)((?:src|public|supabase|pages|components|hooks|lib|styles|assets)\/[\w./-]+\.[\w.-]+)(?:\*\*|`)\s*$/m);
+  if (boldMatch) return normalizePath(boldMatch[1]);
+
+  // Try bare inline path at end of context
+  const bareMatch = context.match(/\b((?:src|public|supabase)\/[\w./-]+\.[\w.-]+)\s*[:]*\s*$/m);
+  if (bareMatch) return normalizePath(bareMatch[1]);
+
+  return null;
 }
 
 export function parseLatestMessage(rawText: string): LatestMessage | null {
@@ -75,12 +105,16 @@ export function extractFilesFromMarkdown(markdown: string): Record<string, strin
     const info = (match[1] || "").trim();
     let code = match[2] || "";
 
+    // Skip non-code fences (e.g. ```json for PRD, ```markdown)
+    const lang = info.split(/\s/)[0]?.toLowerCase() || "";
+    if (lang === "markdown" || lang === "md") continue;
+
     let path = pathFromFenceInfo(info);
 
     if (!path) {
       const firstLine = pathFromCodeFirstLine(code);
       path = firstLine.path;
-      code = firstLine.stripped;
+      if (path) code = firstLine.stripped;
     }
 
     if (!path) path = pathFromContext(markdown, match.index);
