@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,8 @@ import DrawerBuild from "@/components/cirius-editor/DrawerBuild";
 import DrawerChain from "@/components/cirius-editor/DrawerChain";
 import EditorToasts from "@/components/cirius-editor/EditorToasts";
 import SplitModeEditor from "@/components/cirius-editor/SplitModeEditor";
+import { extractFileBlocks, mergeFileMaps, stripFileBlocks } from "@/lib/ai-file-parser";
+import { REACT_VITE_TEMPLATE } from "@/lib/project-template";
 import "@/styles/cirius-editor.css";
 
 import type { FrameMode, ActiveMode, CmdMode, Bubble, EditorToast, ChatMessage } from "@/components/cirius-editor/types";
@@ -28,13 +30,11 @@ function buildPreviewFromFiles(files: Record<string, string>): string | null {
   const html = files["index.html"] || files["dist/index.html"];
   if (!html) return null;
 
-  // Collect CSS and JS to inline
   const cssFiles = Object.entries(files).filter(([k]) => k.endsWith(".css"));
   const jsFiles = Object.entries(files).filter(([k]) => k.endsWith(".js") || k.endsWith(".tsx") || k.endsWith(".ts"));
 
   let assembled = html;
 
-  // Inline CSS before </head>
   if (cssFiles.length > 0) {
     const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
     assembled = assembled.includes("</head>")
@@ -42,7 +42,6 @@ function buildPreviewFromFiles(files: Record<string, string>): string | null {
       : `${cssBlock}\n${assembled}`;
   }
 
-  // Inline JS before </body>
   const plainJs = jsFiles.filter(([k]) => k.endsWith(".js"));
   if (plainJs.length > 0) {
     const jsBlock = plainJs.map(([, v]) => `<script>${v}</script>`).join("\n");
@@ -64,10 +63,9 @@ export default function CiriusEditor() {
   const [loading, setLoading] = useState(true);
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
 
-  // Editor mode: full (floating islands) or split (side-by-side)
-  const [editorMode, setEditorMode] = useState<EditorMode>("full");
+  const [editorMode, setEditorMode] = useState<EditorMode>("split");
+  const [chatMode, setChatMode] = useState<"build" | "ai-chat">("ai-chat");
 
-  // Editor state
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
   const [modesOpen, setModesOpen] = useState(false);
@@ -83,11 +81,15 @@ export default function CiriusEditor() {
   const [chatLoading, setChatLoading] = useState(false);
   const [approvingPrd, setApprovingPrd] = useState(false);
   const [approvedPrdId, setApprovedPrdId] = useState<string | null>(null);
+  const [sourceFiles, setSourceFiles] = useState<Record<string, string>>({});
+
+  const sourceFilesRef = useRef<Record<string, string>>({});
 
   const drawerPositions: Record<string, "left" | "right"> = {
     deploy: "right", files: "right", seo: "left", build: "left", chain: "left",
   };
 
+  // ─── Helpers ───
   const upsertBubbleFromLog = useCallback((log: any) => {
     const stepId = String(log?.step || crypto.randomUUID());
     const isDone = log?.status === "completed";
@@ -100,29 +102,17 @@ export default function CiriusEditor() {
       const nextStep = { s: isError ? "wait" as const : isDone ? "done" as const : "run" as const, t: log?.message || stepId };
 
       if (!found) {
-        const created: Bubble = {
-          id: stepId,
-          title: stepId.split("_").join(" "),
-          phase,
-          steps: [nextStep],
-          pct,
-          startTime: Date.now(),
-        };
-        return [...prev, created];
+        return [...prev, { id: stepId, title: stepId.split("_").join(" "), phase, steps: [nextStep], pct, startTime: Date.now() }];
       }
-
-      return prev.map(b => b.id === stepId
-        ? { ...b, phase, pct, steps: [nextStep] }
-        : b);
+      return prev.map(b => b.id === stepId ? { ...b, phase, pct, steps: [nextStep] } : b);
     });
 
     if (isDone) {
-      setTimeout(() => {
-        setBubbles(prev => prev.filter(b => b.id !== stepId));
-      }, 4000);
+      setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== stepId)), 4000);
     }
   }, []);
 
+  // ─── Load project ───
   const loadProject = useCallback(async () => {
     if (!id) return;
     const { data } = await supabase.functions.invoke("cirius-status", {
@@ -130,16 +120,9 @@ export default function CiriusEditor() {
     });
     if (data?.project) {
       setProject(data.project);
-      const nextLogs = data.logs || [];
-      setLogs(nextLogs);
+      setLogs(data.logs || []);
+      (data.logs || []).slice().reverse().forEach((log: any) => upsertBubbleFromLog(log));
 
-      // Prime bubbles from latest real backend logs
-      nextLogs
-        .slice()
-        .reverse()
-        .forEach((log: any) => upsertBubbleFromLog(log));
-
-      // Live preview URL: only use actual deployed URLs (Vercel/Netlify/custom), never Brain project URLs
       const deployedUrl = data.project.vercel_url || data.project.netlify_url || data.project.custom_domain;
       if (deployedUrl) {
         setLivePreviewUrl(deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`);
@@ -149,21 +132,29 @@ export default function CiriusEditor() {
         setLivePreviewUrl(null);
       }
 
-      // Load source_files_json directly from DB for preview (cirius-status doesn't return it for security)
-      if (data.project.has_files) {
-        const { data: filesData } = await supabase
-          .from("cirius_projects" as any)
-          .select("source_files_json")
-          .eq("id", id)
-          .maybeSingle();
-        const fd = filesData as any;
-        if (fd?.source_files_json) {
-          setPreviewHtml(buildPreviewFromFiles(fd.source_files_json as Record<string, string>));
-          setProject((prev: any) => ({ ...prev, source_files_json: fd.source_files_json }));
-        }
-      } else {
-        setPreviewHtml(null);
+      // Load source files
+      const { data: filesData } = await supabase
+        .from("cirius_projects" as any)
+        .select("source_files_json")
+        .eq("id", id)
+        .maybeSingle();
+      const fd = filesData as any;
+      let files: Record<string, string> = {};
+      if (fd?.source_files_json && typeof fd.source_files_json === "object" && Object.keys(fd.source_files_json).length > 0) {
+        files = fd.source_files_json;
       }
+
+      // Initialize with template if empty
+      if (Object.keys(files).length === 0) {
+        files = { ...REACT_VITE_TEMPLATE };
+        // Save template to DB
+        await supabase.from("cirius_projects" as any).update({ source_files_json: files }).eq("id", id);
+      }
+
+      setSourceFiles(files);
+      sourceFilesRef.current = files;
+      setPreviewHtml(buildPreviewFromFiles(files));
+      setProject((prev: any) => ({ ...prev, source_files_json: files }));
     }
     setLoading(false);
   }, [id, upsertBubbleFromLog]);
@@ -182,10 +173,7 @@ export default function CiriusEditor() {
       .then(({ data }) => {
         if (data && data.length > 0) {
           setChatMessages(data.map((m: any) => ({
-            id: m.id,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            timestamp: new Date(m.created_at).getTime(),
+            id: m.id, role: m.role as "user" | "assistant", content: m.content, timestamp: new Date(m.created_at).getTime(),
           })));
         }
       });
@@ -197,30 +185,20 @@ export default function CiriusEditor() {
     const channel = supabase
       .channel(`cirius-editor:${id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "cirius_generation_log", filter: `project_id=eq.${id}` },
-        (payload) => {
-          const nextLog = payload.new;
-          setLogs(prev => [nextLog, ...prev].slice(0, 100));
-          upsertBubbleFromLog(nextLog);
-        })
+        (payload) => { const nl = payload.new; setLogs(prev => [nl, ...prev].slice(0, 100)); upsertBubbleFromLog(nl); })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "cirius_projects", filter: `id=eq.${id}` },
         (payload) => {
           const updated = payload.new as any;
           setProject(updated);
-
-          // Only use real deployed URLs, never Brain project URLs
           const deployedUrl = updated.vercel_url || updated.netlify_url || updated.custom_domain;
-          if (deployedUrl) {
-            setLivePreviewUrl(deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`);
-          } else if (updated.preview_url && !String(updated.preview_url).includes("lovable.app")) {
-            setLivePreviewUrl(updated.preview_url);
-          } else {
-            setLivePreviewUrl(null);
-          }
+          if (deployedUrl) setLivePreviewUrl(deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`);
+          else if (updated.preview_url && !String(updated.preview_url).includes("lovable.app")) setLivePreviewUrl(updated.preview_url);
+          else setLivePreviewUrl(null);
 
-          if (updated.source_files_json) {
-            setPreviewHtml(buildPreviewFromFiles(updated.source_files_json as Record<string, string>));
-          } else {
-            setPreviewHtml(null);
+          if (updated.source_files_json && typeof updated.source_files_json === "object") {
+            setSourceFiles(updated.source_files_json);
+            sourceFilesRef.current = updated.source_files_json;
+            setPreviewHtml(buildPreviewFromFiles(updated.source_files_json));
           }
         })
       .subscribe();
@@ -230,14 +208,8 @@ export default function CiriusEditor() {
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setCmdOpen(prev => !prev);
-      }
-      if (e.key === "Escape") {
-        if (cmdOpen) setCmdOpen(false);
-        else setModesOpen(false);
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setCmdOpen(prev => !prev); }
+      if (e.key === "Escape") { if (cmdOpen) setCmdOpen(false); else setModesOpen(false); }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -249,21 +221,14 @@ export default function CiriusEditor() {
     setTimeout(() => setToasts(prev => prev.filter(x => x.id !== t.id)), 3100);
   }, []);
 
-  useEffect(() => {
-    setQueueCount(bubbles.filter(b => b.phase === "running").length);
-  }, [bubbles]);
+  useEffect(() => { setQueueCount(bubbles.filter(b => b.phase === "running").length); }, [bubbles]);
 
   const toggleDrawer = useCallback((name: string) => {
     setActiveDrawers(prev => {
       const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        // Close drawers on the same side
+      if (next.has(name)) { next.delete(name); } else {
         const side = drawerPositions[name];
-        for (const d of next) {
-          if (drawerPositions[d] === side) next.delete(d);
-        }
+        for (const d of next) { if (drawerPositions[d] === side) next.delete(d); }
         next.add(name);
       }
       return next;
@@ -273,156 +238,185 @@ export default function CiriusEditor() {
   const persistMsg = useCallback(async (msg: ChatMessage) => {
     if (!id || !user) return;
     await supabase.from("cirius_chat_messages" as any).insert({
-      id: msg.id,
-      project_id: id,
-      user_id: user.id,
-      role: msg.role,
-      content: msg.content,
+      id: msg.id, project_id: id, user_id: user.id, role: msg.role, content: msg.content,
     });
   }, [id, user]);
 
-  // ─── Unified vibecoding send: chat → PRD → approval flow ───
-  const sendMsg = useCallback(async (msg: string) => {
-    if (!msg.trim() || !id) return;
+  // ─── AI CHAT MODE: streaming via cirius-ai-chat ───
+  const sendAiChat = useCallback(async (msg: string) => {
+    if (!msg.trim() || !id || !user) return;
 
-    // 1. Add user message to chat immediately
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
     setChatMessages(prev => [...prev, userMsg]);
     persistMsg(userMsg);
     setChatLoading(true);
 
-    // 2. Create task bubble for visual progress
-    const bubbleId = `prompt_${Date.now()}`;
-    const bubble: Bubble = {
-      id: bubbleId,
-      title: msg.length > 36 ? msg.slice(0, 36) + "..." : msg,
-      phase: "running",
-      steps: [{ s: "run", t: "Gerando blueprint..." }],
-      pct: 20,
-      startTime: Date.now(),
-    };
-    setBubbles(prev => [...prev, bubble]);
+    let assistantContent = "";
 
     try {
-      // 3. Send to build pipeline (now returns PRD for approval)
+      // Persist user message on server
+      await supabase.from("cirius_chat_messages" as any).upsert({
+        id: userMsg.id, project_id: id, user_id: user.id, role: "user", content: msg,
+      });
+
+      // Build messages history for context
+      const historyMsgs = chatMessages.slice(-20).map(m => ({ role: m.role, content: m.content }));
+      historyMsgs.push({ role: "user", content: msg });
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cirius-ai-chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ messages: historyMsgs, project_id: id }),
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || `Error ${resp.status}`);
+      }
+
+      if (!resp.body) throw new Error("No stream body");
+
+      // Stream SSE
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let nlIdx: number;
+        while ((nlIdx = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, nlIdx);
+          buffer = buffer.slice(nlIdx + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (!line.startsWith("data: ")) continue;
+          const json = line.slice(6).trim();
+          if (json === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(json);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              assistantContent += delta;
+              // Update assistant message in real-time
+              setChatMessages(prev => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant" && !last.prdData) {
+                  return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: stripFileBlocks(assistantContent) } : m);
+                }
+                return [...prev, { id: crypto.randomUUID(), role: "assistant", content: stripFileBlocks(assistantContent), timestamp: Date.now() }];
+              });
+            }
+          } catch { /* partial JSON */ }
+        }
+      }
+
+      // After stream: extract files and merge locally
+      if (assistantContent.length > 0) {
+        const newFiles = extractFileBlocks(assistantContent);
+        if (Object.keys(newFiles).length > 0) {
+          const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
+          setSourceFiles(merged);
+          sourceFilesRef.current = merged;
+          setPreviewHtml(buildPreviewFromFiles(merged));
+          setProject((prev: any) => ({ ...prev, source_files_json: merged }));
+          addToast(`${Object.keys(newFiles).length} arquivo(s) atualizado(s)`, "success");
+        }
+      }
+    } catch (e) {
+      const errText = e instanceof Error ? e.message : "Erro";
+      const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `❌ ${errText}`, timestamp: Date.now() };
+      setChatMessages(prev => [...prev, errMsg]);
+    }
+    setChatLoading(false);
+  }, [id, user, chatMessages, persistMsg, addToast]);
+
+  // ─── BUILD MODE: pipeline PRD ───
+  const sendMsg = useCallback(async (msg: string) => {
+    if (!msg.trim() || !id) return;
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
+    setChatMessages(prev => [...prev, userMsg]);
+    persistMsg(userMsg);
+    setChatLoading(true);
+
+    const bubbleId = `prompt_${Date.now()}`;
+    setBubbles(prev => [...prev, { id: bubbleId, title: msg.length > 36 ? msg.slice(0, 36) + "..." : msg, phase: "running", steps: [{ s: "run", t: "Gerando blueprint..." }], pct: 20, startTime: Date.now() }]);
+
+    try {
       const { data, error } = await supabase.functions.invoke("cirius-generate", {
         body: { action: "build_prompt", project_id: id, prompt: msg.trim() },
       });
-
-      if (error || data?.error) {
-        throw new Error(data?.error || error?.message || "Falha na geração");
-      }
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha na geração");
 
       if (data?.status === "awaiting_approval" && data?.prd_json) {
-        // Show PRD card in chat for approval
-        const prdMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `Blueprint gerado com ${data.task_count} tarefa(s). Revise e aprove para iniciar a construção.`,
-          timestamp: Date.now(),
-          prdData: data.prd_json,
-        };
+        const prdMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `Blueprint gerado com ${data.task_count} tarefa(s).`, timestamp: Date.now(), prdData: data.prd_json };
         setChatMessages(prev => [...prev, prdMsg]);
         persistMsg({ ...prdMsg, content: JSON.stringify({ prd: true, ...data.prd_json }) });
-
-        setBubbles(prev => prev.map(b => b.id === bubbleId ? {
-          ...b, phase: "done", pct: 100,
-          steps: [{ s: "done", t: `Blueprint gerado (${data.task_count} tasks)` }],
-        } : b));
-        addToast("Blueprint pronto para aprovação", "success");
+        setBubbles(prev => prev.map(b => b.id === bubbleId ? { ...b, phase: "done", pct: 100, steps: [{ s: "done", t: `Blueprint (${data.task_count} tasks)` }] } : b));
+        addToast("Blueprint pronto", "success");
       } else {
-        // Fallback: direct pipeline (old behavior)
-        const taskCount = data?.task_count || 0;
-        const aiReply = taskCount > 0
-          ? `✅ Pipeline iniciado com ${taskCount} tarefa(s).`
-          : "✅ Comando aceito, pipeline em execução.";
-        const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: aiReply, timestamp: Date.now() };
+        const tc = data?.task_count || 0;
+        const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `✅ Pipeline iniciado com ${tc} tarefa(s).`, timestamp: Date.now() };
         setChatMessages(prev => [...prev, aiMsg]);
         persistMsg(aiMsg);
-
-        setBubbles(prev => prev.map(b => b.id === bubbleId ? {
-          ...b, phase: "done", pct: 100,
-          steps: [{ s: "done", t: `Pipeline iniciado (${taskCount} tasks)` }],
-        } : b));
+        setBubbles(prev => prev.map(b => b.id === bubbleId ? { ...b, phase: "done", pct: 100, steps: [{ s: "done", t: `Pipeline (${tc} tasks)` }] } : b));
         addToast("Pipeline iniciado", "success");
       }
-
       await loadProject();
       setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 4000);
     } catch (e) {
-      const errText = e instanceof Error ? e.message : "Erro ao processar";
+      const errText = e instanceof Error ? e.message : "Erro";
       const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `❌ ${errText}`, timestamp: Date.now() };
       setChatMessages(prev => [...prev, errMsg]);
       persistMsg(errMsg);
-
-      setBubbles(prev => prev.map(b => b.id === bubbleId ? {
-        ...b, phase: "error", pct: 100,
-        steps: [{ s: "wait", t: errText }],
-      } : b));
-      addToast("Erro ao processar", "info");
+      setBubbles(prev => prev.map(b => b.id === bubbleId ? { ...b, phase: "error", pct: 100, steps: [{ s: "wait", t: errText }] } : b));
     }
     setChatLoading(false);
   }, [id, loadProject, addToast, persistMsg]);
 
-  // ─── Approve PRD → trigger code generation ───
+  // ─── Approve PRD ───
   const approvePrd = useCallback(async (_prd: any) => {
     if (!id) return;
     setApprovingPrd(true);
-
     const bubbleId = `approve_${Date.now()}`;
-    setBubbles(prev => [...prev, {
-      id: bubbleId, title: "Iniciando construção...", phase: "running" as const,
-      steps: [{ s: "run" as const, t: "Aprovando PRD e disparando multi-brain..." }],
-      pct: 30, startTime: Date.now(),
-    }]);
+    setBubbles(prev => [...prev, { id: bubbleId, title: "Iniciando construção...", phase: "running" as const, steps: [{ s: "run" as const, t: "Aprovando PRD..." }], pct: 30, startTime: Date.now() }]);
 
     try {
-      const { data, error } = await supabase.functions.invoke("cirius-generate", {
-        body: { action: "approve_prd", project_id: id },
-      });
-
+      const { data, error } = await supabase.functions.invoke("cirius-generate", { body: { action: "approve_prd", project_id: id } });
       if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao aprovar");
 
-      // Mark the PRD message as approved
       setChatMessages(prev => {
         const prdMsgIdx = [...prev].reverse().findIndex(m => m.prdData);
-        if (prdMsgIdx >= 0) {
-          const realIdx = prev.length - 1 - prdMsgIdx;
-          setApprovedPrdId(prev[realIdx].id);
-        }
+        if (prdMsgIdx >= 0) setApprovedPrdId(prev[prev.length - 1 - prdMsgIdx].id);
         return prev;
       });
 
-      const aiMsg: ChatMessage = {
-        id: crypto.randomUUID(), role: "assistant",
-        content: `🚀 Construção iniciada! ${data?.task_count || 0} tarefas sendo executadas por múltiplos brains em paralelo.`,
-        timestamp: Date.now(),
-      };
+      const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `🚀 Construção iniciada! ${data?.task_count || 0} tarefas em paralelo.`, timestamp: Date.now() };
       setChatMessages(prev => [...prev, aiMsg]);
       persistMsg(aiMsg);
-
-      setBubbles(prev => prev.map(b => b.id === bubbleId ? {
-        ...b, phase: "done" as const, pct: 100,
-        steps: [{ s: "done" as const, t: `${data?.task_count || 0} tarefas disparadas` }],
-      } : b));
+      setBubbles(prev => prev.map(b => b.id === bubbleId ? { ...b, phase: "done" as const, pct: 100, steps: [{ s: "done" as const, t: `${data?.task_count || 0} tarefas disparadas` }] } : b));
       addToast("Multi-brain em execução!", "success");
       await loadProject();
       setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 4000);
     } catch (e) {
       const errText = e instanceof Error ? e.message : "Erro";
-      setBubbles(prev => prev.map(b => b.id === bubbleId ? {
-        ...b, phase: "error" as const, pct: 100,
-        steps: [{ s: "wait" as const, t: errText }],
-      } : b));
-      addToast("Erro ao iniciar construção", "info");
+      setBubbles(prev => prev.map(b => b.id === bubbleId ? { ...b, phase: "error" as const, pct: 100, steps: [{ s: "wait" as const, t: errText }] } : b));
     }
     setApprovingPrd(false);
   }, [id, loadProject, addToast, persistMsg]);
+
   const removeBubble = useCallback((bubbleId: string) => {
     setBubbles(prev => prev.filter(b => b.id !== bubbleId));
   }, []);
 
-  // ─── Chat-only conversation (for non-build queries via CMD panel) ───
   const sendChatMsg = useCallback(async (msg: string) => {
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
     setChatMessages(prev => [...prev, userMsg]);
@@ -431,15 +425,13 @@ export default function CiriusEditor() {
     try {
       const history = chatMessages.slice(-10).map(m => ({ role: m.role === "assistant" ? "ai" : "user", content: m.content }));
       const contextPrefix = project?.name ? `[Projeto: ${project.name}] ` : "";
-      const { data } = await supabase.functions.invoke("gemini-chat", {
-        body: { message: contextPrefix + msg, history },
-      });
+      const { data } = await supabase.functions.invoke("gemini-chat", { body: { message: contextPrefix + msg, history } });
       const reply = data?.reply || data?.response || data?.text || "Desculpe, não consegui processar.";
       const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: reply, timestamp: Date.now() };
       setChatMessages(prev => [...prev, aiMsg]);
       persistMsg(aiMsg);
     } catch {
-      const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "Erro ao processar. Tente novamente.", timestamp: Date.now() };
+      const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "Erro ao processar.", timestamp: Date.now() };
       setChatMessages(prev => [...prev, errMsg]);
       persistMsg(errMsg);
     }
@@ -464,44 +456,31 @@ export default function CiriusEditor() {
         chatMessages={chatMessages}
         chatLoading={chatLoading}
         onSendMsg={sendMsg}
-        onSendChat={sendChatMsg}
+        onSendChat={chatMode === "ai-chat" ? sendAiChat : sendChatMsg}
         onEditorModeChange={setEditorMode}
         isLive={isLive}
         toasts={toasts}
         onApprovePrd={approvePrd}
         approvingPrd={approvingPrd}
         approvedPrdId={approvedPrdId}
+        chatMode={chatMode}
+        onChatModeChange={setChatMode}
+        sourceFiles={sourceFiles}
       />
     );
   }
 
-  // ─── FULL MODE (existing floating islands UI) ───
+  // ─── FULL MODE ───
   return (
     <div className="ce-root dark">
-      {/* Preview */}
       <PreviewArea frameMode={frameMode} previewHtml={previewHtml} livePreviewUrl={livePreviewUrl} />
 
-      {/* Top Islands */}
       <div className="ce-top-bar">
-        <IslandLeft
-          projectName={projectName}
-          onDomainClick={() => setDomainVisible(prev => !prev)}
-          onSeoClick={() => toggleDrawer("seo")}
-          editorMode={editorMode}
-          onEditorModeChange={setEditorMode}
-        />
+        <IslandLeft projectName={projectName} onDomainClick={() => setDomainVisible(prev => !prev)} onSeoClick={() => toggleDrawer("seo")} editorMode={editorMode} onEditorModeChange={setEditorMode} />
         <IslandCenter frameMode={frameMode} onFrameChange={setFrameMode} />
-        <IslandRight
-          isLive={isLive}
-          onHistoryClick={() => addToast("Histórico de versões", "info")}
-          onBuildClick={() => toggleDrawer("build")}
-          onFilesClick={() => toggleDrawer("files")}
-          onDeployClick={() => toggleDrawer("deploy")}
-          onPublishClick={() => toggleDrawer("deploy")}
-        />
+        <IslandRight isLive={isLive} onHistoryClick={() => addToast("Histórico de versões", "info")} onBuildClick={() => toggleDrawer("build")} onFilesClick={() => toggleDrawer("files")} onDeployClick={() => toggleDrawer("deploy")} onPublishClick={() => toggleDrawer("deploy")} />
       </div>
 
-      {/* Domain Island */}
       {domainVisible && (
         <DomainIsland
           initialDomain={project?.custom_domain || ""}
@@ -510,52 +489,30 @@ export default function CiriusEditor() {
             if (!id) return;
             const { error } = await supabase.from("cirius_projects" as any).update({ custom_domain: domain || null }).eq("id", id);
             if (error) addToast("Erro ao salvar domínio", "info");
-            else {
-              setProject((prev: any) => ({ ...prev, custom_domain: domain || null }));
-              addToast(`Domínio ${domain || "removido"} salvo`, "success");
-              setDomainVisible(false);
-            }
+            else { setProject((prev: any) => ({ ...prev, custom_domain: domain || null })); addToast(`Domínio ${domain || "removido"} salvo`, "success"); setDomainVisible(false); }
           }}
         />
       )}
 
-      {/* Bottom Island */}
       <BottomIsland
-        modesOpen={modesOpen}
-        setModesOpen={setModesOpen}
-        activeMode={activeMode}
-        setActiveMode={setActiveMode}
-        queueCount={queueCount}
-        onClearQueue={() => setQueueCount(0)}
-        onSend={sendMsg}
-        onCmdOpen={() => setCmdOpen(true)}
-        onChainOpen={() => toggleDrawer("chain")}
+        modesOpen={modesOpen} setModesOpen={setModesOpen} activeMode={activeMode} setActiveMode={setActiveMode}
+        queueCount={queueCount} onClearQueue={() => setQueueCount(0)} onSend={sendMsg}
+        onCmdOpen={() => setCmdOpen(true)} onChainOpen={() => toggleDrawer("chain")}
       />
 
-      {/* Task Bubbles */}
       <TaskBubbles bubbles={bubbles} onRemove={removeBubble} />
 
-      {/* CMD Panel */}
       {cmdOpen && (
-        <CmdPanel
-          mode={cmdMode}
-          onModeChange={setCmdMode}
-          onClose={() => setCmdOpen(false)}
-          sourceFiles={project?.source_files_json}
-          chatMessages={chatMessages}
-          onChatSend={sendChatMsg}
-          chatLoading={chatLoading}
-        />
+        <CmdPanel mode={cmdMode} onModeChange={setCmdMode} onClose={() => setCmdOpen(false)}
+          sourceFiles={project?.source_files_json} chatMessages={chatMessages} onChatSend={sendChatMsg} chatLoading={chatLoading} />
       )}
 
-      {/* Drawers */}
       <DrawerDeploy visible={activeDrawers.has("deploy")} onClose={() => toggleDrawer("deploy")} project={project} onNavigateIntegrations={() => navigate("/cirius/integrations")} />
       <DrawerFiles visible={activeDrawers.has("files")} onClose={() => toggleDrawer("files")} sourceFiles={project?.source_files_json} />
       <DrawerSEO visible={activeDrawers.has("seo")} onClose={() => toggleDrawer("seo")} projectId={id} project={project} />
       <DrawerBuild visible={activeDrawers.has("build")} onClose={() => toggleDrawer("build")} project={project} tasks={tasks} logs={logs} />
       <DrawerChain visible={activeDrawers.has("chain")} onClose={() => toggleDrawer("chain")} tasks={tasks} />
 
-      {/* Toasts */}
       <EditorToasts toasts={toasts} />
     </div>
   );

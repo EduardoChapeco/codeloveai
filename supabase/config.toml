@@ -195,3 +195,6 @@ verify_jwt = false
 
 [functions.cirius-oauth-callback]
 verify_jwt = false
+
+[functions.cirius-ai-chat]
+verify_jwt = false

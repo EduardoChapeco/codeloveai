@@ -9,14 +9,29 @@ interface Props {
   livePreviewUrl?: string | null;
 }
 
+/** Inject Tailwind CDN into HTML if it uses @tailwind directives or Tailwind classes */
+function injectTailwindCdn(html: string): string {
+  if (!html) return html;
+  // Already has Tailwind CDN
+  if (html.includes("cdn.tailwindcss.com")) return html;
+  // Check if project uses Tailwind
+  const usesTailwind = html.includes("@tailwind") || /class="[^"]*(?:flex|grid|bg-|text-|p-|m-|rounded|shadow)/.test(html);
+  if (!usesTailwind) return html;
+  const cdnTag = '<script src="https://cdn.tailwindcss.com"><\/script>';
+  if (html.includes("</head>")) {
+    return html.replace("</head>", `${cdnTag}\n</head>`);
+  }
+  return `${cdnTag}\n${html}`;
+}
+
 export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: Props) {
   const [iframeKey, setIframeKey] = useState(0);
 
   const reload = () => setIframeKey(k => k + 1);
 
-  // Priority: live URL > srcDoc > empty
   const hasLiveUrl = !!livePreviewUrl;
-  const hasContent = hasLiveUrl || !!previewHtml;
+  const processedHtml = previewHtml ? injectTailwindCdn(previewHtml) : null;
+  const hasContent = hasLiveUrl || !!processedHtml;
 
   return (
     <div className={`ce-preview-wrap ${frameMode}`}>
@@ -58,11 +73,11 @@ export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: 
             sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
             title="Live Preview"
           />
-        ) : previewHtml ? (
+        ) : processedHtml ? (
           <iframe
             key={iframeKey}
             className="ce-preview-iframe"
-            srcDoc={previewHtml}
+            srcDoc={processedHtml}
             sandbox="allow-scripts"
             title="Static Preview"
           />
