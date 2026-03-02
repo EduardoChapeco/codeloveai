@@ -11,8 +11,10 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Rocket, Globe, Layout,
-  ShoppingCart, BarChart3, CheckCircle2, Loader2, Layers
+  ShoppingCart, BarChart3, CheckCircle2, Loader2, Layers,
+  Github, FolderDown, FileCode2, AlertCircle, Search
 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TEMPLATE_TYPES = [
   { value: "landing", label: "Landing Page", icon: Globe, desc: "Página única, rápida" },
@@ -42,8 +44,78 @@ export default function CiriusNew() {
   const [templateType, setTemplateType] = useState("landing");
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
 
+  // GitHub Import state
+  const [createMode, setCreateMode] = useState<"new" | "github">("new");
+  const [ghRepoInput, setGhRepoInput] = useState("");
+  const [ghBranch, setGhBranch] = useState("");
+  const [ghImportName, setGhImportName] = useState("");
+  const [ghImporting, setGhImporting] = useState(false);
+  const [ghRepos, setGhRepos] = useState<any[]>([]);
+  const [ghLoadingRepos, setGhLoadingRepos] = useState(false);
+  const [ghRepoSearch, setGhRepoSearch] = useState("");
+
   function toggleFeature(f: string) {
     setSelectedFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+  }
+
+  async function loadMyRepos() {
+    setGhLoadingRepos(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cirius-github-import", {
+        body: { action: "list_repos" },
+      });
+      if (error || data?.error) {
+        toast.error(data?.message || "Conecte o GitHub nas integrações");
+        setGhRepos([]);
+      } else {
+        setGhRepos(data.repos || []);
+      }
+    } catch {
+      toast.error("Erro ao carregar repositórios");
+    } finally {
+      setGhLoadingRepos(false);
+    }
+  }
+
+  async function handleGitHubImport() {
+    if (!ghRepoInput.trim()) { toast.error("Informe o repositório"); return; }
+    setGhImporting(true);
+    setProgress(10);
+    setProgressLabel("Conectando ao GitHub...");
+    setCreating(true);
+
+    try {
+      setProgress(30);
+      setProgressLabel("Baixando arquivos do repositório...");
+
+      const { data, error } = await supabase.functions.invoke("cirius-github-import", {
+        body: {
+          action: "import",
+          repo: ghRepoInput.trim(),
+          name: ghImportName.trim() || undefined,
+          branch: ghBranch.trim() || undefined,
+        },
+      });
+
+      if (error || data?.error) {
+        toast.error(data?.error || "Erro ao importar");
+        setCreating(false);
+        setGhImporting(false);
+        return;
+      }
+
+      setProgress(90);
+      setProgressLabel(`Importados ${data.files_imported} arquivos!`);
+      toast.success(`Projeto importado: ${data.files_imported} arquivos de ${ghRepoInput}`);
+
+      await new Promise(r => setTimeout(r, 1000));
+      navigate(`/cirius/editor/${data.project_id}`);
+    } catch (e) {
+      toast.error("Erro inesperado na importação");
+      console.error(e);
+      setCreating(false);
+      setGhImporting(false);
+    }
   }
 
   async function handleCreate() {
@@ -184,11 +256,18 @@ export default function CiriusNew() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-foreground">Novo Projeto Cirius</h1>
-            <p className="text-xs text-muted-foreground">Descreva e a IA cria tudo automaticamente</p>
+            <p className="text-xs text-muted-foreground">Crie do zero ou importe do GitHub</p>
           </div>
         </div>
 
-        {/* Step indicator */}
+        <Tabs value={createMode} onValueChange={(v) => setCreateMode(v as "new" | "github")} className="w-full">
+          <TabsList className="w-full grid grid-cols-2">
+            <TabsTrigger value="new" className="gap-2"><Rocket className="h-4 w-4" /> Criar Novo</TabsTrigger>
+            <TabsTrigger value="github" className="gap-2"><Github className="h-4 w-4" /> Importar GitHub</TabsTrigger>
+          </TabsList>
+
+          {/* ─── TAB: CRIAR NOVO ─── */}
+          <TabsContent value="new" className="space-y-6 mt-4">
         <div className="flex items-center gap-2">
           {[0, 1, 2].map(i => (
             <div key={i} className="flex items-center gap-2">
@@ -303,6 +382,117 @@ export default function CiriusNew() {
             </div>
           </div>
         )}
+          </TabsContent>
+
+          {/* ─── TAB: IMPORTAR GITHUB ─── */}
+          <TabsContent value="github" className="space-y-5 mt-4">
+            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center">
+                  <FolderDown className="h-4.5 w-4.5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Importar Repositório</p>
+                  <p className="text-[11px] text-muted-foreground">Cole a URL ou owner/repo do GitHub</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Repositório *</label>
+                  <Input
+                    value={ghRepoInput}
+                    onChange={e => setGhRepoInput(e.target.value)}
+                    placeholder="owner/repo ou https://github.com/owner/repo"
+                    className="font-mono text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Nome do projeto</label>
+                    <Input
+                      value={ghImportName}
+                      onChange={e => setGhImportName(e.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Branch</label>
+                    <Input
+                      value={ghBranch}
+                      onChange={e => setGhBranch(e.target.value)}
+                      placeholder="main (padrão)"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleGitHubImport}
+                disabled={ghImporting || !ghRepoInput.trim()}
+                className="w-full gap-2"
+              >
+                {ghImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderDown className="h-4 w-4" />}
+                Importar Projeto
+              </Button>
+            </div>
+
+            {/* My Repos section */}
+            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Meus Repositórios</p>
+                <Button variant="outline" size="sm" onClick={loadMyRepos} disabled={ghLoadingRepos} className="gap-1.5 text-xs">
+                  {ghLoadingRepos ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Github className="h-3.5 w-3.5" />}
+                  Carregar
+                </Button>
+              </div>
+
+              {ghRepos.length > 0 && (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    value={ghRepoSearch}
+                    onChange={e => setGhRepoSearch(e.target.value)}
+                    placeholder="Buscar repositório..."
+                    className="pl-9 h-8 text-xs"
+                  />
+                </div>
+              )}
+
+              {ghRepos.length > 0 ? (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {ghRepos
+                    .filter(r => !ghRepoSearch || r.full_name.toLowerCase().includes(ghRepoSearch.toLowerCase()) || (r.description || "").toLowerCase().includes(ghRepoSearch.toLowerCase()))
+                    .map((r: any) => (
+                    <div
+                      key={r.full_name}
+                      className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors group border border-transparent hover:border-border/50"
+                      onClick={() => { setGhRepoInput(r.full_name); setGhImportName(r.name); }}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <FileCode2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{r.full_name}</p>
+                          {r.description && <p className="text-[10px] text-muted-foreground truncate">{r.description}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {r.language && <Badge variant="outline" className="text-[10px] h-5">{r.language}</Badge>}
+                        {r.private && <Badge variant="secondary" className="text-[10px] h-5">Private</Badge>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : !ghLoadingRepos ? (
+                <div className="text-center py-6 text-xs text-muted-foreground">
+                  <AlertCircle className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                  Clique em "Carregar" para listar seus repos
+                </div>
+              ) : null}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
