@@ -142,6 +142,7 @@ const CiriusDashboard = lazyRetry(() => import("./pages/CiriusDashboard"));
 const CiriusNew = lazyRetry(() => import("./pages/CiriusNew"));
 const CiriusProject = lazyRetry(() => import("./pages/CiriusProject"));
 const CiriusIntegrations = lazyRetry(() => import("./pages/CiriusIntegrations"));
+const CiriusEditor = lazyRetry(() => import("./pages/CiriusEditor"));
 
 const queryClient = new QueryClient();
 
@@ -231,6 +232,7 @@ const App = () => (
                 <Route path="/cirius/new" element={<CiriusNew />} />
                 <Route path="/cirius/project/:id" element={<CiriusProject />} />
                 <Route path="/cirius/integrations" element={<CiriusIntegrations />} />
+                <Route path="/cirius/editor/:id" element={<CiriusEditor />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
