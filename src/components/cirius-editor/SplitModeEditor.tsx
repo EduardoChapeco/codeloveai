@@ -6,9 +6,11 @@ import SplitPreviewPanel from "./SplitPreviewPanel";
 import EditorToasts from "./EditorToasts";
 import FileExplorer from "./FileExplorer";
 import CodeViewer from "./CodeViewer";
+import TerminalPanel, { type TerminalLine } from "./TerminalPanel";
 import type { FrameMode, ActiveMode, EditorToast, ChatMessage, Bubble } from "./types";
 import type { EditorMode } from "./SplitTopBar";
 import type { BuildStage } from "./BuildProgressCard";
+import { Terminal, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface Props {
   project: any;
@@ -35,6 +37,8 @@ interface Props {
   bubbles?: Bubble[];
   onRemoveBubble?: (id: string) => void;
   streamingText?: string;
+  terminalLines?: TerminalLine[];
+  onClearTerminal?: () => void;
 }
 
 export default function SplitModeEditor({
@@ -45,6 +49,7 @@ export default function SplitModeEditor({
   chatMode = "ai-chat", onChatModeChange, sourceFiles,
   buildStages, buildProgress, buildComplete, buildError, deployUrls,
   bubbles, onRemoveBubble, streamingText,
+  terminalLines = [], onClearTerminal,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
@@ -52,6 +57,7 @@ export default function SplitModeEditor({
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [showFiles, setShowFiles] = useState(true);
   const [rightPanel, setRightPanel] = useState<"preview" | "code">("preview");
+  const [showTerminal, setShowTerminal] = useState(false);
 
   const projectName = project?.name || "Novo Projeto";
   const files = sourceFiles || project?.source_files_json || {};
@@ -65,12 +71,20 @@ export default function SplitModeEditor({
     }
   }, [files, selectedFile, hasFiles]);
 
+  // Auto-show terminal on errors
+  useEffect(() => {
+    if (terminalLines.some(l => l.type === "error")) setShowTerminal(true);
+  }, [terminalLines]);
+
   const handleSend = useCallback((msg: string) => {
     if (chatMode === "ai-chat") onSendChat(msg);
     else onSendMsg(msg);
   }, [chatMode, onSendMsg, onSendChat]);
 
   const handleClear = useCallback(() => {}, []);
+
+  const errorCount = terminalLines.filter(l => l.type === "error").length;
+  const fileCount = Object.keys(files).length;
 
   return (
     <div className="sp-root dark">
@@ -88,7 +102,7 @@ export default function SplitModeEditor({
         onRightPanelChange={setRightPanel}
         showFiles={showFiles}
         onToggleFiles={() => setShowFiles(p => !p)}
-        fileCount={Object.keys(files).length}
+        fileCount={fileCount}
       />
 
       <div className="sp-body">
@@ -127,17 +141,66 @@ export default function SplitModeEditor({
 
         <SplitResizer onResize={setChatWidth} currentWidth={chatWidth} />
 
-        {/* Right panel: preview or code */}
-        {rightPanel === "preview" ? (
-          <SplitPreviewPanel frameMode={frameMode} previewHtml={previewHtml} livePreviewUrl={livePreviewUrl} />
-        ) : (
-          <CodeViewer
-            files={files}
-            selectedFile={selectedFile}
-            onSelectFile={setSelectedFile}
-            onSwitchToPreview={() => setRightPanel("preview")}
-          />
-        )}
+        {/* Right side: preview/code + terminal */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          {/* Main content */}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {rightPanel === "preview" ? (
+              <SplitPreviewPanel frameMode={frameMode} previewHtml={previewHtml} livePreviewUrl={livePreviewUrl} />
+            ) : (
+              <CodeViewer
+                files={files}
+                selectedFile={selectedFile}
+                onSelectFile={setSelectedFile}
+                onSwitchToPreview={() => setRightPanel("preview")}
+              />
+            )}
+          </div>
+
+          {/* Terminal */}
+          {showTerminal && (
+            <TerminalPanel
+              lines={terminalLines}
+              onClear={onClearTerminal}
+              onToggle={() => setShowTerminal(false)}
+            />
+          )}
+
+          {/* Status bar */}
+          <div className="sp-bottom-bar">
+            <div className="sp-bb-left">
+              <button className={`sp-bb-btn ${showTerminal ? "on" : ""}`} onClick={() => setShowTerminal(p => !p)}>
+                <Terminal size={10} />
+                Terminal
+                {terminalLines.length > 0 && (
+                  <span style={{ fontFamily: "var(--mono)" }}>({terminalLines.length})</span>
+                )}
+              </button>
+              {errorCount > 0 && (
+                <span style={{ display: "flex", alignItems: "center", gap: 3, color: "var(--red-l)" }}>
+                  <AlertCircle size={10} /> {errorCount} erro(s)
+                </span>
+              )}
+            </div>
+            <div className="sp-bb-right">
+              {chatLoading && (
+                <span style={{ color: "var(--indigo-l)", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span className="stat-dot" style={{ background: "var(--indigo)", width: 4, height: 4 }} />
+                  Gerando...
+                </span>
+              )}
+              {buildComplete && (
+                <span style={{ color: "var(--green-l)", display: "flex", alignItems: "center", gap: 4 }}>
+                  <CheckCircle2 size={10} /> Build completo
+                </span>
+              )}
+              <span style={{ fontFamily: "var(--mono)" }}>{fileCount} arquivo(s)</span>
+              {selectedFile && (
+                <span style={{ fontFamily: "var(--mono)", color: "var(--indigo-l)" }}>{selectedFile}</span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <EditorToasts toasts={toasts} />
