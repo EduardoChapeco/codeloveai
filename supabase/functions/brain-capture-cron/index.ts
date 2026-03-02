@@ -505,7 +505,7 @@ Deno.serve(async (req) => {
         for (const convo of convos) {
           if (!convo.target_project_id) continue;
           const age = Date.now() - new Date(convo.created_at).getTime();
-          if (age > 300_000) {
+          if (age > 600_000) {
             await sc.from("loveai_conversations").update({ status: "timeout" }).eq("id", convo.id);
             timedOut++;
             continue;
