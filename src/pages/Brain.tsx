@@ -593,10 +593,12 @@ export default function BrainPage() {
     } catch (e: any) { toast.error(e.message); }
   };
 
+  // Track temp IDs that haven't been confirmed by the server yet
+  const pendingTempIds = useRef<Set<string>>(new Set());
   // Realtime polling — actively mine responses for processing conversations
   const pollCountRef = useRef<Record<string, number>>({});
   useEffect(() => {
-    const processingConvos = allConversations.filter(c => c.status === "processing" && c.id !== "temp");
+    const processingConvos = allConversations.filter(c => c.status === "processing" && c.id !== "temp" && !pendingTempIds.current.has(c.id));
     if (processingConvos.length === 0) return;
     
     const interval = setInterval(async () => {
@@ -685,7 +687,7 @@ export default function BrainPage() {
     };
     setAllConversations(prev => [...prev, tempConvo]);
     setProcessingIds(prev => new Set(prev).add(tempId));
-
+    pendingTempIds.current.add(tempId);
     try {
       const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "send", message: userMsg, brain_type: brainType, brain_id: activeBrainId },
@@ -701,6 +703,7 @@ export default function BrainPage() {
       }
       
       const realId = data.conversation_id || tempId;
+      pendingTempIds.current.delete(tempId);
       const finalStatus = data.status === "completed" ? "completed" : data.status === "processing" ? "processing" : data.status === "timeout" ? "timeout" : "failed";
       
       setAllConversations(prev =>
@@ -715,6 +718,7 @@ export default function BrainPage() {
         return n;
       });
     } catch (e: any) {
+      pendingTempIds.current.delete(tempId);
       setAllConversations(prev => prev.map(c => c.id === tempId ? { ...c, status: "failed", ai_response: e.message } : c));
       setProcessingIds(prev => { const n = new Set(prev); n.delete(tempId); return n; });
       toast.error(e.message);
