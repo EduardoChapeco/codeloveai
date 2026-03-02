@@ -102,66 +102,105 @@
     --specular-top-hover: inset 0 0.5px 0 rgba(255, 255, 255, 0.95);
   }
 
-  /* ━━━ DARK MODE ━━━ */
+  /* ━━━ DARK MODE — Ereemby Design System v2 ━━━ */
   .dark {
-    --background: 0 0% 0%;
-    --foreground: 240 5% 96%;
-    --card: 240 6% 10%;
-    --card-foreground: 240 5% 96%;
-    --popover: 240 6% 10%;
-    --popover-foreground: 240 5% 96%;
-    --primary: 211 100% 60%;
+    /* ── Ereemby depth levels: bg-0 → bg-5 ── */
+    --background: 240 11% 4%;        /* #08080a — deepest */
+    --foreground: 240 14% 94%;       /* #eeeef2 */
+    --card: 240 9% 9%;               /* #141418 — card base */
+    --card-foreground: 240 14% 94%;
+    --popover: 240 9% 9%;
+    --popover-foreground: 240 14% 94%;
+    --primary: 211 100% 60%;         /* #3b82f6 blue */
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 14%;
-    --secondary-foreground: 240 5% 90%;
-    --muted: 240 5% 14%;
-    --muted-foreground: 240 5% 55%;
-    --accent: 240 5% 16%;
-    --accent-foreground: 240 5% 90%;
+    --secondary: 240 10% 6%;         /* #0e0e11 — surface base */
+    --secondary-foreground: 240 9% 66%;
+    --muted: 240 10% 12%;            /* #1c1c22 — elevated */
+    --muted-foreground: 240 8% 41%;  /* #606070 */
+    --accent: 240 6% 15%;            /* #242429 — active/pressed */
+    --accent-foreground: 240 9% 66%;
     --destructive: 3 86% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 5% 16%;
-    --input: 240 5% 16%;
+    --border: 0 0% 100% / 0.07;      /* rgba(255,255,255,0.07) */
+    --input: 0 0% 100% / 0.07;
     --ring: 211 100% 60%;
-    --sidebar-background: 240 8% 7%;
-    --sidebar-foreground: 240 5% 85%;
+    --sidebar-background: 240 11% 4%;
+    --sidebar-foreground: 240 9% 66%;
     --sidebar-primary: 211 100% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 5% 14%;
-    --sidebar-accent-foreground: 240 5% 85%;
-    --sidebar-border: 240 5% 14%;
+    --sidebar-accent: 240 10% 12%;
+    --sidebar-accent-foreground: 240 9% 66%;
+    --sidebar-border: 0 0% 100% / 0.07;
     --sidebar-ring: 211 100% 60%;
 
-    --clf-bg: #0d0d0f;
-    --clf-bg-solid: #1a1a1e;
-    --clf-bg-glass: rgba(13, 13, 15, 0.95);
-    --clf-fg: #f2f2f7;
-    --clf-fg2: #ebebf5;
-    --clf-muted: rgba(30, 30, 34, 0.9);
-    --clf-muted2: #2c2c2e;
-    --clf-muted-fg: #8e8e93;
-    --clf-border: rgba(255, 255, 255, 0.06);
-    --clf-border-dark: rgba(255, 255, 255, 0.09);
-    --clf-accent: #0a84ff;
-    --clf-accent-hover: #409cff;
-    --clf-accent-bg: rgba(10, 132, 255, 0.12);
-    --clf-ok: #30d158;
-    --clf-ok-bg: rgba(48, 209, 88, 0.12);
-    --clf-warn: #ffd60a;
-    --clf-warn-bg: rgba(255, 214, 10, 0.12);
-    --clf-err: #ff453a;
-    --clf-err-bg: rgba(255, 69, 58, 0.1);
-    --clf-plan: #7d7aff;
-    --clf-plan-bg: rgba(125, 122, 255, 0.12);
+    /* ── Ereemby semantic palette ── */
+    --clf-bg: #08080a;
+    --clf-bg-solid: #141418;
+    --clf-bg-glass: rgba(8, 8, 10, 0.95);
+    --clf-fg: #eeeef2;
+    --clf-fg2: #a0a0b0;
+    --clf-muted: rgba(28, 28, 34, 0.9);
+    --clf-muted2: #2e2e35;
+    --clf-muted-fg: #606070;
+    --clf-border: rgba(255, 255, 255, 0.07);
+    --clf-border-dark: rgba(255, 255, 255, 0.11);
+    --clf-accent: #3b82f6;
+    --clf-accent-hover: #60a5fa;
+    --clf-accent-bg: rgba(59, 130, 246, 0.12);
+    --clf-ok: #22c55e;
+    --clf-ok-bg: rgba(34, 197, 94, 0.11);
+    --clf-warn: #f59e0b;
+    --clf-warn-bg: rgba(245, 158, 11, 0.12);
+    --clf-err: #ef4444;
+    --clf-err-bg: rgba(239, 68, 68, 0.11);
+    --clf-plan: #a855f7;
+    --clf-plan-bg: rgba(168, 85, 247, 0.12);
+
+    /* ── Ereemby shadows ── */
+    --clf-shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --clf-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
+    --clf-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.55);
+    --clf-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.6);
     --clf-shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.5), 0 0.5px 0 rgba(255, 255, 255, 0.05) inset;
-    --glass-bg: 240 6% 10% / 0.92;
-    --glass-border: 0 0% 100% / 0.06;
+
+    --glass-bg: 240 11% 4% / 0.92;
+    --glass-border: 0 0% 100% / 0.07;
     --mesh-1: 211 80% 14%;
     --mesh-2: 199 70% 11%;
     --mesh-3: 263 50% 13%;
-    --liquid-glass-bg: rgba(20, 20, 22, 0.65);
-    --liquid-glass-border: rgba(255, 255, 255, 0.08);
-    --light-specular: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.08);
+    --liquid-glass-bg: rgba(14, 14, 17, 0.65);
+    --liquid-glass-border: rgba(255, 255, 255, 0.07);
+    --light-specular: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.06);
+
+    /* ── Ereemby depth surface vars (for direct use) ── */
+    --er-bg-0: #08080a;
+    --er-bg-1: #0e0e11;
+    --er-bg-2: #141418;
+    --er-bg-3: #1c1c22;
+    --er-bg-4: #242429;
+    --er-bg-5: #2e2e35;
+    --er-b0: rgba(255,255,255,0.04);
+    --er-b1: rgba(255,255,255,0.07);
+    --er-b2: rgba(255,255,255,0.11);
+    --er-b3: rgba(255,255,255,0.16);
+    --er-text-primary: #eeeef2;
+    --er-text-secondary: #a0a0b0;
+    --er-text-tertiary: #606070;
+    --er-text-quaternary: #3a3a48;
+
+    /* ── Ereemby accent colors ── */
+    --er-orange: #f59e0b;  --er-orange-l: #fbbf24;  --er-orange-d: rgba(245,158,11,0.12);
+    --er-blue: #3b82f6;    --er-blue-l: #60a5fa;    --er-blue-d: rgba(59,130,246,0.12);
+    --er-purple: #a855f7;  --er-purple-l: #c084fc;  --er-purple-d: rgba(168,85,247,0.12);
+    --er-green: #22c55e;   --er-green-l: #4ade80;   --er-green-d: rgba(34,197,94,0.11);
+    --er-red: #ef4444;     --er-red-l: #f87171;     --er-red-d: rgba(239,68,68,0.11);
+    --er-teal: #14b8a6;    --er-teal-l: #2dd4bf;    --er-teal-d: rgba(20,184,166,0.11);
+    --er-pink: #ec4899;    --er-pink-l: #f472b6;    --er-pink-d: rgba(236,72,153,0.11);
+    --er-indigo: #6366f1;  --er-indigo-l: #818cf8;  --er-indigo-d: rgba(99,102,241,0.11);
+
+    /* ── Ereemby easing ── */
+    --ease-spring: cubic-bezier(.22, 1, .36, 1);
+    --ease-out: cubic-bezier(0, 0, .2, 1);
   }
 }
 
@@ -171,10 +210,15 @@
   html { font-size: 16px; }
   body {
     @apply bg-background text-foreground;
-    font-family: "Inter", -apple-system, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     letter-spacing: -0.01em;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  code, pre, .mono, .lv-mono {
+    font-family: 'Geist Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
   }
   ::-webkit-scrollbar { width: 0px; height: 0px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -337,7 +381,7 @@
   .lv-body-lg { @apply text-[15px] text-muted-foreground leading-relaxed; }
   .lv-caption { @apply text-[11px] text-muted-foreground; }
   .lv-stat { @apply text-3xl font-extrabold text-foreground tabular-nums; letter-spacing: -0.04em; }
-  .lv-mono { font-family: "SF Mono", ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 11px; }
+  .lv-mono { font-family: 'Geist Mono', ui-monospace, 'Cascadia Code', Menlo, monospace; font-size: 11.5px; }
 
   /* ─── CARDS ─── */
 
