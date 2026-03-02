@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Play, Pause, X, Github, Globe, Database,
   RefreshCw, Rocket, CheckCircle2, Clock, Loader2,
-  Circle, ChevronDown, ChevronRight, FileCode, Wrench, Shield
+  Circle, ChevronDown, ChevronRight, FileCode, Wrench, Shield,
+  Eye, EyeOff, Search, ExternalLink, XCircle,
 } from "lucide-react";
 
 const statusLabels: Record<string, string> = {
@@ -46,6 +47,8 @@ export default function CiriusProject() {
   const [acting, setActing] = useState(false);
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
   const [thinkingTime, setThinkingTime] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
   const loadProject = useCallback(async () => {
     if (!id) return;
@@ -109,6 +112,26 @@ export default function CiriusProject() {
     setActing(false);
   }
 
+  const verifyProject = async () => {
+    if (!id) return;
+    setVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cirius-generate", {
+        body: { action: "debug_log", project_id: id },
+      });
+      if (error) {
+        toast.error("Verificação falhou: " + error.message);
+      } else {
+        const summary = data?.summary || JSON.stringify(data).substring(0, 300);
+        toast.success("Diagnóstico concluído", { description: summary, duration: 8000 });
+      }
+    } catch {
+      toast.error("Erro na verificação");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   if (!user) { navigate("/login"); return null; }
   if (loading) return <AppLayout><div className="min-h-screen bg-background" /></AppLayout>;
   if (!project) return <AppLayout><div className="p-6 text-muted-foreground">Projeto não encontrado</div></AppLayout>;
@@ -140,7 +163,7 @@ export default function CiriusProject() {
           </Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-foreground truncate">{project.name}</h1>
-            <div className="flex items-center gap-2 mt-1">
+             <div className="flex items-center gap-2 mt-1">
               <Badge className={statusColors[project.status] || "bg-muted"}>
                 {statusLabels[project.status] || project.status}
               </Badge>
@@ -149,10 +172,67 @@ export default function CiriusProject() {
                   <Wrench className="h-3 w-3" /> {project.generation_engine}
                 </Badge>
               )}
+              {project.lovable_project_id ? (
+                <Badge variant="outline" className="text-[10px] gap-1 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                  <CheckCircle2 className="h-3 w-3" /> Projeto ativo
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] gap-1 border-destructive/30 text-destructive bg-destructive/10">
+                  <XCircle className="h-3 w-3" /> Sem projeto
+                </Badge>
+              )}
             </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {project.lovable_project_id && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPreview(p => !p)}
+                className={`gap-1.5 text-xs ${showPreview ? "ring-2 ring-primary" : ""}`}
+              >
+                {showPreview ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                Preview
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={verifyProject}
+              disabled={verifying}
+              className="gap-1.5 text-xs"
+            >
+              {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+              Verificar
+            </Button>
           </div>
         </div>
 
+        {/* Live Preview */}
+        {showPreview && project.lovable_project_id && (
+          <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border/30">
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live Preview
+              </span>
+              <a
+                href={`https://id-preview--${project.lovable_project_id}.lovable.app`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Abrir <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+            <iframe
+              src={`https://id-preview--${project.lovable_project_id}.lovable.app`}
+              className="w-full h-[420px] border-0"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              title="Live Preview"
+            />
+          </div>
+        )}
         {/* Thinking indicator */}
         {isActive && (
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 border border-border/50">
