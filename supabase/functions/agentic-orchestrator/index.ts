@@ -448,9 +448,23 @@ Deno.serve(async (req: Request) => {
         return json({ status: "already_executing" });
       }
 
-      // Acquire a brainchain account from the pool
+      // Get next pending task FIRST (needed for brain_type selection)
+      const { data: task } = await sc.from("orchestrator_tasks")
+        .select("*").eq("project_id", projectId).eq("status", "pending")
+        .order("task_index", { ascending: true }).limit(1).maybeSingle();
+
+      if (!task) {
+        await sc.from("orchestrator_projects").update({
+          status: "completed",
+          current_task_index: project.total_tasks as number,
+          quality_score: 100,
+        }).eq("id", projectId);
+        await addLog(sc, projectId, "🎉 All tasks completed!", "info");
+        return json({ status: "completed" });
+      }
+
+      // Acquire a brainchain account from the pool (using task's brain_type)
       const acqT0 = Date.now();
-      // Use brain_type from the task if available, fallback to "code"
       const taskBrainType = (task as any).brain_type || "code";
       const account = await acquireBrainchainAccount(sc, taskBrainType);
       const acqDuration = Date.now() - acqT0;
@@ -467,22 +481,7 @@ Deno.serve(async (req: Request) => {
       await addLog(sc, projectId, `🔑 Acquired brainchain account ${account.id.slice(0, 8)} (brain: ${account.brainProjectId.slice(0, 8)}) in ${acqDuration}ms`, "debug",
         { account_id: account.id, brain_project: account.brainProjectId, acquire_duration_ms: acqDuration });
 
-      // Get next pending task
-      const { data: task } = await sc.from("orchestrator_tasks")
-        .select("*").eq("project_id", projectId).eq("status", "pending")
-        .order("task_index", { ascending: true }).limit(1).maybeSingle();
-
-      if (!task) {
-        await releaseBrainchainAccount(sc, account.id, true);
-        await sc.from("orchestrator_projects").update({
-          status: "completed",
-          current_task_index: project.total_tasks as number,
-          quality_score: 100,
-        }).eq("id", projectId);
-        await addLog(sc, projectId, "🎉 All tasks completed! Released account.", "info",
-          { account_id: account.id });
-        return json({ status: "completed" });
-      }
+      // (task null check already handled above)
 
       // Set to executing BEFORE sending
       await sc.from("orchestrator_projects").update({
