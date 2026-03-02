@@ -639,7 +639,10 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const user = await getUser(req);
-  if (!user) return json({ error: "Unauthorized" }, 401);
+  // Allow service-key calls for internal actions (refine from orchestrator-tick)
+  const authHeader = req.headers.get("Authorization") || "";
+  const isServiceKey = authHeader === `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`;
+  if (!user && !isServiceKey) return json({ error: "Unauthorized" }, 401);
 
   const sc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const body = await req.json().catch(() => ({}));
@@ -1232,9 +1235,16 @@ Deno.serve(async (req) => {
   if (action === "refine") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-    const { data: project } = await sc.from("cirius_projects")
+
+    // Allow service-key calls (from triggerRefinement in orchestrator-tick)
+    // In that case user is null, so we skip user_id filter
+    let projectQuery = sc.from("cirius_projects")
       .select("id, source_files_json, prd_json, name, description, user_id")
-      .eq("id", projectId).eq("user_id", user.id).single();
+      .eq("id", projectId);
+    if (user) {
+      projectQuery = projectQuery.eq("user_id", user.id);
+    }
+    const { data: project } = await projectQuery.single();
     if (!project) return json({ error: "Not found" }, 404);
 
     const files = (project.source_files_json || {}) as Record<string, string>;
@@ -1267,7 +1277,31 @@ Deno.serve(async (req) => {
         duration_ms: refineResult.durationMs,
         metadata: { before: fileCount, after: Object.keys(refined).length },
       });
-      return json({ ok: true, file_count: Object.keys(refined).length, refined: true });
+
+      // ★ Auto-deploy to GitHub if integration is active
+      const ownerId = project.user_id;
+      const { data: ghIntegration } = await sc.from("cirius_integrations")
+        .select("id")
+        .eq("user_id", ownerId)
+        .eq("provider", "github")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (ghIntegration) {
+        await logEntry(sc, projectId, "auto_deploy", "started", "Auto-deploy GitHub triggered after refinement");
+        fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/cirius-deploy`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+          },
+          body: JSON.stringify({ action: "github", project_id: projectId }),
+        }).catch((e) => {
+          console.error("[cirius-generate] auto-deploy failed:", e.message);
+        });
+      }
+
+      return json({ ok: true, file_count: Object.keys(refined).length, refined: true, auto_deploy: !!ghIntegration });
     }
 
     await logEntry(sc, projectId, "refine", "failed",
