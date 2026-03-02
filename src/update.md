@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-02T01:31:00Z
+updated_at: 2026-03-02T01:40:00Z
 status: done
-task: Corrigir erro de carregamento da página Brain (hooks) e estabilizar runtime
+task: Refatorar orchestrator engine v3 - fire-and-forget execute, tick handles completion detection
 ---

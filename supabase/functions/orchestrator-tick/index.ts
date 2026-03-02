@@ -1,12 +1,15 @@
+/**
+ * orchestrator-tick v3 — Handles BOTH "paused" and "executing" projects.
+ *
+ * Key fixes:
+ *  - Processes "executing" projects by polling for task completion
+ *  - On completion: marks task done, sets project to "paused" for next task
+ *  - Timeout: 5 minutes of executing → force complete
+ *  - Paused projects: dispatches next task via execute_next
+ */
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// ═══════════════════════════════════════════════════════════
-// orchestrator-tick — Phase 9 aware
-// Called by pg_cron every 30s to advance all paused projects.
-// Note: execute_next now does its OWN 3-min relay poll internally.
-// So tick skips projects with status=executing and gives 4min breathing room.
-// ═══════════════════════════════════════════════════════════
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,39 +24,19 @@ function json(data: unknown, status = 200) {
 }
 
 const LOVABLE_API = "https://api.lovable.dev";
-const LOVABLE_HEADERS = {
-  "Origin": "https://lovable.dev",
-  "Referer": "https://lovable.dev/",
-};
+const LOVABLE_HEADERS = { "Origin": "https://lovable.dev", "Referer": "https://lovable.dev/" };
 const ORCHESTRATOR_FN = "/functions/v1/agentic-orchestrator";
 
-interface OrchestratorProject {
-  id: string;
-  user_id: string;
-  lovable_project_id: string | null;
-  status: string;
-  current_task_index: number;
-  total_tasks: number;
-  audit_required: boolean;
-  source_fingerprint: string | null;
-  next_tick_at: string | null;
-  quality_score: number | null;
-}
-
-interface OrchestratorTask {
-  id: string;
-  project_id: string;
-  task_index: number;
-  status: string;
-  required_audit_before: boolean;
-  retry_count: number;
-}
+// Max time a task can be in "executing" before force-completing (5 min)
+const EXECUTING_TIMEOUT_MS = 5 * 60 * 1000;
+// Delay between task completion and next dispatch (40s breathing room)
+const INTER_TASK_DELAY_MS = 40 * 1000;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const sc = createClient(supabaseUrl, serviceKey);
 
   const now = new Date().toISOString();
@@ -62,173 +45,177 @@ Deno.serve(async (req: Request) => {
   const tickLog: string[] = [];
 
   try {
-    // 1. Find projects that are PAUSED (not executing — Phase 9: execute_next handles its own relay)
-    const { data: projects, error: projErr } = await sc
+    // ═══════════════════════════════════════════════════════
+    // PHASE 1: Check "executing" projects for completion
+    // ═══════════════════════════════════════════════════════
+    const { data: executingProjects } = await sc
       .from("orchestrator_projects")
       .select("*")
-      .eq("status", "paused")
-      .or(`next_tick_at.is.null,next_tick_at.lte.${now}`)
+      .eq("status", "executing")
       .limit(10);
 
-    if (projErr) {
-      console.error("[orchestrator-tick] Failed to fetch projects:", projErr.message);
-      return json({ error: projErr.message }, 500);
-    }
-
-    if (!projects?.length) {
-      return json({ success: true, processed: 0, message: "No projects pending tick" });
-    }
-
-    for (const project of projects as OrchestratorProject[]) {
+    for (const project of (executingProjects || [])) {
       try {
-        tickLog.push(`→ Project ${project.id} (user: ${project.user_id})`);
+        tickLog.push(`→ [executing] Project ${project.id}`);
 
-        // Get user's own lovable token (no admin fallback)
+        // Get user token
         const { data: account } = await sc
           .from("lovable_accounts")
-          .select("token_encrypted, token_expires_at, status")
+          .select("token_encrypted, status")
           .eq("user_id", project.user_id)
           .eq("status", "active")
           .limit(1)
           .maybeSingle();
 
-        if (!account?.token_encrypted || account.status !== "active") {
-          tickLog.push(`  ⚠️ No active Lovable token for user ${project.user_id}, skipping`);
-          skipped++;
-          await sc.from("orchestrator_projects").update({
-            next_tick_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-          }).eq("id", project.id);
-          continue;
-        }
-
-        // Token expiry pre-check — attempt refresh if expired
-        if (account.token_expires_at) {
-          const expiresAt = new Date(account.token_expires_at as string).getTime();
-          if (Date.now() >= expiresAt) {
-            tickLog.push(`  ⏰ Token expired for user ${project.user_id} — triggering refresh`);
-            // Trigger token refresh via the dedicated function
-            try {
-              await fetch(`${supabaseUrl}/functions/v1/lovable-token-refresh`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-                },
-                body: JSON.stringify({ force_user_id: project.user_id }),
-              });
-            } catch { /* non-critical */ }
-            // Re-fetch token after refresh attempt
-            const { data: refreshedAcct } = await sc
-              .from("lovable_accounts")
-              .select("token_encrypted, token_expires_at, status")
-              .eq("user_id", project.user_id)
-              .eq("status", "active")
-              .limit(1)
-              .maybeSingle();
-            if (!refreshedAcct?.token_encrypted) {
-              tickLog.push(`  ❌ Token refresh failed — skipping`);
-              skipped++;
-              await sc.from("orchestrator_projects").update({
-                next_tick_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-              }).eq("id", project.id);
-              continue;
-            }
-            // Use the refreshed token
-            Object.assign(account, refreshedAcct);
-          }
-        }
-
-        const lovableToken = account.token_encrypted as string;
-
-        // 3. Check if Lovable is idle (has the source code changed since last tick?)
-        let isIdle = true;
-        if (project.lovable_project_id) {
-          const srcRes = await fetch(
-            `${LOVABLE_API}/projects/${project.lovable_project_id}/source-code`,
-            {
-              headers: {
-                Authorization: `Bearer ${lovableToken}`,
-                ...LOVABLE_HEADERS,
-              },
-            }
-          );
-
-          if (srcRes.ok) {
-            const srcData = await srcRes.json() as Record<string, unknown>;
-            const files = (srcData.files || []) as Array<{ path: string; size?: number }>;
-            const fingerprint = files.map(f => `${f.path}:${f.size ?? 0}`).sort().join("|");
-            isIdle = fingerprint === project.source_fingerprint;
-
-            // Update fingerprint
-            await sc.from("orchestrator_projects")
-              .update({ source_fingerprint: fingerprint }).eq("id", project.id);
-          }
-        }
-
-        if (!isIdle) {
-          tickLog.push(`  ⏳ Still processing, back-off 15s`);
-          await sc.from("orchestrator_projects").update({
-            next_tick_at: new Date(Date.now() + 15 * 1000).toISOString(),
-          }).eq("id", project.id);
+        if (!account?.token_encrypted) {
+          tickLog.push(`  ⚠️ No token, skipping`);
           skipped++;
           continue;
         }
 
-        // 4. Get next pending task
+        const token = account.token_encrypted as string;
+        const lovableProjectId = project.lovable_project_id as string;
+        if (!lovableProjectId) {
+          tickLog.push(`  ⚠️ No lovable project, skipping`);
+          continue;
+        }
+
+        // Check how long it's been executing
+        const { data: runningTask } = await sc.from("orchestrator_tasks")
+          .select("*")
+          .eq("project_id", project.id)
+          .eq("status", "running")
+          .order("task_index", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (!runningTask) {
+          // No running task but status is executing — fix: set to paused
+          await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", project.id);
+          tickLog.push(`  🔧 No running task found, reset to paused`);
+          processed++;
+          continue;
+        }
+
+        const startedAt = runningTask.started_at ? new Date(runningTask.started_at as string).getTime() : Date.now();
+        const elapsed = Date.now() - startedAt;
+
+        // Timeout check
+        if (elapsed > EXECUTING_TIMEOUT_MS) {
+          tickLog.push(`  ⏰ Task #${runningTask.task_index} timed out (${Math.round(elapsed / 1000)}s)`);
+          await sc.from("orchestrator_tasks").update({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+          }).eq("id", runningTask.id);
+          await sc.from("orchestrator_projects").update({
+            status: "paused",
+            next_tick_at: new Date(Date.now() + INTER_TASK_DELAY_MS).toISOString(),
+          }).eq("id", project.id);
+          await sc.from("orchestrator_logs").insert({
+            project_id: project.id, task_id: runningTask.id,
+            level: "warn", message: `⏰ Task #${runningTask.task_index} force-completed (timeout)`,
+          });
+          processed++;
+          continue;
+        }
+
+        // Check completion via fingerprint + streaming
+        let completed = false;
+        let reason = "";
+
+        // 1. Fingerprint check
+        try {
+          const fpRes = await fetch(`${LOVABLE_API}/projects/${lovableProjectId}/source-code`, {
+            headers: { Authorization: `Bearer ${token}`, ...LOVABLE_HEADERS },
+          });
+          if (fpRes.ok) {
+            const fpData = await fpRes.json() as Record<string, unknown>;
+            const files = (fpData.files || []) as Array<{ path: string; size?: number }>;
+            const fpNow = files.map(f => `${f.path}:${f.size ?? 0}`).sort().join("|");
+            const fpBefore = project.source_fingerprint as string | null;
+            if (fpBefore && fpNow !== fpBefore) {
+              completed = true;
+              reason = "fingerprint changed";
+              await sc.from("orchestrator_projects").update({ source_fingerprint: fpNow }).eq("id", project.id);
+            }
+          }
+        } catch { /* non-critical */ }
+
+        // 2. Streaming check (only if fingerprint didn't change yet)
+        if (!completed) {
+          try {
+            const pollRes = await fetch(`${LOVABLE_API}/projects/${lovableProjectId}/latest-message`, {
+              headers: { Authorization: `Bearer ${token}`, ...LOVABLE_HEADERS },
+            });
+            if (pollRes.ok) {
+              const pollData = await pollRes.json() as Record<string, unknown>;
+              if (pollData && !pollData.is_streaming && pollData.content && elapsed > 15_000) {
+                completed = true;
+                reason = "streaming complete";
+              }
+            }
+          } catch { /* non-critical */ }
+        }
+
+        if (completed) {
+          tickLog.push(`  ✅ Task #${runningTask.task_index} completed (${reason})`);
+          await sc.from("orchestrator_tasks").update({
+            status: "completed", completed_at: new Date().toISOString(),
+          }).eq("id", runningTask.id);
+          await sc.from("orchestrator_projects").update({
+            status: "paused",
+            next_tick_at: new Date(Date.now() + INTER_TASK_DELAY_MS).toISOString(),
+          }).eq("id", project.id);
+          await sc.from("orchestrator_logs").insert({
+            project_id: project.id, task_id: runningTask.id,
+            level: "info", message: `✅ Task #${runningTask.task_index} completed (${reason})`,
+          });
+          processed++;
+        } else {
+          tickLog.push(`  ⏳ Task #${runningTask.task_index} still running (${Math.round(elapsed / 1000)}s)`);
+          skipped++;
+        }
+      } catch (e) {
+        tickLog.push(`  ❌ Error: ${(e as Error).message}`);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // PHASE 2: Process "paused" projects — dispatch next task
+    // ═══════════════════════════════════════════════════════
+    const { data: pausedProjects } = await sc
+      .from("orchestrator_projects")
+      .select("*")
+      .eq("status", "paused")
+      .or(`next_tick_at.is.null,next_tick_at.lte.${now}`)
+      .limit(5);
+
+    for (const project of (pausedProjects || [])) {
+      try {
+        tickLog.push(`→ [paused] Project ${project.id}`);
+
+        // Check if there are pending tasks
         const { data: nextTask } = await sc
           .from("orchestrator_tasks")
-          .select("*")
+          .select("id")
           .eq("project_id", project.id)
           .eq("status", "pending")
           .order("task_index", { ascending: true })
           .limit(1)
-          .maybeSingle() as { data: OrchestratorTask | null };
+          .maybeSingle();
 
         if (!nextTask) {
           // All done!
-          await sc.from("orchestrator_projects")
-            .update({ status: "completed" }).eq("id", project.id);
+          await sc.from("orchestrator_projects").update({ status: "completed" }).eq("id", project.id);
           await sc.from("orchestrator_logs").insert({
-            project_id: project.id,
-            level: "info",
-            message: "🎉 All tasks completed via cron tick!",
+            project_id: project.id, level: "info", message: "🎉 All tasks completed!",
           });
-          tickLog.push(`  ✅ Completed!`);
+          tickLog.push(`  ✅ All tasks done!`);
           processed++;
           continue;
         }
 
-        // 5. If the next task requires audit first, trigger audit
-        if (nextTask.required_audit_before && !project.audit_required) {
-          // Mark as needing audit, and let the next tick handle it
-          await sc.from("orchestrator_projects").update({
-            status: "auditing",
-            audit_required: true,
-            next_tick_at: new Date(Date.now() + 5 * 1000).toISOString(),
-          }).eq("id", project.id);
-
-          // Trigger audit_checkpoint via the main orchestrator function
-          const auditRes = await fetch(`${supabaseUrl}${ORCHESTRATOR_FN}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${serviceKey}`,
-              "x-orchestrator-internal": "true",
-            },
-            body: JSON.stringify({
-              action: "audit_checkpoint",
-              project_id: project.id,
-              task_id: nextTask.id,
-              _internal_user_id: project.user_id,
-            }),
-          });
-
-          tickLog.push(`  🔍 Audit triggered for task ${nextTask.id}: ${auditRes.status}`);
-          processed++;
-          continue;
-        }
-
-        // 6. Execute the next task
+        // Dispatch execute_next via the orchestrator function
         const execRes = await fetch(`${supabaseUrl}${ORCHESTRATOR_FN}`, {
           method: "POST",
           headers: {
@@ -243,35 +230,20 @@ Deno.serve(async (req: Request) => {
           }),
         });
 
-        const execData = await execRes.json() as Record<string, unknown>;
+        const execData = await execRes.json().catch(() => ({})) as Record<string, unknown>;
         tickLog.push(`  📤 execute_next: ${execData.status || execRes.status}`);
-
-        // Phase 9: execute_next does its own 3-min relay poll internally.
-        // Give it 4 minutes before we tick again to avoid double-dispatch.
-        await sc.from("orchestrator_projects").update({
-          next_tick_at: new Date(Date.now() + 4 * 60 * 1000).toISOString(),
-        }).eq("id", project.id);
-
         processed++;
       } catch (e) {
-        console.error(`[orchestrator-tick] Error processing project ${project.id}:`, e);
         tickLog.push(`  ❌ Error: ${(e as Error).message}`);
-        // Back-off 2 minutes on error
         await sc.from("orchestrator_projects").update({
           next_tick_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
         }).eq("id", project.id);
       }
     }
 
-    return json({
-      success: true,
-      processed,
-      skipped,
-      total: (projects as OrchestratorProject[]).length,
-      tick_log: tickLog,
-    });
+    return json({ success: true, processed, skipped, tick_log: tickLog });
   } catch (err) {
-    console.error("[orchestrator-tick] Fatal error:", err);
+    console.error("[orchestrator-tick] Fatal:", err);
     return json({ error: "Internal server error" }, 500);
   }
 });
