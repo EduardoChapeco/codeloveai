@@ -140,20 +140,37 @@ Deno.serve(async (req) => {
 
     const chosen = keys[0];
 
+    // Only admins can see raw keys; non-admins get a masked version for display
+    const { data: callerRole } = await sc
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    const isCallerAdmin = !!callerRole;
+
     // Increment usage
     await sc.from("api_key_vault").update({
       requests_count: (chosen.requests_count || 0) + 1,
       last_used_at: new Date().toISOString(),
     }).eq("id", chosen.id);
 
+    // Internal service calls (from other edge functions using service_role) get raw key
+    // Non-admin users only get masked key for display purposes
+    const rawKey = chosen.api_key_encrypted || "";
+    const maskedKey = rawKey.length > 8
+      ? "***" + rawKey.slice(-4)
+      : "***";
+
     return json({
       id: chosen.id,
-      key: chosen.api_key_encrypted,
+      key: isCallerAdmin ? rawKey : maskedKey,
       extra_config: (chosen as any).extra_config || {},
     });
 
   } catch (e) {
     console.error("[api-key-router]", e);
-    return json({ error: (e as Error).message }, 500);
+    return json({ error: "Internal server error" }, 500);
   }
 });

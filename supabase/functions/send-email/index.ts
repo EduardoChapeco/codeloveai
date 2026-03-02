@@ -260,6 +260,6 @@ Deno.serve(async (req) => {
 
   } catch (e) {
     console.error("[send-email]", e);
-    return json({ error: (e as Error).message }, 500);
+    return json({ error: "Internal server error" }, 500);
   }
 });
