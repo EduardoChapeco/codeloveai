@@ -138,6 +138,10 @@ const CommunityTestList = lazyRetry(() => import("./pages/CommunityTestList"));
 const CommunityTestSession = lazyRetry(() => import("./pages/CommunityTestSession"));
 const EvolutionSetupGuide = lazyRetry(() => import("./pages/EvolutionSetupGuide"));
 const BrainchainAdmin = lazyRetry(() => import("./pages/BrainchainAdmin"));
+const CiriusDashboard = lazyRetry(() => import("./pages/CiriusDashboard"));
+const CiriusNew = lazyRetry(() => import("./pages/CiriusNew"));
+const CiriusProject = lazyRetry(() => import("./pages/CiriusProject"));
+const CiriusIntegrations = lazyRetry(() => import("./pages/CiriusIntegrations"));
 
 const queryClient = new QueryClient();
 
@@ -222,6 +226,11 @@ const App = () => (
                 <Route path="/marketplace/onboarding/:purchaseId" element={<MarketplaceOnboarding />} />
                 <Route path="/setup/evolution" element={<EvolutionSetupGuide />} />
                 <Route path="/admin/brainchain" element={<BrainchainAdmin />} />
+                {/* Cirius */}
+                <Route path="/cirius" element={<CiriusDashboard />} />
+                <Route path="/cirius/new" element={<CiriusNew />} />
+                <Route path="/cirius/project/:id" element={<CiriusProject />} />
+                <Route path="/cirius/integrations" element={<CiriusIntegrations />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
