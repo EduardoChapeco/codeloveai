@@ -169,10 +169,18 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
     setLoading(true);
 
     try {
+      // Start visual creation animation
+      setCreationStarted(true);
+      setCurrentStep(0);
+      setStepProgress(0);
+
       const { data, error } = await supabase.functions.invoke("brain", {
         body: { action: "setup", skills: selectedSkills, name: name.trim() || undefined },
       });
-      if (error || data?.error) throw new Error(data?.error || error?.message || "Erro ao criar Brain");
+      if (error || data?.error) {
+        setCreationStarted(false);
+        throw new Error(data?.error || error?.message || "Erro ao criar Brain");
+      }
 
       let brainId = typeof data?.brain_id === "string" ? data.brain_id : undefined;
       let projectId = typeof data?.project_id === "string" ? data.project_id : undefined;
@@ -204,6 +212,8 @@ function BrainOnboarding({ onCreated, creating }: { onCreated: (payload?: { brai
       toast.success("Brain criado com sucesso! 🧠");
       onCreated({ brainId, projectId, projectUrl });
     } catch (e: any) {
+      setCreationStarted(false);
+      setCurrentStep(-1);
       toast.error(e.message);
     } finally {
       setLoading(false);
@@ -535,11 +545,11 @@ export default function BrainPage() {
           if (ALL_SKILLS.some(s => s.id === primarySkill)) setBrainType(primarySkill);
         }
         setShowOnboarding(false);
-      } else if (!hasEverLoadedBrains.current) {
-        // No active brains — show onboarding regardless of 'creating' flag
-        // (stale "creating" records should not block the user)
+      } else {
+        // No active brains — show onboarding
+        hasEverLoadedBrains.current = false;
         setShowOnboarding(true);
-        setCreating(false); // reset stuck creating state
+        setCreating(false);
       }
     } catch {
       statusRetryCount.current += 1;
@@ -565,7 +575,16 @@ export default function BrainPage() {
       const { data, error } = await supabase.functions.invoke("brain", { body: { action: "delete", brain_id: brainId } });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       toast.success("Brain removido.");
+      // Remove from local state immediately
+      setBrains(prev => prev.filter(b => b.id !== brainId));
       if (activeBrainId === brainId) setActiveBrainId(null);
+      // Check if this was the last brain
+      const remaining = brains.filter(b => b.id !== brainId);
+      if (remaining.length === 0) {
+        hasEverLoadedBrains.current = false;
+        setShowOnboarding(true);
+        setCreating(false);
+      }
       loadStatus();
     } catch (e: any) { toast.error(e.message); }
   };
