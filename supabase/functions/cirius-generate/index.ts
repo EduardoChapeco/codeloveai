@@ -89,8 +89,13 @@ function validatePRD(prd: any): any | null {
 function validateCapturedResponse(response: string): string | null {
   if (!response || typeof response !== "string") return null;
   const trimmed = response.trim();
-  // Must be substantive (not just whitespace/boilerplate)
-  if (trimmed.length < 50) return null;
+  // Accept shorter responses if they contain valid JSON with tasks array
+  if (trimmed.length < 20) return null;
+  if (trimmed.length < 50) {
+    // Allow short responses only if they look like JSON
+    if (trimmed.includes('"tasks"') || trimmed.startsWith("{")) return trimmed.slice(0, 100_000);
+    return null;
+  }
   // Reject obvious error pages or empty templates
   const rejectPatterns = [
     /^<!DOCTYPE/i,
@@ -202,7 +207,7 @@ async function sendViaBrainProject(
 /** Capture response from Brain project */
 async function captureBrainResponse(
   projectId: string, token: string,
-  maxWaitMs = 60_000, intervalMs = 5_000, initialDelayMs = 8_000,
+  maxWaitMs = 90_000, intervalMs = 4_000, initialDelayMs = 4_000,
 ): Promise<string | null> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`, Origin: "https://lovable.dev",
