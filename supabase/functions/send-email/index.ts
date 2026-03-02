@@ -28,9 +28,46 @@ function json(data: unknown, status = 200) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
+  // ── Authentication: require JWT + admin role ──
+  const authHeader = req.headers.get("Authorization") || "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return json({ error: "Authentication required" }, 401);
+  }
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error: userErr } = await userClient.auth.getUser();
+  if (userErr || !user) {
+    return json({ error: "Authentication required" }, 401);
+  }
+
   const sc = createClient(supabaseUrl, serviceKey);
+
+  // Verify admin role
+  const { data: roleData } = await sc
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("role", "admin")
+    .maybeSingle();
+
+  if (!roleData) {
+    // Also check tenant_admin
+    const { data: tenantRole } = await sc
+      .from("tenant_users")
+      .select("role")
+      .eq("user_id", user.id)
+      .in("role", ["tenant_owner", "tenant_admin"])
+      .limit(1)
+      .maybeSingle();
+    if (!tenantRole) {
+      return json({ error: "Admin access required" }, 403);
+    }
+  }
 
   let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { /* empty */ }

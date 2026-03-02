@@ -357,7 +357,8 @@ serve(async (req) => {
     }), { status: 200, headers: { ...CORS, "Content-Type": "application/json" } });
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    console.error("[lovable-proxy] Internal error:", (err as Error).message);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500, headers: { ...CORS, "Content-Type": "application/json" }
     });
   }
