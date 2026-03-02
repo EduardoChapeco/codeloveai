@@ -1020,7 +1020,6 @@ Deno.serve(async (req) => {
     return json({
       started: true, engine: "orchestrator",
       orchestrator_project_id: orchProject.id,
-      preview_url: previewUrl,
       task_count: prd.tasks.length, total_tasks: prd.tasks.length,
       note: "Pipeline started automatically. Tasks will execute sequentially.",
     });
