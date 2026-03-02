@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-02T17:45:00Z
+updated_at: 2026-03-02T01:31:00Z
 status: done
-task: Fix brain response mining - active capture polling, increased timeouts, longer cron TTL
+task: Corrigir erro de carregamento da página Brain (hooks) e estabilizar runtime
 ---

@@ -680,6 +680,17 @@ export default function BrainPage() {
     }
   };
 
+  const activeBrain = brains.find(b => b.id === activeBrainId);
+  const activeSkills = activeBrain?.skills || [brainType];
+  const isBootstrapping = !!activeBrain && (activeBrain.skill_phase || 0) > 0;
+
+  // Auto-poll status during bootstrap to detect completion
+  useEffect(() => {
+    if (!isBootstrapping) return;
+    const interval = setInterval(() => loadStatus(), 5000);
+    return () => clearInterval(interval);
+  }, [isBootstrapping, loadStatus]);
+
   if (authLoading || !user) {
     return <AppLayout><div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div></AppLayout>;
   }
@@ -745,17 +756,6 @@ export default function BrainPage() {
       </AppLayout>
     );
   }
-
-  const activeBrain = brains.find(b => b.id === activeBrainId);
-  const activeSkills = activeBrain?.skills || [brainType];
-  const isBootstrapping = activeBrain && (activeBrain.skill_phase || 0) > 0;
-
-  // Auto-poll status during bootstrap to detect completion
-  useEffect(() => {
-    if (!isBootstrapping) return;
-    const interval = setInterval(() => loadStatus(), 5000);
-    return () => clearInterval(interval);
-  }, [isBootstrapping, loadStatus]);
 
   return (
     <AppLayout>
