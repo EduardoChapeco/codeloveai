@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-02T15:25:00Z
+updated_at: 2026-03-02T15:40:00Z
 status: done
-task: Delete Lovable project when brain is deleted or reset
+task: Fix brain response mining - prioritize chat capture over update.md
 ---

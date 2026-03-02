@@ -446,11 +446,10 @@ Deno.serve(async (req) => {
           const convoTs = new Date(convo.created_at).getTime();
           console.log(`[bc] ${cid} pid=${pid.slice(0,8)} age=${Math.round(age / 1000)}s convoTs=${convoTs}`);
 
-          // S1: latest-message (FIXED: use /chat/latest-message)
+          // S1: latest-message (PRIMARY — chat response)
           const r1 = await fetchText(`${API}/projects/${pid}/chat/latest-message`, tk, 4000, 3000);
           if (r1 && r1.status === 200 && r1.body.length > 5) {
             try {
-              // Handle SSE format: extract last "data:" line
               let msgText = r1.body;
               if (msgText.includes("data:")) {
                 const lines = msgText.split("\n").filter((l: string) => l.startsWith("data:"));
@@ -461,24 +460,30 @@ Deno.serve(async (req) => {
               const msg = JSON.parse(msgText);
               const txt = msg?.content || msg?.message || msg?.text || "";
               if (msg?.role !== "user" && !msg?.is_streaming && txt.length > 30) {
+                // Skip placeholder responses like "Resposta gravada em src/update.md"
+                const isPlaceholder = /resposta\s+gravada\s+em/i.test(txt) && txt.length < 80;
                 if (isBootstrapResponse(txt)) {
                   console.log(`[bc] ${cid} S1 skipping bootstrap`);
+                } else if (isPlaceholder) {
+                  console.log(`[bc] ${cid} S1 skipping placeholder`);
                 } else {
                   const cleanedTxt = cleanBrainResponse(txt.trim());
-                  await sc.from("loveai_conversations").update({ ai_response: cleanedTxt, status: "completed" }).eq("id", convo.id);
-                  await sc.from("brain_outputs").insert({
-                    user_id: userId, conversation_id: convo.id, skill: "general",
-                    request: "", response: cleanedTxt, status: "done", brain_project_id: pid,
-                  }).catch(() => {});
-                  captured++;
-                  console.log(`[bc] ✅ ${cid} S1 ${cleanedTxt.length}c`);
-                  continue;
+                  if (cleanedTxt.length > 20) {
+                    await sc.from("loveai_conversations").update({ ai_response: cleanedTxt, status: "completed" }).eq("id", convo.id);
+                    await sc.from("brain_outputs").insert({
+                      user_id: userId, conversation_id: convo.id, skill: "general",
+                      request: "", response: cleanedTxt, status: "done", brain_project_id: pid,
+                    }).catch(() => {});
+                    captured++;
+                    console.log(`[bc] ✅ ${cid} S1 ${cleanedTxt.length}c`);
+                    continue;
+                  }
                 }
               }
             } catch { /* parse error */ }
           }
 
-          // S2: source-code — extract response BODY from update.md (PRIMARY)
+          // S2: source-code — extract response BODY from update.md (FALLBACK)
           const r2 = await fetchText(`${API}/projects/${pid}/source-code`, tk, 6000, 10000);
           if (r2 && r2.status === 200 && r2.body.length > 10) {
             try {
@@ -487,7 +492,6 @@ Deno.serve(async (req) => {
               if (md) {
                 const hasDone = /status:\s*done/i.test(md);
 
-                // ── TIMESTAMP CHECK via updated_at ──
                 const updatedAtMatch = md.match(/updated_at:\s*(\S+)/);
                 const mdTs = updatedAtMatch ? new Date(updatedAtMatch[1]).getTime() : null;
                 const isStaleTs = mdTs && !isNaN(mdTs) && mdTs < convoTs;
@@ -495,7 +499,6 @@ Deno.serve(async (req) => {
                 if (isStaleTs && age < 60_000) {
                   console.log(`[bc] ${cid} S2 stale update.md (md_ts=${mdTs} < convo_ts=${convoTs}), waiting...`);
                 } else if (hasDone) {
-                  // Extract body content from update.md (after frontmatter)
                   const mdBody = extractMdBody(md);
                   if (mdBody && mdBody.length > 20) {
                     const cleanedBody = cleanBrainResponse(mdBody);
@@ -508,7 +511,7 @@ Deno.serve(async (req) => {
                     console.log(`[bc] ✅ ${cid} S2-md-body ${cleanedBody.length}c`);
                     continue;
                   }
-                  console.log(`[bc] ${cid} S2 update.md=done but no body content, falling through to S3`);
+                  console.log(`[bc] ${cid} S2 update.md=done but no body content`);
                 }
               } else {
                 console.log(`[bc] ${cid} S2 no-update-md`);
@@ -518,38 +521,7 @@ Deno.serve(async (req) => {
             }
           }
 
-          // S3: Try latest-message with SSE-aware parsing
-          if (age > 15_000) {
-            const r3 = await fetchText(`${API}/projects/${pid}/chat/latest-message`, tk, 4000, 5000);
-            if (r3 && r3.status === 200 && r3.body.length > 5) {
-              try {
-                // Handle SSE format: extract last "data:" line
-                let msgText = r3.body;
-                if (msgText.includes("data:")) {
-                  const lines = msgText.split("\n").filter((l: string) => l.startsWith("data:"));
-                  if (lines.length > 0) {
-                    const lastLine = lines[lines.length - 1].replace(/^data:\s*/, "");
-                    try { msgText = lastLine; } catch { /* keep original */ }
-                  }
-                }
-                const msg = JSON.parse(msgText);
-                const txt = msg?.content || msg?.message || msg?.text || "";
-                if (msg?.role !== "user" && !msg?.is_streaming && typeof txt === "string" && txt.length > 30) {
-                  if (!isBootstrapResponse(txt)) {
-                    const cleanedTxt = cleanBrainResponse(txt.trim());
-                    await sc.from("loveai_conversations").update({ ai_response: cleanedTxt, status: "completed" }).eq("id", convo.id);
-                    await sc.from("brain_outputs").insert({
-                      user_id: userId, conversation_id: convo.id, skill: "general",
-                      request: "", response: cleanedTxt, status: "done", brain_project_id: pid,
-                    }).catch(() => {});
-                    captured++;
-                    console.log(`[bc] ✅ ${cid} S3-msg ${cleanedTxt.length}c`);
-                    continue;
-                  }
-                }
-              } catch { /* S3 parse failed */ }
-            }
-          }
+          // S3 removed — S1 is now primary and handles latest-message
 
           console.log(`[bc] ${cid} no-capture (age=${Math.round(age/1000)}s)`);
         }
