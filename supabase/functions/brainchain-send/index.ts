@@ -2,13 +2,47 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-clf-token',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-clf-token, x-brainchain-admin-key',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const FIREBASE_KEY = Deno.env.get('FIREBASE_API_KEY') || '';
+const BRAINCHAIN_ADMIN_KEY = Deno.env.get('BRAINCHAIN_ADMIN_KEY') || '';
+const VALID_BRAIN_TYPES = new Set(['general', 'code', 'design', 'prd']);
+const MAX_MESSAGE_LENGTH = 8000;
 const C = '0123456789abcdefghjkmnpqrstvwxyz';
 const rb32 = (n: number) => Array.from({ length: n }, () => C[Math.floor(Math.random() * 32)]).join('');
+
+const isUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+async function resolveRequester(req: Request, requestedUserId?: string) {
+  const adminBypass = req.headers.get('x-brainchain-admin-key');
+  if (BRAINCHAIN_ADMIN_KEY && adminBypass === BRAINCHAIN_ADMIN_KEY) {
+    if (!requestedUserId || !isUuid(requestedUserId)) {
+      return { ok: false as const, status: 400, error: 'Invalid or missing user_id for admin request' };
+    }
+    return { ok: true as const, userId: requestedUserId };
+  }
+
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { ok: false as const, status: 401, error: 'Unauthorized' };
+  }
+
+  const authClient = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_PUBLISHABLE_KEY')!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
+  const { data, error } = await authClient.auth.getUser();
+  if (error || !data?.user?.id) {
+    return { ok: false as const, status: 401, error: 'Unauthorized' };
+  }
+
+  return { ok: true as const, userId: data.user.id };
+}
 
 async function selectAccount(supabase: ReturnType<typeof createClient>, brainType: string) {
   // Release stuck accounts (busy > 3 min)
@@ -92,19 +126,39 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
   const { message, brain_type = 'general', user_id } = body;
-  const licenseKey = req.headers.get('x-clf-token') || user_id || 'anonymous';
 
-  if (!message) {
+  const requester = await resolveRequester(req, user_id);
+  if (!requester.ok) {
+    return new Response(JSON.stringify({ ok: false, error: requester.error }), {
+      status: requester.status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const normalizedMessage = typeof message === 'string' ? message.trim() : '';
+  const normalizedBrainType = typeof brain_type === 'string' ? brain_type.trim().toLowerCase() : 'general';
+
+  if (!normalizedMessage) {
     return new Response(JSON.stringify({ error: 'message obrigatório' }), { status: 400, headers: corsHeaders });
   }
 
-  const account = await selectAccount(supabase, brain_type);
+  if (normalizedMessage.length > MAX_MESSAGE_LENGTH) {
+    return new Response(JSON.stringify({ error: 'message muito longo' }), { status: 400, headers: corsHeaders });
+  }
+
+  if (!VALID_BRAIN_TYPES.has(normalizedBrainType)) {
+    return new Response(JSON.stringify({ error: 'brain_type inválido' }), { status: 400, headers: corsHeaders });
+  }
+
+  const licenseKey = requester.userId;
+
+  const account = await selectAccount(supabase, normalizedBrainType);
 
   if (!account) {
     const { data: queued } = await supabase.from('brainchain_queue').insert({
       user_id: licenseKey,
-      brain_type,
-      message,
+        brain_type: normalizedBrainType,
+      message: normalizedMessage,
       status: 'pending',
       expires_at: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
     }).select('id').single();
@@ -128,8 +182,8 @@ Deno.serve(async (req) => {
 
   const { data: queueRecord } = await supabase.from('brainchain_queue').insert({
     user_id: licenseKey,
-    brain_type,
-    message,
+    brain_type: normalizedBrainType,
+    message: normalizedMessage,
     status: 'processing',
     account_id: account.id,
     started_at: new Date().toISOString(),
@@ -232,7 +286,7 @@ Deno.serve(async (req) => {
 
       supabase.from('brainchain_usage').insert({
         user_id: licenseKey,
-        brain_type,
+        brain_type: normalizedBrainType,
         account_id: account.id,
         queue_id: queueRecord?.id,
         duration_ms: durationMs,
@@ -253,7 +307,6 @@ Deno.serve(async (req) => {
         pending: true,
         brain_type: account.brain_type,
         message: 'Brain está processando — resposta disponível em breve',
-        brain_project_id: projectId,
         duration_ms: durationMs,
       }), { headers: corsHeaders });
     }
