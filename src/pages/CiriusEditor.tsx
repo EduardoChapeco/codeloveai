@@ -130,6 +130,27 @@ export default function CiriusEditor() {
 
   useEffect(() => { loadProject(); }, [loadProject]);
 
+  // Load persisted chat messages
+  useEffect(() => {
+    if (!id || !user) return;
+    supabase.from("cirius_chat_messages" as any)
+      .select("id, role, content, created_at")
+      .eq("project_id", id)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(100)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setChatMessages(data.map((m: any) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            timestamp: new Date(m.created_at).getTime(),
+          })));
+        }
+      });
+  }, [id, user]);
+
   // Realtime
   useEffect(() => {
     if (!id) return;
@@ -210,6 +231,17 @@ export default function CiriusEditor() {
     });
   }, []);
 
+  const persistMsg = useCallback(async (msg: ChatMessage) => {
+    if (!id || !user) return;
+    await supabase.from("cirius_chat_messages" as any).insert({
+      id: msg.id,
+      project_id: id,
+      user_id: user.id,
+      role: msg.role,
+      content: msg.content,
+    });
+  }, [id, user]);
+
   // ─── Unified vibecoding send: chat + build pipeline in one ───
   const sendMsg = useCallback(async (msg: string) => {
     if (!msg.trim() || !id) return;
@@ -217,6 +249,7 @@ export default function CiriusEditor() {
     // 1. Add user message to chat immediately
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
     setChatMessages(prev => [...prev, userMsg]);
+    persistMsg(userMsg);
     setChatLoading(true);
 
     // 2. Create task bubble for visual progress
@@ -250,6 +283,7 @@ export default function CiriusEditor() {
 
       const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: aiReply, timestamp: Date.now() };
       setChatMessages(prev => [...prev, aiMsg]);
+      persistMsg(aiMsg);
 
       setBubbles(prev => prev.map(b => b.id === bubbleId ? {
         ...b, phase: "done", pct: 100,
@@ -264,6 +298,7 @@ export default function CiriusEditor() {
       const errText = e instanceof Error ? e.message : "Erro ao processar";
       const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `❌ ${errText}`, timestamp: Date.now() };
       setChatMessages(prev => [...prev, errMsg]);
+      persistMsg(errMsg);
 
       setBubbles(prev => prev.map(b => b.id === bubbleId ? {
         ...b, phase: "error", pct: 100,
@@ -272,7 +307,7 @@ export default function CiriusEditor() {
       addToast("Erro ao processar", "info");
     }
     setChatLoading(false);
-  }, [id, loadProject, addToast]);
+  }, [id, loadProject, addToast, persistMsg]);
   const removeBubble = useCallback((bubbleId: string) => {
     setBubbles(prev => prev.filter(b => b.id !== bubbleId));
   }, []);
@@ -281,6 +316,7 @@ export default function CiriusEditor() {
   const sendChatMsg = useCallback(async (msg: string) => {
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
     setChatMessages(prev => [...prev, userMsg]);
+    persistMsg(userMsg);
     setChatLoading(true);
     try {
       const history = chatMessages.slice(-10).map(m => ({ role: m.role === "assistant" ? "ai" : "user", content: m.content }));
@@ -291,12 +327,14 @@ export default function CiriusEditor() {
       const reply = data?.reply || data?.response || data?.text || "Desculpe, não consegui processar.";
       const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: reply, timestamp: Date.now() };
       setChatMessages(prev => [...prev, aiMsg]);
+      persistMsg(aiMsg);
     } catch {
       const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "Erro ao processar. Tente novamente.", timestamp: Date.now() };
       setChatMessages(prev => [...prev, errMsg]);
+      persistMsg(errMsg);
     }
     setChatLoading(false);
-  }, [project, chatMessages]);
+  }, [project, chatMessages, persistMsg]);
 
   if (!user) { navigate("/login"); return null; }
   if (loading) return <div className="ce-root" />;
