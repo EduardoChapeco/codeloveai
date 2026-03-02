@@ -258,9 +258,28 @@ async function executeTaskViaBrainchain(
     const msgId = "usermsg_" + rb32(26);
     const aiMsgId = "aimsg_" + rb32(26);
 
+    // ★ Snapshot initial latest-message ID BEFORE sending so tick can compare
+    let initialMsgId: string | null = null;
+    try {
+      const snapRes = await fetch(`https://api.lovable.dev/projects/${account.brainProjectId}/chat/latest-message`, {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          Origin: "https://lovable.dev",
+          Referer: "https://lovable.dev/",
+        },
+      });
+      if (snapRes.ok) {
+        const snapData = await snapRes.json().catch(() => null);
+        initialMsgId = snapData?.id || null;
+      }
+    } catch (_) { /* ignore snapshot failure */ }
+
+    // ★ Create a unique output marker so miner targets exact response
+    const outputMarker = `cirius-out-${Date.now()}-${task.task_index}`;
+
     const lvPayload = {
       id: msgId,
-      message: AQ_PREFIX + task.prompt,
+      message: AQ_PREFIX + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`,
       chat_only: false,
       ai_message_id: aiMsgId,
       thread_id: "main",
@@ -304,20 +323,24 @@ async function executeTaskViaBrainchain(
       return { success: false, error: (d as any).error || `HTTP ${lvRes.status}` };
     }
 
-    // Store which account is running this task (for tick to poll)
+    // Store message ID + initial snapshot for tick to compare
     await sc.from("orchestrator_tasks").update({
       lovable_message_id: msgId,
+      metadata: { initial_msg_id: initialMsgId, output_marker: outputMarker },
     }).eq("id", task.id);
 
     // Store brainchain info on project for tick to use
     await sc.from("orchestrator_projects").update({
       lovable_project_id: account.brainProjectId,
       ghost_created: true,
+      source_fingerprint: initialMsgId,
     }).eq("id", projectId);
 
-    await addLog(sc, projectId, `Task #${task.task_index} sent to brain ${account.brainProjectId.slice(0, 8)}. Tick will detect completion.`, "info", {
+    await addLog(sc, projectId, `Task #${task.task_index} sent to brain ${account.brainProjectId.slice(0, 8)}. Initial msg snapshot: ${initialMsgId?.slice(0, 12) || "none"}`, "info", {
       brainchain_account_id: account.id,
       brain_project_id: account.brainProjectId,
+      initial_msg_id: initialMsgId,
+      output_marker: outputMarker,
     }, task.id);
 
     // NOTE: We do NOT release the account here — tick will release it when task completes

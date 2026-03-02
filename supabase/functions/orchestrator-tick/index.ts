@@ -88,25 +88,34 @@ async function releaseBrainchainAccount(sc: SC, accountId: string) {
   }).eq("id", accountId);
 }
 
-/** Try to read src/update.md from Brain project source-code as fallback */
-async function trySourceCodeFallback(brainProjectId: string, token: string): Promise<Record<string, string>> {
-  try {
-    const res = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/source-code?path=src/update.md`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...LOVABLE_HEADERS,
-        "X-Client-Git-SHA": GIT_SHA,
-      },
-    });
-    if (!res.ok) return {};
-    const data = await res.json().catch(() => null);
-    const content = data?.content || data?.source || "";
-    if (!content || content.length < 50) return {};
-    const body = extractMdBody(content);
-    return extractFilesFromMarkdown(body);
-  } catch {
-    return {};
+/** Try to read timestamped cirius-out .md files from Brain project source-code as fallback */
+async function trySourceCodeFallback(brainProjectId: string, token: string, outputMarker?: string): Promise<Record<string, string>> {
+  // If we have a specific output marker, try that file first
+  const pathsToTry = outputMarker
+    ? [`src/${outputMarker}.md`, "src/update.md"]
+    : ["src/update.md"];
+
+  for (const filePath of pathsToTry) {
+    try {
+      const res = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/source-code?path=${encodeURIComponent(filePath)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...LOVABLE_HEADERS,
+          "X-Client-Git-SHA": GIT_SHA,
+        },
+      });
+      if (!res.ok) continue;
+      const data = await res.json().catch(() => null);
+      const content = data?.content || data?.source || "";
+      if (!content || content.length < 50) continue;
+      const body = extractMdBody(content);
+      const files = extractFilesFromMarkdown(body);
+      if (Object.keys(files).length > 0) return files;
+    } catch {
+      continue;
+    }
   }
+  return {};
 }
 
 /** Sync markdown-generated files from latest assistant message into cirius_projects */
@@ -117,6 +126,7 @@ async function syncLatestMarkdownFiles(
   token: string,
   finalize = false,
   taskId?: string,
+  outputMarker?: string,
 ) {
   const { data: ciriusProject } = await sc.from("cirius_projects")
     .select("id, source_files_json")
@@ -153,8 +163,8 @@ async function syncLatestMarkdownFiles(
   const parsedCount = Object.keys(parsedFiles).length;
 
   if (parsedCount === 0) {
-    // Fallback: try reading src/update.md from the Brain project's source code
-    const fallbackFiles = await trySourceCodeFallback(brainProjectId, token);
+    // Fallback: try reading timestamped cirius-out .md from the Brain project's source code
+    const fallbackFiles = await trySourceCodeFallback(brainProjectId, token, outputMarker);
     if (Object.keys(fallbackFiles).length > 0) {
       const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
       const merged = mergeFileMaps(existing, fallbackFiles);
@@ -424,17 +434,20 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Check completion — latest assistant message (markdown-first)
+        // Check completion — latest assistant message (compare against initial snapshot)
         let completed = false;
         let reason = "";
         let checkErrors: string[] = [];
+
+        // Get the initial message ID stored when task was dispatched
+        const taskInitialMsgId = (runningTask as any).metadata?.initial_msg_id as string | null;
+        const lastSeen = taskInitialMsgId || (project.source_fingerprint as string | null);
 
         try {
           const pollRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/chat/latest-message`, token);
           if (pollRes.ok) {
             const rawPoll = await pollRes.text();
             const pollData = parseLatestMessage(rawPoll);
-            const lastSeen = project.source_fingerprint as string | null;
 
             if (!pollData) {
               checkErrors.push("latest-message: parse_failed");
@@ -458,6 +471,7 @@ Deno.serve(async (req: Request) => {
 
         if (completed) {
           // Sync markdown files for this completed task before releasing account
+          const taskOutputMarker = (runningTask as any).metadata?.output_marker as string | undefined;
           const syncResult = await syncLatestMarkdownFiles(
             sc,
             project.id as string,
@@ -465,6 +479,7 @@ Deno.serve(async (req: Request) => {
             token,
             false,
             runningTask.id as string,
+            taskOutputMarker,
           );
 
           await sc.from("orchestrator_tasks").update({
