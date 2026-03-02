@@ -435,11 +435,19 @@ Deno.serve(async (req) => {
           const convoTs = new Date(convo.created_at).getTime();
           console.log(`[bc] ${cid} pid=${pid.slice(0,8)} age=${Math.round(age / 1000)}s convoTs=${convoTs}`);
 
-          // S1: latest-message (no timestamp needed — always latest)
-          const r1 = await fetchText(`${API}/projects/${pid}/latest-message`, tk, 4000, 3000);
+          // S1: latest-message (FIXED: use /chat/latest-message)
+          const r1 = await fetchText(`${API}/projects/${pid}/chat/latest-message`, tk, 4000, 3000);
           if (r1 && r1.status === 200 && r1.body.length > 5) {
             try {
-              const msg = JSON.parse(r1.body);
+              // Handle SSE format: extract last "data:" line
+              let msgText = r1.body;
+              if (msgText.includes("data:")) {
+                const lines = msgText.split("\n").filter((l: string) => l.startsWith("data:"));
+                if (lines.length > 0) {
+                  msgText = lines[lines.length - 1].replace(/^data:\s*/, "");
+                }
+              }
+              const msg = JSON.parse(msgText);
               const txt = msg?.content || msg?.message || msg?.text || "";
               if (msg?.role !== "user" && !msg?.is_streaming && txt.length > 30) {
                 if (isBootstrapResponse(txt)) {
@@ -456,7 +464,7 @@ Deno.serve(async (req) => {
                   continue;
                 }
               }
-            } catch { /* S1 is SSE stream, expected */ }
+            } catch { /* parse error */ }
           }
 
           // S2: source-code (WITH CONTENT-CHANGE + TIMESTAMP VALIDATION)
@@ -500,7 +508,7 @@ Deno.serve(async (req) => {
 
           // S3: Try latest-message with SSE-aware parsing
           if (age > 15_000) {
-            const r3 = await fetchText(`${API}/projects/${pid}/latest-message`, tk, 4000, 5000);
+            const r3 = await fetchText(`${API}/projects/${pid}/chat/latest-message`, tk, 4000, 5000);
             if (r3 && r3.status === 200 && r3.body.length > 5) {
               try {
                 // Handle SSE format: extract last "data:" line
