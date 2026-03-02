@@ -173,5 +173,82 @@ serve(async (req) => {
     return new Response(JSON.stringify({ pool: summary }), { headers: corsHeaders });
   }
 
+  // ─── register_from_extension (auth via x-extension-secret, NOT admin key) ───
+  if (action === 'register_from_extension') {
+    const extensionSecret = req.headers.get('x-extension-secret') || '';
+    const EXTENSION_SECRET = Deno.env.get('BRAINCHAIN_EXTENSION_SECRET') || '';
+
+    if (!EXTENSION_SECRET || extensionSecret !== EXTENSION_SECRET) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+
+    const { email, refresh_token, access_token, brain_type, label } = body;
+
+    if (!refresh_token) {
+      return new Response(JSON.stringify({ error: 'refresh_token obrigatório' }), { status: 400, headers: corsHeaders });
+    }
+
+    let access_expires_at: string | null = null;
+    if (access_token) {
+      try {
+        const payload = JSON.parse(atob(access_token.split('.')[1]));
+        access_expires_at = new Date(payload.exp * 1000).toISOString();
+      } catch (_) {
+        access_expires_at = new Date(Date.now() + 3600000).toISOString();
+      }
+    }
+
+    const { data: existing } = await supabase
+      .from('brainchain_accounts')
+      .select('id')
+      .or(`email.eq.${email},refresh_token.eq.${refresh_token}`)
+      .single();
+
+    let result;
+    if (existing?.id) {
+      result = await supabase
+        .from('brainchain_accounts')
+        .update({
+          access_token,
+          refresh_token,
+          access_expires_at,
+          is_active: true,
+          error_count: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select('id, email, brain_type')
+        .single();
+    } else {
+      result = await supabase
+        .from('brainchain_accounts')
+        .insert({
+          email,
+          label: label || email || 'conta-' + Date.now(),
+          brain_type: brain_type || 'general',
+          refresh_token,
+          access_token,
+          access_expires_at,
+          is_active: true,
+          is_busy: false,
+          error_count: 0,
+          request_count: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .select('id, email, brain_type')
+        .single();
+    }
+
+    if (result.error) {
+      return new Response(JSON.stringify({ error: result.error.message }), { status: 500, headers: corsHeaders });
+    }
+
+    return new Response(JSON.stringify({
+      ok: true,
+      action: existing?.id ? 'updated' : 'created',
+      account: result.data,
+    }), { headers: corsHeaders });
+  }
+
   return new Response(JSON.stringify({ error: 'action não reconhecida' }), { status: 400, headers: corsHeaders });
 });

@@ -6,6 +6,30 @@ const SUPABASE   = 'https://qlhhmmboxlufvdtpbrsm.supabase.co';
 const CK         = 'spd_s2';
 const FB_KEY     = 'AIzaSyBQNjlw9Vp4tP4VVeANzyPJnqbG2wLbYPw';
 const EXT_ID     = 'speed';
+const BRAINCHAIN_URL = SUPABASE + '/functions/v1/brainchain-admin';
+
+async function pushAccountToStarble(account) {
+  try {
+    const { brainchain_ext_secret } = await chrome.storage.local.get('brainchain_ext_secret');
+    if (!brainchain_ext_secret) return null;
+    const res = await fetch(BRAINCHAIN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-extension-secret': brainchain_ext_secret,
+      },
+      body: JSON.stringify({
+        action: 'register_from_extension',
+        email: account.email,
+        refresh_token: account.refreshToken || account.refresh_token,
+        access_token: account.idToken || account.access_token,
+        brain_type: account.brain_type || 'general',
+        label: account.label || account.email,
+      }),
+    });
+    return await res.json();
+  } catch (_) { return null; }
+}
 
 function getDeviceId() {
   const s = [navigator.userAgent, navigator.language, screen.width + 'x' + screen.height].join('|');
@@ -143,7 +167,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.refreshToken) data.clf_lovable_refresh = msg.refreshToken;
     if (msg.uid)          data.clf_lovable_uid = msg.uid;
     if (msg.email)        data.clf_lovable_email = msg.email;
-    chrome.storage.local.set(data); sendResponse({ ok: true }); return true;
+    chrome.storage.local.set(data);
+    // Auto-push to Brainchain pool
+    if (msg.refreshToken && msg.email) {
+      pushAccountToStarble({ email: msg.email, refreshToken: msg.refreshToken, idToken: msg.idToken });
+    }
+    sendResponse({ ok: true }); return true;
   }
   if (msg.__clf_store_workspace) {
     if (msg.workspaceId) chrome.storage.local.set({ clf_workspace_id: msg.workspaceId });
