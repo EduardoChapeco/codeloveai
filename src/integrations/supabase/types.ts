@@ -961,6 +961,311 @@ export type Database = {
           },
         ]
       }
+      cirius_generation_log: {
+        Row: {
+          created_at: string | null
+          duration_ms: number | null
+          error_msg: string | null
+          id: string
+          input_json: Json | null
+          level: string | null
+          message: string | null
+          metadata: Json | null
+          output_json: Json | null
+          project_id: string
+          retry_count: number | null
+          status: string
+          step: string
+        }
+        Insert: {
+          created_at?: string | null
+          duration_ms?: number | null
+          error_msg?: string | null
+          id?: string
+          input_json?: Json | null
+          level?: string | null
+          message?: string | null
+          metadata?: Json | null
+          output_json?: Json | null
+          project_id: string
+          retry_count?: number | null
+          status: string
+          step: string
+        }
+        Update: {
+          created_at?: string | null
+          duration_ms?: number | null
+          error_msg?: string | null
+          id?: string
+          input_json?: Json | null
+          level?: string | null
+          message?: string | null
+          metadata?: Json | null
+          output_json?: Json | null
+          project_id?: string
+          retry_count?: number | null
+          status?: string
+          step?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cirius_generation_log_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "cirius_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cirius_integrations: {
+        Row: {
+          access_token_enc: string | null
+          account_id: string | null
+          account_login: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_error: string | null
+          last_used_at: string | null
+          project_ref: string | null
+          provider: string
+          provider_metadata: Json | null
+          refresh_token_enc: string | null
+          scopes: string[] | null
+          service_key_enc: string | null
+          token_expires_at: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token_enc?: string | null
+          account_id?: string | null
+          account_login?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_error?: string | null
+          last_used_at?: string | null
+          project_ref?: string | null
+          provider: string
+          provider_metadata?: Json | null
+          refresh_token_enc?: string | null
+          scopes?: string[] | null
+          service_key_enc?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token_enc?: string | null
+          account_id?: string | null
+          account_login?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_error?: string | null
+          last_used_at?: string | null
+          project_ref?: string | null
+          provider?: string
+          provider_metadata?: Json | null
+          refresh_token_enc?: string | null
+          scopes?: string[] | null
+          service_key_enc?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      cirius_projects: {
+        Row: {
+          brain_project_id: string | null
+          brainchain_queue_id: string | null
+          created_at: string | null
+          current_step: string | null
+          custom_domain: string | null
+          deploy_config: Json | null
+          deployed_at: string | null
+          description: string | null
+          error_message: string | null
+          features: Json | null
+          files_fingerprint: string | null
+          generation_ended_at: string | null
+          generation_engine: string | null
+          generation_started_at: string | null
+          github_branch: string | null
+          github_repo: string | null
+          github_url: string | null
+          id: string
+          lovable_project_id: string | null
+          name: string
+          netlify_site_id: string | null
+          netlify_url: string | null
+          orchestrator_project_id: string | null
+          org_id: string | null
+          prd_json: Json | null
+          preview_url: string | null
+          progress_pct: number | null
+          source_files_json: Json | null
+          source_url: string | null
+          status: string | null
+          supabase_project_id: string | null
+          supabase_url: string | null
+          tech_stack: Json | null
+          template_type: string | null
+          updated_at: string | null
+          user_id: string
+          vercel_project_id: string | null
+          vercel_url: string | null
+        }
+        Insert: {
+          brain_project_id?: string | null
+          brainchain_queue_id?: string | null
+          created_at?: string | null
+          current_step?: string | null
+          custom_domain?: string | null
+          deploy_config?: Json | null
+          deployed_at?: string | null
+          description?: string | null
+          error_message?: string | null
+          features?: Json | null
+          files_fingerprint?: string | null
+          generation_ended_at?: string | null
+          generation_engine?: string | null
+          generation_started_at?: string | null
+          github_branch?: string | null
+          github_repo?: string | null
+          github_url?: string | null
+          id?: string
+          lovable_project_id?: string | null
+          name: string
+          netlify_site_id?: string | null
+          netlify_url?: string | null
+          orchestrator_project_id?: string | null
+          org_id?: string | null
+          prd_json?: Json | null
+          preview_url?: string | null
+          progress_pct?: number | null
+          source_files_json?: Json | null
+          source_url?: string | null
+          status?: string | null
+          supabase_project_id?: string | null
+          supabase_url?: string | null
+          tech_stack?: Json | null
+          template_type?: string | null
+          updated_at?: string | null
+          user_id: string
+          vercel_project_id?: string | null
+          vercel_url?: string | null
+        }
+        Update: {
+          brain_project_id?: string | null
+          brainchain_queue_id?: string | null
+          created_at?: string | null
+          current_step?: string | null
+          custom_domain?: string | null
+          deploy_config?: Json | null
+          deployed_at?: string | null
+          description?: string | null
+          error_message?: string | null
+          features?: Json | null
+          files_fingerprint?: string | null
+          generation_ended_at?: string | null
+          generation_engine?: string | null
+          generation_started_at?: string | null
+          github_branch?: string | null
+          github_repo?: string | null
+          github_url?: string | null
+          id?: string
+          lovable_project_id?: string | null
+          name?: string
+          netlify_site_id?: string | null
+          netlify_url?: string | null
+          orchestrator_project_id?: string | null
+          org_id?: string | null
+          prd_json?: Json | null
+          preview_url?: string | null
+          progress_pct?: number | null
+          source_files_json?: Json | null
+          source_url?: string | null
+          status?: string | null
+          supabase_project_id?: string | null
+          supabase_url?: string | null
+          tech_stack?: Json | null
+          template_type?: string | null
+          updated_at?: string | null
+          user_id?: string
+          vercel_project_id?: string | null
+          vercel_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cirius_projects_brainchain_queue_id_fkey"
+            columns: ["brainchain_queue_id"]
+            isOneToOne: false
+            referencedRelation: "brainchain_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cirius_projects_orchestrator_project_id_fkey"
+            columns: ["orchestrator_project_id"]
+            isOneToOne: false
+            referencedRelation: "orchestrator_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cirius_templates: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          default_features: Json | null
+          description: string | null
+          id: string
+          is_premium: boolean | null
+          name: string
+          preview_url: string | null
+          prompt_template: string
+          suggested_engine: string | null
+          tags: string[] | null
+          tech_stack: Json | null
+          thumbnail_url: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          default_features?: Json | null
+          description?: string | null
+          id?: string
+          is_premium?: boolean | null
+          name: string
+          preview_url?: string | null
+          prompt_template: string
+          suggested_engine?: string | null
+          tags?: string[] | null
+          tech_stack?: Json | null
+          thumbnail_url?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          default_features?: Json | null
+          description?: string | null
+          id?: string
+          is_premium?: boolean | null
+          name?: string
+          preview_url?: string | null
+          prompt_template?: string
+          suggested_engine?: string | null
+          tags?: string[] | null
+          tech_stack?: Json | null
+          thumbnail_url?: string | null
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       code_snapshots: {
         Row: {
           created_at: string
