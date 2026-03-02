@@ -1,12 +1,22 @@
 /**
- * Cirius Generate v2.1 — Multi-engine pipeline orchestrator
- * Actions: init, generate_prd, generate_code, capture, status, pause, resume, cancel,
- *          oauth_state, save_supabase_integration, debug_log
+ * Cirius Generate v3 — Multi-engine pipeline orchestrator
  * 
- * Engine priority: Brainchain → OpenRouter (Claude) → AI Gateway
- * PRD generation: Brain system (send + capture/mining) → AI Gateway → OpenRouter
+ * Actions:
+ *   start         — NEW: Full pipeline (classify → scrape → PRD → create → generate)
+ *   status        — Full project + orchestrator + logs status
+ *   cancel        — Cancel generation
+ *   init          — Create empty project (legacy)
+ *   build_prompt  — Generate PRD for approval (legacy)
+ *   approve_prd   — Approve PRD → trigger code gen (legacy)
+ *   generate_prd  — Generate PRD only (legacy)
+ *   generate_code — Generate code from existing PRD (legacy)
+ *   capture       — Sync files from Brain response
+ *   refine        — AI-powered holistic code review
+ *   debug_log     — Comprehensive pipeline state dump
+ *   pause/resume  — Pipeline control
+ *   oauth_state, save_github_integration, save_vercel_integration, save_supabase_integration
  * 
- * v2.1: Comprehensive internal logging for debugging all errors/failures/pauses
+ * Engine priority for PRD: Brainchain → Claude (OpenRouter) → Gemini (Vault) → AI Gateway
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -26,7 +36,96 @@ function json(data: unknown, status = 200) {
   });
 }
 
-/** Extract and validate PRD JSON with strict quality checks */
+// ─── Intent Classifier (inline for edge function) ─────────────────────────
+
+type ProjectIntent = "landing_page" | "marketing_site" | "crud_system" | "dashboard" | "ecommerce" | "saas_app" | "api_only" | "component" | "custom";
+
+interface ProjectBlueprint {
+  intent: ProjectIntent;
+  needsDatabase: boolean;
+  needsAuth: boolean;
+  needsPayments: boolean;
+  needsStorage: boolean;
+  suggestedEngine: "brain" | "brainchain" | "orchestrator";
+  suggestedSkill: "design" | "code" | "general";
+  estimatedTasks: number;
+  generationStrategy: "single_shot" | "multi_task" | "iterative";
+  supabaseTables: string[];
+  features: string[];
+}
+
+const INTENT_KW: Record<ProjectIntent, string[]> = {
+  landing_page: ["landing", "landing page", "pagina", "one page", "lp", "captura", "squeeze", "hero"],
+  marketing_site: ["site", "website", "institucional", "portfolio", "blog", "contato"],
+  crud_system: ["sistema", "crud", "gerenciar", "gerenciamento", "cadastro", "tabela", "listagem", "formulario", "registro", "controle", "admin", "backoffice", "gestao"],
+  dashboard: ["dashboard", "painel", "metricas", "relatorio", "analytics", "grafico", "chart", "kpi", "indicador", "monitoramento"],
+  ecommerce: ["loja", "ecommerce", "e-commerce", "produto", "carrinho", "cart", "checkout", "vender", "venda", "pedido", "catalogo", "shop", "store", "marketplace"],
+  saas_app: ["saas", "assinatura", "plano", "billing", "subscription", "multi-tenant", "multitenant", "tenant", "recurring", "pricing", "freemium", "trial"],
+  api_only: ["api", "endpoint", "backend", "edge function", "webhook", "rest", "microservice"],
+  component: ["componente", "component", "widget", "botao", "modal", "card", "ui element"],
+  custom: [],
+};
+
+const FEAT_KW: Record<string, string[]> = {
+  auth: ["login", "autenticacao", "signup", "cadastro", "senha", "password", "oauth"],
+  payments: ["pagamento", "payment", "stripe", "pix", "checkout", "cobranca", "fatura"],
+  storage: ["upload", "arquivo", "file", "imagem", "image", "foto", "media", "storage"],
+  notifications: ["notificacao", "notification", "email", "push", "alerta"],
+  search: ["busca", "search", "filtro", "pesquisa"],
+  realtime: ["realtime", "tempo real", "chat", "live", "websocket"],
+};
+
+function norm(t: string): string {
+  return t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function classifyIntent(prompt: string): ProjectBlueprint {
+  const n = norm(prompt);
+  let bestIntent: ProjectIntent = "custom";
+  let bestScore = 0;
+  for (const [intent, kws] of Object.entries(INTENT_KW) as [ProjectIntent, string[]][]) {
+    let s = 0;
+    for (const kw of kws) { if (n.includes(kw)) s += kw.length; }
+    if (s > bestScore) { bestScore = s; bestIntent = intent; }
+  }
+  const features: string[] = [];
+  for (const [feat, kws] of Object.entries(FEAT_KW)) {
+    if (kws.some(kw => n.includes(kw))) features.push(feat);
+  }
+  const needsDb = ["crud_system", "dashboard", "ecommerce", "saas_app"].includes(bestIntent) || features.includes("auth");
+  const needsAuth = ["crud_system", "dashboard", "ecommerce", "saas_app"].includes(bestIntent) || features.includes("auth");
+  const needsPay = ["ecommerce", "saas_app"].includes(bestIntent) || features.includes("payments");
+  const needsStorage = features.includes("storage");
+  let engine: ProjectBlueprint["suggestedEngine"] = "brainchain";
+  if (["ecommerce", "saas_app"].includes(bestIntent)) engine = "orchestrator";
+  else if (["crud_system", "dashboard", "api_only"].includes(bestIntent)) engine = "brain";
+  let skill: ProjectBlueprint["suggestedSkill"] = "general";
+  if (["landing_page", "marketing_site", "component"].includes(bestIntent)) skill = "design";
+  else if (["crud_system", "api_only", "saas_app"].includes(bestIntent)) skill = "code";
+  const taskMap: Record<string, number> = { landing_page: 2, marketing_site: 3, component: 1, api_only: 2, crud_system: 5, dashboard: 4, ecommerce: 7, saas_app: 8, custom: 3 };
+  let est = taskMap[bestIntent] || 3;
+  if (needsPay) est = Math.min(10, est + 1);
+  if (needsStorage) est = Math.min(10, est + 1);
+  let strat: ProjectBlueprint["generationStrategy"] = "single_shot";
+  if (est >= 5) strat = "multi_task";
+  else if (est >= 3) strat = "iterative";
+  // Detect tables
+  const tables: string[] = [];
+  if (bestIntent === "ecommerce") tables.push("products", "orders", "order_items", "customers");
+  else if (bestIntent === "saas_app") tables.push("profiles", "subscriptions", "plans", "usage_logs");
+  else if (bestIntent === "dashboard") tables.push("metrics", "reports");
+  else if (bestIntent === "crud_system") {
+    const m = n.match(/(?:cadastro|tabela|gerenciar|crud)\s+(?:de\s+)?(\w+)/);
+    tables.push(m ? m[1].replace(/s$/, "") : "items");
+  }
+  const fl = [...features];
+  if (needsAuth && !fl.includes("auth")) fl.push("auth");
+  if (needsDb) fl.push("database");
+  return { intent: bestIntent, needsDatabase: needsDb, needsAuth, needsPayments: needsPay, needsStorage, suggestedEngine: engine, suggestedSkill: skill, estimatedTasks: est, generationStrategy: strat, supabaseTables: tables, features: fl };
+}
+
+// ─── PRD / Validation helpers ─────────────────────────────────────────────
+
 function extractJSON(content: string): any {
   if (!content || content.length < 10) return null;
   let s = content.trim();
@@ -36,32 +135,20 @@ function extractJSON(content: string): any {
   if (i >= 0) s = s.slice(i);
   const j = s.lastIndexOf("}");
   if (j >= 0) s = s.slice(0, j + 1);
-  try {
-    const parsed = JSON.parse(s);
-    return validatePRD(parsed);
-  } catch { /* invalid */ }
-  return null;
+  try { return validatePRD(JSON.parse(s)); } catch { return null; }
 }
 
-/** Validate PRD structure and completeness */
 function validatePRD(prd: any): any | null {
   if (!prd || typeof prd !== "object") return null;
-  if (!Array.isArray(prd.tasks) || prd.tasks.length === 0) return null;
-  if (prd.tasks.length > 15) return null; // sanity cap
-
-  // Validate each task has required fields with substance
-  const validTasks = prd.tasks.filter((t: any) => {
+  if (!Array.isArray(prd.tasks) || prd.tasks.length === 0 || prd.tasks.length > 15) return null;
+  const valid = prd.tasks.filter((t: any) => {
     if (!t || typeof t !== "object") return false;
     const title = typeof t.title === "string" ? t.title.trim() : "";
     const prompt = typeof t.prompt === "string" ? t.prompt.trim() : "";
-    // Title must be 3+ chars, prompt must be 20+ chars (substantive)
     return title.length >= 3 && prompt.length >= 20;
   });
-
-  if (validTasks.length === 0) return null;
-
-  // Normalize tasks — ensure required fields
-  const normalizedTasks = validTasks.map((t: any, i: number) => ({
+  if (valid.length === 0) return null;
+  const tasks = valid.map((t: any) => ({
     title: String(t.title).trim().slice(0, 200),
     skill: typeof t.skill === "string" ? t.skill.slice(0, 30) : "code",
     intent: typeof t.intent === "string" ? t.intent.slice(0, 30) : "security_fix_v2",
@@ -69,73 +156,47 @@ function validatePRD(prd: any): any | null {
     stop_condition: typeof t.stop_condition === "string" ? t.stop_condition.slice(0, 200) : null,
     brain_type: typeof t.brain_type === "string" ? t.brain_type.slice(0, 30) : "code",
   }));
-
-  // Validate design object if present
   let design = null;
   if (prd.design && typeof prd.design === "object") {
     design = {
       primary_color: typeof prd.design.primary_color === "string" ? prd.design.primary_color.slice(0, 20) : "#6366f1",
       font: typeof prd.design.font === "string" ? prd.design.font.slice(0, 50) : "Geist",
       style: typeof prd.design.style === "string" ? prd.design.style.slice(0, 50) : "modern_minimal",
-      pages: Array.isArray(prd.design.pages) ? prd.design.pages.filter((p: any) => typeof p === "string").slice(0, 20).map((p: string) => p.slice(0, 60)) : [],
-      tables: Array.isArray(prd.design.tables) ? prd.design.tables.filter((t: any) => typeof t === "string").slice(0, 30).map((t: string) => t.slice(0, 60)) : [],
+      pages: Array.isArray(prd.design.pages) ? prd.design.pages.filter((p: any) => typeof p === "string").slice(0, 20) : [],
+      tables: Array.isArray(prd.design.tables) ? prd.design.tables.filter((t: any) => typeof t === "string").slice(0, 30) : [],
     };
   }
-
-  return { tasks: normalizedTasks, design };
+  return { tasks, design };
 }
 
-/** Validate captured Brain/AI response quality */
 function validateCapturedResponse(response: string): string | null {
   if (!response || typeof response !== "string") return null;
   const trimmed = response.trim();
-  // Accept shorter responses if they contain valid JSON with tasks array
   if (trimmed.length < 20) return null;
   if (trimmed.length < 50) {
-    // Allow short responses only if they look like JSON
     if (trimmed.includes('"tasks"') || trimmed.startsWith("{")) return trimmed.slice(0, 100_000);
     return null;
   }
-  // Reject obvious error pages or empty templates
-  const rejectPatterns = [
-    /^<!DOCTYPE/i,
-    /^<html/i,
-    /^{"error"/i,
-    /^404\s/i,
-    /^500\s/i,
-    /aguardando instrucoes/i,
-    /brain ativado\.\s*credenciais/i,
-  ];
-  if (rejectPatterns.some(r => r.test(trimmed))) return null;
-  // Cap response size (prevent memory issues)
+  const reject = [/^<!DOCTYPE/i, /^<html/i, /^{"error"/i, /^404\s/i, /^500\s/i, /aguardando instrucoes/i, /brain ativado\.\s*credenciais/i];
+  if (reject.some(r => r.test(trimmed))) return null;
   return trimmed.slice(0, 100_000);
 }
+
+// ─── Auth / Logging ───────────────────────────────────────────────────────
 
 async function getUser(req: Request) {
   const auth = req.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) return null;
-  const sc = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: auth } } }
-  );
+  const sc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
   const { data: { user } } = await sc.auth.getUser();
   return user;
 }
 
-// ─── Enhanced Logging ─────────────────────────────────────────
-async function logEntry(
-  sc: SupabaseClient, projectId: string, step: string, status: string,
-  message: string, extra?: Record<string, unknown>
-) {
+async function logEntry(sc: SupabaseClient, projectId: string, step: string, status: string, message: string, extra?: Record<string, unknown>) {
   const payload: Record<string, unknown> = {
     project_id: projectId, step, status, message,
     level: status === "failed" ? "error" : status === "retrying" ? "warning" : "info",
-    metadata: {
-      timestamp_ms: Date.now(),
-      fn: "cirius-generate",
-      ...(extra?.metadata as Record<string, unknown> || {}),
-    },
+    metadata: { timestamp_ms: Date.now(), fn: "cirius-generate", ...(extra?.metadata as Record<string, unknown> || {}) },
   };
   if (extra?.duration_ms) payload.duration_ms = extra.duration_ms;
   if (extra?.output_json) payload.output_json = extra.output_json;
@@ -145,7 +206,6 @@ async function logEntry(
   await sc.from("cirius_generation_log").insert(payload);
 }
 
-/** HMAC-SHA256 sign */
 async function hmacSign(data: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -153,35 +213,20 @@ async function hmacSign(data: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-// ─── Engine helpers ───
+// ─── Engine helpers ───────────────────────────────────────────────────────
 
-/** Get user's active Brain project */
-async function getUserBrain(sc: SupabaseClient, userId: string): Promise<{ projectId: string; brainId: string } | null> {
-  const { data } = await sc.from("user_brain_projects")
-    .select("id, lovable_project_id")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+async function getUserBrain(sc: SupabaseClient, userId: string) {
+  const { data } = await sc.from("user_brain_projects").select("id, lovable_project_id").eq("user_id", userId).eq("status", "active").order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (!data?.lovable_project_id || data.lovable_project_id.startsWith("creating")) return null;
   return { projectId: data.lovable_project_id, brainId: data.id };
 }
 
-/** Get user's Lovable token */
 async function getUserToken(sc: SupabaseClient, userId: string): Promise<string | null> {
-  const { data } = await sc.from("lovable_accounts")
-    .select("token_encrypted")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .maybeSingle();
+  const { data } = await sc.from("lovable_accounts").select("token_encrypted").eq("user_id", userId).eq("status", "active").maybeSingle();
   return data?.token_encrypted?.trim() || null;
 }
 
-/** Send prompt via venus-chat */
-async function sendViaBrainProject(
-  projectId: string, token: string, message: string,
-): Promise<{ ok: boolean; error?: string; durationMs?: number }> {
+async function sendViaBrainProject(projectId: string, token: string, message: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const ctrl = new AbortController();
@@ -194,206 +239,108 @@ async function sendViaBrainProject(
       body: JSON.stringify({ task: message, project_id: projectId, mode: "task", lovable_token: token, skip_suffix: true }),
     });
     clearTimeout(timer);
-    const durationMs = Date.now() - t0;
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data?.ok === false) return { ok: false, error: data?.error || `HTTP ${res.status}`, durationMs };
-    return { ok: true, durationMs };
-  } catch (e) {
-    clearTimeout(timer);
-    return { ok: false, error: String(e).slice(0, 120), durationMs: Date.now() - t0 };
-  }
+    return { ok: res.ok && data?.ok !== false, error: data?.error, durationMs: Date.now() - t0 };
+  } catch (e) { clearTimeout(timer); return { ok: false, error: String(e).slice(0, 120), durationMs: Date.now() - t0 }; }
 }
 
-/** Capture response from Brain project */
-async function captureBrainResponse(
-  projectId: string, token: string,
-  maxWaitMs = 90_000, intervalMs = 4_000, initialDelayMs = 4_000,
-): Promise<string | null> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`, Origin: "https://lovable.dev",
-    Referer: "https://lovable.dev/", "X-Client-Git-SHA": GIT_SHA,
-  };
-
+async function captureBrainResponse(projectId: string, token: string, maxWaitMs = 90_000, intervalMs = 4_000, initialDelayMs = 4_000): Promise<string | null> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}`, Origin: "https://lovable.dev", Referer: "https://lovable.dev/", "X-Client-Git-SHA": GIT_SHA };
   let initialMsgId: string | null = null;
-  try {
-    const initRes = await fetch(`${EXT_API}/projects/${projectId}/chat/latest-message`, { headers });
-    if (initRes.ok) {
-      const msg = await initRes.json().catch(() => null);
-      initialMsgId = msg?.id || null;
-    }
-  } catch { /* ignore */ }
-
+  try { const r = await fetch(`${EXT_API}/projects/${projectId}/chat/latest-message`, { headers }); if (r.ok) { const m = await r.json().catch(() => null); initialMsgId = m?.id || null; } } catch {}
   await new Promise(r => setTimeout(r, initialDelayMs));
   const deadline = Date.now() + maxWaitMs;
-
   while (Date.now() < deadline) {
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10_000);
       const res = await fetch(`${EXT_API}/projects/${projectId}/chat/latest-message`, { signal: ctrl.signal, headers });
       clearTimeout(t);
       if (res.ok) {
         const msg = await res.json().catch(() => null);
         if (msg && msg.role !== "user" && !msg.is_streaming && msg.id !== initialMsgId) {
-          const content = (msg.content || msg.text || "").trim();
-          const validated = validateCapturedResponse(content);
+          const validated = validateCapturedResponse((msg.content || msg.text || "").trim());
           if (validated) return validated;
         }
       }
-    } catch { /* continue */ }
-
-    // Secondary fallback removed: avoid source-code crawling.
-    // Keep polling latest-message only to respect Brain markdown-first workflow.
-
+    } catch {}
     await new Promise(r => setTimeout(r, intervalMs));
   }
   return null;
 }
 
-/** Send via Brainchain pool */
-async function sendViaBrainchain(
-  sc: SupabaseClient, userId: string, message: string, brainType = "code"
-): Promise<{ ok: boolean; queueId?: string; response?: string; error?: string; durationMs?: number }> {
+async function sendViaBrainchain(sc: SupabaseClient, userId: string, message: string, brainType = "code") {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const t0 = Date.now();
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
       body: JSON.stringify({ message, brain_type: brainType, user_id: userId }),
     });
     const data = await res.json();
-    const durationMs = Date.now() - t0;
-    if (data.queued) return { ok: true, queueId: data.queue_id, durationMs };
-    if (data.ok && data.response) return { ok: true, response: data.response, durationMs };
-    return { ok: false, error: data.error || "Brainchain unavailable", durationMs };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message.slice(0, 120), durationMs: Date.now() - t0 };
-  }
+    const d = Date.now() - t0;
+    if (data.queued) return { ok: true, queueId: data.queue_id, durationMs: d };
+    if (data.ok && data.response) return { ok: true, response: data.response, durationMs: d };
+    return { ok: false, error: data.error || "Brainchain unavailable", durationMs: d };
+  } catch (e) { return { ok: false, error: (e as Error).message.slice(0, 120), durationMs: Date.now() - t0 }; }
 }
 
-/** Send via OpenRouter (Claude fallback) */
-async function sendViaOpenRouter(prompt: string, systemPrompt?: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
+async function sendViaOpenRouter(prompt: string, systemPrompt?: string) {
   const key = Deno.env.get("OPENROUTER_API_KEY");
   const t0 = Date.now();
   if (!key) return { content: null, durationMs: 0, error: "OPENROUTER_API_KEY not set" };
   try {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`, "Content-Type": "application/json",
-        "HTTP-Referer": "https://starble.lovable.app", "X-Title": "Cirius Generator",
-      },
-      body: JSON.stringify({
-        model: "anthropic/claude-sonnet-4",
-        messages: [
-          { role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.2, max_tokens: 4000,
-      }),
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": "https://starble.lovable.app", "X-Title": "Cirius Generator" },
+      body: JSON.stringify({ model: "anthropic/claude-sonnet-4", messages: [{ role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 4000 }),
     });
-    const durationMs = Date.now() - t0;
-    if (res.ok) {
-      const result = await res.json();
-      return { content: result?.choices?.[0]?.message?.content || null, durationMs };
-    }
-    const errBody = await res.text().catch(() => "");
-    return { content: null, durationMs, error: `HTTP ${res.status}: ${errBody.slice(0, 100)}` };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) };
-  }
+    const d = Date.now() - t0;
+    if (res.ok) { const r = await res.json(); return { content: r?.choices?.[0]?.message?.content || null, durationMs: d }; }
+    const e = await res.text().catch(() => ""); return { content: null, durationMs: d, error: `HTTP ${res.status}: ${e.slice(0, 100)}` };
+  } catch (e) { return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) }; }
 }
 
-/** Send via AI Gateway */
-async function sendViaGateway(prompt: string, systemPrompt?: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
+async function sendViaGateway(prompt: string, systemPrompt?: string) {
   const key = Deno.env.get("LOVABLE_API_KEY");
   const t0 = Date.now();
   if (!key) return { content: null, durationMs: 0, error: "LOVABLE_API_KEY not set" };
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.2, max_tokens: 3000,
-      }),
+      method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 3000 }),
     });
-    const durationMs = Date.now() - t0;
-    if (res.ok) {
-      const result = await res.json();
-      return { content: result?.choices?.[0]?.message?.content || null, durationMs };
-    }
-    const errBody = await res.text().catch(() => "");
-    return { content: null, durationMs, error: `HTTP ${res.status}: ${errBody.slice(0, 100)}` };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) };
-  }
+    const d = Date.now() - t0;
+    if (res.ok) { const r = await res.json(); return { content: r?.choices?.[0]?.message?.content || null, durationMs: d }; }
+    const e = await res.text().catch(() => ""); return { content: null, durationMs: d, error: `HTTP ${res.status}: ${e.slice(0, 100)}` };
+  } catch (e) { return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) }; }
 }
 
-/** Send via Gemini Direct (uses API key from api_key_vault) */
-async function sendViaGeminiDirect(sc: SupabaseClient, prompt: string, systemPrompt?: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
+async function sendViaGeminiDirect(sc: SupabaseClient, prompt: string, systemPrompt?: string) {
   const t0 = Date.now();
-  // Get Gemini key from api_key_vault
-  const { data: vaultKey } = await sc.from("api_key_vault")
-    .select("id, api_key_encrypted, requests_count")
-    .eq("provider", "gemini")
-    .eq("is_active", true)
-    .order("requests_count", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  const apiKey = vaultKey?.api_key_encrypted;
-  if (!apiKey) return { content: null, durationMs: 0, error: "No Gemini key in vault" };
-
+  const { data: vk } = await sc.from("api_key_vault").select("id, api_key_encrypted, requests_count").eq("provider", "gemini").eq("is_active", true).order("requests_count", { ascending: true }).limit(1).maybeSingle();
+  if (!vk?.api_key_encrypted) return { content: null, durationMs: 0, error: "No Gemini key in vault" };
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${systemPrompt || "Return only valid JSON, no markdown fences."}\n\n${prompt}` }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 4000 },
-      }),
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${vk.api_key_encrypted}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt || "Return only valid JSON."}\n\n${prompt}` }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 4000 } }),
     });
-    const durationMs = Date.now() - t0;
-
-    // Increment usage counter
-    if (vaultKey) {
-      await sc.from("api_key_vault").update({ requests_count: (vaultKey as any).requests_count + 1, last_used_at: new Date().toISOString() }).eq("id", (vaultKey as any).id);
-    }
-
-    if (res.ok) {
-      const result = await res.json();
-      const content = result?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-      return { content, durationMs };
-    }
-    const errBody = await res.text().catch(() => "");
-    return { content: null, durationMs, error: `HTTP ${res.status}: ${errBody.slice(0, 100)}` };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) };
-  }
+    const d = Date.now() - t0;
+    await sc.from("api_key_vault").update({ requests_count: (vk.requests_count || 0) + 1, last_used_at: new Date().toISOString() }).eq("id", vk.id);
+    if (res.ok) { const r = await res.json(); return { content: r?.candidates?.[0]?.content?.parts?.[0]?.text || null, durationMs: d }; }
+    const e = await res.text().catch(() => ""); return { content: null, durationMs: d, error: `HTTP ${res.status}: ${e.slice(0, 100)}` };
+  } catch (e) { return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) }; }
 }
 
-// ─── PRD Generation with full logging ───
+// ─── PRD Generation (multi-engine cascade) ────────────────────────────────
 
 async function generatePRD(sc: SupabaseClient, userId: string, project: Record<string, any>, projectId: string): Promise<any> {
   const features = Array.isArray(project.features) ? project.features : [];
-  const prompt = `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
+  const prompt = `IMPORTANTE: Não faça perguntas. Execute diretamente.
 
-Você é um arquiteto de software sênior. Decomponha o projeto em tarefas atribuídas a brains ESPECIALIZADOS.
+Você é um arquiteto de software sênior. Decomponha o projeto em tarefas para brains ESPECIALIZADOS.
 
-Brains disponíveis:
-- "database": Schema, migrations, RLS, triggers, indexes
-- "design": Design system, cores, tipografia, Tailwind config
-- "frontend": Componentes React, páginas, UI/UX, responsividade
-- "backend": Edge Functions, APIs, autenticação, validação server-side
-- "code": Full-stack geral (quando a tarefa abrange múltiplas áreas)
-- "review": Revisão holística, validação cross-file, checagem de integração
+Brains disponíveis: "database", "design", "frontend", "backend", "code", "review"
 
 Projeto:
 Nome: ${project.name}
@@ -404,309 +351,126 @@ URL de referência: ${project.source_url || "none"}
 Stack: React + Tailwind + shadcn/ui + Supabase
 
 Retorne APENAS JSON válido:
-{"tasks":[{"title":"Título","brain_type":"frontend","skill":"code","intent":"security_fix_v2","prompt":"Prompt detalhado para o brain especialista","depends_on":[],"stop_condition":"file_exists:src/App.tsx"}],"design":{"primary_color":"#6366f1","font":"Geist","style":"modern_minimal","pages":["Home","Dashboard","Login"],"tables":["users","projects"]}}
+{"tasks":[{"title":"Título","brain_type":"frontend","skill":"code","intent":"security_fix_v2","prompt":"Prompt detalhado","depends_on":[],"stop_condition":"file_exists:src/App.tsx"}],"design":{"primary_color":"#6366f1","font":"Geist","style":"modern_minimal","pages":["Home"],"tables":["users"]}}
 
 Regras:
 - intent DEVE ser security_fix_v2
 - SEMPRE comece com "database" se o projeto precisa de dados
 - SEMPRE inclua "design" cedo para o sistema visual
 - SEMPRE termine com "review" para checagem holística
-- depends_on: array de índices de tarefas das quais depende
-- Cada brain é ESPECIALISTA — prompts devem ser direcionados
-- Máximo 8 tarefas
-- Inclua o objeto "design" com cores, fonte, estilo, páginas e tabelas`;
+- depends_on: array de índices
+- Máximo 8 tarefas`;
 
+  const attempts: Array<{ engine: string; ok: boolean; durationMs: number; error?: string }> = [];
 
-  const engineAttempts: Array<{ engine: string; ok: boolean; durationMs: number; error?: string; taskCount?: number }> = [];
-
-  // 1. BRAINCHAIN POOL (principal — usa contas do pool, sem token do usuário)
-  const bcResult = await sendViaBrainchain(sc, userId, prompt, "prd");
-  if (bcResult.ok && bcResult.response) {
-    const p = extractJSON(bcResult.response);
-    await logEntry(sc, projectId, "prd_brainchain", p ? "completed" : "failed",
-      p ? `Brainchain PRD: ${p.tasks?.length} tasks` : `Brainchain response not parseable`, {
-      duration_ms: bcResult.durationMs,
-    });
-    engineAttempts.push({ engine: "brainchain", ok: !!p, durationMs: bcResult.durationMs || 0, taskCount: p?.tasks?.length });
+  // 1. BRAINCHAIN
+  const bc = await sendViaBrainchain(sc, userId, prompt, "prd");
+  if (bc.ok && bc.response) {
+    const p = extractJSON(bc.response);
+    await logEntry(sc, projectId, "prd_brainchain", p ? "completed" : "failed", p ? `Brainchain PRD: ${p.tasks?.length} tasks` : "Brainchain not parseable", { duration_ms: bc.durationMs });
+    attempts.push({ engine: "brainchain", ok: !!p, durationMs: bc.durationMs || 0 });
     if (p) return p;
-  } else if (bcResult.ok && bcResult.queueId) {
+  } else if (bc.ok && bc.queueId) {
     const t0 = Date.now();
     let pollResult: string | null = null;
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 5000));
-      const { data: q } = await sc.from("brainchain_queue").select("status, response").eq("id", bcResult.queueId).maybeSingle();
+      const { data: q } = await sc.from("brainchain_queue").select("status, response").eq("id", bc.queueId).maybeSingle();
       if (q?.status === "done" && q.response) { pollResult = q.response; break; }
       if (q?.status === "error") break;
     }
-    if (pollResult) {
-      const p = extractJSON(pollResult);
-      const dur = Date.now() - t0;
-      await logEntry(sc, projectId, "prd_brainchain", p ? "completed" : "failed",
-        p ? `Brainchain PRD (polled): ${p.tasks?.length} tasks` : `Brainchain polled response not parseable`, { duration_ms: dur });
-      engineAttempts.push({ engine: "brainchain", ok: !!p, durationMs: dur, taskCount: p?.tasks?.length });
-      if (p) return p;
-    } else {
-      engineAttempts.push({ engine: "brainchain", ok: false, durationMs: Date.now() - t0, error: "poll timeout" });
-    }
+    if (pollResult) { const p = extractJSON(pollResult); if (p) return p; }
+    attempts.push({ engine: "brainchain", ok: false, durationMs: Date.now() - t0, error: "poll timeout" });
   } else {
-    await logEntry(sc, projectId, "prd_brainchain", "failed", `Brainchain failed: ${bcResult.error || "unavailable"}`, {
-      duration_ms: bcResult.durationMs, error_msg: bcResult.error,
-    });
-    engineAttempts.push({ engine: "brainchain", ok: false, durationMs: bcResult.durationMs || 0, error: bcResult.error });
+    attempts.push({ engine: "brainchain", ok: false, durationMs: bc.durationMs || 0, error: bc.error });
   }
 
-  // 2. OPENROUTER / CLAUDE (fallback principal)
-  const orResult = await sendViaOpenRouter(prompt);
-  if (orResult.content) {
-    const p = extractJSON(orResult.content);
-    await logEntry(sc, projectId, "prd_openrouter", p ? "completed" : "failed",
-      p ? `OpenRouter PRD: ${p.tasks?.length} tasks` : `OpenRouter response not parseable (len=${orResult.content.length})`, {
-      duration_ms: orResult.durationMs,
-      metadata: { response_length: orResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
-    });
-    engineAttempts.push({ engine: "openrouter", ok: !!p, durationMs: orResult.durationMs, taskCount: p?.tasks?.length });
-    if (p) return p;
-  } else {
-    await logEntry(sc, projectId, "prd_openrouter", "failed", `OpenRouter failed: ${orResult.error || "empty response"}`, {
-      duration_ms: orResult.durationMs, error_msg: orResult.error,
-    });
-    engineAttempts.push({ engine: "openrouter", ok: false, durationMs: orResult.durationMs, error: orResult.error });
-  }
+  // 2. CLAUDE (OpenRouter)
+  const or = await sendViaOpenRouter(prompt);
+  if (or.content) { const p = extractJSON(or.content); if (p) { await logEntry(sc, projectId, "prd_openrouter", "completed", `Claude PRD: ${p.tasks?.length} tasks`, { duration_ms: or.durationMs }); return p; } }
+  attempts.push({ engine: "openrouter", ok: false, durationMs: or.durationMs, error: or.error });
 
-  // 3. GEMINI via API Key Vault (integração própria)
-  const geminiResult = await sendViaGeminiDirect(sc, prompt);
-  if (geminiResult.content) {
-    const p = extractJSON(geminiResult.content);
-    await logEntry(sc, projectId, "prd_gemini", p ? "completed" : "failed",
-      p ? `Gemini PRD: ${p.tasks?.length} tasks` : `Gemini response not parseable (len=${geminiResult.content.length})`, {
-      duration_ms: geminiResult.durationMs,
-    });
-    engineAttempts.push({ engine: "gemini", ok: !!p, durationMs: geminiResult.durationMs, taskCount: p?.tasks?.length });
-    if (p) return p;
-  } else {
-    await logEntry(sc, projectId, "prd_gemini", "failed", `Gemini failed: ${geminiResult.error || "empty response"}`, {
-      duration_ms: geminiResult.durationMs, error_msg: geminiResult.error,
-    });
-    engineAttempts.push({ engine: "gemini", ok: false, durationMs: geminiResult.durationMs, error: geminiResult.error });
-  }
+  // 3. GEMINI (Vault)
+  const gm = await sendViaGeminiDirect(sc, prompt);
+  if (gm.content) { const p = extractJSON(gm.content); if (p) { await logEntry(sc, projectId, "prd_gemini", "completed", `Gemini PRD: ${p.tasks?.length} tasks`, { duration_ms: gm.durationMs }); return p; } }
+  attempts.push({ engine: "gemini", ok: false, durationMs: gm.durationMs, error: gm.error });
 
-  // 4. AI GATEWAY LOVABLE (último recurso)
-  const gwResult = await sendViaGateway(prompt);
-  if (gwResult.content) {
-    const p = extractJSON(gwResult.content);
-    await logEntry(sc, projectId, "prd_gateway", p ? "completed" : "failed",
-      p ? `Gateway PRD: ${p.tasks?.length} tasks` : `Gateway response not parseable (len=${gwResult.content.length})`, {
-      duration_ms: gwResult.durationMs,
-    });
-    engineAttempts.push({ engine: "gateway", ok: !!p, durationMs: gwResult.durationMs, taskCount: p?.tasks?.length });
-    if (p) return p;
-  } else {
-    await logEntry(sc, projectId, "prd_gateway", "failed", `Gateway failed: ${gwResult.error || "empty response"}`, {
-      duration_ms: gwResult.durationMs, error_msg: gwResult.error,
-    });
-    engineAttempts.push({ engine: "gateway", ok: false, durationMs: gwResult.durationMs, error: gwResult.error });
-  }
+  // 4. AI GATEWAY (último recurso)
+  const gw = await sendViaGateway(prompt);
+  if (gw.content) { const p = extractJSON(gw.content); if (p) { await logEntry(sc, projectId, "prd_gateway", "completed", `Gateway PRD: ${p.tasks?.length} tasks`, { duration_ms: gw.durationMs }); return p; } }
+  attempts.push({ engine: "gateway", ok: false, durationMs: gw.durationMs, error: gw.error });
 
-  // ALL engines failed
-  await logEntry(sc, projectId, "prd_all_failed", "failed",
-    `ALL PRD engines failed. Attempts: ${engineAttempts.map(a => `${a.engine}(${a.ok ? "ok" : a.error})`).join(", ")}`, {
-    metadata: { engine_attempts: engineAttempts },
-  });
-
+  await logEntry(sc, projectId, "prd_all_failed", "failed", `ALL PRD engines failed: ${attempts.map(a => `${a.engine}(${a.error || "fail"})`).join(", ")}`, { metadata: { attempts } });
   return null;
 }
 
-// ─── Code Generation (handled by agentic-orchestrator) ───
+// ─── Refinement ───────────────────────────────────────────────────────────
 
-// ─── Post-orchestration AI refinement ───
-async function refineSourceFiles(
-  sc: SupabaseClient, projectId: string,
-  files: Record<string, string>, projectName: string, description: string,
-  prdJson?: any,
-): Promise<{ ok: boolean; files?: Record<string, string>; durationMs: number; error?: string }> {
-  const fileList = Object.entries(files)
-    .filter(([, content]) => typeof content === "string" && content.length > 0)
-    .map(([path, content]) => `--- ${path} ---\n${content.slice(0, 5000)}`)
-    .join("\n\n");
-
+async function refineSourceFiles(sc: SupabaseClient, projectId: string, files: Record<string, string>, projectName: string, description: string, prdJson?: any) {
+  const fileList = Object.entries(files).filter(([, c]) => typeof c === "string" && c.length > 0).map(([p, c]) => `--- ${p} ---\n${c.slice(0, 5000)}`).join("\n\n");
   if (fileList.length < 50) return { ok: false, durationMs: 0, error: "No substantive files" };
-
-  // Cap to avoid exceeding context limits (~120KB)
   const truncated = fileList.slice(0, 110_000);
-
-  // Build PRD context for holistic review
-  let prdContext = "";
+  let prdCtx = `\n## PROJECT: "${projectName}" — ${description}\n`;
   if (prdJson) {
     const prd = typeof prdJson === "string" ? (() => { try { return JSON.parse(prdJson); } catch { return null; } })() : prdJson;
-    if (prd) {
-      const tasksSummary = Array.isArray(prd.tasks)
-        ? prd.tasks.map((t: any, i: number) => `  ${i + 1}. ${t.title || "Task"}: ${(t.prompt || "").slice(0, 150)}`).join("\n")
-        : "";
-      const designInfo = prd.design
-        ? `Design: style=${prd.design.style || "modern"}, color=${prd.design.primary_color || "#6366f1"}, font=${prd.design.font || "Geist"}, pages=[${(prd.design.pages || []).join(", ")}]`
-        : "";
-      prdContext = `
-## PROJECT SPECIFICATION (PRD)
-Project: "${projectName}" — ${description}
-${designInfo}
-
-Tasks that were executed to build this project:
-${tasksSummary}
-
-`;
-    }
+    if (prd?.tasks) prdCtx = `\n## PRD: ${projectName}\nTasks:\n${prd.tasks.map((t: any, i: number) => `${i + 1}. ${t.title}`).join("\n")}\n`;
   }
-  if (!prdContext) {
-    prdContext = `\n## PROJECT: "${projectName}" — ${description}\n`;
-  }
-
-  const prompt = `You are a senior full-stack engineer performing a HOLISTIC code review.
-${prdContext}
-## YOUR MISSION
-Analyze ALL source files below against the project specification above. You must ensure:
-
-### 1. FUNCTIONAL COMPLETENESS (Does the code match the PRD?)
-- Every page/feature described in the PRD must have a corresponding component
-- Routes must exist for all specified pages
-- Business logic described in tasks must be implemented (not mocked/placeholder)
-- If a task says "create X", verify X exists and works
-
-### 2. STRUCTURAL INTEGRITY (Does the code compile?)
-- All imports reference files that exist in the file list
-- All exports match what other files import
-- TypeScript types are consistent across files
-- React hooks follow rules (no conditional hooks)
-- package.json includes all used dependencies
-
-### 3. RUNTIME CORRECTNESS (Will it run?)
-- No undefined variables or missing props
-- Event handlers are properly connected
-- State management is consistent
-- API calls have proper error handling
-- Routes in App.tsx match component file paths
-
-### 4. QUALITY
-- Responsive design (if specified in PRD)
-- Consistent styling approach (Tailwind classes or CSS modules, not mixed)
-- No dead/unreachable code
-- No duplicate component definitions
-
-## SOURCE FILES:
-
-${truncated}
-
-## OUTPUT
-Return ONLY a valid JSON object: {"files":{"path/to/file.tsx":"corrected full content..."}}
-Include ALL files — corrected or unchanged. If a file is missing from the spec, ADD it.
-Return ONLY valid JSON, no markdown fences.`;
-
-  const systemPrompt = "You are a code reviewer and fixer. You validate generated code against project specifications. Return only valid JSON with all corrected source files. Never omit files.";
+  const prompt = `You are a senior engineer performing holistic code review.${prdCtx}\nSOURCE FILES:\n${truncated}\n\nReturn ONLY valid JSON: {"files":{"path":"content"}} with ALL files corrected.`;
+  const sys = "You are a code reviewer. Return only valid JSON with all corrected source files.";
   const t0 = Date.now();
-
-  // Try AI Gateway first, then OpenRouter
-  const gwResult = await sendViaGateway(prompt, systemPrompt);
-  if (gwResult.content) {
-    const parsed = tryParseRefinementResult(gwResult.content);
-    if (parsed) {
-      const merged = mergeFileMaps(files, parsed);
-      return { ok: true, files: merged, durationMs: Date.now() - t0 };
-    }
-  }
-
-  const orResult = await sendViaOpenRouter(prompt, systemPrompt);
-  if (orResult.content) {
-    const parsed = tryParseRefinementResult(orResult.content);
-    if (parsed) {
-      const merged = mergeFileMaps(files, parsed);
-      return { ok: true, files: merged, durationMs: Date.now() - t0 };
-    }
-  }
-
+  const gw = await sendViaGateway(prompt, sys);
+  if (gw.content) { const p = tryParseRefinement(gw.content); if (p) return { ok: true, files: mergeFileMaps(files, p), durationMs: Date.now() - t0 }; }
+  const or2 = await sendViaOpenRouter(prompt, sys);
+  if (or2.content) { const p = tryParseRefinement(or2.content); if (p) return { ok: true, files: mergeFileMaps(files, p), durationMs: Date.now() - t0 }; }
   return { ok: false, durationMs: Date.now() - t0, error: "Refinement engines returned no parseable result" };
 }
 
-/** Parse refinement AI response into file map */
-function tryParseRefinementResult(content: string): Record<string, string> | null {
+function tryParseRefinement(content: string): Record<string, string> | null {
   try {
     let s = content.trim();
-    const m = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (m) s = m[1].trim();
-    const i = s.indexOf("{");
-    if (i >= 0) s = s.slice(i);
-    const j = s.lastIndexOf("}");
-    if (j >= 0) s = s.slice(0, j + 1);
+    const m = s.match(/```(?:json)?\s*([\s\S]*?)```/); if (m) s = m[1].trim();
+    const i = s.indexOf("{"); if (i >= 0) s = s.slice(i);
+    const j = s.lastIndexOf("}"); if (j >= 0) s = s.slice(0, j + 1);
     const parsed = JSON.parse(s);
     const refined = parsed.files || parsed;
-    if (typeof refined === "object" && Object.keys(refined).length > 0) {
-      return refined;
-    }
-  } catch { /* parse failed */ }
+    if (typeof refined === "object" && Object.keys(refined).length > 0) return refined;
+  } catch {}
   return null;
 }
 
-/** Auto-trigger orchestrator-tick (fire-and-forget) */
 async function autoTriggerTick(_sc: SupabaseClient) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  try {
-    await fetch(`${supabaseUrl}/functions/v1/orchestrator-tick`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({ _auto_trigger: true }),
-    });
-  } catch { /* fire and forget */ }
+  try { await fetch(`${supabaseUrl}/functions/v1/orchestrator-tick`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` }, body: JSON.stringify({ _auto_trigger: true }) }); } catch {}
 }
 
 async function syncFilesFromLatestMessage(sc: SupabaseClient, projectId: string, lovableProjectId: string, token: string) {
   const latestRes = await fetch(`${EXT_API}/projects/${lovableProjectId}/chat/latest-message`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Origin: "https://lovable.dev",
-      Referer: "https://lovable.dev/",
-      "X-Client-Git-SHA": GIT_SHA,
-    },
+    headers: { Authorization: `Bearer ${token}`, Origin: "https://lovable.dev", Referer: "https://lovable.dev/", "X-Client-Git-SHA": GIT_SHA },
   });
-
-  if (!latestRes.ok) {
-    return { ok: false, error: `latest-message HTTP ${latestRes.status}`, fileCount: 0 };
-  }
-
+  if (!latestRes.ok) return { ok: false, error: `HTTP ${latestRes.status}`, fileCount: 0 };
   const rawLatest = await latestRes.text();
   const msg = parseLatestMessage(rawLatest);
   if (!msg || msg.role === "user") return { ok: false, error: "no assistant message", fileCount: 0 };
-
   const body = extractMdBody(msg.content || "");
   const parsedFiles = extractFilesFromMarkdown(body);
-  const parsedCount = Object.keys(parsedFiles).length;
-  if (parsedCount === 0) return { ok: false, error: "no file blocks in markdown", fileCount: 0 };
-
-  const { data: currentProject } = await sc.from("cirius_projects")
-    .select("source_files_json")
-    .eq("id", projectId)
-    .maybeSingle();
-
-  const existing = (currentProject?.source_files_json || {}) as Record<string, string>;
-  const merged = mergeFileMaps(existing, parsedFiles);
-  const fingerprint = buildFilesFingerprint(merged);
-
-  await sc.from("cirius_projects").update({
-    source_files_json: merged,
-    files_fingerprint: fingerprint,
-    progress_pct: 80,
-    generation_ended_at: new Date().toISOString(),
-  }).eq("id", projectId);
-
-  return { ok: true, fileCount: Object.keys(merged).length, mergedFingerprint: fingerprint };
+  if (Object.keys(parsedFiles).length === 0) return { ok: false, error: "no file blocks", fileCount: 0 };
+  const { data: cur } = await sc.from("cirius_projects").select("source_files_json").eq("id", projectId).maybeSingle();
+  const merged = mergeFileMaps((cur?.source_files_json || {}) as Record<string, string>, parsedFiles);
+  const fp = buildFilesFingerprint(merged);
+  await sc.from("cirius_projects").update({ source_files_json: merged, files_fingerprint: fp, progress_pct: 80, generation_ended_at: new Date().toISOString() }).eq("id", projectId);
+  return { ok: true, fileCount: Object.keys(merged).length };
 }
 
-// ─── Main Handler ───
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── MAIN HANDLER ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const user = await getUser(req);
-  // Allow service-key calls for internal actions (refine from orchestrator-tick)
   const authHeader = req.headers.get("Authorization") || "";
   const isServiceKey = authHeader === `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`;
   if (!user && !isServiceKey) return json({ error: "Unauthorized" }, 401);
@@ -715,431 +479,147 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   let action = (body.action as string) || "";
 
-  // ─── BUILD_PROMPT (generates PRD and returns for approval) ───
-  if (action === "build_prompt") {
-    const projectId = typeof body.project_id === "string" ? body.project_id.trim() : "";
-    const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-    if (!projectId || projectId.length < 10) return json({ error: "project_id required" }, 400);
-    if (!prompt || prompt.length < 3) return json({ error: "prompt required (min 3 chars)" }, 400);
-    if (prompt.length > 10_000) return json({ error: "prompt too long (max 10000 chars)" }, 400);
+  // ═══════════════════════════════════════════════════════════════════════
+  // ─── NEW: action = 'start' — Full 5-step pipeline ──────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  if (action === "start") {
+    const userPrompt = typeof body.user_prompt === "string" ? body.user_prompt.trim() : "";
+    const projectName = typeof body.project_name === "string" ? body.project_name.trim() : "";
+    const sourceUrl = typeof body.source_url === "string" ? body.source_url.trim() : "";
+    const templateId = typeof body.template_id === "string" ? body.template_id.trim() : "";
+    const config = body.config || {};
 
-    const effectiveBuildUserId = user?.id || (isServiceKey ? body.user_id : null);
-    if (!effectiveBuildUserId) return json({ error: "user_id required" }, 400);
-
-    const { data: project } = await sc.from("cirius_projects")
-      .select("*")
-      .eq("id", projectId)
-      .eq("user_id", effectiveBuildUserId)
-      .single();
-
-    if (!project) return json({ error: "Project not found" }, 404);
-
-    await logEntry(sc, projectId, "prompt", "started", "Prompt recebido, gerando PRD para aprovação", {
-      input_json: { prompt_length: prompt.length, prompt_preview: prompt.slice(0, 120) },
-    });
-
-    await sc.from("cirius_projects").update({ description: prompt, status: "generating_prd", progress_pct: 5 }).eq("id", projectId);
-
-    let prd = project.prd_json as any;
-    if (!prd || !Array.isArray(prd?.tasks) || prd.tasks.length === 0) {
-      const generatedPrd = await generatePRD(sc, effectiveBuildUserId, { ...project, description: prompt }, projectId);
-      if (!generatedPrd) {
-        await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao gerar PRD" }).eq("id", projectId);
-        await logEntry(sc, projectId, "prompt", "failed", "Pipeline interrompido: PRD não foi gerado");
-        return json({ error: "PRD generation failed" }, 500);
-      }
-      prd = generatedPrd;
-    }
-
-    // Save PRD and set status to awaiting_approval (user must approve before code gen)
-    // Also save PRD as .cirius/prd/prd.md in source_files_json
-    const prdMarkdown = `# PRD — ${project.name}\n\n**Descrição:** ${prompt}\n\n## Tasks\n\n${prd.tasks.map((t: any, i: number) => `### ${i + 1}. ${t.title}\n- Skill: ${t.skill || "code"}\n- Prompt: ${t.prompt}\n`).join("\n")}\n\n## Design\n${JSON.stringify(prd.design || {}, null, 2)}`;
-    const existingFiles = (project.source_files_json || {}) as Record<string, string>;
-    const updatedFiles = {
-      ...existingFiles,
-      ".cirius/prd/prd.md": prdMarkdown,
-      ".cirius/knowledge/base.md": `# Project Memory\n_Created: ${new Date().toISOString()}_\n\n## PRD Aprovado\n\n${prdMarkdown}`,
-    };
-
-    await sc.from("cirius_projects").update({
-      prd_json: prd, status: "draft", progress_pct: 15,
-      source_files_json: updatedFiles,
-    }).eq("id", projectId);
-    await logEntry(sc, projectId, "prd", "completed", `PRD gerado via build_prompt (${prd.tasks?.length || 0} tasks) — salvo em .cirius/prd/prd.md e base.md`);
-
-    return json({
-      status: "awaiting_approval",
-      prd_json: prd,
-      task_count: prd.tasks?.length || 0,
-      design: prd.design || null,
-      project_id: projectId,
-    });
-  }
-
-  // ─── APPROVE_PRD (user approves PRD → triggers code generation) ───
-  if (action === "approve_prd") {
-    const projectId = typeof body.project_id === "string" ? body.project_id.trim() : "";
-    if (!projectId || projectId.length < 10) return json({ error: "project_id required" }, 400);
+    if (!userPrompt || userPrompt.length < 3) return json({ success: false, error: "user_prompt required (min 3 chars)" }, 400);
+    if (!projectName || projectName.length < 2) return json({ success: false, error: "project_name required (min 2 chars)" }, 400);
 
     const effectiveUserId = user?.id || (isServiceKey ? body.user_id : null);
-    if (!effectiveUserId) return json({ error: "user_id required" }, 400);
+    if (!effectiveUserId) return json({ success: false, error: "user_id required" }, 400);
 
-    const { data: project } = await sc.from("cirius_projects")
-      .select("*")
-      .eq("id", projectId)
-      .eq("user_id", effectiveUserId)
-      .single();
+    // ── STEP 1: CLASSIFY ──────────────────────────────────────────────
+    const blueprint = classifyIntent(userPrompt);
 
-    if (!project) return json({ error: "Project not found" }, 404);
-    if (!project.prd_json || !(project.prd_json as any).tasks?.length) {
-      return json({ error: "No PRD to approve — run build_prompt first" }, 400);
-    }
+    // Create project first to get an ID for logging
+    const { data: project, error: createErr } = await sc.from("cirius_projects").insert({
+      user_id: effectiveUserId,
+      name: projectName,
+      description: userPrompt,
+      template_type: blueprint.intent,
+      source_url: sourceUrl || null,
+      tech_stack: { framework: "react", css: "tailwind", ui: "shadcn" },
+      features: blueprint.features,
+      deploy_config: config,
+      generation_engine: blueprint.suggestedEngine,
+      status: "generating_prd",
+      progress_pct: 5,
+    }).select("id").single();
 
-    await logEntry(sc, projectId, "approve_prd", "completed", "PRD aprovado pelo usuário — iniciando geração de código");
+    if (createErr || !project) return json({ success: false, error: "Failed to create project" }, 500);
+    const projectId = project.id;
 
-    // Continue to generate_code
-    body.project_id = projectId;
-    action = "generate_code";
-  }
+    await logEntry(sc, projectId, "classify", "completed", `Intent: ${blueprint.intent}, engine: ${blueprint.suggestedEngine}, tasks: ${blueprint.estimatedTasks}`, {
+      output_json: blueprint as unknown as Record<string, unknown>,
+    });
 
-  // ─── OAUTH_STATE ───
-  if (action === "oauth_state") {
-    const provider = body.provider;
-    if (!provider || !["github", "vercel", "netlify", "supabase"].includes(provider)) {
-      return json({ error: "Invalid provider" }, 400);
-    }
-    const stateSecret = Deno.env.get("CLF_TOKEN_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const ts = String(Date.now());
-    const payload = `${user.id}:${ts}`;
-    const sig = await hmacSign(payload, stateSecret);
-    const state = btoa(JSON.stringify({ user_id: user.id, ts, sig }));
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const callbackUrl = `${supabaseUrl}/functions/v1/cirius-oauth-callback?provider=${provider}`;
-
-    // Fetch OAuth credentials from api_key_vault (Admin > Integrações)
-    const { data: vaultKey } = await sc.from("api_key_vault")
-      .select("api_key_encrypted")
-      .eq("provider", provider)
-      .eq("is_active", true)
-      .order("requests_count", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    const clientId = vaultKey?.api_key_encrypted || Deno.env.get(`CIRIUS_${provider.toUpperCase()}_CLIENT_ID`) || "";
-    if (!clientId) return json({ error: `${provider} OAuth not configured. Configure em Admin > Integrações.` }, 400);
-
-    let authUrl = "";
-    if (provider === "github") {
-      authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
-    } else if (provider === "vercel") {
-      authUrl = `https://vercel.com/oauth/authorize?client_id=${clientId}&scope=user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
-    } else if (provider === "netlify") {
-      authUrl = `https://app.netlify.com/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
-    } else if (provider === "supabase") {
-      authUrl = `https://api.supabase.com/v1/oauth/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}&scope=all`;
-    }
-    return json({ auth_url: authUrl });
-  }
-
-  // ─── SAVE_GITHUB_INTEGRATION (PAT) ───
-  if (action === "save_github_integration") {
-    const ghToken = (body.github_token as string || "").trim();
-    if (!ghToken) return json({ error: "Personal Access Token é obrigatório" }, 400);
-    let accountLogin = "";
-    let accountId = "";
-    try {
-      const res = await fetch("https://api.github.com/user", {
-        headers: { Authorization: `Bearer ${ghToken}`, "User-Agent": "Cirius-Starble" },
-      });
-      if (!res.ok) {
-        await res.text().catch(() => {});
-        return json({ error: "Token inválido — verifique em github.com/settings/tokens" }, 400);
+    // ── STEP 2: SCRAPING (optional) ───────────────────────────────────
+    let combinedPrompt = userPrompt;
+    if (sourceUrl) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const scrapeRes = await fetch(`${supabaseUrl}/functions/v1/starcrawl`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+          body: JSON.stringify({ action: "generate_prompt", url: sourceUrl }),
+        });
+        if (scrapeRes.ok) {
+          const scrapeData = await scrapeRes.json();
+          if (scrapeData?.prompt) {
+            combinedPrompt = `${userPrompt}\n\n[REFERÊNCIA VISUAL]\n${scrapeData.prompt}`;
+            await logEntry(sc, projectId, "scrape", "completed", `Scrape da URL de referência concluído`, { metadata: { source_url: sourceUrl } });
+          }
+        }
+      } catch {
+        await logEntry(sc, projectId, "scrape", "failed", `Scrape falhou para ${sourceUrl} — continuando sem referência`);
       }
-      const ghUser = await res.json();
-      accountLogin = ghUser.login || "";
-      accountId = String(ghUser.id || "");
-    } catch {
-      return json({ error: "Falha ao validar token GitHub" }, 400);
     }
-    const { error } = await sc.from("cirius_integrations").upsert({
-      user_id: user.id, provider: "github", access_token_enc: ghToken,
-      account_login: accountLogin, account_id: accountId,
-      is_active: true, updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id,provider" });
-    if (error) return json({ error: "Failed to save integration" }, 500);
-    return json({ ok: true, account: accountLogin });
-  }
 
-  // ─── SAVE_VERCEL_INTEGRATION ───
-  if (action === "save_vercel_integration") {
-    const vToken = (body.vercel_token as string || "").trim();
-    if (!vToken) return json({ error: "API Token é obrigatório" }, 400);
-    // Validate token by fetching user info
-    let accountLogin = "";
-    let accountId = "";
-    try {
-      const res = await fetch("https://api.vercel.com/v2/user", {
-        headers: { Authorization: `Bearer ${vToken}` },
-      });
-      if (!res.ok) {
-        await res.text().catch(() => {});
-        return json({ error: "Token inválido — verifique em vercel.com/account/tokens" }, 400);
-      }
-      const userData = await res.json();
-      accountLogin = userData.user?.username || userData.user?.email || "";
-      accountId = userData.user?.uid || "";
-    } catch {
-      return json({ error: "Falha ao validar token Vercel" }, 400);
-    }
-    const { error } = await sc.from("cirius_integrations").upsert({
-      user_id: user.id, provider: "vercel", access_token_enc: vToken,
-      account_login: accountLogin, account_id: accountId,
-      is_active: true, updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id,provider" });
-    if (error) return json({ error: "Failed to save integration" }, 500);
-    return json({ ok: true, account: accountLogin });
-  }
-
-  // ─── SAVE_SUPABASE_INTEGRATION ───
-  if (action === "save_supabase_integration") {
-    const sbUrl = typeof body.supabase_url === "string" ? body.supabase_url.trim() : "";
-    const serviceKey = typeof body.service_key === "string" ? body.service_key.trim() : "";
-    if (!sbUrl || !serviceKey) return json({ error: "URL e Service Key são obrigatórios" }, 400);
-    if (sbUrl.length > 500) return json({ error: "URL muito longa" }, 400);
-    if (serviceKey.length > 500) return json({ error: "Service key muito longa" }, 400);
-    // Validate URL format — must be a valid Supabase URL
-    if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(sbUrl)) {
-      return json({ error: "URL deve ser no formato https://xxxxx.supabase.co" }, 400);
-    }
-    const ref = sbUrl.match(/https:\/\/([^.]+)/)?.[1] || "";
-    if (!ref || ref.length < 10) return json({ error: "URL inválida — referência do projeto não encontrada" }, 400);
-    try {
-      const testClient = createClient(sbUrl, serviceKey);
-      const { error: testErr } = await testClient.from("_test_nonexistent_table_").select("id").limit(1);
-      if (testErr && testErr.message?.includes("Invalid API key")) return json({ error: "Service key inválida" }, 400);
-    } catch { /* ok */ }
-    const { error } = await sc.from("cirius_integrations").upsert({
-      user_id: user.id, provider: "supabase", service_key_enc: serviceKey,
-      project_ref: ref, account_login: sbUrl, is_active: true, updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id,provider" });
-    if (error) return json({ error: "Failed to save integration" }, 500);
-    return json({ ok: true });
-  }
-
-
-  // ─── INIT ───
-  if (action === "init") {
-    const config = body.config || {};
-    const name = typeof config.name === "string" ? config.name.trim() : "";
-    if (!name || name.length < 2) return json({ error: "config.name required (min 2 chars)" }, 400);
-    if (name.length > 200) return json({ error: "config.name too long (max 200 chars)" }, 400);
-    const description = typeof config.description === "string" ? config.description.trim().slice(0, 5000) : null;
-    const templateType = typeof config.template_type === "string" ? config.template_type.slice(0, 50) : "custom";
-    const sourceUrl = typeof config.source_url === "string" ? config.source_url.slice(0, 500) : null;
-    // Validate source_url if present
-    if (sourceUrl && !/^https?:\/\/.+/i.test(sourceUrl)) return json({ error: "source_url must be a valid HTTP(S) URL" }, 400);
-    const features = Array.isArray(config.features) ? config.features.filter((f: any) => typeof f === "string").slice(0, 20).map((f: string) => f.slice(0, 100)) : [];
-
-    const { data: project, error } = await sc.from("cirius_projects").insert({
-      user_id: user.id, name,
-      description,
-      template_type: templateType,
+    // ── STEP 3: PRD GENERATION ────────────────────────────────────────
+    const prd = await generatePRD(sc, effectiveUserId, {
+      name: projectName,
+      description: combinedPrompt,
+      template_type: blueprint.intent,
+      features: blueprint.features,
       source_url: sourceUrl,
-      tech_stack: config.tech_stack || { framework: "react", css: "tailwind", ui: "shadcn" },
-      features,
-      deploy_config: config.deploy_config || {},
-      status: "draft",
-    }).select("id, status").single();
-    if (error) {
-      console.error("[cirius] init error:", error);
-      return json({ error: "Failed to create project" }, 500);
-    }
-    await logEntry(sc, project.id, "init", "completed", `Projeto criado: "${name}"`, {
-      metadata: { template: templateType, features, source_url: sourceUrl },
-    });
-    return json({ project_id: project.id, status: "draft" });
-  }
-
-  // ─── GENERATE_PRD ───
-  if (action === "generate_prd") {
-    const projectId = body.project_id;
-    if (!projectId) return json({ error: "project_id required" }, 400);
-    const { data: project } = await sc.from("cirius_projects")
-      .select("*").eq("id", projectId).eq("user_id", user.id).single();
-    if (!project) return json({ error: "Project not found" }, 404);
-
-    // ★ Skip if PRD already exists
-    if (project.prd_json && (project.prd_json as any).tasks?.length > 0) {
-      await logEntry(sc, projectId, "prd_cache_hit", "completed",
-        `PRD already exists (${(project.prd_json as any).tasks.length} tasks), skipping generation`, {
-        metadata: { cached: true, task_count: (project.prd_json as any).tasks.length },
-      });
-      const existingPrd = project.prd_json as any;
-      return json({
-        prd_json: existingPrd,
-        engine_selected: project.generation_engine || "cached",
-        task_count: existingPrd.tasks?.length || 0,
-        design: existingPrd.design || null,
-        cached: true,
-      });
-    }
-
-    await sc.from("cirius_projects").update({ status: "generating_prd" }).eq("id", projectId);
-    await logEntry(sc, projectId, "prd", "started", `Gerando PRD para "${project.name}"...`, {
-      input_json: { name: project.name, template: project.template_type, features: project.features },
-    });
-
-    const startMs = Date.now();
-    const prd = await generatePRD(sc, user.id, project, projectId);
-    const durationMs = Date.now() - startMs;
+    }, projectId);
 
     if (!prd) {
-      await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao gerar PRD — todos os engines falharam" }).eq("id", projectId);
-      await logEntry(sc, projectId, "prd", "failed", `PRD generation FAILED after ${durationMs}ms — all engines exhausted`, {
-        duration_ms: durationMs, error_msg: "All PRD engines failed",
-      });
-      return json({ error: "PRD generation failed" }, 500);
+      await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao gerar PRD" }).eq("id", projectId);
+      return json({ success: false, project_id: projectId, status: "failed", message: "PRD generation failed — all engines exhausted" });
     }
 
-    const engine = "brainchain";
-    await sc.from("cirius_projects").update({
-      prd_json: prd, generation_engine: engine, status: "draft", progress_pct: 15,
-    }).eq("id", projectId);
-
-    await logEntry(sc, projectId, "prd", "completed", `PRD gerado: ${prd.tasks.length} tasks em ${durationMs}ms`, {
-      duration_ms: durationMs,
-      output_json: { task_count: prd.tasks.length, engine, design: prd.design || null, task_titles: prd.tasks.map((t: any) => t.title) },
+    await logEntry(sc, projectId, "prd", "completed", `PRD gerado: ${prd.tasks?.length} tasks`, {
+      metadata: { tasks_count: prd.tasks?.length, design: prd.design },
     });
 
-    return json({ prd_json: prd, engine_selected: engine, task_count: prd.tasks.length, design: prd.design || null });
-  }
+    // ── STEP 4: UPDATE PROJECT ────────────────────────────────────────
+    await sc.from("cirius_projects").update({
+      prd_json: prd,
+      status: "generating_code",
+      progress_pct: 20,
+      generation_started_at: new Date().toISOString(),
+    }).eq("id", projectId);
 
-  // ─── GENERATE_CODE ───
-  if (action === "generate_code") {
-    const projectId = body.project_id;
-    if (!projectId) return json({ error: "project_id required" }, 400);
-    
-    // For service-key calls, use body.user_id; for user calls, use user.id
-    const effectiveUserId = user?.id || (isServiceKey ? body.user_id : null);
-    if (!effectiveUserId) return json({ error: "user_id required" }, 400);
-    
-    let projectQuery = sc.from("cirius_projects").select("*").eq("id", projectId);
-    if (user) projectQuery = projectQuery.eq("user_id", user.id);
-    const { data: project } = await projectQuery.single();
-    if (!project) return json({ error: "Project not found" }, 404);
-    if (!project.prd_json) return json({ error: "PRD not generated yet" }, 400);
-
-    // ★ Acquire a brainchain account to get the target lovable_project_id
+    // ── STEP 5: ASYNC GENERATION ──────────────────────────────────────
+    // Acquire brain for orchestrator
     const { data: bcAccounts } = await sc.from("brainchain_accounts")
-      .select("id, brain_project_id, access_token, brain_type")
-      .eq("is_active", true)
-      .eq("is_busy", false)
-      .lt("error_count", 5)
+      .select("id, brain_project_id, brain_type")
+      .eq("is_active", true).eq("is_busy", false).lt("error_count", 5)
       .not("brain_project_id", "is", null)
       .order("last_used_at", { ascending: true, nullsFirst: true })
       .limit(1);
 
     let brainProjectId = bcAccounts?.[0]?.brain_project_id || null;
-
-    // Fallback: try user's personal Brain
-    if (!brainProjectId && effectiveUserId) {
+    if (!brainProjectId) {
       const brain = await getUserBrain(sc, effectiveUserId);
       brainProjectId = brain?.projectId || null;
     }
 
     if (!brainProjectId) {
-      await logEntry(sc, projectId, "code", "failed", "No brain project available — cannot generate code", {
-        error_msg: "No brainchain accounts or personal brain found",
-      });
-      await sc.from("cirius_projects").update({ status: "failed", error_message: "Nenhum Brain disponível para geração" }).eq("id", projectId);
-      return json({ error: "No brain project available for code generation" }, 503);
+      await sc.from("cirius_projects").update({ status: "failed", error_message: "Nenhum Brain disponível" }).eq("id", projectId);
+      await logEntry(sc, projectId, "code", "failed", "No brain project available");
+      return json({ success: false, project_id: projectId, status: "failed", message: "No brain project available" });
     }
 
-    // Save brain_project_id as internal reference for orchestrator (NOT for preview)
-    // The Brain is a shared code-generation tool, NOT the user's project.
-    // Preview comes from source_files_json (assembled code) or deployed URLs.
-    await sc.from("cirius_projects").update({
-      brain_project_id: brainProjectId,
-    }).eq("id", projectId);
+    await sc.from("cirius_projects").update({ brain_project_id: brainProjectId }).eq("id", projectId);
 
-    // ★ Skip if already linked to orchestrator — reset and re-trigger
-    if (project.orchestrator_project_id) {
-      await logEntry(sc, projectId, "code_orchestrator_reuse", "info",
-        `Already linked to orchestrator ${(project.orchestrator_project_id as string).slice(0, 8)}, resetting for retry`, {
-        metadata: { orchestrator_id: project.orchestrator_project_id, action: "reset_to_paused" },
-      });
-      // Set lovable_project_id on the orchestrator project too
-      await sc.from("orchestrator_projects").update({
-        status: "paused", quality_score: 0, lovable_project_id: brainProjectId,
-      }).eq("id", project.orchestrator_project_id);
-      await sc.from("cirius_projects").update({ status: "generating_code", error_message: null, progress_pct: 25 }).eq("id", projectId);
+    // Create orchestrator project + tasks
+    const prdCtx = `[CONTEXTO]\nNome: ${projectName}\nDescrição: ${combinedPrompt}\nStack: React + Tailwind + shadcn/ui + Supabase\n\n[PRD]\n${prd.tasks.map((t: any, i: number) => `${i + 1}. ${t.title}: ${t.prompt?.slice(0, 200)}`).join("\n")}\n\n`;
 
-      // Auto-trigger orchestrator-tick
-      autoTriggerTick(sc).catch(() => {});
-
-      return json({
-        started: true, engine: "orchestrator",
-        orchestrator_project_id: project.orchestrator_project_id,
-        note: "Pipeline resumed automatically.",
-        resumed: true,
-      });
-    }
-
-    await sc.from("cirius_projects").update({
-      status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20,
-    }).eq("id", projectId);
-    await logEntry(sc, projectId, "code", "started", "Registrando tarefas no orquestrador...", {
-      metadata: { prd_task_count: (project.prd_json as any).tasks?.length, brain_project: brainProjectId },
-    });
-
-    const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string; intent?: string; stop_condition?: string; skill?: string }> };
-
-    // Build context block from PRD + project metadata for injection into each task
-    const prdContext = `[CONTEXTO DO PROJETO]\nNome: ${project.name}\nDescrição: ${project.description || ""}\nStack: React + Tailwind + shadcn/ui + Supabase\nTemplate: ${project.template_type || "custom"}\n\n[PRD BASE]\n${prd.tasks.map((t, i) => `${i + 1}. ${t.title}: ${t.prompt?.slice(0, 200)}`).join("\n")}\n\n`;
-
-    // Save tasks as individual .cirius/skills/task-{n}.md files
-    const taskFiles: Record<string, string> = {};
-    prd.tasks.forEach((t, i) => {
-      taskFiles[`.cirius/skills/task-${i + 1}.md`] = `# Task ${i + 1}: ${t.title}\n\n**Skill:** ${t.skill || "code"}\n**Brain Type:** ${t.brain_type || "code"}\n\n## Prompt\n\n${t.prompt}\n`;
-    });
-    const existingFilesForTasks = (project.source_files_json || {}) as Record<string, string>;
-    await sc.from("cirius_projects").update({
-      source_files_json: { ...existingFilesForTasks, ...taskFiles },
-    }).eq("id", projectId);
-
-    const clientPrompt = project.description || project.name || "Cirius project";
     const { data: orchProject, error: orchErr } = await sc.from("orchestrator_projects").insert({
-      user_id: user.id, client_prompt: clientPrompt,
-      status: "paused", total_tasks: prd.tasks.length, prd_json: project.prd_json,
+      user_id: effectiveUserId, client_prompt: combinedPrompt,
+      status: "paused", total_tasks: prd.tasks.length, prd_json: prd,
       lovable_project_id: brainProjectId,
     }).select("id").single();
 
     if (orchErr || !orchProject) {
-      await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao registrar no orquestrador" }).eq("id", projectId);
-      await logEntry(sc, projectId, "code", "failed", `Orchestrator project creation failed: ${orchErr?.message || "unknown"}`, {
-        error_msg: orchErr?.message,
-      });
-      return json({ error: "Orchestrator registration failed" }, 500);
+      await sc.from("cirius_projects").update({ status: "failed", error_message: "Orchestrator registration failed" }).eq("id", projectId);
+      return json({ success: false, project_id: projectId, status: "failed", message: "Orchestrator registration failed" });
     }
 
-    const taskInserts = prd.tasks.map((t, i) => ({
+    const taskInserts = prd.tasks.map((t: any, i: number) => ({
       project_id: orchProject.id, task_index: i,
       title: t.title || `Task ${i + 1}`,
       intent: t.intent || "security_fix_v2",
-      prompt: prdContext + `[SUA ESPECIALIDADE: ${t.title}]\n\n${t.prompt}`,
+      prompt: prdCtx + `[ESPECIALIDADE: ${t.title}]\n\n${t.prompt}`,
       stop_condition: t.stop_condition || null,
       brain_type: t.brain_type || "code",
     }));
-    const { error: taskErr } = await sc.from("orchestrator_tasks").insert(taskInserts);
 
+    const { error: taskErr } = await sc.from("orchestrator_tasks").insert(taskInserts);
     if (taskErr) {
-      await logEntry(sc, projectId, "code", "failed", `Task insertion failed: ${taskErr.message}`, {
-        error_msg: taskErr.message,
-      });
-      await sc.from("cirius_projects").update({ status: "failed", error_message: `Task insertion failed: ${taskErr.message}` }).eq("id", projectId);
-      // Clean up orphaned orchestrator project
       await sc.from("orchestrator_projects").delete().eq("id", orchProject.id);
-      return json({ error: `Task insertion failed: ${taskErr.message}`, hint: "Schema cache may be stale. Retry in a few seconds." }, 500);
+      await sc.from("cirius_projects").update({ status: "failed", error_message: `Task insertion failed: ${taskErr.message}` }).eq("id", projectId);
+      return json({ success: false, project_id: projectId, status: "failed", message: taskErr.message });
     }
 
     await sc.from("cirius_projects").update({
@@ -1147,329 +627,369 @@ Deno.serve(async (req) => {
     }).eq("id", projectId);
 
     await logEntry(sc, projectId, "code", "started",
-      `Pipeline automático iniciado: ${prd.tasks.length} tarefas → Brain ${brainProjectId.slice(0, 8)} (orch: ${orchProject.id.slice(0, 8)})`, {
-      metadata: {
-        orchestrator_id: orchProject.id,
-        brain_project: brainProjectId,
-        task_count: prd.tasks.length,
-        task_titles: prd.tasks.map(t => t.title || "untitled"),
-      },
+      `Pipeline iniciado: ${prd.tasks.length} tarefas → Brain ${brainProjectId.slice(0, 8)} (orch: ${orchProject.id.slice(0, 8)})`, {
+      metadata: { orchestrator_id: orchProject.id, brain_project: brainProjectId, task_count: prd.tasks.length },
     });
 
-    // ★ Auto-trigger orchestrator-tick immediately (don't wait for cron)
+    // Fire orchestrator tick
     autoTriggerTick(sc).catch(() => {});
 
+    // Return immediately — generation is async
     return json({
-      started: true, engine: "orchestrator",
+      success: true,
+      project_id: projectId,
+      status: "generating_code",
+      message: `Pipeline started: ${prd.tasks.length} tasks via ${blueprint.suggestedEngine}`,
+      blueprint,
+      prd_task_count: prd.tasks.length,
       orchestrator_project_id: orchProject.id,
-      task_count: prd.tasks.length, total_tasks: prd.tasks.length,
-      note: "Pipeline started automatically. Tasks will execute sequentially.",
     });
   }
 
-  // ─── STATUS ───
+  // ═══════════════════════════════════════════════════════════════════════
+  // ─── action = 'status' — Full project status ───────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
   if (action === "status") {
     const projectId = body.project_id;
-    if (!projectId) return json({ error: "project_id required" }, 400);
+    if (!projectId) return json({ success: false, error: "project_id required" }, 400);
     const statusUserId = user?.id || (isServiceKey ? body.user_id : null);
-    if (!statusUserId) return json({ error: "user_id required" }, 400);
-    const { data: project } = await sc.from("cirius_projects")
-      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at, orchestrator_project_id, lovable_project_id, brain_project_id")
-      .eq("id", projectId).eq("user_id", statusUserId).single();
-    if (!project) return json({ error: "Not found" }, 404);
+    if (!statusUserId) return json({ success: false, error: "user_id required" }, 400);
 
-    // Get cirius logs
+    const { data: project } = await sc.from("cirius_projects")
+      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at, orchestrator_project_id, lovable_project_id, brain_project_id, source_files_json, prd_json")
+      .eq("id", projectId).eq("user_id", statusUserId).single();
+    if (!project) return json({ success: false, error: "Not found" }, 404);
+
     const { data: logs } = await sc.from("cirius_generation_log")
       .select("step, status, level, message, created_at, duration_ms, error_msg, metadata")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .limit(30);
+      .eq("project_id", projectId).order("created_at", { ascending: false }).limit(30);
 
-    // Get orchestrator status if linked
     let orchestrator: Record<string, unknown> | null = null;
     if (project.orchestrator_project_id) {
-      const [{ data: orchProj }, { data: orchTasks }, { data: orchLogs }] = await Promise.all([
+      const [{ data: orchProj }, { data: orchTasks }] = await Promise.all([
         sc.from("orchestrator_projects").select("*").eq("id", project.orchestrator_project_id).maybeSingle(),
         sc.from("orchestrator_tasks").select("*").eq("project_id", project.orchestrator_project_id).order("task_index"),
-        sc.from("orchestrator_logs").select("*").eq("project_id", project.orchestrator_project_id).order("created_at", { ascending: false }).limit(30),
       ]);
 
-      // Auto-reconcile: if orchestrator is completed, finalize Cirius generation state and sync markdown-assembled files.
+      // Auto-reconcile
       if (orchProj?.status === "completed" && project.status === "generating_code") {
-        const hasFiles = !!project.source_files_json && Object.keys(project.source_files_json || {}).length > 0;
-        if (!hasFiles) {
-          const targetBrain = orchProj.lovable_project_id || project.lovable_project_id || project.brain_project_id;
-          if (targetBrain) {
-            const captureToken = await getUserToken(sc, user.id);
-            if (captureToken) {
-              const syncResult = await syncFilesFromLatestMessage(sc, projectId, targetBrain, captureToken);
-              await logEntry(sc, projectId, "auto_capture", syncResult.ok ? "completed" : "failed",
-                syncResult.ok
-                  ? `${syncResult.fileCount} arquivos sincronizados por markdown mining no status`
-                  : `Falha no markdown mining: ${syncResult.error}`,
-              );
-            }
-          }
-        }
-
-        await sc.from("cirius_projects").update({
-          status: "live",
-          current_step: "completed",
-          progress_pct: 100,
-          generation_ended_at: new Date().toISOString(),
-          error_message: null,
-        }).eq("id", projectId).eq("user_id", user.id);
-
-        await logEntry(sc, projectId, "code", "completed",
-          "Orquestrador concluído — projeto finalizado automaticamente.", {
-            metadata: { orchestrator_id: project.orchestrator_project_id },
-          });
-
-        // Keep returned project data aligned with the reconciled state
-        (project as Record<string, unknown>).status = "live";
-        (project as Record<string, unknown>).current_step = "completed";
-        (project as Record<string, unknown>).progress_pct = 100;
+        await sc.from("cirius_projects").update({ status: "live", current_step: "completed", progress_pct: 100, generation_ended_at: new Date().toISOString(), error_message: null }).eq("id", projectId);
+        (project as any).status = "live";
+        (project as any).progress_pct = 100;
       }
 
-      orchestrator = { project: orchProj, tasks: orchTasks, logs: orchLogs };
+      const completed = orchTasks?.filter((t: any) => t.status === "completed").length || 0;
+      const total = orchTasks?.length || 0;
+      const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      orchestrator = { project: orchProj, tasks: orchTasks, progress_percent: progress };
     }
 
-    return json({ project, logs: logs || [], orchestrator });
-  }
-
-  // ─── DEBUG_LOG — Comprehensive pipeline state dump ───
-  if (action === "debug_log") {
-    const projectId = body.project_id;
-    if (!projectId) return json({ error: "project_id required" }, 400);
-
-    const { data: project } = await sc.from("cirius_projects")
-      .select("*").eq("id", projectId).eq("user_id", user.id).single();
-    if (!project) return json({ error: "Not found" }, 404);
-
-    const [
-      { data: ciriusLogs },
-      { data: orchProject },
-      { data: orchTasks },
-      { data: orchLogs },
-      { data: bcAccounts },
-      { data: bcQueue },
-    ] = await Promise.all([
-      sc.from("cirius_generation_log")
-        .select("*").eq("project_id", projectId)
-        .order("created_at", { ascending: false }).limit(50),
-      project.orchestrator_project_id
-        ? sc.from("orchestrator_projects").select("*").eq("id", project.orchestrator_project_id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      project.orchestrator_project_id
-        ? sc.from("orchestrator_tasks").select("*").eq("project_id", project.orchestrator_project_id).order("task_index")
-        : Promise.resolve({ data: null }),
-      project.orchestrator_project_id
-        ? sc.from("orchestrator_logs").select("*").eq("project_id", project.orchestrator_project_id).order("created_at", { ascending: false }).limit(50)
-        : Promise.resolve({ data: null }),
-      sc.from("brainchain_accounts").select("id, email, brain_type, brain_project_id, is_active, is_busy, busy_since, error_count, request_count, last_used_at, access_expires_at").order("last_used_at", { ascending: false }).limit(10),
-      sc.from("brainchain_queue").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(10),
-    ]);
-
-    // Compute pipeline health diagnostics
-    const diagnostics: Record<string, unknown> = {
-      cirius_status: project.status,
-      cirius_error: project.error_message,
-      cirius_progress: project.progress_pct,
-      has_prd: !!(project.prd_json as any)?.tasks?.length,
-      prd_task_count: (project.prd_json as any)?.tasks?.length || 0,
-      has_orchestrator: !!project.orchestrator_project_id,
-      orchestrator_status: orchProject?.status || "none",
-      orchestrator_last_error: orchProject?.last_error || null,
-      tasks_pending: orchTasks?.filter((t: any) => t.status === "pending").length || 0,
-      tasks_running: orchTasks?.filter((t: any) => t.status === "running").length || 0,
-      tasks_completed: orchTasks?.filter((t: any) => t.status === "completed").length || 0,
-      tasks_failed: orchTasks?.filter((t: any) => t.status === "failed").length || 0,
-      brainchain_active: bcAccounts?.filter((a: any) => a.is_active).length || 0,
-      brainchain_busy: bcAccounts?.filter((a: any) => a.is_busy).length || 0,
-      brainchain_errored: bcAccounts?.filter((a: any) => (a.error_count || 0) >= 5).length || 0,
-      errors_in_logs: ciriusLogs?.filter((l: any) => l.level === "error").length || 0,
-      warnings_in_logs: ciriusLogs?.filter((l: any) => l.level === "warning").length || 0,
-    };
+    const fileCount = project.source_files_json ? Object.keys(project.source_files_json as any).length : 0;
 
     return json({
-      diagnostics,
-      cirius_project: project,
-      cirius_logs: ciriusLogs || [],
-      orchestrator: orchProject || null,
-      orchestrator_tasks: orchTasks || [],
-      orchestrator_logs: orchLogs || [],
-      brainchain_accounts: bcAccounts || [],
-      brainchain_queue: bcQueue || [],
+      success: true,
+      project_id: projectId,
+      status: project.status,
+      progress_percent: project.progress_pct || 0,
+      current_step: project.current_step,
+      message: project.error_message || `Status: ${project.status}`,
+      project,
+      logs: logs || [],
+      orchestrator,
+      file_count: fileCount,
     });
   }
 
-  // ─── PAUSE / RESUME / CANCEL ───
-  if (action === "pause" || action === "resume" || action === "cancel") {
+  // ═══════════════════════════════════════════════════════════════════════
+  // ─── action = 'cancel' ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  if (action === "cancel") {
+    const projectId = body.project_id;
+    if (!projectId) return json({ success: false, error: "project_id required" }, 400);
+    const cancelUserId = user?.id || (isServiceKey ? body.user_id : null);
+    if (!cancelUserId) return json({ success: false, error: "user_id required" }, 400);
+
+    const { data: project } = await sc.from("cirius_projects")
+      .select("id, orchestrator_project_id")
+      .eq("id", projectId).eq("user_id", cancelUserId).single();
+    if (!project) return json({ success: false, error: "Not found" }, 404);
+
+    await sc.from("cirius_projects").update({ status: "failed", error_message: "Cancelado pelo usuário" }).eq("id", projectId);
+    await logEntry(sc, projectId, "cancel", "completed", "Pipeline cancelado pelo usuário");
+
+    // Cancel orchestrator if linked
+    if (project.orchestrator_project_id) {
+      await sc.from("orchestrator_projects").update({ status: "failed" }).eq("id", project.orchestrator_project_id);
+    }
+
+    return json({ success: true, project_id: projectId, status: "cancelled", message: "Pipeline cancelled" });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ─── LEGACY ACTIONS (preserved) ────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // ─── BUILD_PROMPT ───
+  if (action === "build_prompt") {
+    const projectId = typeof body.project_id === "string" ? body.project_id.trim() : "";
+    const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+    if (!projectId || projectId.length < 10) return json({ error: "project_id required" }, 400);
+    if (!prompt || prompt.length < 3) return json({ error: "prompt required" }, 400);
+    const effectiveUserId = user?.id || (isServiceKey ? body.user_id : null);
+    if (!effectiveUserId) return json({ error: "user_id required" }, 400);
+    const { data: proj } = await sc.from("cirius_projects").select("*").eq("id", projectId).eq("user_id", effectiveUserId).single();
+    if (!proj) return json({ error: "Project not found" }, 404);
+    await sc.from("cirius_projects").update({ description: prompt, status: "generating_prd", progress_pct: 5 }).eq("id", projectId);
+    let prd = proj.prd_json as any;
+    if (!prd?.tasks?.length) {
+      prd = await generatePRD(sc, effectiveUserId, { ...proj, description: prompt }, projectId);
+      if (!prd) { await sc.from("cirius_projects").update({ status: "failed", error_message: "PRD failed" }).eq("id", projectId); return json({ error: "PRD generation failed" }, 500); }
+    }
+    const prdMd = `# PRD — ${proj.name}\n\n${prd.tasks.map((t: any, i: number) => `### ${i + 1}. ${t.title}\n${t.prompt}\n`).join("\n")}`;
+    const ef = (proj.source_files_json || {}) as Record<string, string>;
+    await sc.from("cirius_projects").update({ prd_json: prd, status: "draft", progress_pct: 15, source_files_json: { ...ef, ".cirius/prd/prd.md": prdMd } }).eq("id", projectId);
+    return json({ status: "awaiting_approval", prd_json: prd, task_count: prd.tasks?.length || 0, design: prd.design || null, project_id: projectId });
+  }
+
+  // ─── APPROVE_PRD ───
+  if (action === "approve_prd") {
+    const projectId = typeof body.project_id === "string" ? body.project_id.trim() : "";
+    if (!projectId) return json({ error: "project_id required" }, 400);
+    const effectiveUserId = user?.id || (isServiceKey ? body.user_id : null);
+    if (!effectiveUserId) return json({ error: "user_id required" }, 400);
+    const { data: proj } = await sc.from("cirius_projects").select("*").eq("id", projectId).eq("user_id", effectiveUserId).single();
+    if (!proj) return json({ error: "Not found" }, 404);
+    if (!(proj.prd_json as any)?.tasks?.length) return json({ error: "No PRD" }, 400);
+    await logEntry(sc, projectId, "approve_prd", "completed", "PRD aprovado");
+    body.project_id = projectId;
+    action = "generate_code";
+  }
+
+  // ─── OAUTH_STATE ───
+  if (action === "oauth_state") {
+    const provider = body.provider;
+    if (!provider || !["github", "vercel", "netlify", "supabase"].includes(provider)) return json({ error: "Invalid provider" }, 400);
+    const stateSecret = Deno.env.get("CLF_TOKEN_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const ts = String(Date.now());
+    const sig = await hmacSign(`${user!.id}:${ts}`, stateSecret);
+    const state = btoa(JSON.stringify({ user_id: user!.id, ts, sig }));
+    const callbackUrl = `${Deno.env.get("SUPABASE_URL")!}/functions/v1/cirius-oauth-callback?provider=${provider}`;
+    const { data: vk } = await sc.from("api_key_vault").select("api_key_encrypted").eq("provider", provider).eq("is_active", true).order("requests_count", { ascending: true }).limit(1).maybeSingle();
+    const clientId = vk?.api_key_encrypted || Deno.env.get(`CIRIUS_${provider.toUpperCase()}_CLIENT_ID`) || "";
+    if (!clientId) return json({ error: `${provider} OAuth not configured` }, 400);
+    const urls: Record<string, string> = {
+      github: `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`,
+      vercel: `https://vercel.com/oauth/authorize?client_id=${clientId}&scope=user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`,
+      netlify: `https://app.netlify.com/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`,
+      supabase: `https://api.supabase.com/v1/oauth/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}&scope=all`,
+    };
+    return json({ auth_url: urls[provider] });
+  }
+
+  // ─── SAVE_GITHUB_INTEGRATION ───
+  if (action === "save_github_integration") {
+    const ghToken = (body.github_token as string || "").trim();
+    if (!ghToken) return json({ error: "Token required" }, 400);
+    let login = "", accId = "";
+    try {
+      const res = await fetch("https://api.github.com/user", { headers: { Authorization: `Bearer ${ghToken}`, "User-Agent": "Cirius" } });
+      if (!res.ok) { await res.text().catch(() => {}); return json({ error: "Token inválido" }, 400); }
+      const u = await res.json(); login = u.login || ""; accId = String(u.id || "");
+    } catch { return json({ error: "Falha ao validar token" }, 400); }
+    await sc.from("cirius_integrations").upsert({ user_id: user!.id, provider: "github", access_token_enc: ghToken, account_login: login, account_id: accId, is_active: true, updated_at: new Date().toISOString() }, { onConflict: "user_id,provider" });
+    return json({ ok: true, account: login });
+  }
+
+  // ─── SAVE_VERCEL_INTEGRATION ───
+  if (action === "save_vercel_integration") {
+    const vToken = (body.vercel_token as string || "").trim();
+    if (!vToken) return json({ error: "Token required" }, 400);
+    let login = "", accId = "";
+    try {
+      const res = await fetch("https://api.vercel.com/v2/user", { headers: { Authorization: `Bearer ${vToken}` } });
+      if (!res.ok) { await res.text().catch(() => {}); return json({ error: "Token inválido" }, 400); }
+      const u = await res.json(); login = u.user?.username || u.user?.email || ""; accId = u.user?.uid || "";
+    } catch { return json({ error: "Falha ao validar token" }, 400); }
+    await sc.from("cirius_integrations").upsert({ user_id: user!.id, provider: "vercel", access_token_enc: vToken, account_login: login, account_id: accId, is_active: true, updated_at: new Date().toISOString() }, { onConflict: "user_id,provider" });
+    return json({ ok: true, account: login });
+  }
+
+  // ─── SAVE_SUPABASE_INTEGRATION ───
+  if (action === "save_supabase_integration") {
+    const sbUrl = typeof body.supabase_url === "string" ? body.supabase_url.trim() : "";
+    const srvKey = typeof body.service_key === "string" ? body.service_key.trim() : "";
+    if (!sbUrl || !srvKey) return json({ error: "URL e Service Key obrigatórios" }, 400);
+    if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(sbUrl)) return json({ error: "URL inválida" }, 400);
+    const ref = sbUrl.match(/https:\/\/([^.]+)/)?.[1] || "";
+    if (!ref || ref.length < 10) return json({ error: "URL inválida" }, 400);
+    await sc.from("cirius_integrations").upsert({ user_id: user!.id, provider: "supabase", service_key_enc: srvKey, project_ref: ref, account_login: sbUrl, is_active: true, updated_at: new Date().toISOString() }, { onConflict: "user_id,provider" });
+    return json({ ok: true });
+  }
+
+  // ─── INIT ───
+  if (action === "init") {
+    const config = body.config || {};
+    const name = typeof config.name === "string" ? config.name.trim() : "";
+    if (!name || name.length < 2) return json({ error: "config.name required" }, 400);
+    const desc = typeof config.description === "string" ? config.description.trim().slice(0, 5000) : null;
+    const tpl = typeof config.template_type === "string" ? config.template_type.slice(0, 50) : "custom";
+    const srcUrl = typeof config.source_url === "string" ? config.source_url.slice(0, 500) : null;
+    const feats = Array.isArray(config.features) ? config.features.filter((f: any) => typeof f === "string").slice(0, 20) : [];
+    const { data: proj, error } = await sc.from("cirius_projects").insert({
+      user_id: user!.id, name, description: desc, template_type: tpl, source_url: srcUrl,
+      tech_stack: config.tech_stack || { framework: "react", css: "tailwind", ui: "shadcn" },
+      features: feats, deploy_config: config.deploy_config || {}, status: "draft",
+    }).select("id, status").single();
+    if (error) return json({ error: "Failed to create project" }, 500);
+    await logEntry(sc, proj!.id, "init", "completed", `Projeto criado: "${name}"`);
+    return json({ project_id: proj!.id, status: "draft" });
+  }
+
+  // ─── GENERATE_PRD ───
+  if (action === "generate_prd") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-    const statusMap: Record<string, string> = { pause: "paused", resume: "generating_code", cancel: "failed" };
-    const { error } = await sc.from("cirius_projects")
-      .update({
-        status: statusMap[action],
-        ...(action === "cancel" ? { error_message: "Cancelado pelo usuário" } : {}),
-      })
-      .eq("id", projectId).eq("user_id", user.id);
-    if (error) return json({ error: "Operation failed" }, 500);
-    await logEntry(sc, projectId, action, "completed",
-      `Pipeline ${action === "cancel" ? "cancelado" : action === "pause" ? "pausado" : "retomado"} pelo usuário`, {
-      metadata: { user_action: action, user_id: user.id },
-    });
-    return json({ [action === "cancel" ? "cancelled" : action === "pause" ? "paused" : "resumed"]: true });
+    const { data: proj } = await sc.from("cirius_projects").select("*").eq("id", projectId).eq("user_id", user!.id).single();
+    if (!proj) return json({ error: "Not found" }, 404);
+    if ((proj.prd_json as any)?.tasks?.length > 0) return json({ prd_json: proj.prd_json, cached: true, task_count: (proj.prd_json as any).tasks.length });
+    await sc.from("cirius_projects").update({ status: "generating_prd" }).eq("id", projectId);
+    const prd = await generatePRD(sc, user!.id, proj, projectId);
+    if (!prd) { await sc.from("cirius_projects").update({ status: "failed", error_message: "PRD failed" }).eq("id", projectId); return json({ error: "PRD generation failed" }, 500); }
+    await sc.from("cirius_projects").update({ prd_json: prd, generation_engine: "brainchain", status: "draft", progress_pct: 15 }).eq("id", projectId);
+    return json({ prd_json: prd, task_count: prd.tasks.length, design: prd.design || null });
+  }
+
+  // ─── GENERATE_CODE ───
+  if (action === "generate_code") {
+    const projectId = body.project_id;
+    if (!projectId) return json({ error: "project_id required" }, 400);
+    const effectiveUserId = user?.id || (isServiceKey ? body.user_id : null);
+    if (!effectiveUserId) return json({ error: "user_id required" }, 400);
+    let pq = sc.from("cirius_projects").select("*").eq("id", projectId);
+    if (user) pq = pq.eq("user_id", user.id);
+    const { data: proj } = await pq.single();
+    if (!proj) return json({ error: "Not found" }, 404);
+    if (!proj.prd_json) return json({ error: "PRD not generated" }, 400);
+
+    const { data: bcAcc } = await sc.from("brainchain_accounts")
+      .select("id, brain_project_id").eq("is_active", true).eq("is_busy", false).lt("error_count", 5)
+      .not("brain_project_id", "is", null).order("last_used_at", { ascending: true, nullsFirst: true }).limit(1);
+    let bpId = bcAcc?.[0]?.brain_project_id || null;
+    if (!bpId) { const b = await getUserBrain(sc, effectiveUserId); bpId = b?.projectId || null; }
+    if (!bpId) { await sc.from("cirius_projects").update({ status: "failed", error_message: "No Brain available" }).eq("id", projectId); return json({ error: "No brain project available" }, 503); }
+
+    await sc.from("cirius_projects").update({ brain_project_id: bpId }).eq("id", projectId);
+
+    if (proj.orchestrator_project_id) {
+      await sc.from("orchestrator_projects").update({ status: "paused", quality_score: 0, lovable_project_id: bpId }).eq("id", proj.orchestrator_project_id);
+      await sc.from("cirius_projects").update({ status: "generating_code", error_message: null, progress_pct: 25 }).eq("id", projectId);
+      autoTriggerTick(sc).catch(() => {});
+      return json({ started: true, engine: "orchestrator", orchestrator_project_id: proj.orchestrator_project_id, resumed: true });
+    }
+
+    await sc.from("cirius_projects").update({ status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20 }).eq("id", projectId);
+    const prd = proj.prd_json as any;
+    const prdCtx = `[CONTEXTO]\nNome: ${proj.name}\nStack: React + Tailwind + shadcn/ui + Supabase\n\n[PRD]\n${prd.tasks.map((t: any, i: number) => `${i + 1}. ${t.title}: ${t.prompt?.slice(0, 200)}`).join("\n")}\n\n`;
+    const { data: orchProj, error: orchErr } = await sc.from("orchestrator_projects").insert({
+      user_id: effectiveUserId, client_prompt: proj.description || proj.name,
+      status: "paused", total_tasks: prd.tasks.length, prd_json: prd, lovable_project_id: bpId,
+    }).select("id").single();
+    if (orchErr || !orchProj) { await sc.from("cirius_projects").update({ status: "failed" }).eq("id", projectId); return json({ error: "Orchestrator failed" }, 500); }
+    const inserts = prd.tasks.map((t: any, i: number) => ({
+      project_id: orchProj.id, task_index: i, title: t.title || `Task ${i + 1}`,
+      intent: t.intent || "security_fix_v2", prompt: prdCtx + `[${t.title}]\n\n${t.prompt}`,
+      stop_condition: t.stop_condition || null, brain_type: t.brain_type || "code",
+    }));
+    const { error: tErr } = await sc.from("orchestrator_tasks").insert(inserts);
+    if (tErr) { await sc.from("orchestrator_projects").delete().eq("id", orchProj.id); await sc.from("cirius_projects").update({ status: "failed" }).eq("id", projectId); return json({ error: tErr.message }, 500); }
+    await sc.from("cirius_projects").update({ orchestrator_project_id: orchProj.id, progress_pct: 25 }).eq("id", projectId);
+    await logEntry(sc, projectId, "code", "started", `Pipeline: ${prd.tasks.length} tasks → Brain ${bpId.slice(0, 8)}`, { metadata: { orchestrator_id: orchProj.id } });
+    autoTriggerTick(sc).catch(() => {});
+    return json({ started: true, engine: "orchestrator", orchestrator_project_id: orchProj.id, task_count: prd.tasks.length });
   }
 
   // ─── CAPTURE ───
   if (action === "capture") {
     const projectId = body.project_id;
-    const lovableProjectId = body.lovable_project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-    const { data: project } = await sc.from("cirius_projects")
-      .select("*").eq("id", projectId).eq("user_id", user.id).single();
-    if (!project) return json({ error: "Not found" }, 404);
-    const targetProjectId = lovableProjectId || project.lovable_project_id;
-    if (!targetProjectId) {
-      await logEntry(sc, projectId, "capture", "failed", "No lovable_project_id available for capture");
-      return json({ error: "No lovable_project_id" }, 400);
-    }
-    const { data: account } = await sc.from("lovable_accounts")
-      .select("token_encrypted").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
-    if (!account?.token_encrypted) {
-      await logEntry(sc, projectId, "capture", "failed", "No Lovable token available for capture");
-      return json({ error: "No Lovable token" }, 503);
-    }
-    const t0 = Date.now();
-    const syncResult = await syncFilesFromLatestMessage(sc, projectId, targetProjectId, account.token_encrypted);
-    const captureDuration = Date.now() - t0;
-
-    if (!syncResult.ok) {
-      await logEntry(sc, projectId, "capture", "failed", `Markdown capture failed: ${syncResult.error}`, {
-        duration_ms: captureDuration,
-        error_msg: syncResult.error,
-      });
-      return json({ error: "Markdown capture failed", details: syncResult.error }, 500);
-    }
-
-    await logEntry(sc, projectId, "capture", "completed", `${syncResult.fileCount} arquivos sincronizados por markdown mining em ${captureDuration}ms`, {
-      duration_ms: captureDuration,
-      metadata: { file_count: syncResult.fileCount, target_project: targetProjectId },
-    });
-
-    const { data: saved } = await sc.from("cirius_projects")
-      .select("source_files_json, files_fingerprint")
-      .eq("id", projectId)
-      .maybeSingle();
-
-    return json({
-      files_json: (saved?.source_files_json || {}) as Record<string, string>,
-      fingerprint: saved?.files_fingerprint || null,
-      file_count: syncResult.fileCount,
-      capture_mode: "markdown_mining",
-    });
+    const { data: proj } = await sc.from("cirius_projects").select("*").eq("id", projectId).eq("user_id", user!.id).single();
+    if (!proj) return json({ error: "Not found" }, 404);
+    const targetId = body.lovable_project_id || proj.lovable_project_id;
+    if (!targetId) return json({ error: "No lovable_project_id" }, 400);
+    const tok = await getUserToken(sc, user!.id);
+    if (!tok) return json({ error: "No Lovable token" }, 503);
+    const r = await syncFilesFromLatestMessage(sc, projectId, targetId, tok);
+    if (!r.ok) return json({ error: "Capture failed", details: r.error }, 500);
+    const { data: saved } = await sc.from("cirius_projects").select("source_files_json, files_fingerprint").eq("id", projectId).maybeSingle();
+    return json({ files_json: saved?.source_files_json || {}, file_count: r.fileCount, capture_mode: "markdown_mining" });
   }
 
-  // ─── REFINE — Post-orchestration AI refinement of assembled source files ───
+  // ─── REFINE ───
   if (action === "refine") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-
-    // Allow service-key calls (from triggerRefinement in orchestrator-tick)
-    // In that case user is null, so we skip user_id filter
-    let projectQuery = sc.from("cirius_projects")
-      .select("id, source_files_json, prd_json, name, description, user_id")
-      .eq("id", projectId);
-    if (user) {
-      projectQuery = projectQuery.eq("user_id", user.id);
-    }
-    const { data: project } = await projectQuery.single();
-    if (!project) return json({ error: "Not found" }, 404);
-
-    const files = (project.source_files_json || {}) as Record<string, string>;
-    const fileCount = Object.keys(files).length;
-    if (fileCount === 0) {
-      await logEntry(sc, projectId, "refine", "failed", "No source files to refine");
-      return json({ error: "No source files to refine" }, 400);
-    }
-
-    await logEntry(sc, projectId, "refine", "started", `Refinando ${fileCount} arquivos via IA...`);
+    let pq = sc.from("cirius_projects").select("id, source_files_json, prd_json, name, description, user_id").eq("id", projectId);
+    if (user) pq = pq.eq("user_id", user.id);
+    const { data: proj } = await pq.single();
+    if (!proj) return json({ error: "Not found" }, 404);
+    const files = (proj.source_files_json || {}) as Record<string, string>;
+    if (Object.keys(files).length === 0) return json({ error: "No files to refine" }, 400);
     await sc.from("cirius_projects").update({ current_step: "refining", progress_pct: 85 }).eq("id", projectId);
-
-    const refineResult = await refineSourceFiles(sc, projectId, files, project.name || "", project.description || "", project.prd_json);
-
-    if (refineResult.ok && refineResult.files) {
-      const refined = refineResult.files;
-      const fingerprint = buildFilesFingerprint(refined);
-      await sc.from("cirius_projects").update({
-        source_files_json: refined,
-        files_fingerprint: fingerprint,
-        current_step: "refined",
-        progress_pct: 95,
-      }).eq("id", projectId);
-      await sc.from("code_snapshots").insert({
-        project_id: projectId, files_json: refined,
-        file_count: Object.keys(refined).length, fingerprint, phase: 2,
-      });
-      await logEntry(sc, projectId, "refine", "completed",
-        `Refinamento concluído: ${Object.keys(refined).length} arquivos (${refineResult.durationMs}ms)`, {
-        duration_ms: refineResult.durationMs,
-        metadata: { before: fileCount, after: Object.keys(refined).length },
-      });
-
-      // ★ Auto-deploy to GitHub if integration is active
-      const ownerId = project.user_id;
-      const { data: ghIntegration } = await sc.from("cirius_integrations")
-        .select("id")
-        .eq("user_id", ownerId)
-        .eq("provider", "github")
-        .eq("is_active", true)
-        .maybeSingle();
-
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-      if (ghIntegration) {
-        // Set status to deploying before triggering
-        await sc.from("cirius_projects").update({
-          status: "deploying",
-          current_step: "deploy_github",
-          progress_pct: 90,
-        }).eq("id", projectId);
-
-        await logEntry(sc, projectId, "auto_deploy", "started", "Refinamento concluído. Auto-deploy GitHub triggered.");
-
-        fetch(`${supabaseUrl}/functions/v1/cirius-deploy`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({ action: "github", project_id: projectId }),
-        }).catch((e) => {
-          console.error("[cirius-generate] auto-deploy failed:", e.message);
-        });
+    const result = await refineSourceFiles(sc, projectId, files, proj.name || "", proj.description || "", proj.prd_json);
+    if (result.ok && result.files) {
+      const fp = buildFilesFingerprint(result.files);
+      await sc.from("cirius_projects").update({ source_files_json: result.files, files_fingerprint: fp, current_step: "refined", progress_pct: 95 }).eq("id", projectId);
+      await sc.from("code_snapshots").insert({ project_id: projectId, files_json: result.files, file_count: Object.keys(result.files).length, fingerprint: fp, phase: 2 });
+      // Auto-deploy check
+      const { data: ghInt } = await sc.from("cirius_integrations").select("id").eq("user_id", proj.user_id).eq("provider", "github").eq("is_active", true).maybeSingle();
+      if (ghInt) {
+        await sc.from("cirius_projects").update({ status: "deploying", current_step: "deploy_github", progress_pct: 90 }).eq("id", projectId);
+        const sUrl = Deno.env.get("SUPABASE_URL")!; const sKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        fetch(`${sUrl}/functions/v1/cirius-deploy`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sKey}` }, body: JSON.stringify({ action: "github", project_id: projectId }) }).catch(() => {});
       } else {
-        // No GitHub integration: mark as live directly
-        await sc.from("cirius_projects").update({
-          status: "live",
-          current_step: "done",
-          progress_pct: 100,
-          generation_ended_at: new Date().toISOString(),
-        }).eq("id", projectId);
-
-        await logEntry(sc, projectId, "auto_deploy", "completed", "Sem integração GitHub ativa — projeto marcado como live direto.");
+        await sc.from("cirius_projects").update({ status: "live", current_step: "done", progress_pct: 100, generation_ended_at: new Date().toISOString() }).eq("id", projectId);
       }
-
-      return json({ ok: true, file_count: Object.keys(refined).length, refined: true, auto_deploy: !!ghIntegration });
+      return json({ ok: true, file_count: Object.keys(result.files).length, refined: true, auto_deploy: !!ghInt });
     }
+    return json({ ok: false, error: result.error, refined: false });
+  }
 
-    await logEntry(sc, projectId, "refine", "failed",
-      `Refinamento falhou: ${refineResult.error} — mantendo arquivos originais`, {
-      duration_ms: refineResult.durationMs, error_msg: refineResult.error,
+  // ─── DEBUG_LOG ───
+  if (action === "debug_log") {
+    const projectId = body.project_id;
+    if (!projectId) return json({ error: "project_id required" }, 400);
+    const { data: proj } = await sc.from("cirius_projects").select("*").eq("id", projectId).eq("user_id", user!.id).single();
+    if (!proj) return json({ error: "Not found" }, 404);
+    const [{ data: logs }, { data: orchProj }, { data: orchTasks }, { data: bcAcc }] = await Promise.all([
+      sc.from("cirius_generation_log").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(50),
+      proj.orchestrator_project_id ? sc.from("orchestrator_projects").select("*").eq("id", proj.orchestrator_project_id).maybeSingle() : Promise.resolve({ data: null }),
+      proj.orchestrator_project_id ? sc.from("orchestrator_tasks").select("*").eq("project_id", proj.orchestrator_project_id).order("task_index") : Promise.resolve({ data: null }),
+      sc.from("brainchain_accounts").select("id, email, brain_type, is_active, is_busy, error_count, request_count, last_used_at").order("last_used_at", { ascending: false }).limit(10),
+    ]);
+    return json({
+      diagnostics: {
+        status: proj.status, error: proj.error_message, progress: proj.progress_pct,
+        has_prd: !!(proj.prd_json as any)?.tasks?.length,
+        orchestrator_status: orchProj?.status || "none",
+        tasks_completed: orchTasks?.filter((t: any) => t.status === "completed").length || 0,
+        tasks_failed: orchTasks?.filter((t: any) => t.status === "failed").length || 0,
+        brainchain_active: bcAcc?.filter((a: any) => a.is_active).length || 0,
+      },
+      cirius_logs: logs || [],
+      orchestrator_tasks: orchTasks || [],
+      brainchain_accounts: bcAcc || [],
     });
-    return json({ ok: false, error: refineResult.error, file_count: fileCount, refined: false });
+  }
+
+  // ─── PAUSE / RESUME ───
+  if (action === "pause" || action === "resume") {
+    const projectId = body.project_id;
+    if (!projectId) return json({ error: "project_id required" }, 400);
+    const st = action === "pause" ? "paused" : "generating_code";
+    await sc.from("cirius_projects").update({ status: st }).eq("id", projectId).eq("user_id", user!.id);
+    await logEntry(sc, projectId, action, "completed", `Pipeline ${action === "pause" ? "pausado" : "retomado"}`);
+    return json({ [action === "pause" ? "paused" : "resumed"]: true });
   }
 
   return json({ error: "unknown_action" }, 400);
