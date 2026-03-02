@@ -88,6 +88,27 @@ async function releaseBrainchainAccount(sc: SC, accountId: string) {
   }).eq("id", accountId);
 }
 
+/** Try to read src/update.md from Brain project source-code as fallback */
+async function trySourceCodeFallback(brainProjectId: string, token: string): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/source-code?path=src/update.md`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...LOVABLE_HEADERS,
+        "X-Client-Git-SHA": GIT_SHA,
+      },
+    });
+    if (!res.ok) return {};
+    const data = await res.json().catch(() => null);
+    const content = data?.content || data?.source || "";
+    if (!content || content.length < 50) return {};
+    const body = extractMdBody(content);
+    return extractFilesFromMarkdown(body);
+  } catch {
+    return {};
+  }
+}
+
 /** Sync markdown-generated files from latest assistant message into cirius_projects */
 async function syncLatestMarkdownFiles(
   sc: SC,
@@ -132,7 +153,30 @@ async function syncLatestMarkdownFiles(
   const parsedCount = Object.keys(parsedFiles).length;
 
   if (parsedCount === 0) {
-    await addLog(sc, orchProjectId, `📦 [capture] No code blocks with file paths found in markdown`, "warn", {
+    // Fallback: try reading src/update.md from the Brain project's source code
+    const fallbackFiles = await trySourceCodeFallback(brainProjectId, token);
+    if (Object.keys(fallbackFiles).length > 0) {
+      const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
+      const merged = mergeFileMaps(existing, fallbackFiles);
+      const fingerprint = buildFilesFingerprint(merged);
+      const updatePayload: Record<string, unknown> = {
+        source_files_json: merged,
+        files_fingerprint: fingerprint,
+      };
+      if (finalize) {
+        updatePayload.status = "live";
+        updatePayload.progress_pct = 100;
+        updatePayload.generation_ended_at = new Date().toISOString();
+        updatePayload.error_message = null;
+      }
+      await sc.from("cirius_projects").update(updatePayload).eq("id", ciriusProject.id);
+      await addLog(sc, orchProjectId,
+        `📦 [capture] ✅ source-code fallback: +${Object.keys(fallbackFiles).length} arquivo(s)${finalize ? " (finalize)" : ""}`,
+        "info", { fallback: true, file_count: Object.keys(fallbackFiles).length }, taskId);
+      return { ok: true, reason: "source_code_fallback", fileCount: Object.keys(merged).length };
+    }
+
+    await addLog(sc, orchProjectId, `📦 [capture] No code blocks with file paths found in markdown or source-code`, "warn", {
       latest_message_id: msg.id,
     }, taskId);
     return { ok: false, reason: "no_file_blocks", fileCount: 0 };

@@ -40,7 +40,7 @@ async function getUserId(req: Request, anonSc: SupabaseClient, body?: Record<str
 }
 
 // ─── Brainchain Account Pool ──────────────────────────────────
-async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "general"): Promise<{
+async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "code"): Promise<{
   id: string; accessToken: string; brainProjectId: string;
 } | null> {
   // Release stuck accounts (busy > 3 min)
@@ -450,7 +450,9 @@ Deno.serve(async (req: Request) => {
 
       // Acquire a brainchain account from the pool
       const acqT0 = Date.now();
-      const account = await acquireBrainchainAccount(sc);
+      // Use brain_type from the task if available, fallback to "code"
+      const taskBrainType = (task as any).brain_type || "code";
+      const account = await acquireBrainchainAccount(sc, taskBrainType);
       const acqDuration = Date.now() - acqT0;
 
       if (!account) {
