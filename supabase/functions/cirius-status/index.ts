@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     if (!projectId) return json({ error: "project_id required" }, 400);
 
     const { data: project } = await sc.from("cirius_projects")
-      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, template_type, created_at, updated_at, deployed_at")
+      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, template_type, created_at, updated_at, deployed_at, prd_json, source_files_json")
       .eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Not found" }, 404);
 
@@ -55,7 +55,12 @@ Deno.serve(async (req) => {
       .limit(15);
 
     return json({
-      project,
+      project: {
+        ...project,
+        has_prd: !!project.prd_json,
+        has_files: !!project.source_files_json,
+        prd_json: project.prd_json,
+      },
       logs: logs || [],
       deploy: {
         github_url: project.github_url,
