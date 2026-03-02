@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import type { Bubble } from "@/pages/CiriusEditor";
+import type { Bubble } from "@/components/cirius-editor/types";
 
 interface Props {
   bubbles: Bubble[];

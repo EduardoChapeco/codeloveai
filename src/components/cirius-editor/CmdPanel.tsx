@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MessageCircle, Code, Search, X } from "lucide-react";
-import type { CmdMode } from "@/pages/CiriusEditor";
+import type { CmdMode } from "@/components/cirius-editor/types";
 
 interface Props {
   mode: CmdMode;

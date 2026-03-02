@@ -1,5 +1,5 @@
 import { Sparkles } from "lucide-react";
-import type { FrameMode } from "@/pages/CiriusEditor";
+import type { FrameMode } from "@/components/cirius-editor/types";
 
 interface Props {
   frameMode: FrameMode;
