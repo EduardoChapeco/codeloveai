@@ -22,6 +22,7 @@ function json(data: unknown, status = 200) {
 const LOVABLE_API = "https://api.lovable.dev";
 const LOVABLE_HEADERS = { Origin: "https://lovable.dev", Referer: "https://lovable.dev/" };
 const ORCHESTRATOR_FN = "/functions/v1/agentic-orchestrator";
+const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
 
 const EXECUTING_TIMEOUT_MS = 5 * 60 * 1000;
 const INTER_TASK_DELAY_MS = 40 * 1000;
@@ -84,6 +85,95 @@ async function releaseBrainchainAccount(sc: SC, accountId: string) {
     is_busy: false, busy_since: null, busy_user_id: null,
     updated_at: new Date().toISOString(),
   }).eq("id", accountId);
+}
+
+/** Auto-capture source files from Lovable project back to cirius_projects after completion */
+async function autoCapture(sc: SC, orchProjectId: string, brainProjectId: string, userId: string) {
+  if (!brainProjectId) return;
+
+  try {
+    // Find the cirius_project linked to this orchestrator project
+    const { data: ciriusProject } = await sc.from("cirius_projects")
+      .select("id, lovable_project_id")
+      .eq("orchestrator_project_id", orchProjectId)
+      .maybeSingle();
+
+    if (!ciriusProject) {
+      await addLog(sc, orchProjectId, `📦 [capture] No cirius_project linked to orchestrator ${orchProjectId.slice(0, 8)}`, "warn");
+      return;
+    }
+
+    // Get a token to fetch source code
+    const account = await getBusyAccountForProject(sc, brainProjectId);
+    if (!account) {
+      // Try user's personal token
+      const { data: userAccount } = await sc.from("lovable_accounts")
+        .select("token_encrypted").eq("user_id", userId).eq("status", "active").maybeSingle();
+      if (!userAccount?.token_encrypted) {
+        await addLog(sc, orchProjectId, `📦 [capture] No token available to capture source files`, "warn");
+        return;
+      }
+      await captureSourceFiles(sc, ciriusProject.id, brainProjectId, userAccount.token_encrypted, orchProjectId);
+    } else {
+      await captureSourceFiles(sc, ciriusProject.id, brainProjectId, account.accessToken, orchProjectId);
+    }
+  } catch (e) {
+    await addLog(sc, orchProjectId, `📦 [capture] Error: ${(e as Error).message}`, "error");
+  }
+}
+
+async function captureSourceFiles(sc: SC, ciriusProjectId: string, brainProjectId: string, token: string, orchProjectId: string) {
+  const res = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/source-code`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...LOVABLE_HEADERS,
+      "X-Client-Git-SHA": GIT_SHA,
+    },
+  });
+
+  if (!res.ok) {
+    await addLog(sc, orchProjectId, `📦 [capture] Source-code fetch failed: HTTP ${res.status}`, "warn");
+    return;
+  }
+
+  const data = await res.json();
+  const files = data.files || [];
+  const filesJson: Record<string, string> = {};
+
+  for (const f of files) {
+    if (f.path && !f.path.startsWith(".lovable/") && typeof f.content === "string") {
+      filesJson[f.path] = f.content;
+    }
+  }
+
+  const fileCount = Object.keys(filesJson).length;
+  if (fileCount === 0) {
+    await addLog(sc, orchProjectId, `📦 [capture] No files captured from brain ${brainProjectId.slice(0, 8)}`, "warn");
+    return;
+  }
+
+  const fingerprint = files.map((f: any) => `${f.path}:${f.size ?? 0}`).sort().join("|");
+
+  await sc.from("cirius_projects").update({
+    source_files_json: filesJson,
+    files_fingerprint: fingerprint,
+    status: "live",
+    progress_pct: 100,
+    generation_ended_at: new Date().toISOString(),
+    error_message: null,
+  }).eq("id", ciriusProjectId);
+
+  // Save snapshot for versioning
+  await sc.from("code_snapshots").insert({
+    project_id: ciriusProjectId,
+    files_json: filesJson,
+    file_count: fileCount,
+    fingerprint,
+  }).then(() => {});
+
+  await addLog(sc, orchProjectId,
+    `📦 [capture] ✅ ${fileCount} files synced to cirius_project ${ciriusProjectId.slice(0, 8)}`, "info",
+    { file_count: fileCount, cirius_project: ciriusProjectId, brain_project: brainProjectId });
 }
 
 Deno.serve(async (req: Request) => {
@@ -397,6 +487,10 @@ Deno.serve(async (req: Request) => {
               total_tasks: project.total_tasks, user_id: project.user_id });
           tickLog.push(`→ [paused] ${projId8}: ✅ all done!`);
           processed++;
+
+          // ★ Auto-capture source files back to cirius_projects
+          await autoCapture(sc, project.id as string, project.lovable_project_id as string, project.user_id as string);
+
           continue;
         }
 
