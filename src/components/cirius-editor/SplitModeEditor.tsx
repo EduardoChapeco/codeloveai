@@ -1,10 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import SplitTopBar from "./SplitTopBar";
 import SplitChatPanel from "./SplitChatPanel";
 import SplitResizer from "./SplitResizer";
 import SplitPreviewPanel from "./SplitPreviewPanel";
 import EditorToasts from "./EditorToasts";
 import FileExplorer from "./FileExplorer";
+import CodeViewer from "./CodeViewer";
 import type { FrameMode, ActiveMode, EditorToast, ChatMessage, Bubble } from "./types";
 import type { EditorMode } from "./SplitTopBar";
 import type { BuildStage } from "./BuildProgressCard";
@@ -33,6 +34,7 @@ interface Props {
   deployUrls?: { github?: string; vercel?: string; netlify?: string };
   bubbles?: Bubble[];
   onRemoveBubble?: (id: string) => void;
+  streamingText?: string;
 }
 
 export default function SplitModeEditor({
@@ -42,24 +44,30 @@ export default function SplitModeEditor({
   onApprovePrd, approvingPrd, approvedPrdId,
   chatMode = "ai-chat", onChatModeChange, sourceFiles,
   buildStages, buildProgress, buildComplete, buildError, deployUrls,
-  bubbles, onRemoveBubble,
+  bubbles, onRemoveBubble, streamingText,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
   const [chatWidth, setChatWidth] = useState(400);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [showFiles, setShowFiles] = useState(false);
+  const [showFiles, setShowFiles] = useState(true);
+  const [rightPanel, setRightPanel] = useState<"preview" | "code">("preview");
 
   const projectName = project?.name || "Novo Projeto";
   const files = sourceFiles || project?.source_files_json || {};
   const hasFiles = Object.keys(files).length > 0;
 
-  const handleSend = useCallback((msg: string) => {
-    if (chatMode === "ai-chat") {
-      onSendChat(msg);
-    } else {
-      onSendMsg(msg);
+  // Auto-select first file if none selected
+  useEffect(() => {
+    if (!selectedFile && hasFiles) {
+      const firstFile = Object.keys(files).find(f => f.endsWith(".tsx") || f.endsWith(".ts")) || Object.keys(files)[0];
+      if (firstFile) setSelectedFile(firstFile);
     }
+  }, [files, selectedFile, hasFiles]);
+
+  const handleSend = useCallback((msg: string) => {
+    if (chatMode === "ai-chat") onSendChat(msg);
+    else onSendMsg(msg);
   }, [chatMode, onSendMsg, onSendChat]);
 
   const handleClear = useCallback(() => {}, []);
@@ -76,15 +84,22 @@ export default function SplitModeEditor({
         onPublish={() => {}}
         onHistoryClick={() => {}}
         onShareClick={() => {}}
+        rightPanel={rightPanel}
+        onRightPanelChange={setRightPanel}
+        showFiles={showFiles}
+        onToggleFiles={() => setShowFiles(p => !p)}
+        fileCount={Object.keys(files).length}
       />
 
       <div className="sp-body">
+        {/* File sidebar */}
         {showFiles && hasFiles && (
           <div className="sp-file-sidebar">
-            <FileExplorer files={files} selectedFile={selectedFile} onSelectFile={setSelectedFile} />
+            <FileExplorer files={files} selectedFile={selectedFile} onSelectFile={(f) => { setSelectedFile(f); setRightPanel("code"); }} />
           </div>
         )}
 
+        {/* Chat panel */}
         <div style={{ width: chatWidth, flexShrink: 0 }}>
           <SplitChatPanel
             messages={chatMessages}
@@ -106,12 +121,23 @@ export default function SplitModeEditor({
             projectName={projectName}
             bubbles={bubbles}
             onRemoveBubble={onRemoveBubble}
+            streamingText={streamingText}
           />
         </div>
 
         <SplitResizer onResize={setChatWidth} currentWidth={chatWidth} />
 
-        <SplitPreviewPanel frameMode={frameMode} previewHtml={previewHtml} livePreviewUrl={livePreviewUrl} />
+        {/* Right panel: preview or code */}
+        {rightPanel === "preview" ? (
+          <SplitPreviewPanel frameMode={frameMode} previewHtml={previewHtml} livePreviewUrl={livePreviewUrl} />
+        ) : (
+          <CodeViewer
+            files={files}
+            selectedFile={selectedFile}
+            onSelectFile={setSelectedFile}
+            onSwitchToPreview={() => setRightPanel("preview")}
+          />
+        )}
       </div>
 
       <EditorToasts toasts={toasts} />

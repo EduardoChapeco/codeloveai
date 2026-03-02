@@ -30,6 +30,7 @@ interface Props {
   projectName?: string;
   bubbles?: Bubble[];
   onRemoveBubble?: (id: string) => void;
+  streamingText?: string;
 }
 
 const SUGGESTIONS = [
@@ -43,7 +44,7 @@ export default function SplitChatPanel({
   onApprovePrd, approvingPrd, approvedPrdId,
   chatMode = "ai-chat", onChatModeChange,
   buildStages, buildProgress, buildComplete, buildError, deployUrls, projectName,
-  bubbles, onRemoveBubble,
+  bubbles, onRemoveBubble, streamingText,
 }: Props) {
   const [text, setText] = useState("");
   const [modesOpen, setModesOpen] = useState(false);
@@ -220,11 +221,17 @@ export default function SplitChatPanel({
           <div className="sp-msg sp-msg-ai">
             <div className="sp-msg-avatar sp-ai-av">C</div>
             <div className="sp-msg-body">
-              <div className="sp-typing-bubble">
-                <div className="sp-typing-dot" />
-                <div className="sp-typing-dot" />
-                <div className="sp-typing-dot" />
-              </div>
+              {streamingText ? (
+                <div className="sp-msg-bubble sp-msg-md">
+                  <ReactMarkdown>{streamingText}</ReactMarkdown>
+                </div>
+              ) : (
+                <div className="sp-typing-bubble">
+                  <div className="sp-typing-dot" />
+                  <div className="sp-typing-dot" />
+                  <div className="sp-typing-dot" />
+                </div>
+              )}
             </div>
           </div>
         )}

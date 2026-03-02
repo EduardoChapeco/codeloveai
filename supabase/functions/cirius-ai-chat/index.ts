@@ -13,157 +13,19 @@ type CommandType = "build" | "fix" | "improve" | "refine" | "chat";
 
 function detectCommand(text: string): { type: CommandType; prompt: string } {
   const lower = text.trim().toLowerCase();
-
-  // Build commands
   if (/^(crie|criar|cria|build|gere|gerar|construa|monte|implemente|adicione|adicionar|faça|faz)\s/i.test(lower)) {
     return { type: "build", prompt: text.trim() };
   }
-
-  // Fix commands
   if (/^(corrija|corrigir|fix|fixe|arrume|arrumar|conserte|consertar|debug)\s/i.test(lower)) {
     return { type: "fix", prompt: text.trim() };
   }
-
-  // Improve commands
   if (/^(melhore|melhorar|improve|otimize|otimizar|refatore|refatorar|upgrade)\s/i.test(lower)) {
     return { type: "improve", prompt: text.trim() };
   }
-
-  // Refine commands
   if (/^(refine|refinar|revise|revisar|review|analise|analisar)\s/i.test(lower)) {
     return { type: "refine", prompt: text.trim() };
   }
-
   return { type: "chat", prompt: text.trim() };
-}
-
-// ─── AI Engines ──────────────────────────────────────────────
-
-/** Route through api-key-router for OpenRouter keys */
-async function sendViaOpenRouterPool(
-  sc: SupabaseClient,
-  supabaseUrl: string,
-  serviceKey: string,
-  prompt: string,
-  systemPrompt: string,
-  model = "anthropic/claude-sonnet-4",
-): Promise<{ content: string | null; durationMs: number; error?: string }> {
-  const t0 = Date.now();
-  try {
-    // Get key from api-key-router (round-robin pool)
-    const keyRes = await fetch(`${supabaseUrl}/functions/v1/api-key-router`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ action: "get", provider: "openrouter" }),
-    });
-    const keyData = await keyRes.json();
-    if (!keyRes.ok || !keyData?.key) {
-      // Fallback to env var
-      const envKey = Deno.env.get("OPENROUTER_API_KEY");
-      if (!envKey) return { content: null, durationMs: Date.now() - t0, error: "No OpenRouter keys available" };
-      return await directOpenRouter(envKey, prompt, systemPrompt, model, t0);
-    }
-
-    return await directOpenRouter(keyData.key, prompt, systemPrompt, model, t0);
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 120) };
-  }
-}
-
-async function directOpenRouter(
-  key: string, prompt: string, systemPrompt: string, model: string, t0: number
-): Promise<{ content: string | null; durationMs: number; error?: string }> {
-  try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://starble.lovable.app",
-        "X-Title": "Cirius AI Chat",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 16000,
-      }),
-    });
-    const durationMs = Date.now() - t0;
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => "");
-      return { content: null, durationMs, error: `HTTP ${res.status}: ${errBody.slice(0, 100)}` };
-    }
-    const result = await res.json();
-    return { content: result?.choices?.[0]?.message?.content || null, durationMs };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 120) };
-  }
-}
-
-/** Gateway (Gemini) */
-async function sendViaGateway(prompt: string, systemPrompt: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  const t0 = Date.now();
-  if (!key) return { content: null, durationMs: 0, error: "LOVABLE_API_KEY not set" };
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 16000,
-      }),
-    });
-    const durationMs = Date.now() - t0;
-    if (!res.ok) {
-      if (res.status === 429) return { content: null, durationMs, error: "Rate limit exceeded" };
-      if (res.status === 402) return { content: null, durationMs, error: "AI credits exhausted" };
-      return { content: null, durationMs, error: `Gateway HTTP ${res.status}` };
-    }
-    const json = await res.json();
-    return { content: json?.choices?.[0]?.message?.content || null, durationMs };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 80) };
-  }
-}
-
-/** Brainchain pool (cost-effective) */
-async function sendViaBrainchain(
-  supabaseUrl: string, serviceKey: string, anonKey: string,
-  userId: string, message: string, brainType = "code",
-): Promise<{ content: string | null; durationMs: number; error?: string }> {
-  const t0 = Date.now();
-  try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
-        apikey: anonKey,
-      },
-      body: JSON.stringify({ user_id: userId, brain_type: brainType, message }),
-    });
-    const data = await res.json().catch(() => ({}));
-    const durationMs = Date.now() - t0;
-    if (res.ok && data?.ok && typeof data?.response === "string" && data.response.length > 0) {
-      return { content: data.response, durationMs };
-    }
-    return { content: null, durationMs, error: data?.error || "Brainchain unavailable" };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 80) };
-  }
 }
 
 // ─── Prompts ─────────────────────────────────────────────────
@@ -281,55 +143,17 @@ ${fileList}
 Retorne TODOS os arquivos corrigidos usando <file path="...">...</file>.`;
 }
 
-// ─── Summary Generator ──────────────────────────────────────
-
-function generateSummary(
-  commandType: CommandType,
-  filesUpdated: number,
-  filePaths: string[],
-  rawContent: string,
-): string {
-  const actionMap: Record<CommandType, string> = {
-    build: "🏗️ **Construção concluída**",
-    fix: "🔧 **Correção aplicada**",
-    improve: "✨ **Melhoria implementada**",
-    refine: "🔍 **Refinamento completo**",
-    chat: "💬 **Resposta**",
-  };
-
-  if (filesUpdated === 0) {
-    // Extract text before any code blocks for chat-like responses
-    const textBefore = rawContent.split(/<file\s/)[0]?.trim() || rawContent.slice(0, 500);
-    return textBefore;
-  }
-
-  const header = actionMap[commandType];
-  const fileListStr = filePaths.slice(0, 10).map(f => `  • \`${f}\``).join("\n");
-  const moreFiles = filePaths.length > 10 ? `\n  • ... +${filePaths.length - 10} arquivos` : "";
-
-  // Extract explanation text (before first <file> tag)
-  const explanation = rawContent.split(/<file\s/)[0]?.trim().slice(0, 300) || "";
-
-  return `${header}
-
-${explanation ? explanation + "\n" : ""}
-**${filesUpdated} arquivo(s) ${commandType === "fix" ? "corrigido(s)" : commandType === "improve" ? "melhorado(s)" : "atualizado(s)"}:**
-${fileListStr}${moreFiles}`;
-}
-
 // ─── File Extraction ────────────────────────────────────────
 
 function extractFileBlocks(text: string): Record<string, string> {
   const files: Record<string, string> = {};
   const re = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
   let m: RegExpExecArray | null;
-
   while ((m = re.exec(text)) !== null) {
     const path = m[1].trim().replace(/^\.\//, "");
     const content = m[2].replace(/^\n/, "").replace(/\s+$/, "") + "\n";
     if (path && content.trim().length > 1) files[path] = content;
   }
-
   if (Object.keys(files).length === 0) {
     const cbRe = /```(?:\w+)?\s+((?:src|public|index|vite|tailwind|tsconfig|package)[^\n]*)\n([\s\S]*?)```/g;
     while ((m = cbRe.exec(text)) !== null) {
@@ -338,7 +162,6 @@ function extractFileBlocks(text: string): Record<string, string> {
       if (path.includes(".") && content.trim().length > 1) files[path] = content;
     }
   }
-
   return files;
 }
 
@@ -372,7 +195,6 @@ async function dispatchToOrchestrator(
   projectName: string,
 ): Promise<{ orchestratorId: string; taskCount: number } | null> {
   try {
-    // Create orchestrator project
     const { data: orchProject, error: orchErr } = await sc.from("orchestrator_projects").insert({
       user_id: userId,
       client_prompt: prd.summary || projectName,
@@ -383,7 +205,6 @@ async function dispatchToOrchestrator(
 
     if (orchErr || !orchProject) return null;
 
-    // Get a brain project for execution
     const { data: bcAccount } = await sc.from("brainchain_accounts")
       .select("brain_project_id")
       .eq("is_active", true)
@@ -400,10 +221,8 @@ async function dispatchToOrchestrator(
       }).eq("id", orchProject.id);
     }
 
-    // Build context prefix
     const prdContext = `[CONTEXTO DO PROJETO]\nNome: ${projectName}\n\n[PRD]\n${prd.tasks.map((t, i) => `${i + 1}. ${t.title}`).join("\n")}\n\n`;
 
-    // Insert tasks
     const taskInserts = prd.tasks.map((t, i) => ({
       project_id: orchProject.id,
       task_index: i,
@@ -415,14 +234,12 @@ async function dispatchToOrchestrator(
 
     await sc.from("orchestrator_tasks").insert(taskInserts);
 
-    // Link to cirius project
     await sc.from("cirius_projects").update({
       orchestrator_project_id: orchProject.id,
       status: "generating_code",
       progress_pct: 25,
     }).eq("id", projectId);
 
-    // Fire orchestrator-tick
     fetch(`${supabaseUrl}/functions/v1/orchestrator-tick`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
@@ -436,17 +253,140 @@ async function dispatchToOrchestrator(
   }
 }
 
+// ─── SSE Streaming via Gateway ──────────────────────────────
+
+async function streamViaGateway(prompt: string, systemPrompt: string): Promise<ReadableStream | null> {
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) return null;
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        stream: true,
+        temperature: 0.3,
+        max_tokens: 16000,
+      }),
+    });
+    if (!res.ok || !res.body) return null;
+    return res.body;
+  } catch {
+    return null;
+  }
+}
+
+// Non-streaming fallbacks
+async function sendViaOpenRouterPool(
+  sc: SupabaseClient, supabaseUrl: string, serviceKey: string,
+  prompt: string, systemPrompt: string, model = "anthropic/claude-sonnet-4",
+): Promise<{ content: string | null; durationMs: number; error?: string }> {
+  const t0 = Date.now();
+  try {
+    const keyRes = await fetch(`${supabaseUrl}/functions/v1/api-key-router`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({ action: "get", provider: "openrouter" }),
+    });
+    const keyData = await keyRes.json();
+    const apiKey = (keyRes.ok && keyData?.key) ? keyData.key : Deno.env.get("OPENROUTER_API_KEY");
+    if (!apiKey) return { content: null, durationMs: Date.now() - t0, error: "No OpenRouter keys" };
+    return await directOpenRouter(apiKey, prompt, systemPrompt, model, t0);
+  } catch (e) {
+    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 120) };
+  }
+}
+
+async function directOpenRouter(
+  key: string, prompt: string, systemPrompt: string, model: string, t0: number
+): Promise<{ content: string | null; durationMs: number; error?: string }> {
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`, "Content-Type": "application/json",
+        "HTTP-Referer": "https://starble.lovable.app", "X-Title": "Cirius AI Chat",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        temperature: 0.3, max_tokens: 16000,
+      }),
+    });
+    const durationMs = Date.now() - t0;
+    if (!res.ok) return { content: null, durationMs, error: `HTTP ${res.status}` };
+    const result = await res.json();
+    return { content: result?.choices?.[0]?.message?.content || null, durationMs };
+  } catch (e) {
+    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 120) };
+  }
+}
+
+async function sendViaGatewaySync(prompt: string, systemPrompt: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  const t0 = Date.now();
+  if (!key) return { content: null, durationMs: 0, error: "LOVABLE_API_KEY not set" };
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        temperature: 0.3, max_tokens: 16000,
+      }),
+    });
+    const durationMs = Date.now() - t0;
+    if (!res.ok) {
+      if (res.status === 429) return { content: null, durationMs, error: "Rate limit exceeded" };
+      if (res.status === 402) return { content: null, durationMs, error: "AI credits exhausted" };
+      return { content: null, durationMs, error: `Gateway HTTP ${res.status}` };
+    }
+    const json = await res.json();
+    return { content: json?.choices?.[0]?.message?.content || null, durationMs };
+  } catch (e) {
+    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 80) };
+  }
+}
+
+async function sendViaBrainchain(
+  supabaseUrl: string, serviceKey: string, anonKey: string,
+  userId: string, message: string, brainType = "code",
+): Promise<{ content: string | null; durationMs: number; error?: string }> {
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}`, apikey: anonKey,
+      },
+      body: JSON.stringify({ user_id: userId, brain_type: brainType, message }),
+    });
+    const data = await res.json().catch(() => ({}));
+    const durationMs = Date.now() - t0;
+    if (res.ok && data?.ok && typeof data?.response === "string" && data.response.length > 0) {
+      return { content: data.response, durationMs };
+    }
+    return { content: null, durationMs, error: data?.error || "Brainchain unavailable" };
+  } catch (e) {
+    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 80) };
+  }
+}
+
 // ─── Main Handler ───────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, project_id, mode } = await req.json();
+    const { messages, project_id, mode, stream: wantStream } = await req.json();
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "messages array required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -454,7 +394,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     let userId: string | null = null;
@@ -469,8 +408,7 @@ serve(async (req) => {
 
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -495,252 +433,234 @@ serve(async (req) => {
       }
     }
 
-    // Detect command type from latest user message
     const latestMsg = messages[messages.length - 1]?.content || "";
     const command = detectCommand(latestMsg);
-
-    console.log(`[cirius-ai-chat] Command: ${command.type}, Project: ${project_id?.slice(0, 8)}, Mode: ${mode || "auto"}`);
-
-    let assistantContent = "";
-    let provider = "brainchain";
-    let orchestratorResult: { orchestratorId: string; taskCount: number } | null = null;
+    console.log(`[cirius-ai-chat] Command: ${command.type}, Project: ${project_id?.slice(0, 8)}, Stream: ${!!wantStream}`);
 
     // ═══════════════════════════════════════════════════════════
     // BUILD COMMAND → Generate PRD → Dispatch to Orchestrator
+    // (Never streamed — returns JSON)
     // ═══════════════════════════════════════════════════════════
     if (command.type === "build" && project_id) {
-      // Step 1: Generate PRD via OpenRouter (Claude) for quality
       const prdPrompt = buildPrdPrompt(command.prompt, projectName, projectFiles);
+      let prd: any = null;
+      let provider = "brainchain";
 
-      let prd: { tasks: Array<{ title: string; brain_type: string; prompt: string }>; summary?: string } | null = null;
-
-      // Try OpenRouter pool first (Claude for better PRD quality)
       const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey, prdPrompt,
         "Return only valid JSON, no markdown fences. No questions.", "anthropic/claude-sonnet-4");
+      if (orResult.content) { prd = extractPrdJSON(orResult.content); provider = "openrouter_claude"; }
 
-      if (orResult.content) {
-        prd = extractPrdJSON(orResult.content);
-        provider = "openrouter_claude";
-      }
-
-      // Fallback to Brainchain
       if (!prd) {
-        const bcResult = await sendViaBrainchain(supabaseUrl, serviceRoleKey, anonKey, userId, prdPrompt);
-        if (bcResult.content) {
-          prd = extractPrdJSON(bcResult.content);
-          provider = "brainchain";
-        }
-      }
-
-      // Fallback to Gateway
-      if (!prd) {
-        const gwResult = await sendViaGateway(prdPrompt, "Return only valid JSON, no markdown fences.");
-        if (gwResult.content) {
-          prd = extractPrdJSON(gwResult.content);
-          provider = "gateway";
-        }
+        const gwResult = await sendViaGatewaySync(prdPrompt, "Return only valid JSON, no markdown fences.");
+        if (gwResult.content) { prd = extractPrdJSON(gwResult.content); provider = "gateway"; }
       }
 
       if (prd && prd.tasks.length > 0) {
-        // Step 2: Dispatch to Orchestrator for parallel Brain execution
-        orchestratorResult = await dispatchToOrchestrator(
-          supabase, supabaseUrl, serviceRoleKey,
-          userId, project_id, prd, projectName,
+        const orchestratorResult = await dispatchToOrchestrator(
+          supabase, supabaseUrl, serviceRoleKey, userId, project_id, prd, projectName,
         );
+        await supabase.from("cirius_projects").update({ prd_json: prd }).eq("id", project_id);
+        const taskList = prd.tasks.map((t: any, i: number) => `${i + 1}. **${t.title}** _(${t.brain_type})_`).join("\n");
+        const content = `🚀 **Pipeline de construção iniciado!**\n\n${prd.summary || ""}\n\n**${prd.tasks.length} tarefas distribuídas:**\n${taskList}`;
 
-        // Save PRD to project
-        await supabase.from("cirius_projects").update({
-          prd_json: prd,
-        }).eq("id", project_id);
-
-        const taskList = prd.tasks.map((t, i) => `${i + 1}. **${t.title}** _(${t.brain_type})_`).join("\n");
-
-        assistantContent = `🚀 **Pipeline de construção iniciado!**
-
-${prd.summary || "Gerando código para sua solicitação..."}
-
-**${prd.tasks.length} tarefas distribuídas para os Brains:**
-${taskList}
-
-${orchestratorResult
-  ? `⚡ Orquestrador ativo (ID: \`${orchestratorResult.orchestratorId.slice(0, 8)}\`). Progresso aparecerá automaticamente.`
-  : "⏳ Aguardando disponibilidade de Brain..."}
-
-_O código será minerado, montado e refinado automaticamente._`;
+        return new Response(JSON.stringify({
+          ok: true, content, command_type: "build", provider,
+          files_updated: 0, updated_paths: [],
+          orchestrator: orchestratorResult || null,
+          pipeline: { status: orchestratorResult ? "executing" : "pending", task_count: orchestratorResult?.taskCount || 0 },
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       } else {
-        assistantContent = "❌ Não consegui gerar o plano de construção. Tente reformular o pedido com mais detalhes.";
+        return new Response(JSON.stringify({
+          ok: true, content: "❌ Não consegui gerar o plano. Reformule com mais detalhes.",
+          command_type: "build", provider, files_updated: 0, updated_paths: [],
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
     // ═══════════════════════════════════════════════════════════
-    // FIX / IMPROVE COMMANDS → Direct AI with project context
+    // STREAMING PATH — chat, fix, improve, refine
     // ═══════════════════════════════════════════════════════════
-    else if ((command.type === "fix" || command.type === "improve") && project_id) {
-      const prompt = command.type === "fix"
-        ? buildFixPrompt(command.prompt, projectFiles)
-        : buildImprovePrompt(command.prompt, projectFiles);
-
-      const systemPrompt = CODE_SYSTEM_PROMPT + `\n\nCURRENT PROJECT FILES:\n${Object.keys(projectFiles).filter(f => !f.startsWith(".cirius/")).slice(0, 30).join(", ")}`;
-
-      // Try Brainchain first (cost-effective), then OpenRouter, then Gateway
-      const bcResult = await sendViaBrainchain(supabaseUrl, serviceRoleKey, anonKey, userId,
-        `[SYSTEM]\n${systemPrompt}\n\n[USER]\n${prompt}`, "code");
-
-      if (bcResult.content && bcResult.content.length > 50) {
-        assistantContent = bcResult.content;
-        provider = "brainchain";
-      } else {
-        const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey, prompt, systemPrompt);
-        if (orResult.content) {
-          assistantContent = orResult.content;
-          provider = "openrouter";
-        } else {
-          const gwResult = await sendViaGateway(prompt, systemPrompt);
-          assistantContent = gwResult.content || "";
-          provider = "gateway";
-        }
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // REFINE COMMAND → Holistic review with PRD context
-    // ═══════════════════════════════════════════════════════════
-    else if (command.type === "refine" && project_id) {
-      const prompt = buildRefinePrompt(projectFiles, projectPrd);
-      const systemPrompt = CODE_SYSTEM_PROMPT;
-
-      // Refinement needs Claude for quality — use OpenRouter pool
-      const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey, prompt, systemPrompt);
-      if (orResult.content) {
-        assistantContent = orResult.content;
-        provider = "openrouter_claude";
-      } else {
-        const gwResult = await sendViaGateway(prompt, systemPrompt);
-        assistantContent = gwResult.content || "";
-        provider = "gateway";
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // CHAT → Conversational AI (Brainchain first)
-    // ═══════════════════════════════════════════════════════════
-    else {
+    if (wantStream) {
+      let prompt: string;
+      let systemPrompt = CODE_SYSTEM_PROMPT;
       const filesContext = Object.keys(projectFiles).length > 0
         ? `\nPROJECT FILES:\n${Object.keys(projectFiles).filter(f => !f.startsWith(".cirius/")).slice(0, 30).join(", ")}`
         : "";
 
-      const systemPrompt = CODE_SYSTEM_PROMPT + filesContext;
-      const conversationText = messages
-        .slice(-20)
-        .map((m: any) => `${m.role.toUpperCase()}:\n${String(m.content || "").slice(0, 6000)}`)
-        .join("\n\n");
+      if (command.type === "fix") {
+        prompt = buildFixPrompt(command.prompt, projectFiles);
+        systemPrompt += filesContext;
+      } else if (command.type === "improve") {
+        prompt = buildImprovePrompt(command.prompt, projectFiles);
+        systemPrompt += filesContext;
+      } else if (command.type === "refine") {
+        prompt = buildRefinePrompt(projectFiles, projectPrd);
+      } else {
+        // chat
+        systemPrompt += filesContext;
+        prompt = messages.slice(-20)
+          .map((m: any) => `${m.role.toUpperCase()}:\n${String(m.content || "").slice(0, 6000)}`)
+          .join("\n\n");
+      }
 
-      // Try Brainchain → OpenRouter → Gateway
+      const stream = await streamViaGateway(prompt, systemPrompt);
+      if (stream) {
+        // Collect full response in background for file extraction + DB save
+        const [passThrough, collector] = stream.tee();
+
+        // Background: collect full text and save
+        (async () => {
+          try {
+            const reader = collector.getReader();
+            const decoder = new TextDecoder();
+            let fullText = "";
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value, { stream: true });
+              for (const line of chunk.split("\n")) {
+                if (!line.startsWith("data: ")) continue;
+                const jsonStr = line.slice(6).trim();
+                if (jsonStr === "[DONE]") continue;
+                try {
+                  const parsed = JSON.parse(jsonStr);
+                  const c = parsed.choices?.[0]?.delta?.content;
+                  if (c) fullText += c;
+                } catch { /* partial */ }
+              }
+            }
+
+            // Extract and merge files
+            if (project_id && fullText.length > 10) {
+              let newFiles = extractFileBlocks(fullText);
+              if (Object.keys(newFiles).length === 0) {
+                newFiles = extractFilesFromMarkdown(fullText);
+              }
+              if (Object.keys(newFiles).length > 0) {
+                const merged = { ...projectFiles, ...newFiles };
+                await supabase.from("cirius_projects").update({
+                  source_files_json: merged,
+                  updated_at: new Date().toISOString(),
+                }).eq("id", project_id);
+              }
+
+              // Save assistant message
+              const summary = fullText.split(/<file\s/)[0]?.trim().slice(0, 400) || "Código atualizado";
+              await supabase.from("cirius_chat_messages").insert({
+                project_id, user_id: userId, role: "assistant", content: summary,
+                metadata: { command_type: command.type, provider: "gateway_stream", files_updated: Object.keys(newFiles || {}).length },
+              });
+            }
+          } catch (e) {
+            console.error("[cirius-ai-chat] background save error:", e);
+          }
+        })();
+
+        return new Response(passThrough, {
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+        });
+      }
+      // If stream fails, fall through to non-streaming
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // NON-STREAMING FALLBACK for fix/improve/refine/chat
+    // ═══════════════════════════════════════════════════════════
+    let assistantContent = "";
+    let provider = "brainchain";
+
+    if ((command.type === "fix" || command.type === "improve") && project_id) {
+      const prompt = command.type === "fix"
+        ? buildFixPrompt(command.prompt, projectFiles)
+        : buildImprovePrompt(command.prompt, projectFiles);
+      const systemPrompt = CODE_SYSTEM_PROMPT + `\nCURRENT FILES:\n${Object.keys(projectFiles).slice(0, 30).join(", ")}`;
+
+      const bcResult = await sendViaBrainchain(supabaseUrl, serviceRoleKey, anonKey, userId,
+        `[SYSTEM]\n${systemPrompt}\n\n[USER]\n${prompt}`, "code");
+      if (bcResult.content && bcResult.content.length > 50) {
+        assistantContent = bcResult.content; provider = "brainchain";
+      } else {
+        const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey, prompt, systemPrompt);
+        if (orResult.content) { assistantContent = orResult.content; provider = "openrouter"; }
+        else {
+          const gw = await sendViaGatewaySync(prompt, systemPrompt);
+          assistantContent = gw.content || ""; provider = "gateway";
+        }
+      }
+    } else if (command.type === "refine" && project_id) {
+      const prompt = buildRefinePrompt(projectFiles, projectPrd);
+      const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey, prompt, CODE_SYSTEM_PROMPT);
+      if (orResult.content) { assistantContent = orResult.content; provider = "openrouter_claude"; }
+      else {
+        const gw = await sendViaGatewaySync(prompt, CODE_SYSTEM_PROMPT);
+        assistantContent = gw.content || ""; provider = "gateway";
+      }
+    } else {
+      const filesContext = Object.keys(projectFiles).length > 0
+        ? `\nPROJECT FILES:\n${Object.keys(projectFiles).filter(f => !f.startsWith(".cirius/")).slice(0, 30).join(", ")}` : "";
+      const systemPrompt = CODE_SYSTEM_PROMPT + filesContext;
+      const conversationText = messages.slice(-20)
+        .map((m: any) => `${m.role.toUpperCase()}:\n${String(m.content || "").slice(0, 6000)}`).join("\n\n");
+
       const bcResult = await sendViaBrainchain(supabaseUrl, serviceRoleKey, anonKey, userId,
         `[SYSTEM]\n${systemPrompt}\n\n[CONVERSATION]\n${conversationText}`, "code");
-
       if (bcResult.content && bcResult.content.length > 20) {
-        assistantContent = bcResult.content;
-        provider = "brainchain";
+        assistantContent = bcResult.content; provider = "brainchain";
       } else {
         const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey,
           conversationText, systemPrompt, "anthropic/claude-sonnet-4");
-        if (orResult.content) {
-          assistantContent = orResult.content;
-          provider = "openrouter";
-        } else {
-          const gwResult = await sendViaGateway(conversationText, systemPrompt);
-          assistantContent = gwResult.content || "";
-          provider = "gateway";
+        if (orResult.content) { assistantContent = orResult.content; provider = "openrouter"; }
+        else {
+          const gw = await sendViaGatewaySync(conversationText, systemPrompt);
+          assistantContent = gw.content || ""; provider = "gateway";
         }
       }
     }
 
     if (!assistantContent || assistantContent.trim().length < 2) {
       return new Response(JSON.stringify({ error: "Empty AI response" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ─── File Extraction & Merge ────────────────────────────
+    // File extraction & merge
     let filesUpdated = 0;
     let updatedPaths: string[] = [];
-
-    if (project_id && command.type !== "build") {
-      // For build commands, orchestrator handles file assembly
+    if (project_id) {
       let newFiles = extractFileBlocks(assistantContent);
       if (Object.keys(newFiles).length === 0) {
         newFiles = extractFilesFromMarkdown(assistantContent);
       }
       filesUpdated = Object.keys(newFiles).length;
       updatedPaths = Object.keys(newFiles);
-
       if (filesUpdated > 0) {
         const merged = { ...projectFiles, ...newFiles };
-        await supabase
-          .from("cirius_projects")
-          .update({ source_files_json: merged, updated_at: new Date().toISOString() })
-          .eq("id", project_id);
+        await supabase.from("cirius_projects").update({
+          source_files_json: merged, updated_at: new Date().toISOString(),
+        }).eq("id", project_id);
       }
     }
 
-    // ─── Generate Summary for Chat ──────────────────────────
-    const summary = generateSummary(command.type, filesUpdated, updatedPaths, assistantContent);
+    const summary = filesUpdated > 0
+      ? `${filesUpdated} arquivo(s) atualizado(s):\n${updatedPaths.slice(0, 10).map(f => `• \`${f}\``).join("\n")}`
+      : assistantContent.split(/<file\s/)[0]?.trim().slice(0, 400) || assistantContent.slice(0, 400);
 
-    // ─── Save Message ───────────────────────────────────────
     if (project_id) {
       await supabase.from("cirius_chat_messages").insert({
-        project_id,
-        user_id: userId,
-        role: "assistant",
-        content: summary,
-        metadata: {
-          command_type: command.type,
-          provider,
-          files_updated: filesUpdated,
-          updated_paths: updatedPaths.slice(0, 20),
-          orchestrator_id: orchestratorResult?.orchestratorId || null,
-        },
+        project_id, user_id: userId, role: "assistant", content: summary,
+        metadata: { command_type: command.type, provider, files_updated: filesUpdated },
       });
-
-      // Append to project memory
-      fetch(`${supabaseUrl}/functions/v1/brain-memory`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${serviceRoleKey}`,
-        },
-        body: JSON.stringify({
-          action: "append",
-          project_id,
-          user_id: userId,
-          content: `## ${command.type.toUpperCase()} — ${new Date().toISOString()}\n\n${latestMsg.slice(0, 200)}\n→ ${filesUpdated} files updated (${provider})`,
-        }),
-      }).catch(() => {});
     }
 
     return new Response(JSON.stringify({
-      ok: true,
-      content: summary,
-      raw_content: command.type !== "build" ? assistantContent : undefined,
-      command_type: command.type,
-      provider,
-      files_updated: filesUpdated,
-      updated_paths: updatedPaths,
-      orchestrator: orchestratorResult || null,
-      pipeline: command.type === "build" ? {
-        status: orchestratorResult ? "executing" : "pending",
-        task_count: orchestratorResult?.taskCount || 0,
-      } : undefined,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+      ok: true, content: summary, raw_content: assistantContent,
+      command_type: command.type, provider,
+      files_updated: filesUpdated, updated_paths: updatedPaths,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("cirius-ai-chat error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
