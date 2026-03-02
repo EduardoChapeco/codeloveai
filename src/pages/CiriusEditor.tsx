@@ -30,29 +30,98 @@ import type { EditorMode } from "@/components/cirius-editor/SplitTopBar";
 /** Build a self-contained HTML preview from source_files_json */
 function buildPreviewFromFiles(files: Record<string, string>): string | null {
   const html = files["index.html"] || files["dist/index.html"];
-  if (!html) return null;
 
   const cssFiles = Object.entries(files).filter(([k]) => k.endsWith(".css"));
   const jsFiles = Object.entries(files).filter(([k]) => k.endsWith(".js") || k.endsWith(".tsx") || k.endsWith(".ts"));
 
-  let assembled = html;
-
-  if (cssFiles.length > 0) {
-    const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
-    assembled = assembled.includes("</head>")
-      ? assembled.replace("</head>", `${cssBlock}\n</head>`)
-      : `${cssBlock}\n${assembled}`;
+  // If we have an index.html, assemble normally
+  if (html) {
+    let assembled = html;
+    if (cssFiles.length > 0) {
+      const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
+      assembled = assembled.includes("</head>")
+        ? assembled.replace("</head>", `${cssBlock}\n</head>`)
+        : `${cssBlock}\n${assembled}`;
+    }
+    const plainJs = jsFiles.filter(([k]) => k.endsWith(".js"));
+    if (plainJs.length > 0) {
+      const jsBlock = plainJs.map(([, v]) => `<script>${v}</script>`).join("\n");
+      assembled = assembled.includes("</body>")
+        ? assembled.replace("</body>", `${jsBlock}\n</body>`)
+        : `${assembled}\n${jsBlock}`;
+    }
+    return assembled;
   }
 
-  const plainJs = jsFiles.filter(([k]) => k.endsWith(".js"));
-  if (plainJs.length > 0) {
-    const jsBlock = plainJs.map(([, v]) => `<script>${v}</script>`).join("\n");
-    assembled = assembled.includes("</body>")
-      ? assembled.replace("</body>", `${jsBlock}\n</body>`)
-      : `${assembled}\n${jsBlock}`;
-  }
+  // No index.html — try to render TSX/JSX files via Babel Standalone + React CDN
+  const tsxFiles = Object.entries(files).filter(([k]) => /\.(tsx|jsx)$/.test(k) && !k.includes(".d.ts"));
+  if (tsxFiles.length === 0) return null;
 
-  return assembled;
+  // Find the main App component
+  const appEntry = tsxFiles.find(([k]) => /App\.(tsx|jsx)$/.test(k));
+  const mainFile = appEntry || tsxFiles[0];
+  const [mainPath, mainCode] = mainFile;
+
+  // Collect all CSS
+  const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
+
+  // Build component registry from all tsx files
+  const componentScripts = tsxFiles
+    .filter(([k]) => k !== mainPath)
+    .map(([path, code]) => {
+      const name = path.split("/").pop()?.replace(/\.(tsx|jsx)$/, "") || "Component";
+      // Strip import/export lines for inline rendering
+      const cleaned = code
+        .replace(/^import\s+.*$/gm, "")
+        .replace(/^export\s+default\s+/gm, "const " + name + " = ")
+        .replace(/^export\s+/gm, "");
+      return `<script type="text/babel" data-type="module">\n// ${path}\n${cleaned}\n</script>`;
+    })
+    .join("\n");
+
+  // Clean main file
+  const cleanedMain = mainCode
+    .replace(/^import\s+.*$/gm, "")
+    .replace(/^export\s+default\s+function\s+(\w+)/gm, "function $1")
+    .replace(/^export\s+default\s+/gm, "const App = ")
+    .replace(/^export\s+/gm, "");
+
+  // Detect the default export name
+  const fnMatch = cleanedMain.match(/^function\s+(\w+)/m);
+  const constMatch = cleanedMain.match(/^const\s+(\w+)\s*=/m);
+  const rootComponent = fnMatch?.[1] || constMatch?.[1] || "App";
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdn.tailwindcss.com"><\/script>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; }
+</style>
+${cssBlock}
+</head>
+<body>
+<div id="root"></div>
+${componentScripts}
+<script type="text/babel" data-type="module">
+// Provide lucide stubs so generated code doesn't crash
+const LucideStub = (props) => React.createElement('span', { style: { display: 'inline-flex', width: props.size || 16, height: props.size || 16 } }, '●');
+const lucideReact = new Proxy({}, { get: () => LucideStub });
+
+${cleanedMain}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(${rootComponent}));
+<\/script>
+</body>
+</html>`;
 }
 
 export default function CiriusEditor() {
