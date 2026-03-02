@@ -418,6 +418,7 @@ export default function AppSidebar() {
     ...(isAdmin ? [
       { to: "/admin", label: "Admin Operacional", icon: Shield, desc: "Gestão operacional" },
       { to: "/admin/global", label: "Admin Global", icon: Building2, desc: "Multi-tenant" },
+      { to: "/admin/integrations", label: "Integrações", icon: Key, desc: "API Keys & Email" },
       { to: "/admin/cloud", label: "Lovable Cloud", icon: Zap, desc: "Infra & deploy" },
     ] : []),
   ];

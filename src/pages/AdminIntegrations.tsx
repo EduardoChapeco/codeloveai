@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import AppLayout from "@/components/AppLayout";
 import {
   Plus, Key, Trash2, Power, PowerOff, RefreshCw, Loader2,
   AlertTriangle, CheckCircle, Info, ChevronDown, ChevronUp,
@@ -711,51 +712,55 @@ export default function AdminIntegrations() {
   const keysByProvider = (provider: Provider) => keys.filter(k => k.provider === provider);
 
   if (loading) return (
-    <div className="flex justify-center py-20">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
+    <AppLayout>
+      <div className="flex justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    </AppLayout>
   );
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 p-6">
-      <div>
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <Key className="h-5 w-5" /> Integrações — Orquestrador de Chaves de API
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Gerencie múltiplas chaves por provedor. O sistema rotaciona automaticamente entre elas conforme o uso.
-        </p>
-      </div>
+    <AppLayout>
+      <div className="max-w-3xl mx-auto space-y-6 p-6">
+        <div>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <Key className="h-5 w-5" /> Integrações — Orquestrador de Chaves de API
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Gerencie múltiplas chaves por provedor. O sistema rotaciona automaticamente entre elas conforme o uso.
+          </p>
+        </div>
 
-      <div className="rounded-xl bg-muted/40 border border-border/60 px-5 py-4">
-        <p className="text-xs font-semibold mb-2">Como funciona o orquestrador</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px] text-muted-foreground">
-          <div className="flex items-start gap-2">
-            <span className="text-primary font-bold">1.</span>
-            Quando o sistema precisa chamar uma API, consulta o orquestrador
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="text-primary font-bold">2.</span>
-            O orquestrador seleciona a chave com menor uso do dia (load balance)
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="text-primary font-bold">3.</span>
-            Se todas atingiram o limite, o sistema pausa e alerta — nunca ultrapassa
+        <div className="rounded-xl bg-muted/40 border border-border/60 px-5 py-4">
+          <p className="text-xs font-semibold mb-2">Como funciona o orquestrador</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px] text-muted-foreground">
+            <div className="flex items-start gap-2">
+              <span className="text-primary font-bold">1.</span>
+              Quando o sistema precisa chamar uma API, consulta o orquestrador
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-primary font-bold">2.</span>
+              O orquestrador seleciona a chave com menor uso do dia (load balance)
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-primary font-bold">3.</span>
+              Se todas atingiram o limite, o sistema pausa e alerta — nunca ultrapassa
+            </div>
           </div>
         </div>
+
+        {(Object.keys(PROVIDERS) as Provider[]).map(provider => (
+          <ProviderSection key={provider} provider={provider} keys={keysByProvider(provider)}
+            onAdd={setAddingFor} onToggle={handleToggle} onDelete={handleDelete} onRefreshUsage={fetchKeys} />
+        ))}
+
+        {/* Email System Panel */}
+        <EmailPanel />
+
+        {addingFor && (
+          <AddKeyModal provider={addingFor} onSave={handleAdd} onClose={() => setAddingFor(null)} />
+        )}
       </div>
-
-      {(Object.keys(PROVIDERS) as Provider[]).map(provider => (
-        <ProviderSection key={provider} provider={provider} keys={keysByProvider(provider)}
-          onAdd={setAddingFor} onToggle={handleToggle} onDelete={handleDelete} onRefreshUsage={fetchKeys} />
-      ))}
-
-      {/* Email System Panel */}
-      <EmailPanel />
-
-      {addingFor && (
-        <AddKeyModal provider={addingFor} onSave={handleAdd} onClose={() => setAddingFor(null)} />
-      )}
-    </div>
+    </AppLayout>
   );
 }
