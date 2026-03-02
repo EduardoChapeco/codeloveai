@@ -106,23 +106,8 @@ function GlassTabButton({
   return (
     <button
       onClick={onClick}
-      className={`group w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all duration-200 text-left ${
-        isActive
-          ? "bg-primary/10 border-primary/20 text-primary shadow-sm shadow-primary/5"
-          : "border-[var(--liquid-glass-border)] text-muted-foreground hover:text-foreground hover:border-foreground/10 hover:shadow-sm"
-      }`}
-      style={
-        !isActive
-          ? {
-              background: "var(--liquid-glass-bg)",
-              backdropFilter: "blur(20px) saturate(180%)",
-              WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            }
-          : {
-              backdropFilter: "blur(20px) saturate(180%)",
-              WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            }
-      }
+      data-active={isActive}
+      className="lv-nav-glass-btn"
     >
       <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
         isActive ? "bg-primary/15" : "bg-foreground/[0.04]"
@@ -174,23 +159,8 @@ function GlassNavButton({
   return (
     <NavLink
       to={item.to}
-      className={`group w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all duration-200 text-left no-underline ${
-        isActive
-          ? "bg-primary/10 border-primary/20 text-primary shadow-sm shadow-primary/5"
-          : "border-[var(--liquid-glass-border)] text-muted-foreground hover:text-foreground hover:border-foreground/10 hover:shadow-sm"
-      }`}
-      style={
-        !isActive
-          ? {
-              background: "var(--liquid-glass-bg)",
-              backdropFilter: "blur(20px) saturate(180%)",
-              WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            }
-          : {
-              backdropFilter: "blur(20px) saturate(180%)",
-              WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            }
-      }
+      data-active={isActive}
+      className="lv-nav-glass-btn no-underline"
     >
       <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
         isActive ? "bg-primary/15" : "bg-foreground/[0.04]"
