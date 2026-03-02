@@ -36,7 +36,7 @@ export default function SplitTopBar({
         <span className="sp-tb-brand">Cirius</span>
         <div className="sp-tb-sep" />
 
-        <button className="sp-tb-proj">
+        <button className="sp-tb-proj" onClick={onHistoryClick} title="Configurações do projeto">
           <Folder size={12} />
           <span>{projectName}</span>
           <ChevronDown size={10} />

@@ -13,7 +13,7 @@ export default function IslandLeft({ projectName, onDomainClick, onSeoClick, edi
     <div className="ce-island">
       <div className="il-logo">C</div>
       <div className="il-sep" />
-      <button className="il-proj">
+      <button className="il-proj" onClick={onSeoClick} title="Configurações do projeto">
         <Folder size={13} />
         <span>{projectName}</span>
         <ChevronDown size={11} />

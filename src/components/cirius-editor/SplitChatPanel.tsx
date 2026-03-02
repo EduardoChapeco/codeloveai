@@ -252,7 +252,7 @@ export default function SplitChatPanel({
               <Info size={11} /> Debug
             </button>
             <div className="sp-ci-msep" />
-            <button className="sp-ci-mbtn">
+            <button className="sp-ci-mbtn" onClick={() => { setActiveMode("debug"); }}>
               <Shield size={11} /> Review
             </button>
           </div>
@@ -285,9 +285,9 @@ export default function SplitChatPanel({
           {/* Toolbar */}
           <div className="sp-ci-toolbar">
             <div className="sp-ci-tl">
-              <button className="sp-ci-tbtn ico"><Paperclip size={11} /></button>
-              <button className="sp-ci-tbtn ico" onClick={() => setContextFiles(prev => [...prev, "Hero.tsx"])}><Code size={11} /></button>
-              <button className="sp-ci-tbtn ico"><Camera size={11} /></button>
+              <button className="sp-ci-tbtn ico" onClick={() => setText(prev => prev + " [anexo]")} title="Anexar arquivo"><Paperclip size={11} /></button>
+              <button className="sp-ci-tbtn ico" onClick={() => setContextFiles(prev => [...prev, "Hero.tsx"])} title="Adicionar contexto"><Code size={11} /></button>
+              <button className="sp-ci-tbtn ico" onClick={() => setText(prev => prev + " [screenshot]")} title="Captura de tela"><Camera size={11} /></button>
             </div>
             <div className="sp-ci-tr">
               <span style={{ fontSize: 10, fontFamily: "var(--mono)", color: "var(--text-quaternary)" }}>⌘↵</span>
