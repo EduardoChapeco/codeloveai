@@ -539,6 +539,7 @@ Deno.serve(async (req) => {
     const sourceUrl = typeof body.source_url === "string" ? body.source_url.trim() : "";
     const templateId = typeof body.template_id === "string" ? body.template_id.trim() : "";
     const config = body.config || {};
+    const noBrains = config.no_brains === true;
 
     if (!userPrompt || userPrompt.length < 3) return json({ success: false, error: "user_prompt required (min 3 chars)" }, 400);
     if (!projectName || projectName.length < 2) return json({ success: false, error: "project_name required (min 2 chars)" }, 400);
@@ -620,7 +621,108 @@ Deno.serve(async (req) => {
       generation_started_at: new Date().toISOString(),
     }).eq("id", projectId);
 
-    // ── STEP 5: ASYNC GENERATION ──────────────────────────────────────
+    // ── STEP 5: CODE GENERATION ──────────────────────────────────────
+
+    if (noBrains) {
+      // ═══ NO BRAINS MODE: Direct Claude/OpenRouter generation ═══
+      await sc.from("cirius_projects").update({ generation_engine: "claude_direct" }).eq("id", projectId);
+      await logEntry(sc, projectId, "code", "started", "No Brains mode — generating directly via Claude (OpenRouter)");
+
+      // Build a comprehensive prompt with all PRD tasks
+      const taskPrompts = prd.tasks.map((t: any, i: number) => `### Task ${i + 1}: ${t.title}\n${t.prompt}`).join("\n\n");
+      const codePrompt = `You are a senior full-stack engineer. Generate a COMPLETE, production-ready project.
+
+## Project: "${projectName}"
+## Description: ${combinedPrompt}
+## Stack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM
+${blueprint.needsDatabase ? "## Database: Supabase (PostgreSQL + Auth + Storage)" : ""}
+
+## PRD Tasks:
+${taskPrompts}
+
+## RULES:
+- Return ALL files using <file path="path/to/file.tsx">content</file> tags
+- Include: App.tsx, main.tsx, index.css, all pages, components, hooks, lib utilities
+- Use modern, responsive design with dark mode support
+- Include loading states, empty states, error handling
+- Use shadcn/ui components (Button, Card, Input, etc.)
+- Use React Router DOM for navigation
+- DO NOT use mock data — connect to Supabase if database is needed
+- Each file must be COMPLETE and functional`;
+
+      const sysPrompt = "You are an expert React/TypeScript developer. Return only code files wrapped in <file path=\"...\">content</file> tags. No explanations outside file tags.";
+
+      // Try OpenRouter (Claude) first, then Gateway, then Gemini Direct
+      let generatedContent: string | null = null;
+      let engine = "";
+
+      const or = await sendViaOpenRouter(codePrompt, sysPrompt);
+      if (or.content && or.content.length > 200) {
+        generatedContent = or.content;
+        engine = "openrouter_claude";
+        await logEntry(sc, projectId, "code_claude", "completed", `Claude generated ${or.content.length} chars in ${or.durationMs}ms`);
+      }
+
+      if (!generatedContent) {
+        const gw = await sendViaGateway(codePrompt, sysPrompt);
+        if (gw.content && gw.content.length > 200) {
+          generatedContent = gw.content;
+          engine = "lovable_gateway";
+          await logEntry(sc, projectId, "code_gateway", "completed", `Gateway generated ${gw.content.length} chars in ${gw.durationMs}ms`);
+        }
+      }
+
+      if (!generatedContent) {
+        const gem = await sendViaGeminiDirect(sc, codePrompt, sysPrompt);
+        if (gem.content && gem.content.length > 200) {
+          generatedContent = gem.content;
+          engine = "gemini_direct";
+          await logEntry(sc, projectId, "code_gemini", "completed", `Gemini generated ${gem.content.length} chars in ${gem.durationMs}ms`);
+        }
+      }
+
+      if (!generatedContent) {
+        await sc.from("cirius_projects").update({ status: "failed", error_message: "All AI engines failed to generate code" }).eq("id", projectId);
+        await logEntry(sc, projectId, "code", "failed", "No Brains: all engines exhausted");
+        return json({ success: false, project_id: projectId, status: "failed", message: "Code generation failed — all engines exhausted" });
+      }
+
+      // Parse files from response
+      const parsedFiles = tryParseRefinement(generatedContent);
+      if (!parsedFiles || Object.keys(parsedFiles).length === 0) {
+        await sc.from("cirius_projects").update({ status: "failed", error_message: "AI response contained no parseable files" }).eq("id", projectId);
+        await logEntry(sc, projectId, "code", "failed", "No parseable files in AI response");
+        return json({ success: false, project_id: projectId, status: "failed", message: "No parseable files in AI response" });
+      }
+
+      // Refine
+      const refResult = await refineSourceFiles(sc, projectId, parsedFiles, projectName, combinedPrompt, prd);
+
+      const finalFiles = refResult.ok ? refResult.files : parsedFiles;
+
+      await sc.from("cirius_projects").update({
+        source_files_json: finalFiles,
+        status: "live",
+        progress_pct: 100,
+        generation_ended_at: new Date().toISOString(),
+        generation_engine: engine,
+      }).eq("id", projectId);
+
+      await logEntry(sc, projectId, "complete", "completed", `No Brains complete: ${Object.keys(finalFiles).length} files via ${engine}`, {
+        metadata: { file_count: Object.keys(finalFiles).length, engine, refined: refResult.ok },
+      });
+
+      return json({
+        success: true,
+        project_id: projectId,
+        status: "live",
+        message: `Generated ${Object.keys(finalFiles).length} files directly via ${engine}`,
+        file_count: Object.keys(finalFiles).length,
+        engine,
+      });
+    }
+
+    // ═══ STANDARD MODE: Brain + Orchestrator pipeline ═══
     // Acquire brain for orchestrator
     const { data: bcAccounts } = await sc.from("brainchain_accounts")
       .select("id, brain_project_id, brain_type")
