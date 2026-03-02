@@ -389,16 +389,14 @@ Deno.serve(async (req: Request) => {
 
         const token = account.accessToken;
 
-        // Get running task
-        const { data: runningTask } = await sc.from("orchestrator_tasks")
+        // Get ALL running tasks (parallel support)
+        const { data: runningTasks } = await sc.from("orchestrator_tasks")
           .select("*")
           .eq("project_id", project.id)
           .eq("status", "running")
-          .order("task_index", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+          .order("task_index", { ascending: true });
 
-        if (!runningTask) {
+        if (!runningTasks || runningTasks.length === 0) {
           await releaseBrainchainAccount(sc, account.id);
           await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", project.id);
           await addLog(sc, project.id as string,
@@ -409,85 +407,112 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        const startedAt = runningTask.started_at ? new Date(runningTask.started_at as string).getTime() : Date.now();
-        const elapsed = Date.now() - startedAt;
-        const taskIdx = runningTask.task_index as number;
+        let anyCompleted = false;
+        let allDone = true;
 
-        // Timeout check
-        if (elapsed > EXECUTING_TIMEOUT_MS) {
-          await sc.from("orchestrator_tasks").update({
-            status: "completed", completed_at: new Date().toISOString(),
-          }).eq("id", runningTask.id);
-          await releaseBrainchainAccount(sc, account.id);
-          await sc.from("orchestrator_projects").update({
-            status: "paused",
-            next_tick_at: new Date(Date.now() + INTER_TASK_DELAY_MS).toISOString(),
-          }).eq("id", project.id);
-          await addLog(sc, project.id as string,
-            `⏰ [tick] Task #${taskIdx} TIMEOUT after ${Math.round(elapsed / 1000)}s — force-completed, released account ${account.id.slice(0, 8)}`, "warn",
-            { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
-              elapsed_ms: elapsed, timeout_ms: EXECUTING_TIMEOUT_MS,
-              account_id: account.id, brain_project: lovableProjectId,
-              action: "force_complete_timeout" }, runningTask.id as string);
-          tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} timeout (${Math.round(elapsed / 1000)}s)`);
-          processed++;
-          continue;
-        }
+        for (const runningTask of runningTasks) {
+          const startedAt = runningTask.started_at ? new Date(runningTask.started_at as string).getTime() : Date.now();
+          const elapsed = Date.now() - startedAt;
+          const taskIdx = runningTask.task_index as number;
 
-        // Check completion — latest assistant message (compare against initial snapshot)
-        let completed = false;
-        let reason = "";
-        let checkErrors: string[] = [];
-
-        // Get the initial message ID stored when task was dispatched
-        const taskInitialMsgId = (runningTask as any).metadata?.initial_msg_id as string | null;
-        const lastSeen = taskInitialMsgId || (project.source_fingerprint as string | null);
-
-        try {
-          const pollRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/chat/latest-message`, token);
-          if (pollRes.ok) {
-            const rawPoll = await pollRes.text();
-            const pollData = parseLatestMessage(rawPoll);
-
-            if (!pollData) {
-              checkErrors.push("latest-message: parse_failed");
-            } else if (pollData.role !== "user" && !pollData.is_streaming && (pollData.content || "").trim().length > 20 && elapsed > 15_000) {
-              if (pollData.id && pollData.id !== lastSeen) {
-                completed = true;
-                reason = "latest_message_new";
-                await sc.from("orchestrator_projects").update({ source_fingerprint: pollData.id }).eq("id", project.id);
-              } else if (!lastSeen && pollData.id) {
-                await sc.from("orchestrator_projects").update({ source_fingerprint: pollData.id }).eq("id", project.id);
-                checkErrors.push("latest-message: seeded_last_seen");
-              }
-            }
-          } else {
-            checkErrors.push(`latest-message: HTTP ${pollRes.status}`);
-            if (pollRes.status === 401) checkErrors.push("token_expired");
+          // Timeout check
+          if (elapsed > EXECUTING_TIMEOUT_MS) {
+            await sc.from("orchestrator_tasks").update({
+              status: "completed", completed_at: new Date().toISOString(),
+            }).eq("id", runningTask.id);
+            await addLog(sc, project.id as string,
+              `⏰ [tick] Task #${taskIdx} TIMEOUT after ${Math.round(elapsed / 1000)}s — force-completed`, "warn",
+              { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
+                elapsed_ms: elapsed, timeout_ms: EXECUTING_TIMEOUT_MS,
+                brain_project: lovableProjectId,
+                action: "force_complete_timeout" }, runningTask.id as string);
+            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} timeout (${Math.round(elapsed / 1000)}s)`);
+            anyCompleted = true;
+            continue;
           }
-        } catch (e) {
-          checkErrors.push(`latest-message: ${(e as Error).message.slice(0, 60)}`);
+
+          // Check completion — latest assistant message (compare against initial snapshot)
+          let completed = false;
+          let reason = "";
+          let checkErrors: string[] = [];
+
+          // Get the initial message ID stored when task was dispatched
+          const taskInitialMsgId = (runningTask as any).metadata?.initial_msg_id as string | null;
+          const lastSeen = taskInitialMsgId || (project.source_fingerprint as string | null);
+
+          // Each parallel task may use a different brain — try to get account for that brain
+          const taskAccount = await getBusyAccountForProject(sc, lovableProjectId);
+          const taskToken = taskAccount?.accessToken || token;
+
+          try {
+            const pollRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/chat/latest-message`, taskToken);
+            if (pollRes.ok) {
+              const rawPoll = await pollRes.text();
+              const pollData = parseLatestMessage(rawPoll);
+
+              if (!pollData) {
+                checkErrors.push("latest-message: parse_failed");
+              } else if (pollData.role !== "user" && !pollData.is_streaming && (pollData.content || "").trim().length > 20 && elapsed > 15_000) {
+                if (pollData.id && pollData.id !== lastSeen) {
+                  completed = true;
+                  reason = "latest_message_new";
+                  await sc.from("orchestrator_projects").update({ source_fingerprint: pollData.id }).eq("id", project.id);
+                } else if (!lastSeen && pollData.id) {
+                  await sc.from("orchestrator_projects").update({ source_fingerprint: pollData.id }).eq("id", project.id);
+                  checkErrors.push("latest-message: seeded_last_seen");
+                }
+              }
+            } else {
+              checkErrors.push(`latest-message: HTTP ${pollRes.status}`);
+              if (pollRes.status === 401) checkErrors.push("token_expired");
+            }
+          } catch (e) {
+            checkErrors.push(`latest-message: ${(e as Error).message.slice(0, 60)}`);
+          }
+
+          if (completed) {
+            const taskOutputMarker = (runningTask as any).metadata?.output_marker as string | undefined;
+            const syncResult = await syncLatestMarkdownFiles(
+              sc,
+              project.id as string,
+              lovableProjectId,
+              taskToken,
+              false,
+              runningTask.id as string,
+              taskOutputMarker,
+            );
+
+            await sc.from("orchestrator_tasks").update({
+              status: "completed", completed_at: new Date().toISOString(),
+            }).eq("id", runningTask.id);
+
+            await addLog(sc, project.id as string,
+              `✅ [tick] Task #${taskIdx} completed (${reason}) after ${Math.round(elapsed / 1000)}s`, "info",
+              { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
+                elapsed_ms: elapsed, reason,
+                brain_project: lovableProjectId, check_errors: checkErrors.length ? checkErrors : undefined,
+                markdown_sync: syncResult,
+                action: "task_completed" }, runningTask.id as string);
+            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ✅ (${reason}, ${Math.round(elapsed / 1000)}s)`);
+            anyCompleted = true;
+          } else {
+            allDone = false;
+            if (checkErrors.length > 0) {
+              await addLog(sc, project.id as string,
+                `⏳ [tick] Task #${taskIdx} still running (${Math.round(elapsed / 1000)}s) — check errors: ${checkErrors.join("; ")}`, "debug",
+                { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
+                  elapsed_ms: elapsed, check_errors: checkErrors,
+                  brain_project: lovableProjectId,
+                  action: "still_running_with_errors" }, runningTask.id as string);
+            }
+            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ⏳ (${Math.round(elapsed / 1000)}s)${checkErrors.length ? ` [${checkErrors.join(",")}]` : ""}`);
+          }
         }
 
-        if (completed) {
-          // Sync markdown files for this completed task before releasing account
-          const taskOutputMarker = (runningTask as any).metadata?.output_marker as string | undefined;
-          const syncResult = await syncLatestMarkdownFiles(
-            sc,
-            project.id as string,
-            lovableProjectId,
-            token,
-            false,
-            runningTask.id as string,
-            taskOutputMarker,
-          );
-
-          await sc.from("orchestrator_tasks").update({
-            status: "completed", completed_at: new Date().toISOString(),
-          }).eq("id", runningTask.id);
+        // After processing all running tasks
+        if (anyCompleted) {
           await releaseBrainchainAccount(sc, account.id);
-
-          // Count completed tasks to update progress
+          
           const { count: completedCount } = await sc
             .from("orchestrator_tasks")
             .select("id", { count: "exact", head: true })
@@ -496,29 +521,11 @@ Deno.serve(async (req: Request) => {
 
           await sc.from("orchestrator_projects").update({
             status: "paused",
-            current_task_index: completedCount || (taskIdx + 1),
-            next_tick_at: new Date(Date.now() + INTER_TASK_DELAY_MS).toISOString(),
+            current_task_index: completedCount || 0,
+            next_tick_at: new Date(Date.now() + (allDone ? 5_000 : INTER_TASK_DELAY_MS)).toISOString(),
           }).eq("id", project.id);
-          await addLog(sc, project.id as string,
-            `✅ [tick] Task #${taskIdx} completed (${reason}) after ${Math.round(elapsed / 1000)}s — released account, next in ${INTER_TASK_DELAY_MS / 1000}s`, "info",
-            { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
-              elapsed_ms: elapsed, reason, account_id: account.id,
-              brain_project: lovableProjectId, check_errors: checkErrors.length ? checkErrors : undefined,
-              markdown_sync: syncResult,
-              action: "task_completed" }, runningTask.id as string);
-          tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ✅ (${reason}, ${Math.round(elapsed / 1000)}s)`);
           processed++;
         } else {
-          // Still running — log check status for debugging
-          if (checkErrors.length > 0) {
-            await addLog(sc, project.id as string,
-              `⏳ [tick] Task #${taskIdx} still running (${Math.round(elapsed / 1000)}s) — check errors: ${checkErrors.join("; ")}`, "debug",
-              { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
-                elapsed_ms: elapsed, check_errors: checkErrors,
-                account_id: account.id, brain_project: lovableProjectId,
-                action: "still_running_with_errors" }, runningTask.id as string);
-          }
-          tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ⏳ (${Math.round(elapsed / 1000)}s)${checkErrors.length ? ` [${checkErrors.join(",")}]` : ""}`);
           skipped++;
         }
       } catch (e) {

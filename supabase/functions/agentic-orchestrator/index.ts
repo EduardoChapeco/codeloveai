@@ -297,10 +297,12 @@ async function executeTaskViaBrainchain(
       },
     };
 
-    const lvRes = await fetch(`https://api.lovable.dev/projects/${account.brainProjectId}/chat`, {
+    let currentToken = account.accessToken;
+
+    const sendChat = async (token: string) => fetch(`https://api.lovable.dev/projects/${account.brainProjectId}/chat`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${account.accessToken}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         Origin: "https://lovable.dev",
         Referer: "https://lovable.dev/",
@@ -309,13 +311,43 @@ async function executeTaskViaBrainchain(
       body: JSON.stringify(lvPayload),
     });
 
+    let lvRes = await sendChat(currentToken);
+
+    // On 401/403 — force-refresh token and retry once
+    if (lvRes.status === 401 || lvRes.status === 403) {
+      await lvRes.text().catch(() => {}); // consume body
+      await addLog(sc, projectId, `🔄 Task #${task.task_index}: HTTP ${lvRes.status} — refreshing token and retrying`, "warn", undefined, task.id);
+
+      // Force refresh by getting raw account data
+      const { data: rawAcc } = await sc.from("brainchain_accounts")
+        .select("refresh_token, access_token, access_expires_at")
+        .eq("id", account.id).single();
+
+      if (rawAcc?.refresh_token) {
+        const refreshedToken = await ensureValidToken(sc, {
+          ...rawAcc,
+          id: account.id,
+          access_expires_at: new Date(0).toISOString(), // Force refresh
+        });
+        if (refreshedToken) {
+          currentToken = refreshedToken;
+          // Update payload with new token
+          lvPayload.integration_metadata.browser.auth_token = currentToken;
+          lvPayload.integration_metadata.supabase.auth_token = currentToken;
+          lvRes = await sendChat(currentToken);
+        }
+      }
+    }
+
     if (lvRes.status === 429) {
+      await lvRes.text().catch(() => {});
       await releaseBrainchainAccount(sc, account.id, false);
       return { success: false, error: "Rate limit on brainchain account" };
     }
-    if (lvRes.status === 401) {
+    if (lvRes.status === 401 || lvRes.status === 403) {
+      await lvRes.text().catch(() => {});
       await releaseBrainchainAccount(sc, account.id, false);
-      return { success: false, error: "Token expired on brainchain account" };
+      return { success: false, error: `Auth failed (${lvRes.status}) after token refresh` };
     }
     if (lvRes.status !== 202 && !lvRes.ok) {
       await releaseBrainchainAccount(sc, account.id, false);
