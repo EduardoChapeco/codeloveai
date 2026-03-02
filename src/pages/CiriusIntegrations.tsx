@@ -123,6 +123,7 @@ export default function CiriusIntegrations() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold">{p.name}</h3>
+                      {(p as any).primary && <Badge variant="secondary" className="gap-1 bg-teal-500/20 text-teal-400 text-[10px]">Principal</Badge>}
                       {connected?.is_active && <Badge variant="default" className="gap-1"><Check className="h-3 w-3" /> Conectado</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground">{p.desc}</p>
