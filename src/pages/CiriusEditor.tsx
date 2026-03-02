@@ -29,6 +29,7 @@ export default function CiriusEditor() {
   const [project, setProject] = useState<any>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
 
   // Editor state
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
@@ -57,7 +58,16 @@ export default function CiriusEditor() {
     if (data?.project) {
       setProject(data.project);
       setLogs(data.logs || []);
-      // If project has source files, load preview
+
+      // Live preview URL: use lovable_project_id or brain_project_id for real-time preview (like Lovable)
+      const lpId = data.project.lovable_project_id || data.project.brain_project_id;
+      if (lpId && !lpId.startsWith("creating")) {
+        setLivePreviewUrl(`https://id-preview--${lpId}.lovable.app`);
+      } else if (data.project.preview_url) {
+        setLivePreviewUrl(data.project.preview_url);
+      }
+
+      // Fallback: static srcDoc from source files
       if (data.project.source_files_json) {
         const files = data.project.source_files_json as any;
         const indexHtml = files?.["index.html"] || files?.["dist/index.html"];
@@ -80,6 +90,13 @@ export default function CiriusEditor() {
         (payload) => {
           const updated = payload.new as any;
           setProject(updated);
+          // Update live preview URL in realtime
+          const lpId = updated.lovable_project_id || updated.brain_project_id;
+          if (lpId && !lpId.startsWith("creating")) {
+            setLivePreviewUrl(`https://id-preview--${lpId}.lovable.app`);
+          } else if (updated.preview_url) {
+            setLivePreviewUrl(updated.preview_url);
+          }
           // Extract preview HTML from updated source files in realtime
           if (updated.source_files_json) {
             const files = updated.source_files_json;
@@ -221,7 +238,7 @@ export default function CiriusEditor() {
   return (
     <div className="ce-root dark">
       {/* Preview */}
-      <PreviewArea frameMode={frameMode} previewHtml={previewHtml} />
+      <PreviewArea frameMode={frameMode} previewHtml={previewHtml} livePreviewUrl={livePreviewUrl} />
 
       {/* Top Islands */}
       <div className="ce-top-bar">
