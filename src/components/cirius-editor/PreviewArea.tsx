@@ -11,7 +11,7 @@ export default function PreviewArea({ frameMode, previewHtml }: Props) {
     <div className={`ce-preview-wrap ${frameMode}`}>
       <div className="ce-preview-outer">
         {previewHtml ? (
-          <iframe className="ce-preview-iframe" srcDoc={previewHtml} sandbox="allow-scripts allow-same-origin" />
+          <iframe className="ce-preview-iframe" srcDoc={previewHtml} sandbox="allow-scripts" />
         ) : (
           <div className="ce-empty">
             <div className="ce-empty-ico">

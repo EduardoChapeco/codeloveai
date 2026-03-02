@@ -1,7 +1,9 @@
 /**
- * Starble Client Signature
+ * Starble Client Fingerprint
  * Generates X-Starble-Sig header for authenticated requests to Edge Functions.
- * Must match the validation in supabase/functions/_shared/client-guard.ts
+ * NOTE: This is a client-fingerprinting mechanism, NOT a security secret.
+ * Real authentication is enforced via JWT Bearer tokens on every edge function.
+ * Must match the fallback in supabase/functions/_shared/client-guard.ts
  */
 
 const CLIENT_SIG_KEY = "stbl_c8f2a91d4e7b3c6a0f5e8d2b1a9c7f4e";
