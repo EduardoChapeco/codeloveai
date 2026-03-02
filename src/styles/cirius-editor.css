@@ -550,6 +550,96 @@
 .bs-ico.run  { background: rgba(59,130,246,0.2); color: var(--blue-l); animation: phase-pulse 1.5s ease infinite; }
 .bs-ico.wait { background: var(--bg-3); color: var(--text-quaternary); }
 
+/* Thinking indicator */
+.bs-thinking {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--r3);
+  background: rgba(99,102,241,0.06);
+  border: 1px solid rgba(99,102,241,0.15);
+  font-size: 11px; color: var(--indigo-l);
+  animation: phase-pulse 2s ease infinite;
+}
+
+/* Section labels */
+.bs-section-label {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 0 3px;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.bs-section-label.green  { color: var(--green-l); }
+.bs-section-label.blue   { color: var(--blue-l); }
+.bs-section-label.gray   { color: var(--text-quaternary); }
+.bs-section-label.purple { color: var(--purple-l); }
+
+/* Task cards */
+.bs-task-card {
+  border-radius: var(--r3);
+  background: var(--bg-2);
+  border: 1px solid var(--b0);
+  margin-bottom: 4px;
+  overflow: hidden;
+  transition: all 0.15s;
+}
+.bs-task-card.done { border-color: rgba(34,197,94,0.12); }
+.bs-task-card.run  { border-color: rgba(59,130,246,0.18); background: rgba(59,130,246,0.03); }
+.bs-task-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.bs-task-header:hover { background: rgba(255,255,255,0.03); }
+.bs-task-detail {
+  padding: 0 9px 9px 30px;
+  animation: cmd-in 0.2s var(--ease-spring);
+}
+
+/* Files fixed table */
+.bs-files-table {
+  border-radius: var(--r3);
+  border: 1px solid var(--b0);
+  overflow: hidden;
+  font-size: 10.5px;
+}
+.bs-ft-header {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  padding: 5px 8px;
+  background: var(--bg-3);
+  color: var(--text-quaternary);
+  font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; font-size: 9px;
+}
+.bs-ft-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  padding: 4px 8px;
+  border-top: 1px solid var(--b0);
+  color: var(--text-tertiary);
+}
+.bs-ft-file {
+  font-family: var(--mono);
+  color: var(--blue-l);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Tool count in bubbles */
+.tb-thinking {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 8px;
+  border-radius: var(--r2);
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.15);
+  font-size: 10px; color: var(--indigo-l);
+  margin-bottom: 6px;
+}
+.tb-tool-count {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 6px;
+  font-size: 10px; color: var(--text-quaternary);
+  font-family: var(--mono);
+}
+
 /* Chain items */
 .chain-item {
   display: flex; align-items: flex-start; gap: 8px;
