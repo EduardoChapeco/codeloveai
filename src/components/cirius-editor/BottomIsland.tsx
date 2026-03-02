@@ -12,9 +12,13 @@ interface Props {
   onSend: (msg: string) => void;
   onCmdOpen: () => void;
   onChainOpen: () => void;
+  onAttach?: () => void;
+  onVoice?: () => void;
+  onDraw?: () => void;
+  onReview?: () => void;
 }
 
-export default function BottomIsland({ modesOpen, setModesOpen, activeMode, setActiveMode, queueCount, onClearQueue, onSend, onCmdOpen, onChainOpen }: Props) {
+export default function BottomIsland({ modesOpen, setModesOpen, activeMode, setActiveMode, queueCount, onClearQueue, onSend, onCmdOpen, onChainOpen, onAttach, onVoice, onDraw, onReview }: Props) {
   const [text, setText] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -57,7 +61,7 @@ export default function BottomIsland({ modesOpen, setModesOpen, activeMode, setA
             <Link2 size={12} /> Encadeado
           </button>
           <div className="md-sep" />
-          <button className="md-btn">
+          <button className="md-btn" onClick={onReview}>
             <Shield size={12} /> Review
           </button>
           <button className={`md-btn ${activeMode === "debug" ? "on c-blue" : ""}`} onClick={() => setActiveMode("debug")}>
@@ -86,15 +90,15 @@ export default function BottomIsland({ modesOpen, setModesOpen, activeMode, setA
         {/* Toolbar */}
         <div className="bi-toolbar">
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button className="bi-tbtn ico"><Paperclip size={12} /></button>
+            <button className="bi-tbtn ico" onClick={onAttach} title="Anexar arquivo"><Paperclip size={12} /></button>
             <button className="bi-tbtn" onClick={onCmdOpen}>
               <Code size={12} /> Código
               <kbd style={{ fontSize: 10, opacity: 0.5, marginLeft: 4, fontFamily: "var(--mono)" }}>⌘K</kbd>
             </button>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button className="bi-tbtn ico"><Pencil size={12} /></button>
-            <button className="bi-tbtn ico"><Mic size={12} /></button>
+            <button className="bi-tbtn ico" onClick={onDraw} title="Desenhar na tela"><Pencil size={12} /></button>
+            <button className="bi-tbtn ico" onClick={onVoice} title="Entrada por voz"><Mic size={12} /></button>
             <button className="bi-send" onClick={() => { if (text.trim()) { onSend(text); setText(""); if (taRef.current) taRef.current.style.height = "auto"; } }}>
               <ArrowUp size={14} />
             </button>
