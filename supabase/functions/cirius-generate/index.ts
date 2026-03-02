@@ -430,6 +430,19 @@ Deno.serve(async (req) => {
       .select("*").eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Project not found" }, 404);
 
+    // ★ Skip if PRD already exists
+    if (project.prd_json && (project.prd_json as any).tasks?.length > 0) {
+      console.log(`[cirius] PRD already exists for ${projectId}, skipping generation`);
+      const existingPrd = project.prd_json as any;
+      return json({
+        prd_json: existingPrd,
+        engine_selected: project.generation_engine || "cached",
+        task_count: existingPrd.tasks?.length || 0,
+        design: existingPrd.design || null,
+        cached: true,
+      });
+    }
+
     await sc.from("cirius_projects").update({ status: "generating_prd" }).eq("id", projectId);
     await logEntry(sc, projectId, "prd", "started", "Gerando PRD...");
 
@@ -465,6 +478,24 @@ Deno.serve(async (req) => {
       .select("*").eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Project not found" }, 404);
     if (!project.prd_json) return json({ error: "PRD not generated yet" }, 400);
+
+    // ★ Skip if already linked to orchestrator (avoid duplicate registrations)
+    if (project.orchestrator_project_id) {
+      console.log(`[cirius] Already linked to orchestrator ${project.orchestrator_project_id}, skipping re-registration`);
+      // Reset orchestrator project to allow retry
+      await sc.from("orchestrator_projects").update({
+        status: "paused", quality_score: 0,
+      }).eq("id", project.orchestrator_project_id);
+      await sc.from("cirius_projects").update({
+        status: "generating_code", error_message: null, progress_pct: 25,
+      }).eq("id", projectId);
+      return json({
+        started: true, engine: "orchestrator",
+        orchestrator_project_id: project.orchestrator_project_id,
+        note: "Orchestrator project already exists. Reset to paused for retry.",
+        resumed: true,
+      });
+    }
 
     await sc.from("cirius_projects").update({
       status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20,
