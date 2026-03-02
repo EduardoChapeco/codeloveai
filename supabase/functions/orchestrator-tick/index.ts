@@ -257,11 +257,11 @@ async function autoCapture(sc: SC, orchProjectId: string, brainProjectId: string
   }
 }
 
-/** Trigger cirius-generate refine action after all tasks complete (fire-and-forget) */
+/** Trigger cirius-generate refine action after all tasks complete */
 async function triggerRefinement(sc: SC, orchProjectId: string, userId: string) {
   try {
     const { data: ciriusProject } = await sc.from("cirius_projects")
-      .select("id, user_id")
+      .select("id, user_id, status, source_files_json")
       .eq("orchestrator_project_id", orchProjectId)
       .maybeSingle();
 
@@ -273,19 +273,9 @@ async function triggerRefinement(sc: SC, orchProjectId: string, userId: string) 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Get user token to authenticate the refine call
-    const { data: userAccount } = await sc.from("lovable_accounts")
-      .select("token_encrypted")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    // Create a service-level auth header for internal call
-    // The refine action requires user auth, so we use the user's session
     await addLog(sc, orchProjectId, `🔧 [refine] Triggering AI refinement for cirius project ${ciriusProject.id.slice(0, 8)}`, "info");
 
-    // Fire-and-forget refinement call via internal service key
-    fetch(`${supabaseUrl}/functions/v1/cirius-generate`, {
+    const refineRes = await fetch(`${supabaseUrl}/functions/v1/cirius-generate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -295,9 +285,40 @@ async function triggerRefinement(sc: SC, orchProjectId: string, userId: string) 
         action: "refine",
         project_id: ciriusProject.id,
       }),
-    }).catch((e) => {
-      console.error("[tick] refine trigger failed:", e.message);
     });
+
+    const refineBody = await refineRes.text().catch(() => "");
+
+    if (!refineRes.ok) {
+      const fileCount = Object.keys((ciriusProject.source_files_json || {}) as Record<string, string>).length;
+
+      // Fallback: avoid infinite "generating_code" when internal refine auth/invoke fails
+      if (fileCount > 0) {
+        await sc.from("cirius_projects").update({
+          status: "live",
+          current_step: "done",
+          progress_pct: 100,
+          generation_ended_at: new Date().toISOString(),
+          error_message: null,
+        }).eq("id", ciriusProject.id);
+
+        await addLog(
+          sc,
+          orchProjectId,
+          `🔧 [refine] HTTP ${refineRes.status} on refine — fallback applied (marked live with existing files)`,
+          "warn",
+          { refine_status: refineRes.status, refine_body: refineBody.slice(0, 180), file_count: fileCount }
+        );
+      } else {
+        await addLog(
+          sc,
+          orchProjectId,
+          `🔧 [refine] HTTP ${refineRes.status} on refine and no files available`,
+          "error",
+          { refine_status: refineRes.status, refine_body: refineBody.slice(0, 180), file_count: 0 }
+        );
+      }
+    }
   } catch (e) {
     await addLog(sc, orchProjectId, `🔧 [refine] Error: ${(e as Error).message}`, "error");
   }
