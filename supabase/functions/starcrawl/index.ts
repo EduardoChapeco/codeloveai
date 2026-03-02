@@ -79,12 +79,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const sc = createClient(supabaseUrl, serviceKey);
 
-  // Auth
+  // Auth — validate JWT
   const authHeader = req.headers.get("Authorization") || "";
   if (!authHeader.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error: userError } = await userClient.auth.getUser();
+  if (userError || !user) return json({ error: "Unauthorized" }, 401);
+
+  const sc = createClient(supabaseUrl, serviceKey);
 
   try {
     const { action = "scrape", url, options = {} } = await req.json() as {
