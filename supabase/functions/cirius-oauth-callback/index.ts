@@ -1,5 +1,5 @@
 /**
- * Cirius OAuth Callback — Processes OAuth callbacks for GitHub, Vercel, Netlify
+ * Cirius OAuth Callback — Processes OAuth callbacks for GitHub, Vercel, Netlify, Supabase
  * GET ?provider=github&code=xxx&state=xxx
  * State is HMAC-signed to prevent forgery.
  */
@@ -167,6 +167,80 @@ Deno.serve(async (req) => {
       const nUser = await userRes.json();
       accountLogin = nUser.email || nUser.full_name || "";
       accountId = nUser.id || "";
+    }
+
+    else if (provider === "supabase") {
+      const clientId = Deno.env.get("CIRIUS_SUPABASE_CLIENT_ID") || "";
+      const clientSecret = Deno.env.get("CIRIUS_SUPABASE_CLIENT_SECRET") || "";
+
+      // Also check api_key_vault
+      if (!clientId || !clientSecret) {
+        const creds = await getOAuthCreds("supabase");
+        if (!creds.clientId || !creds.clientSecret) return errorHtml("Supabase OAuth not configured.");
+        // Use vault creds
+        const vClientId = creds.clientId;
+        const vClientSecret = creds.clientSecret;
+
+        const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/cirius-oauth-callback?provider=supabase`;
+        const tokenRes = await fetch("https://api.supabase.com/v1/oauth/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: redirectUri,
+            client_id: vClientId,
+            client_secret: vClientSecret,
+          }),
+        });
+        const tokenData = await tokenRes.json();
+        accessToken = tokenData.access_token || "";
+        refreshToken = tokenData.refresh_token || "";
+        if (tokenData.expires_in) {
+          expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+        }
+        if (!accessToken) return errorHtml("Supabase authentication failed. Please try again.");
+
+        // Get user's orgs/projects
+        const orgsRes = await fetch("https://api.supabase.com/v1/organizations", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const orgs = await orgsRes.json().catch(() => []);
+        const orgName = Array.isArray(orgs) && orgs.length > 0 ? orgs[0]?.name || "" : "";
+        const orgId = Array.isArray(orgs) && orgs.length > 0 ? orgs[0]?.id || "" : "";
+        accountLogin = orgName;
+        accountId = orgId;
+      } else {
+        const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/cirius-oauth-callback?provider=supabase`;
+        const tokenRes = await fetch("https://api.supabase.com/v1/oauth/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: redirectUri,
+            client_id: clientId,
+            client_secret: clientSecret,
+          }),
+        });
+        const tokenData = await tokenRes.json();
+        accessToken = tokenData.access_token || "";
+        refreshToken = tokenData.refresh_token || "";
+        if (tokenData.expires_in) {
+          expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+        }
+        if (!accessToken) return errorHtml("Supabase authentication failed. Please try again.");
+
+        // Get orgs
+        const orgsRes = await fetch("https://api.supabase.com/v1/organizations", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const orgs = await orgsRes.json().catch(() => []);
+        const orgName = Array.isArray(orgs) && orgs.length > 0 ? orgs[0]?.name || "" : "";
+        const orgId = Array.isArray(orgs) && orgs.length > 0 ? orgs[0]?.id || "" : "";
+        accountLogin = orgName;
+        accountId = orgId;
+      }
     }
 
     else {

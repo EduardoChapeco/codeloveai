@@ -14,7 +14,7 @@ const PROVIDERS = [
   { id: "github", name: "GitHub", icon: Github, desc: "Push código + criar repos", scopes: "Personal Access Token (repo, read:user)", isOAuth: false, tokenField: true },
   { id: "vercel", name: "Vercel", icon: Globe, desc: "Deploy automático de apps", scopes: "API Token", isOAuth: false, tokenField: true },
   { id: "netlify", name: "Netlify", icon: Globe, desc: "Deploy por ZIP ou Git", scopes: "all", isOAuth: true },
-  { id: "supabase", name: "Supabase", icon: Database, desc: "Aplicar migrations SQL", scopes: "service_role", isOAuth: false },
+  { id: "supabase", name: "Supabase", icon: Database, desc: "Banco de dados, auth e storage via OAuth", scopes: "all (organizations, projects)", isOAuth: true },
 ];
 
 export default function CiriusIntegrations() {
@@ -23,11 +23,6 @@ export default function CiriusIntegrations() {
   const [searchParams] = useSearchParams();
   const [integrations, setIntegrations] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-
-  // Supabase manual fields
-  const [sbUrl, setSbUrl] = useState("");
-  const [sbKey, setSbKey] = useState("");
-  const [savingSb, setSavingSb] = useState(false);
 
   // GitHub manual fields
   const [githubToken, setGithubToken] = useState("");
@@ -72,30 +67,6 @@ export default function CiriusIntegrations() {
     }
 
     window.open(data.auth_url, "_blank", "width=600,height=700");
-  }
-
-  async function saveSupabase() {
-    if (!sbUrl.trim() || !sbKey.trim()) { toast.error("URL e Service Key são obrigatórios"); return; }
-    setSavingSb(true);
-
-    // Send to edge function — service key never stored from client side
-    const { data, error } = await supabase.functions.invoke("cirius-generate", {
-      body: {
-        action: "save_supabase_integration",
-        supabase_url: sbUrl.trim(),
-        service_key: sbKey.trim(),
-      },
-    });
-
-    if (error || data?.error) {
-      toast.error(data?.error || "Falha ao salvar integração");
-    } else {
-      toast.success("Supabase conectado!");
-      setSbUrl("");
-      setSbKey("");
-      await loadIntegrations();
-    }
-    setSavingSb(false);
   }
 
   async function saveGithub() {
@@ -196,17 +167,6 @@ export default function CiriusIntegrations() {
                   </CardContent>
                 )}
 
-                {/* Supabase manual form */}
-                {p.id === "supabase" && !connected && (
-                  <CardContent className="pt-0 space-y-3 border-t mt-2">
-                    <Input placeholder="https://xxxxx.supabase.co" value={sbUrl} onChange={e => setSbUrl(e.target.value)} />
-                    <Input placeholder="service_role key" type="password" value={sbKey} onChange={e => setSbKey(e.target.value)} />
-                    <p className="text-xs text-destructive">⚠️ A service key tem acesso total ao banco. Nunca compartilhe.</p>
-                    <Button onClick={saveSupabase} disabled={savingSb} size="sm">
-                      {savingSb ? "Salvando..." : "Salvar Supabase"}
-                    </Button>
-                  </CardContent>
-                )}
               </Card>
             );
           })}
