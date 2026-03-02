@@ -81,34 +81,30 @@ export default function ChatTaskCard({
     }
   }, [active]);
 
-  // Legacy phase advancement
+  // Legacy phase advancement — single consolidated effect
   useEffect(() => {
     if (tasks && tasks.length > 0) return;
-    if (!active) return;
+    if (!active && !complete) {
+      if (legacyPhase < 2) setLegacyPhase(2);
+      return;
+    }
+    if (complete) {
+      if (legacyPhase < 2) setLegacyPhase(2);
+      else if (legacyPhase === 2) {
+        const t = setTimeout(() => setLegacyPhase(3), 600);
+        return () => clearTimeout(t);
+      }
+      return;
+    }
+    if (hasStreamContent && legacyPhase < 1) {
+      setLegacyPhase(1);
+      return;
+    }
     if (legacyPhase === 0) {
       const t = setTimeout(() => setLegacyPhase(1), 2000);
       return () => clearTimeout(t);
     }
-  }, [active, legacyPhase, tasks]);
-
-  useEffect(() => {
-    if (tasks && tasks.length > 0) return;
-    if (hasStreamContent && legacyPhase < 1) setLegacyPhase(1);
-  }, [hasStreamContent, legacyPhase, tasks]);
-
-  useEffect(() => {
-    if (tasks && tasks.length > 0) return;
-    if (!active && legacyPhase < 2 && !complete) setLegacyPhase(2);
-  }, [active, legacyPhase, complete, tasks]);
-
-  useEffect(() => {
-    if (tasks && tasks.length > 0) return;
-    if (complete && legacyPhase < 3) {
-      setLegacyPhase(2);
-      const t = setTimeout(() => setLegacyPhase(3), 600);
-      return () => clearTimeout(t);
-    }
-  }, [complete, legacyPhase, tasks]);
+  }, [active, legacyPhase, complete, hasStreamContent, tasks]);
 
   // Multi-task stats
   const stats = useMemo(() => {
