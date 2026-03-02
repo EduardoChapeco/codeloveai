@@ -625,7 +625,7 @@ Deno.serve(async (req) => {
 
     let prd = project.prd_json as any;
     if (!prd || !Array.isArray(prd?.tasks) || prd.tasks.length === 0) {
-      const generatedPrd = await generatePRD(sc, user.id, { ...project, description: prompt }, projectId);
+      const generatedPrd = await generatePRD(sc, effectiveBuildUserId, { ...project, description: prompt }, projectId);
       if (!generatedPrd) {
         await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao gerar PRD" }).eq("id", projectId);
         await logEntry(sc, projectId, "prompt", "failed", "Pipeline interrompido: PRD não foi gerado");
