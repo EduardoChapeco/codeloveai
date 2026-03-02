@@ -118,6 +118,38 @@ Deno.serve(async (req: Request) => {
       try {
         const lovableProjectId = project.lovable_project_id as string;
         if (!lovableProjectId) {
+          // Recovery path for legacy/partial records that lost lovable_project_id.
+          const [{ count: pendingCount }, { data: runningTasks }] = await Promise.all([
+            sc.from("orchestrator_tasks")
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", project.id)
+              .eq("status", "pending"),
+            sc.from("orchestrator_tasks")
+              .select("id, task_index")
+              .eq("project_id", project.id)
+              .eq("status", "running"),
+          ]);
+
+          if ((pendingCount || 0) === 0 && (runningTasks?.length || 0) > 0) {
+            const runningIds = (runningTasks || []).map((t) => t.id as string);
+            await sc.from("orchestrator_tasks").update({
+              status: "completed",
+              completed_at: new Date().toISOString(),
+            }).in("id", runningIds);
+
+            await sc.from("orchestrator_projects").update({
+              status: "completed",
+              next_tick_at: null,
+            }).eq("id", project.id);
+
+            await addLog(sc, project.id as string,
+              `🛠️ [tick] Recovery: project had no lovable_project_id with ${runningIds.length} running tasks and no pending tasks — force-completed and finalized`, "warn",
+              { phase: "executing", action: "recover_missing_project_id_finalize", running_tasks: runningIds.length });
+            tickLog.push(`→ [exec] ${projId8}: recovery finalize (${runningIds.length} running)`);
+            processed++;
+            continue;
+          }
+
           await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", project.id);
           await addLog(sc, project.id as string,
             `🔄 [tick] No lovable_project_id set — reset to paused`, "warn",
@@ -302,6 +334,49 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (!nextTask) {
+          // Safety: if there is still a running task, do NOT complete the project.
+          const { data: runningTask } = await sc
+            .from("orchestrator_tasks")
+            .select("id, task_index, started_at")
+            .eq("project_id", project.id)
+            .eq("status", "running")
+            .order("task_index", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+
+          if (runningTask) {
+            await sc.from("orchestrator_projects").update({
+              status: "executing",
+              current_task_index: runningTask.task_index as number,
+              next_tick_at: new Date(Date.now() + 5_000).toISOString(),
+            }).eq("id", project.id);
+
+            await addLog(sc, project.id as string,
+              `🔄 [tick] No pending tasks but found running task #${runningTask.task_index} — switching back to executing`, "warn",
+              { phase: "paused", action: "recover_running_state", task_id: runningTask.id, task_index: runningTask.task_index });
+
+            tickLog.push(`→ [paused] ${projId8}: running task #${runningTask.task_index} found → executing`);
+            skipped++;
+            continue;
+          }
+
+          // If there are failed tasks, project should be failed (not completed).
+          const { count: failedCount } = await sc
+            .from("orchestrator_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", project.id)
+            .eq("status", "failed");
+
+          if ((failedCount || 0) > 0) {
+            await sc.from("orchestrator_projects").update({ status: "failed" }).eq("id", project.id);
+            await addLog(sc, project.id as string,
+              `❌ [tick] Project marked as failed — no pending/running tasks and ${failedCount} failed tasks found`, "error",
+              { phase: "paused", action: "project_failed", failed_tasks: failedCount });
+            tickLog.push(`→ [paused] ${projId8}: failed tasks=${failedCount} → failed`);
+            processed++;
+            continue;
+          }
+
           await sc.from("orchestrator_projects").update({ status: "completed" }).eq("id", project.id);
           await addLog(sc, project.id as string,
             `🎉 [tick] All tasks completed!`, "info",

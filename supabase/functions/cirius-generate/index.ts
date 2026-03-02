@@ -696,6 +696,28 @@ Deno.serve(async (req) => {
         sc.from("orchestrator_tasks").select("*").eq("project_id", project.orchestrator_project_id).order("task_index"),
         sc.from("orchestrator_logs").select("*").eq("project_id", project.orchestrator_project_id).order("created_at", { ascending: false }).limit(30),
       ]);
+
+      // Auto-reconcile: if orchestrator is completed, finalize Cirius generation state.
+      if (orchProj?.status === "completed" && project.status === "generating_code") {
+        await sc.from("cirius_projects").update({
+          status: "live",
+          current_step: "completed",
+          progress_pct: 100,
+          generation_ended_at: new Date().toISOString(),
+          error_message: null,
+        }).eq("id", projectId).eq("user_id", user.id);
+
+        await logEntry(sc, projectId, "code", "completed",
+          "Orquestrador concluído — projeto finalizado automaticamente.", {
+            metadata: { orchestrator_id: project.orchestrator_project_id },
+          });
+
+        // Keep returned project data aligned with the reconciled state
+        (project as Record<string, unknown>).status = "live";
+        (project as Record<string, unknown>).current_step = "completed";
+        (project as Record<string, unknown>).progress_pct = 100;
+      }
+
       orchestrator = { project: orchProj, tasks: orchTasks, logs: orchLogs };
     }
 
