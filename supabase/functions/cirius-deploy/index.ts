@@ -46,7 +46,10 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const user = await getUser(req);
-  if (!user) return json({ error: "Unauthorized" }, 401);
+  // Allow service-key calls for internal auto-deploy (from cirius-generate refine)
+  const authHeader = req.headers.get("Authorization") || "";
+  const isServiceKey = authHeader === `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`;
+  if (!user && !isServiceKey) return json({ error: "Unauthorized" }, 401);
 
   const sc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const body = await req.json().catch(() => ({}));
@@ -55,9 +58,12 @@ Deno.serve(async (req) => {
 
   if (!projectId) return json({ error: "project_id required" }, 400);
 
-  const { data: project } = await sc.from("cirius_projects")
-    .select("*").eq("id", projectId).eq("user_id", user.id).single();
+  // When called via service key (internal), skip user_id filter
+  let projectQuery = sc.from("cirius_projects").select("*").eq("id", projectId);
+  if (user) projectQuery = projectQuery.eq("user_id", user.id);
+  const { data: project } = await projectQuery.single();
   if (!project) return json({ error: "Project not found" }, 404);
+  const projectUserId = project.user_id as string;
 
   const filesJson = (project.source_files_json || {}) as Record<string, string>;
   if (Object.keys(filesJson).length === 0) return json({ error: "No source files to deploy" }, 400);
@@ -66,7 +72,7 @@ Deno.serve(async (req) => {
 
   // ─── GITHUB ───
   if (action === "github") {
-    const integration = await getIntegration(sc, user.id, "github");
+    const integration = await getIntegration(sc, projectUserId, "github");
     if (!integration?.access_token_enc) return json({ error: "GitHub not connected. Connect via integrations page." }, 400);
 
     const ghToken = integration.access_token_enc;
@@ -140,9 +146,24 @@ Deno.serve(async (req) => {
       await sc.from("cirius_projects").update({
         github_repo: `${owner}/${repo}`, github_url: repoUrl,
         status: "live", deployed_at: new Date().toISOString(),
+        current_step: "done", progress_pct: 100,
+        generation_ended_at: new Date().toISOString(),
       }).eq("id", projectId);
 
-      await logDeploy(sc, projectId, "deploy_github", "completed", `${pushed} arquivos pushados`);
+      await logDeploy(sc, projectId, "deploy_github", "completed", `${pushed} arquivos pushados para ${repoUrl}`);
+
+      // Chain: auto-deploy to Vercel if integration is active
+      const vercelIntegration = await getIntegration(sc, projectUserId, "vercel");
+      if (vercelIntegration?.access_token_enc) {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        fetch(`${supabaseUrl}/functions/v1/cirius-deploy`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${svcKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "vercel", project_id: projectId }),
+        }).catch(console.error);
+      }
+
       return json({ repo_url: repoUrl, files_pushed: pushed });
     } catch (e) {
       console.error("[cirius-deploy] github error:", (e as Error).message);
@@ -153,7 +174,7 @@ Deno.serve(async (req) => {
 
   // ─── VERCEL ───
   if (action === "vercel") {
-    const integration = await getIntegration(sc, user.id, "vercel");
+    const integration = await getIntegration(sc, projectUserId, "vercel");
     if (!integration?.access_token_enc) return json({ error: "Vercel not connected" }, 400);
 
     const vToken = integration.access_token_enc;
@@ -191,7 +212,7 @@ Deno.serve(async (req) => {
 
   // ─── NETLIFY ───
   if (action === "netlify") {
-    const integration = await getIntegration(sc, user.id, "netlify");
+    const integration = await getIntegration(sc, projectUserId, "netlify");
     if (!integration?.access_token_enc) return json({ error: "Netlify not connected" }, 400);
 
     await logDeploy(sc, projectId, "deploy_netlify", "started", "Criando site Netlify...");
@@ -222,7 +243,7 @@ Deno.serve(async (req) => {
 
   // ─── SUPABASE ───
   if (action === "supabase") {
-    const integration = await getIntegration(sc, user.id, "supabase");
+    const integration = await getIntegration(sc, projectUserId, "supabase");
     if (!integration?.service_key_enc || !integration?.project_ref) {
       return json({ error: "Supabase not configured" }, 400);
     }
