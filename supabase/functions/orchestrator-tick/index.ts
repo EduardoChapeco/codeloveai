@@ -516,8 +516,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ═══════════════════════════════════════════════════════
-    // PHASE 2: Process "paused" projects — dispatch next task
+    // PHASE 2: Process "paused" projects — dispatch next task(s) in PARALLEL
     // ═══════════════════════════════════════════════════════
+    const MAX_PARALLEL = 3; // Max concurrent brain tasks per project
     const now = new Date().toISOString();
     const { data: pausedProjects, error: pauseErr } = await sc
       .from("orchestrator_projects")
@@ -534,44 +535,44 @@ Deno.serve(async (req: Request) => {
     for (const project of (pausedProjects || [])) {
       const projId8 = (project.id as string).slice(0, 8);
       try {
-        // Check pending tasks
-        const { data: nextTask } = await sc
+        // Count currently running tasks for this project
+        const { count: runningCount } = await sc
+          .from("orchestrator_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("project_id", project.id)
+          .eq("status", "running");
+
+        const currentRunning = runningCount || 0;
+        const slotsAvailable = MAX_PARALLEL - currentRunning;
+
+        // Get pending tasks (up to available slots)
+        const { data: pendingTasks } = await sc
           .from("orchestrator_tasks")
           .select("id, task_index, title")
           .eq("project_id", project.id)
           .eq("status", "pending")
           .order("task_index", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+          .limit(Math.max(slotsAvailable, 1));
 
-        if (!nextTask) {
-          // Safety: if there is still a running task, do NOT complete the project.
-          const { data: runningTask } = await sc
-            .from("orchestrator_tasks")
-            .select("id, task_index, started_at")
-            .eq("project_id", project.id)
-            .eq("status", "running")
-            .order("task_index", { ascending: true })
-            .limit(1)
-            .maybeSingle();
-
-          if (runningTask) {
+        if (!pendingTasks || pendingTasks.length === 0) {
+          // No pending tasks — check if there are still running ones
+          if (currentRunning > 0) {
+            // Tasks still running — switch to executing
             await sc.from("orchestrator_projects").update({
               status: "executing",
-              current_task_index: runningTask.task_index as number,
               next_tick_at: new Date(Date.now() + 5_000).toISOString(),
             }).eq("id", project.id);
 
             await addLog(sc, project.id as string,
-              `🔄 [tick] No pending tasks but found running task #${runningTask.task_index} — switching back to executing`, "warn",
-              { phase: "paused", action: "recover_running_state", task_id: runningTask.id, task_index: runningTask.task_index });
+              `🔄 [tick] No pending tasks but ${currentRunning} running — switching to executing`, "warn",
+              { phase: "paused", action: "recover_running_state", running_count: currentRunning });
 
-            tickLog.push(`→ [paused] ${projId8}: running task #${runningTask.task_index} found → executing`);
+            tickLog.push(`→ [paused] ${projId8}: ${currentRunning} running → executing`);
             skipped++;
             continue;
           }
 
-          // If there are failed tasks, project should be failed (not completed).
+          // No pending and no running — check for failures
           const { count: failedCount } = await sc
             .from("orchestrator_tasks")
             .select("id", { count: "exact", head: true })
@@ -581,13 +582,14 @@ Deno.serve(async (req: Request) => {
           if ((failedCount || 0) > 0) {
             await sc.from("orchestrator_projects").update({ status: "failed" }).eq("id", project.id);
             await addLog(sc, project.id as string,
-              `❌ [tick] Project marked as failed — no pending/running tasks and ${failedCount} failed tasks found`, "error",
+              `❌ [tick] Project marked as failed — ${failedCount} failed tasks`, "error",
               { phase: "paused", action: "project_failed", failed_tasks: failedCount });
             tickLog.push(`→ [paused] ${projId8}: failed tasks=${failedCount} → failed`);
             processed++;
             continue;
           }
 
+          // All done!
           await sc.from("orchestrator_projects").update({
             status: "completed",
             current_task_index: project.total_tasks as number,
@@ -606,59 +608,68 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Dispatch execute_next
-        const dispatchT0 = Date.now();
-        const execRes = await fetch(`${supabaseUrl}${ORCHESTRATOR_FN}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${serviceKey}`,
-            "x-orchestrator-internal": "true",
-          },
-          body: JSON.stringify({
-            action: "execute_next",
-            project_id: project.id,
-            _internal_user_id: project.user_id,
-          }),
-        });
-        const dispatchDuration = Date.now() - dispatchT0;
+        // Dispatch multiple tasks in parallel (up to available slots)
+        const tasksToDispatch = slotsAvailable > 0 ? pendingTasks.slice(0, slotsAvailable) : [pendingTasks[0]];
+        let anySuccess = false;
+        let anyBackoff = false;
 
-        const execData = await execRes.json().catch(() => ({})) as Record<string, unknown>;
+        for (const nextTask of tasksToDispatch) {
+          const dispatchT0 = Date.now();
+          const execRes = await fetch(`${supabaseUrl}${ORCHESTRATOR_FN}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${serviceKey}`,
+              "x-orchestrator-internal": "true",
+            },
+            body: JSON.stringify({
+              action: "execute_next",
+              project_id: project.id,
+              _internal_user_id: project.user_id,
+              _target_task_id: nextTask.id,
+            }),
+          });
+          const dispatchDuration = Date.now() - dispatchT0;
+          const execData = await execRes.json().catch(() => ({})) as Record<string, unknown>;
 
-        if (execRes.status === 503) {
-          const backoffMs = 60_000;
+          if (execRes.status === 503) {
+            anyBackoff = true;
+            await addLog(sc, project.id as string,
+              `⚠️ [tick] No brainchain accounts for task #${nextTask.task_index} "${nextTask.title}" — backoff`, "warn",
+              { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
+                dispatch_duration_ms: dispatchDuration, action: "backoff_no_accounts" }, nextTask.id as string);
+            tickLog.push(`→ [paused] ${projId8}: no accounts for #${nextTask.task_index} → backoff`);
+            break; // No more accounts available
+          } else if (execRes.status >= 400) {
+            await addLog(sc, project.id as string,
+              `❌ [tick] execute_next failed for #${nextTask.task_index}: HTTP ${execRes.status}`, "error",
+              { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
+                dispatch_status: execRes.status, dispatch_response: execData,
+                dispatch_duration_ms: dispatchDuration, action: "dispatch_failed" }, nextTask.id as string);
+            tickLog.push(`→ [paused] ${projId8}: dispatch #${nextTask.task_index} failed (${execRes.status})`);
+          } else {
+            anySuccess = true;
+            await addLog(sc, project.id as string,
+              `📤 [tick] Dispatched task #${nextTask.task_index} "${nextTask.title}" → parallel (${dispatchDuration}ms)`, "info",
+              { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
+                dispatch_status: execRes.status, dispatch_response: execData,
+                dispatch_duration_ms: dispatchDuration, parallel_slot: tasksToDispatch.indexOf(nextTask) + 1,
+                total_parallel: tasksToDispatch.length, action: "task_dispatched_parallel" }, nextTask.id as string);
+            tickLog.push(`→ [paused] ${projId8}: dispatched #${nextTask.task_index} ∥${tasksToDispatch.indexOf(nextTask) + 1}`);
+            processed++;
+          }
+        }
+
+        if (anyBackoff) {
           await sc.from("orchestrator_projects").update({
-            next_tick_at: new Date(Date.now() + backoffMs).toISOString(),
+            next_tick_at: new Date(Date.now() + 60_000).toISOString(),
           }).eq("id", project.id);
-          await addLog(sc, project.id as string,
-            `⚠️ [tick] No brainchain accounts available for task #${nextTask.task_index} "${nextTask.title}" — backoff ${backoffMs / 1000}s`, "warn",
-            { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
-              dispatch_duration_ms: dispatchDuration, backoff_ms: backoffMs,
-              action: "backoff_no_accounts" }, nextTask.id as string);
-          tickLog.push(`→ [paused] ${projId8}: no accounts → backoff 60s`);
           skipped++;
-        } else if (execRes.status >= 400) {
-          await addLog(sc, project.id as string,
-            `❌ [tick] execute_next failed: HTTP ${execRes.status} — ${JSON.stringify(execData).slice(0, 150)}`, "error",
-            { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
-              dispatch_status: execRes.status, dispatch_response: execData,
-              dispatch_duration_ms: dispatchDuration,
-              action: "dispatch_failed" }, nextTask.id as string);
-          tickLog.push(`→ [paused] ${projId8}: dispatch failed (${execRes.status})`);
-          // Backoff on error
+        } else if (!anySuccess) {
           await sc.from("orchestrator_projects").update({
             next_tick_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
           }).eq("id", project.id);
           skipped++;
-        } else {
-          await addLog(sc, project.id as string,
-            `📤 [tick] Dispatched task #${nextTask.task_index} "${nextTask.title}" → status=${execData.status || "ok"} (${dispatchDuration}ms)`, "info",
-            { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
-              dispatch_status: execRes.status, dispatch_response: execData,
-              dispatch_duration_ms: dispatchDuration,
-              action: "task_dispatched" }, nextTask.id as string);
-          tickLog.push(`→ [paused] ${projId8}: dispatched #${nextTask.task_index} (${execData.status || execRes.status})`);
-          processed++;
         }
       } catch (e) {
         const errMsg = (e as Error).message;

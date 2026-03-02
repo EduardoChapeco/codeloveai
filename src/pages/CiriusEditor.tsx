@@ -81,6 +81,8 @@ export default function CiriusEditor() {
   const [toasts, setToasts] = useState<EditorToast[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [approvingPrd, setApprovingPrd] = useState(false);
+  const [approvedPrdId, setApprovedPrdId] = useState<string | null>(null);
 
   const drawerPositions: Record<string, "left" | "right"> = {
     deploy: "right", files: "right", seo: "left", build: "left", chain: "left",
@@ -279,7 +281,7 @@ export default function CiriusEditor() {
     });
   }, [id, user]);
 
-  // ─── Unified vibecoding send: chat + build pipeline in one ───
+  // ─── Unified vibecoding send: chat → PRD → approval flow ───
   const sendMsg = useCallback(async (msg: string) => {
     if (!msg.trim() || !id) return;
 
@@ -295,14 +297,14 @@ export default function CiriusEditor() {
       id: bubbleId,
       title: msg.length > 36 ? msg.slice(0, 36) + "..." : msg,
       phase: "running",
-      steps: [{ s: "run", t: "Processando comando..." }],
+      steps: [{ s: "run", t: "Gerando blueprint..." }],
       pct: 20,
       startTime: Date.now(),
     };
     setBubbles(prev => [...prev, bubble]);
 
     try {
-      // 3. Send to build pipeline
+      // 3. Send to build pipeline (now returns PRD for approval)
       const { data, error } = await supabase.functions.invoke("cirius-generate", {
         body: { action: "build_prompt", project_id: id, prompt: msg.trim() },
       });
@@ -311,27 +313,43 @@ export default function CiriusEditor() {
         throw new Error(data?.error || error?.message || "Falha na geração");
       }
 
-      // 4. Show AI acknowledgment in chat
-      const taskCount = data?.task_count || 0;
-      const previewUrl = data?.preview_url || null;
-      const aiReply = taskCount > 0
-        ? `✅ Pipeline iniciado com ${taskCount} tarefa(s). ${previewUrl ? `Preview: ${previewUrl}` : "O preview será atualizado automaticamente."}`
-        : "✅ Comando aceito, pipeline em execução.";
+      if (data?.status === "awaiting_approval" && data?.prd_json) {
+        // Show PRD card in chat for approval
+        const prdMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Blueprint gerado com ${data.task_count} tarefa(s). Revise e aprove para iniciar a construção.`,
+          timestamp: Date.now(),
+          prdData: data.prd_json,
+        };
+        setChatMessages(prev => [...prev, prdMsg]);
+        persistMsg({ ...prdMsg, content: JSON.stringify({ prd: true, ...data.prd_json }) });
 
-      const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: aiReply, timestamp: Date.now() };
-      setChatMessages(prev => [...prev, aiMsg]);
-      persistMsg(aiMsg);
+        setBubbles(prev => prev.map(b => b.id === bubbleId ? {
+          ...b, phase: "done", pct: 100,
+          steps: [{ s: "done", t: `Blueprint gerado (${data.task_count} tasks)` }],
+        } : b));
+        addToast("Blueprint pronto para aprovação", "success");
+      } else {
+        // Fallback: direct pipeline (old behavior)
+        const taskCount = data?.task_count || 0;
+        const aiReply = taskCount > 0
+          ? `✅ Pipeline iniciado com ${taskCount} tarefa(s).`
+          : "✅ Comando aceito, pipeline em execução.";
+        const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: aiReply, timestamp: Date.now() };
+        setChatMessages(prev => [...prev, aiMsg]);
+        persistMsg(aiMsg);
 
-      setBubbles(prev => prev.map(b => b.id === bubbleId ? {
-        ...b, phase: "done", pct: 100,
-        steps: [{ s: "done", t: `Pipeline iniciado (${taskCount} tasks)` }],
-      } : b));
+        setBubbles(prev => prev.map(b => b.id === bubbleId ? {
+          ...b, phase: "done", pct: 100,
+          steps: [{ s: "done", t: `Pipeline iniciado (${taskCount} tasks)` }],
+        } : b));
+        addToast("Pipeline iniciado", "success");
+      }
 
-      addToast("Pipeline iniciado", "success");
       await loadProject();
       setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 4000);
     } catch (e) {
-      // Show error in chat
       const errText = e instanceof Error ? e.message : "Erro ao processar";
       const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: `❌ ${errText}`, timestamp: Date.now() };
       setChatMessages(prev => [...prev, errMsg]);
@@ -344,6 +362,61 @@ export default function CiriusEditor() {
       addToast("Erro ao processar", "info");
     }
     setChatLoading(false);
+  }, [id, loadProject, addToast, persistMsg]);
+
+  // ─── Approve PRD → trigger code generation ───
+  const approvePrd = useCallback(async (_prd: any) => {
+    if (!id) return;
+    setApprovingPrd(true);
+
+    const bubbleId = `approve_${Date.now()}`;
+    setBubbles(prev => [...prev, {
+      id: bubbleId, title: "Iniciando construção...", phase: "running" as const,
+      steps: [{ s: "run" as const, t: "Aprovando PRD e disparando multi-brain..." }],
+      pct: 30, startTime: Date.now(),
+    }]);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("cirius-generate", {
+        body: { action: "approve_prd", project_id: id },
+      });
+
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao aprovar");
+
+      // Mark the PRD message as approved
+      setChatMessages(prev => {
+        const prdMsgIdx = [...prev].reverse().findIndex(m => m.prdData);
+        if (prdMsgIdx >= 0) {
+          const realIdx = prev.length - 1 - prdMsgIdx;
+          setApprovedPrdId(prev[realIdx].id);
+        }
+        return prev;
+      });
+
+      const aiMsg: ChatMessage = {
+        id: crypto.randomUUID(), role: "assistant",
+        content: `🚀 Construção iniciada! ${data?.task_count || 0} tarefas sendo executadas por múltiplos brains em paralelo.`,
+        timestamp: Date.now(),
+      };
+      setChatMessages(prev => [...prev, aiMsg]);
+      persistMsg(aiMsg);
+
+      setBubbles(prev => prev.map(b => b.id === bubbleId ? {
+        ...b, phase: "done" as const, pct: 100,
+        steps: [{ s: "done" as const, t: `${data?.task_count || 0} tarefas disparadas` }],
+      } : b));
+      addToast("Multi-brain em execução!", "success");
+      await loadProject();
+      setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 4000);
+    } catch (e) {
+      const errText = e instanceof Error ? e.message : "Erro";
+      setBubbles(prev => prev.map(b => b.id === bubbleId ? {
+        ...b, phase: "error" as const, pct: 100,
+        steps: [{ s: "wait" as const, t: errText }],
+      } : b));
+      addToast("Erro ao iniciar construção", "info");
+    }
+    setApprovingPrd(false);
   }, [id, loadProject, addToast, persistMsg]);
   const removeBubble = useCallback((bubbleId: string) => {
     setBubbles(prev => prev.filter(b => b.id !== bubbleId));
@@ -395,6 +468,9 @@ export default function CiriusEditor() {
         onEditorModeChange={setEditorMode}
         isLive={isLive}
         toasts={toasts}
+        onApprovePrd={approvePrd}
+        approvingPrd={approvingPrd}
+        approvedPrdId={approvedPrdId}
       />
     );
   }

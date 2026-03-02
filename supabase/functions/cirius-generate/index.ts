@@ -598,7 +598,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   let action = (body.action as string) || "";
 
-  // ─── BUILD_PROMPT (single-entry real pipeline trigger) ───
+  // ─── BUILD_PROMPT (generates PRD and returns for approval) ───
   if (action === "build_prompt") {
     const projectId = typeof body.project_id === "string" ? body.project_id.trim() : "";
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
@@ -617,7 +617,7 @@ Deno.serve(async (req) => {
 
     if (!project) return json({ error: "Project not found" }, 404);
 
-    await logEntry(sc, projectId, "prompt", "started", "Prompt recebido, iniciando pipeline", {
+    await logEntry(sc, projectId, "prompt", "started", "Prompt recebido, gerando PRD para aprovação", {
       input_json: { prompt_length: prompt.length, prompt_preview: prompt.slice(0, 120) },
     });
 
@@ -632,10 +632,45 @@ Deno.serve(async (req) => {
         return json({ error: "PRD generation failed" }, 500);
       }
       prd = generatedPrd;
-      await sc.from("cirius_projects").update({ prd_json: prd, status: "draft", progress_pct: 20 }).eq("id", projectId);
-      await logEntry(sc, projectId, "prd", "completed", `PRD gerado via build_prompt (${prd.tasks?.length || 0} tasks)`);
     }
 
+    // Save PRD and set status to awaiting_approval (user must approve before code gen)
+    await sc.from("cirius_projects").update({
+      prd_json: prd, status: "draft", progress_pct: 15,
+    }).eq("id", projectId);
+    await logEntry(sc, projectId, "prd", "completed", `PRD gerado via build_prompt (${prd.tasks?.length || 0} tasks) — aguardando aprovação`);
+
+    return json({
+      status: "awaiting_approval",
+      prd_json: prd,
+      task_count: prd.tasks?.length || 0,
+      design: prd.design || null,
+      project_id: projectId,
+    });
+  }
+
+  // ─── APPROVE_PRD (user approves PRD → triggers code generation) ───
+  if (action === "approve_prd") {
+    const projectId = typeof body.project_id === "string" ? body.project_id.trim() : "";
+    if (!projectId || projectId.length < 10) return json({ error: "project_id required" }, 400);
+
+    const effectiveUserId = user?.id || (isServiceKey ? body.user_id : null);
+    if (!effectiveUserId) return json({ error: "user_id required" }, 400);
+
+    const { data: project } = await sc.from("cirius_projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("user_id", effectiveUserId)
+      .single();
+
+    if (!project) return json({ error: "Project not found" }, 404);
+    if (!project.prd_json || !(project.prd_json as any).tasks?.length) {
+      return json({ error: "No PRD to approve — run build_prompt first" }, 400);
+    }
+
+    await logEntry(sc, projectId, "approve_prd", "completed", "PRD aprovado pelo usuário — iniciando geração de código");
+
+    // Continue to generate_code
     body.project_id = projectId;
     action = "generate_code";
   }

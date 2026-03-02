@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, CheckCircle2, AlertCircle, Clock, Wrench } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Clock, Wrench, Cpu } from "lucide-react";
 import type { Bubble } from "@/components/cirius-editor/types";
 
 interface Props {
@@ -16,6 +16,13 @@ function BubbleTimer({ startTime }: { startTime: number }) {
   return <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--mono)" }}>{elapsed}s</span>;
 }
 
+const BRAIN_COLORS: Record<string, string> = {
+  code: "var(--indigo-l, #818cf8)",
+  design: "var(--pink-l, #f472b6)",
+  prd: "var(--amber-l, #fbbf24)",
+  general: "var(--blue-l, #60a5fa)",
+};
+
 export default function TaskBubbles({ bubbles, onRemove }: Props) {
   if (!bubbles.length) return null;
 
@@ -23,6 +30,14 @@ export default function TaskBubbles({ bubbles, onRemove }: Props) {
     <div className="ce-bubbles">
       {bubbles.map((b) => (
         <div key={b.id} className={`task-bubble ${b.phase === "done" ? "bubble-done" : ""}`}>
+          {/* Brain type indicator */}
+          {b.brainType && (
+            <div className="tb-brain-type" style={{ color: BRAIN_COLORS[b.brainType] || BRAIN_COLORS.general }}>
+              <Cpu size={9} />
+              <span>{b.brainType}</span>
+            </div>
+          )}
+
           {/* Thinking indicator */}
           {b.phase === "running" && (
             <div className="tb-thinking">

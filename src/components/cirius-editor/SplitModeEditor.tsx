@@ -18,12 +18,16 @@ interface Props {
   onEditorModeChange: (mode: EditorMode) => void;
   isLive: boolean;
   toasts: EditorToast[];
+  onApprovePrd?: (prd: any) => void;
+  approvingPrd?: boolean;
+  approvedPrdId?: string | null;
 }
 
 export default function SplitModeEditor({
   project, previewHtml, livePreviewUrl,
   chatMessages, chatLoading, onSendMsg, onSendChat,
   onEditorModeChange, isLive, toasts,
+  onApprovePrd, approvingPrd, approvedPrdId,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
@@ -63,6 +67,9 @@ export default function SplitModeEditor({
             activeMode={activeMode}
             setActiveMode={setActiveMode}
             onClear={handleClear}
+            onApprovePrd={onApprovePrd}
+            approvingPrd={approvingPrd}
+            approvedPrdId={approvedPrdId}
           />
         </div>
 

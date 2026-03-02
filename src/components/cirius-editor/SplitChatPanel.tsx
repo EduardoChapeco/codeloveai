@@ -3,6 +3,7 @@ import {
   MessageCircle, Trash2, Clock, Code, CheckSquare, Info, Shield,
   Paperclip, Camera, ArrowUp, X, Sparkles
 } from "lucide-react";
+import PRDCard from "./PRDCard";
 import type { ChatMessage, ActiveMode } from "./types";
 
 interface Props {
@@ -12,6 +13,9 @@ interface Props {
   activeMode: ActiveMode;
   setActiveMode: (m: ActiveMode) => void;
   onClear: () => void;
+  onApprovePrd?: (prd: any) => void;
+  approvingPrd?: boolean;
+  approvedPrdId?: string | null;
 }
 
 const SUGGESTIONS = [
@@ -20,7 +24,7 @@ const SUGGESTIONS = [
   { icon: "📱", text: "Tornar responsivo" },
 ];
 
-export default function SplitChatPanel({ messages, onSend, isGenerating, activeMode, setActiveMode, onClear }: Props) {
+export default function SplitChatPanel({ messages, onSend, isGenerating, activeMode, setActiveMode, onClear, onApprovePrd, approvingPrd, approvedPrdId }: Props) {
   const [text, setText] = useState("");
   const [modesOpen, setModesOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "history" | "versions">("chat");
@@ -109,22 +113,44 @@ export default function SplitChatPanel({ messages, onSend, isGenerating, activeM
           </div>
         )}
 
-        {messages.map(m => (
-          <div key={m.id} className={`sp-msg ${m.role === "user" ? "sp-msg-user" : "sp-msg-ai"}`}>
-            <div className={`sp-msg-avatar ${m.role === "user" ? "sp-user-av" : "sp-ai-av"}`}>
-              {m.role === "assistant" ? "C" : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              )}
+        {messages.map(m => {
+          // Detect PRD messages (assistant messages with prd_json metadata)
+          const prdData = m.role === "assistant" && m.prdData ? m.prdData : null;
+
+          if (prdData) {
+            return (
+              <div key={m.id} className="sp-msg sp-msg-ai">
+                <div className="sp-msg-avatar sp-ai-av">C</div>
+                <div className="sp-msg-body">
+                  <PRDCard
+                    prd={prdData}
+                    onApprove={() => onApprovePrd?.(prdData)}
+                    isApproving={!!approvingPrd}
+                    isApproved={approvedPrdId === m.id}
+                  />
+                  <div className="sp-msg-time">{formatTime(m.timestamp)}</div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div key={m.id} className={`sp-msg ${m.role === "user" ? "sp-msg-user" : "sp-msg-ai"}`}>
+              <div className={`sp-msg-avatar ${m.role === "user" ? "sp-user-av" : "sp-ai-av"}`}>
+                {m.role === "assistant" ? "C" : (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                )}
+              </div>
+              <div className="sp-msg-body">
+                <div className="sp-msg-bubble">{m.content}</div>
+                <div className="sp-msg-time">{formatTime(m.timestamp)}</div>
+              </div>
             </div>
-            <div className="sp-msg-body">
-              <div className="sp-msg-bubble">{m.content}</div>
-              <div className="sp-msg-time">{formatTime(m.timestamp)}</div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isGenerating && (
           <div className="sp-msg sp-msg-ai">
