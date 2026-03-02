@@ -377,6 +377,71 @@ async function sendViaBrainchain(
   }
 }
 
+// ─── Brain Streaming SSE proxy ──────────────────────────────
+async function streamViaBrainchain(
+  supabaseUrl: string, serviceKey: string,
+  userId: string, message: string, brainType = "code",
+): Promise<ReadableStream | null> {
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/brainchain-stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({ user_id: userId, brain_type: brainType, message }),
+    });
+    if (!res.ok || !res.body) return null;
+    
+    // Transform brain SSE events into OpenAI-compatible SSE format
+    const brainStream = res.body;
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    let buffer = "";
+
+    return new ReadableStream({
+      async start(controller) {
+        const reader = brainStream.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (line.startsWith("event: delta")) continue;
+              if (line.startsWith("event: status")) continue;
+              if (line.startsWith("event: done")) continue;
+              if (line.startsWith("event: error")) continue;
+              if (!line.startsWith("data: ")) continue;
+
+              const payload = line.slice(6).trim();
+              try {
+                const data = JSON.parse(payload);
+                if (data.content) {
+                  // Transform to OpenAI SSE format
+                  const chunk = { choices: [{ delta: { content: data.content } }] };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                }
+                if (data.error) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: data.error })}\n\n`));
+                }
+                if (data.success !== undefined) {
+                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                }
+              } catch { /* skip non-json */ }
+            }
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        } catch { /* stream error */ } finally {
+          controller.close();
+        }
+      }
+    });
+  } catch {
+    return null;
+  }
+}
+
 // ─── Main Handler ───────────────────────────────────────────
 
 serve(async (req) => {
@@ -503,6 +568,58 @@ serve(async (req) => {
           .join("\n\n");
       }
 
+      // Try Brain streaming first (if use_brain_stream is set or as primary)
+      const brainStream = await streamViaBrainchain(
+        supabaseUrl, serviceRoleKey, userId!,
+        `[SYSTEM]\n${systemPrompt}\n\n[USER]\n${prompt}`,
+        command.type === "fix" || command.type === "improve" ? "code" : "general",
+      );
+      if (brainStream) {
+        // Background: tee and collect for file extraction
+        const [passThrough, collector] = brainStream.tee();
+
+        (async () => {
+          try {
+            const reader = collector.getReader();
+            const dec = new TextDecoder();
+            let fullText = "";
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              const chunk = dec.decode(value, { stream: true });
+              for (const line of chunk.split("\n")) {
+                if (!line.startsWith("data: ")) continue;
+                const jsonStr = line.slice(6).trim();
+                if (jsonStr === "[DONE]") continue;
+                try {
+                  const parsed = JSON.parse(jsonStr);
+                  const c = parsed.choices?.[0]?.delta?.content;
+                  if (c) fullText += c;
+                } catch { /* partial */ }
+              }
+            }
+            if (project_id && fullText.length > 10) {
+              let newFiles = extractFileBlocks(fullText);
+              if (Object.keys(newFiles).length === 0) newFiles = extractFilesFromMarkdown(fullText);
+              if (Object.keys(newFiles).length > 0) {
+                const merged = { ...projectFiles, ...newFiles };
+                await supabase.from("cirius_projects").update({ source_files_json: merged, updated_at: new Date().toISOString() }).eq("id", project_id);
+              }
+              const summary = fullText.split(/<file\s/)[0]?.trim().slice(0, 400) || "Brain stream response";
+              await supabase.from("cirius_chat_messages").insert({
+                project_id, user_id: userId, role: "assistant", content: summary,
+                metadata: { command_type: command.type, provider: "brain_stream", files_updated: Object.keys(newFiles || {}).length },
+              });
+            }
+          } catch (e) { console.error("[cirius-ai-chat] brain stream save error:", e); }
+        })();
+
+        return new Response(passThrough, {
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+        });
+      }
+
+      // Fallback: Gateway streaming
       const stream = await streamViaGateway(prompt, systemPrompt);
       if (stream) {
         // Collect full response in background for file extraction + DB save
