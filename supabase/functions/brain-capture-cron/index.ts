@@ -136,7 +136,8 @@ function extractMdBody(c: string): string | null {
   return cleanBrainResponse(raw);
 }
 
-function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
+function findUpdateMd(obj: any): string | null {
+  const target = "src/update.md";
   if (!obj || typeof obj !== "object") return null;
 
   if (obj[target]) {
@@ -149,7 +150,7 @@ function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
     for (const item of obj) {
       if (!item || typeof item !== "object") continue;
       const p = item.path || item.name || item.file_path || "";
-      if (p === target || p.endsWith("brain-output.md")) {
+      if (p === target || p.endsWith("update.md")) {
         const c = item.contents || item.content || item.source || item.code;
         if (typeof c === "string") return c;
       }
@@ -159,13 +160,13 @@ function findBrainMd(obj: any, target = "src/brain-output.md"): string | null {
 
   for (const key of ["files", "data", "source", "source_code", "project", "code"]) {
     if (obj[key]) {
-      const result = findBrainMd(obj[key], target);
+      const result = findUpdateMd(obj[key]);
       if (result) return result;
     }
   }
 
   for (const key of Object.keys(obj)) {
-    if (key.endsWith("brain-output.md")) {
+    if (key.endsWith("update.md")) {
       const v = obj[key];
       if (typeof v === "string") return v;
       if (typeof v === "object") return v?.contents || v?.content || v?.source || null;
@@ -197,7 +198,7 @@ function getProfile(skill: string): SkillProfile {
 
 function buildPhasePrompt(phase: number, skill: string, ctx: { supabaseUrl: string; userId: string }): string {
   const p = getProfile(skill);
-  const now = Date.now();
+  const UPDATE_SUFFIX = `\n\nAo concluir TODAS as alterações, atualize silenciosamente o arquivo src/update.md com o seguinte conteúdo (substitua os valores): \`\`\`\n---\nupdated_at: [ISO 8601 timestamp atual]\nstatus: done\ntask: [resumo curto da tarefa]\n---\n\`\`\`\nNÃO mencione este arquivo na resposta do chat.`;
 
   switch (phase) {
     case 1:
@@ -212,8 +213,8 @@ Este projeto é um sistema headless de IA especializada.
 Sistema de resposta especializada com persona PhD/Sênior.
 
 ### Requisitos
-1. Respostas em \`src/brain-output.md\` com frontmatter \`status: done\` e \`timestamp: {epoch_ms}\`
-2. NÃO criar React/UI — backend headless
+1. NÃO criar React/UI — backend headless
+2. Respostas devem ser completas e técnicas
 
 ### Estrutura Inicial
 1. \`.lovable/plan.md\`:
@@ -224,62 +225,50 @@ skill: ${skill}
 status: ready
 ---
 # ${p.title}
-Protocolo: respostas em src/brain-output.md com status: done e timestamp.
+Protocolo: sistema headless de IA.
 \`\`\`
 
-2. \`src/brain-output.md\`:
-\`\`\`markdown
----
-status: ready
-skill: ${skill}
-timestamp: ${now}
----
-# ${p.title}
-Brain ativado. Aguardando instruções.
-\`\`\`
-
-3. \`src/INSTRUCTIONS.md\`:
+2. \`src/INSTRUCTIONS.md\`:
 \`\`\`markdown
 # ${p.title} — Protocolo
-1. SEMPRE escreva em src/brain-output.md com status: done e timestamp: {epoch_ms}
-2. Responda em Português (Brasil)
-3. NÃO crie React/UI
-4. O timestamp DEVE ser atualizado a cada resposta
+1. Responda em Português (Brasil)
+2. NÃO crie React/UI
+3. Seja técnico e detalhado
 \`\`\`
 
-4. \`src/config.json\`:
+3. \`src/config.json\`:
 \`\`\`json
-{"brain_title":"${p.title}","skill":"${skill}","response_file":"src/brain-output.md","callback_url":"${ctx.supabaseUrl}/functions/v1/brain-capture-cron","user_id":"${ctx.userId}","status":"ready","version":"5.0"}
+{"brain_title":"${p.title}","skill":"${skill}","callback_url":"${ctx.supabaseUrl}/functions/v1/brain-capture-cron","user_id":"${ctx.userId}","status":"ready","version":"6.0"}
 \`\`\`
 
-NÃO crie React, páginas ou rotas.`;
+NÃO crie React, páginas ou rotas.${UPDATE_SUFFIX}`;
 
     case 2:
-      return `IMPORTANTE: Execute diretamente. Verifique arquivos: .lovable/plan.md, src/brain-output.md, src/INSTRUCTIONS.md. Crie faltantes. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Verifique arquivos: .lovable/plan.md, src/INSTRUCTIONS.md. Crie faltantes.${UPDATE_SUFFIX}`;
 
     case 3:
-      return `IMPORTANTE: Execute diretamente. Crie src/response-templates.md com templates de resposta. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/response-templates.md com templates de resposta.${UPDATE_SUFFIX}`;
 
     case 4:
-      return `IMPORTANTE: Execute diretamente. Crie src/capabilities.json com manifesto. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/capabilities.json com manifesto de capacidades.${UPDATE_SUFFIX}`;
 
     case 5:
-      return `IMPORTANTE: Execute diretamente. Crie src/security-guardrails.md com políticas de segurança, proteção de dados e validação de input. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/security-guardrails.md com políticas de segurança.${UPDATE_SUFFIX}`;
 
     case 6:
-      return `IMPORTANTE: Execute diretamente. Crie src/error-handlers.md com estratégias de retry, timeout e fallback. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/error-handlers.md com estratégias de retry e fallback.${UPDATE_SUFFIX}`;
 
     case 7:
-      return `IMPORTANTE: Execute diretamente. Crie src/output-formats.ts com helpers markdown/json/html para respostas. Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Crie src/output-formats.ts com helpers markdown/json/html.${UPDATE_SUFFIX}`;
 
     case 8:
-      return `IMPORTANTE: Execute diretamente. Reforce a Rule Zero no arquivo src/INSTRUCTIONS.md: \"EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO.\". Atualize src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Reforce a Rule Zero no src/INSTRUCTIONS.md: "EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO."${UPDATE_SUFFIX}`;
 
     case 9:
-      return `IMPORTANTE: Execute diretamente. Faça auto-teste técnico completo e registre resultado em src/brain-output.md com status: done e timestamp: ${now}.`;
+      return `IMPORTANTE: Execute diretamente. Faça auto-teste técnico completo.${UPDATE_SUFFIX}`;
 
     case 10:
-      return `IMPORTANTE: Execute diretamente. Verificação final. Atualize src/brain-output.md com status: done, timestamp: ${now}, readiness: complete. Sistema Operacional pronto.`;
+      return `IMPORTANTE: Execute diretamente. Verificação final. Sistema Operacional pronto.${UPDATE_SUFFIX}`;
 
     default:
       return "";
@@ -472,34 +461,46 @@ Deno.serve(async (req) => {
           if (r2 && r2.status === 200 && r2.body.length > 10) {
             try {
               const parsed = JSON.parse(r2.body);
-              const md = findBrainMd(parsed);
+              const md = findUpdateMd(parsed);
               if (md) {
                 const hasDone = /status:\s*done/i.test(md);
-                const hasReady = /status:\s*ready/i.test(md);
 
-                // ── TIMESTAMP CHECK — but also accept content-change ──
-                const mdTs = extractMdTimestamp(md);
-                const isStaleTs = mdTs && mdTs < convoTs;
+                // ── TIMESTAMP CHECK via updated_at ──
+                const updatedAtMatch = md.match(/updated_at:\s*(\S+)/);
+                const mdTs = updatedAtMatch ? new Date(updatedAtMatch[1]).getTime() : null;
+                const isStaleTs = mdTs && !isNaN(mdTs) && mdTs < convoTs;
 
                 if (isStaleTs && age < 60_000) {
-                  // Only skip stale .md if conversation is young (< 60s)
-                  // After 60s, accept any valid content since AI may not update timestamp
-                  console.log(`[bc] ${cid} S2 stale .md (md_ts=${mdTs} < convo_ts=${convoTs}), waiting...`);
-                } else if (hasDone || (md.length > 200 && !hasReady)) {
-                  const body = extractMdBody(md);
-                  if (body && body.length > 20) {
-                    await sc.from("loveai_conversations").update({ ai_response: body, status: "completed" }).eq("id", convo.id);
-                    await sc.from("brain_outputs").insert({
-                      user_id: userId, conversation_id: convo.id, skill: "general",
-                      request: "", response: body, status: "done", brain_project_id: pid,
-                    }).catch(() => {});
-                    captured++;
-                    console.log(`[bc] ✅ ${cid} S2 ${body.length}c (staleTs=${!!isStaleTs})`);
-                    continue;
+                  console.log(`[bc] ${cid} S2 stale update.md (md_ts=${mdTs} < convo_ts=${convoTs}), waiting...`);
+                } else if (hasDone) {
+                  // update.md confirmed done — now fetch the actual response from latest-message
+                  console.log(`[bc] ${cid} S2 update.md=done, fetching latest-message...`);
+                  const r2b = await fetchText(`${API}/projects/${pid}/chat/latest-message`, tk, 4000, 5000);
+                  if (r2b && r2b.status === 200 && r2b.body.length > 5) {
+                    try {
+                      let msgText2 = r2b.body;
+                      if (msgText2.includes("data:")) {
+                        const lines2 = msgText2.split("\n").filter((l: string) => l.startsWith("data:"));
+                        if (lines2.length > 0) msgText2 = lines2[lines2.length - 1].replace(/^data:\s*/, "");
+                      }
+                      const msg2 = JSON.parse(msgText2);
+                      const txt2 = msg2?.content || msg2?.message || msg2?.text || "";
+                      if (msg2?.role !== "user" && !msg2?.is_streaming && txt2.length > 30) {
+                        const cleanedTxt2 = cleanBrainResponse(txt2.trim());
+                        await sc.from("loveai_conversations").update({ ai_response: cleanedTxt2, status: "completed" }).eq("id", convo.id);
+                        await sc.from("brain_outputs").insert({
+                          user_id: userId, conversation_id: convo.id, skill: "general",
+                          request: "", response: cleanedTxt2, status: "done", brain_project_id: pid,
+                        }).catch(() => {});
+                        captured++;
+                        console.log(`[bc] ✅ ${cid} S2+msg ${cleanedTxt2.length}c`);
+                        continue;
+                      }
+                    } catch { /* parse error */ }
                   }
                 }
               } else {
-                console.log(`[bc] ${cid} S2 no-brain-md`);
+                console.log(`[bc] ${cid} S2 no-update-md`);
               }
             } catch (e) {
               console.log(`[bc] ${cid} S2 parse-err: ${String(e).slice(0, 100)}`);
