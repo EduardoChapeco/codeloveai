@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const FIREBASE_KEY = Deno.env.get('FIREBASE_API_KEY') || 'AIzaSyDePbPuDMK7YXNKS4f78N7Ni9GkYQ7bLRw';
+const FIREBASE_KEY = Deno.env.get('FIREBASE_API_KEY') || '';
 const C = '0123456789abcdefghjkmnpqrstvwxyz';
 const rb32 = (n: number) => Array.from({ length: n }, () => C[Math.floor(Math.random() * 32)]).join('');
 
@@ -263,7 +263,7 @@ serve(async (req) => {
       }).eq('id', queueRecord.id);
     }
 
-    return new Response(JSON.stringify({ ok: false, error: errMsg }), {
+    return new Response(JSON.stringify({ ok: false, error: 'Internal processing error' }), {
       status: 500, headers: corsHeaders,
     });
   }
