@@ -1,499 +1,297 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import AppLayout from "@/components/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
-  ArrowLeft, ArrowRight, Rocket, Globe, Layout,
-  ShoppingCart, BarChart3, CheckCircle2, Loader2, Layers,
-  Github, FolderDown, FileCode2, AlertCircle, Search
+  ArrowUp, Loader2, CheckCircle2, Sparkles, Cpu,
+  Code2, Eye, Rocket, Github, FolderDown, X,
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import "@/styles/cirius-editor.css";
 
-const TEMPLATE_TYPES = [
-  { value: "landing", label: "Landing Page", icon: Globe, desc: "Página única, rápida" },
-  { value: "app", label: "Web App", icon: Layout, desc: "Aplicação completa" },
-  { value: "dashboard", label: "Dashboard", icon: BarChart3, desc: "Painel de dados" },
-  { value: "ecommerce", label: "E-commerce", icon: ShoppingCart, desc: "Loja online" },
-  { value: "custom", label: "Custom", icon: Layers, desc: "Descreva livremente" },
-];
+/* ─── Phases for the creation timeline ─── */
+type Phase = "idle" | "creating" | "prd" | "dispatching" | "generating" | "done";
 
-const FEATURES = [
-  "Auth (login/registro)", "Database (CRUD)", "Dashboard", "API integrations",
-  "File upload", "Chat/Messaging", "Payments", "Admin panel", "Analytics",
-  "Dark mode", "PWA", "SEO optimized",
+const PHASE_META: Record<Phase, { label: string; sub: string }> = {
+  idle: { label: "", sub: "" },
+  creating: { label: "Criando projeto", sub: "Inicializando ambiente..." },
+  prd: { label: "Gerando PRD", sub: "Analisando requisitos e planejando tarefas..." },
+  dispatching: { label: "Distribuindo tarefas", sub: "Enviando para Brains especializados..." },
+  generating: { label: "Gerando código", sub: "Brains trabalhando em paralelo..." },
+  done: { label: "Projeto criado!", sub: "Redirecionando para o editor..." },
+};
+
+const SUGGESTIONS = [
+  "Um SaaS de gestão de projetos com Kanban, auth, dashboard e dark mode",
+  "Landing page para startup de IA com hero animado, pricing e CTA",
+  "CRM completo com login OAuth, CRUD de contatos, pipeline de vendas e relatórios",
+  "E-commerce com catálogo, carrinho, checkout e painel admin",
 ];
 
 export default function CiriusNew() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState(0);
-  const [creating, setCreating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressLabel, setProgressLabel] = useState("");
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [templateType, setTemplateType] = useState("landing");
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
+  const [prompt, setPrompt] = useState("");
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [projectName, setProjectName] = useState("");
+  const [taskCount, setTaskCount] = useState(0);
+  const [prdData, setPrdData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [phaseHistory, setPhaseHistory] = useState<Phase[]>([]);
 
-  // GitHub Import state
-  const [createMode, setCreateMode] = useState<"new" | "github">("new");
-  const [ghRepoInput, setGhRepoInput] = useState("");
-  const [ghBranch, setGhBranch] = useState("");
-  const [ghImportName, setGhImportName] = useState("");
-  const [ghImporting, setGhImporting] = useState(false);
-  const [ghRepos, setGhRepos] = useState<any[]>([]);
-  const [ghLoadingRepos, setGhLoadingRepos] = useState(false);
-  const [ghRepoSearch, setGhRepoSearch] = useState("");
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const isRunning = phase !== "idle" && phase !== "done";
 
-  function toggleFeature(f: string) {
-    setSelectedFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
-  }
+  const advancePhase = useCallback((p: Phase) => {
+    setPhase(p);
+    setPhaseHistory(prev => [...prev, p]);
+  }, []);
 
-  async function loadMyRepos() {
-    setGhLoadingRepos(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("cirius-github-import", {
-        body: { action: "list_repos" },
-      });
-      if (error || data?.error) {
-        toast.error(data?.message || "Conecte o GitHub nas integrações");
-        setGhRepos([]);
-      } else {
-        setGhRepos(data.repos || []);
-      }
-    } catch {
-      toast.error("Erro ao carregar repositórios");
-    } finally {
-      setGhLoadingRepos(false);
-    }
-  }
+  /* ─── Auto-resize textarea ─── */
+  const handleInput = useCallback(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }, []);
 
-  async function handleGitHubImport() {
-    if (!ghRepoInput.trim()) { toast.error("Informe o repositório"); return; }
-    setGhImporting(true);
-    setProgress(10);
-    setProgressLabel("Conectando ao GitHub...");
-    setCreating(true);
+  /* ─── Full auto pipeline ─── */
+  const handleCreate = useCallback(async (text: string) => {
+    if (!text.trim() || !user) return;
+    const msg = text.trim();
+    setPrompt(msg);
+    setError(null);
+    setPhaseHistory([]);
+
+    // Derive name from prompt
+    const name = msg.length > 40 ? msg.slice(0, 40).replace(/\s+\S*$/, "") + "..." : msg;
+    setProjectName(name);
 
     try {
-      setProgress(30);
-      setProgressLabel("Baixando arquivos do repositório...");
+      // Phase 1: Create project
+      advancePhase("creating");
 
-      const { data, error } = await supabase.functions.invoke("cirius-github-import", {
-        body: {
-          action: "import",
-          repo: ghRepoInput.trim(),
-          name: ghImportName.trim() || undefined,
-          branch: ghBranch.trim() || undefined,
-        },
-      });
-
-      if (error || data?.error) {
-        toast.error(data?.error || "Erro ao importar");
-        setCreating(false);
-        setGhImporting(false);
-        return;
-      }
-
-      setProgress(90);
-      setProgressLabel(`Importados ${data.files_imported} arquivos!`);
-      toast.success(`Projeto importado: ${data.files_imported} arquivos de ${ghRepoInput}`);
-
-      await new Promise(r => setTimeout(r, 1000));
-      navigate(`/cirius/editor/${data.project_id}`);
-    } catch (e) {
-      toast.error("Erro inesperado na importação");
-      console.error(e);
-      setCreating(false);
-      setGhImporting(false);
-    }
-  }
-
-  async function handleCreate() {
-    if (!name.trim()) { toast.error("Nome é obrigatório"); return; }
-    setCreating(true);
-    setProgress(10);
-    setProgressLabel("Criando projeto...");
-
-    try {
-      // Step 1: Init
       const { data: initData, error: initErr } = await supabase.functions.invoke("cirius-generate", {
         body: {
           action: "init",
           config: {
-            name: name.trim(),
-            description: description.trim(),
-            template_type: templateType,
-            source_url: sourceUrl.trim() || null,
-            features: selectedFeatures,
+            name: name.slice(0, 60),
+            description: msg,
+            template_type: "app",
+            features: [],
           },
         },
       });
 
       if (initErr || !initData?.project_id) {
-        toast.error(initData?.error || "Erro ao criar projeto");
-        setCreating(false);
-        return;
+        throw new Error(initData?.error || "Erro ao criar projeto");
       }
 
       const projectId = initData.project_id;
-      setProgress(25);
-      setProgressLabel("Gerando PRD (plano de tarefas)...");
 
-      // Step 2: Generate PRD automatically
-      const { data: prdData } = await supabase.functions.invoke("cirius-generate", {
+      // Phase 2: Generate PRD
+      advancePhase("prd");
+
+      const { data: prdResult } = await supabase.functions.invoke("cirius-generate", {
         body: { action: "generate_prd", project_id: projectId },
       });
 
-      if (prdData?.prd_json) {
-        setProgress(50);
-        setProgressLabel("PRD pronto! Analisando design...");
+      if (prdResult?.prd_json) {
+        const tc = prdResult.task_count || prdResult.prd_json?.tasks?.length || 0;
+        setTaskCount(tc);
+        setPrdData(prdResult.prd_json);
 
-        const taskCount = prdData.task_count || prdData.prd_json?.tasks?.length || 0;
-        const design = prdData.design || prdData.prd_json?.design;
+        // Phase 3: Dispatch tasks
+        advancePhase("dispatching");
+        await new Promise(r => setTimeout(r, 800));
 
-        toast.success(
-          `PRD gerado: ${taskCount} tasks` +
-          (design?.pages ? ` · ${design.pages.length} páginas` : "") +
-          (design?.tables ? ` · ${design.tables.length} tabelas` : "")
-        );
+        // Phase 4: Start code generation
+        advancePhase("generating");
 
-        // Brief pause so user sees the summary
-        await new Promise(r => setTimeout(r, 1500));
-        setProgress(60);
-        setProgressLabel("Iniciando geração de código...");
-
-        // Step 3: Auto-start code generation
         const { data: codeData } = await supabase.functions.invoke("cirius-generate", {
           body: { action: "generate_code", project_id: projectId },
         });
 
         if (codeData?.started) {
-          setProgress(70);
-          setProgressLabel("Código em geração via " + (codeData.engine || "Brainchain") + "...");
-          toast.success("Geração de código iniciada via " + (codeData.engine || "Brainchain"));
+          toast.success(`${tc} tarefas distribuídas para ${codeData.engine || "Brainchain"}`);
         }
-      } else {
-        toast.info("PRD salvo — geração manual disponível");
-      }
 
-      // Navigate to project page
-      await new Promise(r => setTimeout(r, 800));
-      navigate(`/cirius/editor/${projectId}`);
+        // Phase 5: Done — redirect
+        advancePhase("done");
+        await new Promise(r => setTimeout(r, 1200));
+        navigate(`/cirius/editor/${projectId}`);
+      } else {
+        // PRD failed, go to editor anyway
+        advancePhase("done");
+        toast.info("PRD pendente — continue no editor");
+        await new Promise(r => setTimeout(r, 600));
+        navigate(`/cirius/editor/${projectId}`);
+      }
     } catch (e) {
-      toast.error("Erro inesperado");
-      console.error(e);
-    } finally {
-      setCreating(false);
+      const errMsg = e instanceof Error ? e.message : "Erro inesperado";
+      setError(errMsg);
+      setPhase("idle");
+      toast.error(errMsg);
     }
-  }
+  }, [user, navigate, advancePhase]);
+
+  const handleKey = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleCreate(prompt);
+    }
+  }, [prompt, handleCreate]);
 
   if (!user) { navigate("/login"); return null; }
 
-  // Creating state - full screen progress
-  if (creating) {
-    return (
-      <AppLayout>
-        <div className="max-w-lg mx-auto p-6 flex flex-col items-center justify-center min-h-[60vh] gap-6">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center shadow-xl shadow-primary/20">
-            <Loader2 className="h-8 w-8 text-primary-foreground animate-spin" />
-          </div>
-          <div className="text-center space-y-2">
-            <h2 className="text-xl font-bold text-foreground">Criando {name}</h2>
-            <p className="text-sm text-muted-foreground">{progressLabel}</p>
-          </div>
-          <div className="w-full max-w-sm space-y-2">
-            <Progress value={progress} className="h-2" />
-            <p className="text-xs text-center text-muted-foreground font-mono">{progress}%</p>
-          </div>
-
-          {/* Pipeline steps */}
-          <div className="w-full max-w-sm space-y-2">
-            {[
-              { label: "Criar projeto", threshold: 10 },
-              { label: "Gerar PRD (plano)", threshold: 25 },
-              { label: "Definir design", threshold: 50 },
-              { label: "Gerar código", threshold: 60 },
-            ].map((s, i) => (
-              <div key={i} className="flex items-center gap-3 text-sm">
-                {progress >= s.threshold + 15 ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                ) : progress >= s.threshold ? (
-                  <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
-                ) : (
-                  <div className="h-4 w-4 rounded-full border border-border/50 shrink-0" />
-                )}
-                <span className={progress >= s.threshold ? "text-foreground" : "text-muted-foreground/50"}>
-                  {s.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </AppLayout>
-    );
-  }
+  const allPhases: Phase[] = ["creating", "prd", "dispatching", "generating", "done"];
 
   return (
-    <AppLayout>
-      <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6">
-        <Button variant="ghost" onClick={() => navigate("/cirius")} className="gap-2">
-          <ArrowLeft className="h-4 w-4" /> Voltar
-        </Button>
-
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center">
-            <Rocket className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Novo Projeto Cirius</h1>
-            <p className="text-xs text-muted-foreground">Crie do zero ou importe do GitHub</p>
-          </div>
-        </div>
-
-        <Tabs value={createMode} onValueChange={(v) => setCreateMode(v as "new" | "github")} className="w-full">
-          <TabsList className="w-full grid grid-cols-2">
-            <TabsTrigger value="new" className="gap-2"><Rocket className="h-4 w-4" /> Criar Novo</TabsTrigger>
-            <TabsTrigger value="github" className="gap-2"><Github className="h-4 w-4" /> Importar GitHub</TabsTrigger>
-          </TabsList>
-
-          {/* ─── TAB: CRIAR NOVO ─── */}
-          <TabsContent value="new" className="space-y-6 mt-4">
-        <div className="flex items-center gap-2">
-          {[0, 1, 2].map(i => (
-            <div key={i} className="flex items-center gap-2">
-              <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                step >= i ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-              }`}>
-                {step > i ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
-              </div>
-              {i < 2 && <div className={`w-8 h-0.5 ${step > i ? "bg-primary" : "bg-muted"}`} />}
-            </div>
-          ))}
-        </div>
-
-        {/* Step 0: Type */}
-        {step === 0 && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Que tipo de projeto?</p>
-            <div className="grid grid-cols-2 gap-3">
-              {TEMPLATE_TYPES.map(t => (
-                <div
-                  key={t.value}
-                  className={`rounded-xl border p-4 cursor-pointer transition-all flex items-center gap-3 ${
-                    templateType === t.value
-                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                      : "border-border/50 hover:border-primary/30 bg-card"
-                  }`}
-                  onClick={() => setTemplateType(t.value)}
-                >
-                  <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${
-                    templateType === t.value ? "bg-primary/10" : "bg-muted"
-                  }`}>
-                    <t.icon className={`h-4.5 w-4.5 ${templateType === t.value ? "text-primary" : "text-muted-foreground"}`} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{t.label}</p>
-                    <p className="text-[11px] text-muted-foreground">{t.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Button onClick={() => setStep(1)} className="w-full gap-2">
-              Próximo <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-
-        {/* Step 1: Details */}
-        {step === 1 && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nome do Projeto *</label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Meu App Incrível" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Descreva o que quer construir</label>
-              <Textarea value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="Um dashboard para gerenciar clientes com login, CRUD de contatos, gráficos de vendas..." rows={4} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">URL de referência (opcional)</label>
-              <Input value={sourceUrl} onChange={e => setSourceUrl(e.target.value)}
-                placeholder="https://exemplo.com" type="url" />
-              <p className="text-[11px] text-muted-foreground">Cole a URL de um site para usar como inspiração</p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep(0)}>Voltar</Button>
-              <Button onClick={() => setStep(2)} className="flex-1 gap-2">
-                Próximo <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Features + Build */}
-        {step === 2 && (
-          <div className="space-y-4">
-            <p className="text-sm font-medium">Features (selecione)</p>
-            <div className="flex flex-wrap gap-2">
-              {FEATURES.map(f => (
-                <Badge
-                  key={f}
-                  variant={selectedFeatures.includes(f) ? "default" : "outline"}
-                  className="cursor-pointer transition-all hover:scale-105"
-                  onClick={() => toggleFeature(f)}
-                >
-                  {selectedFeatures.includes(f) && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                  {f}
-                </Badge>
-              ))}
-            </div>
-
-            {/* Summary card */}
-            <div className="rounded-xl border border-border/50 bg-card p-4 space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resumo</p>
-              <div className="text-sm space-y-1">
-                <p><span className="text-muted-foreground">Tipo:</span> <span className="font-medium">{TEMPLATE_TYPES.find(t => t.value === templateType)?.label}</span></p>
-                <p><span className="text-muted-foreground">Nome:</span> <span className="font-medium">{name || "—"}</span></p>
-                {description && <p><span className="text-muted-foreground">Desc:</span> {description.slice(0, 80)}{description.length > 80 ? "..." : ""}</p>}
-                {sourceUrl && <p><span className="text-muted-foreground">Ref:</span> <span className="text-primary">{sourceUrl}</span></p>}
-                <p><span className="text-muted-foreground">Features:</span> {selectedFeatures.length > 0 ? selectedFeatures.join(", ") : "Nenhuma"}</p>
-              </div>
-              <div className="pt-2 border-t border-border/30 text-[11px] text-muted-foreground">
-                Ao clicar em "Gerar", o Cirius criará automaticamente: PRD (plano), design (cores/fontes), e iniciará a geração de código via Brainchain.
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep(1)}>Voltar</Button>
-              <Button onClick={handleCreate} disabled={creating || !name.trim()} className="flex-1 gap-2">
-                <Rocket className="h-4 w-4" /> Gerar Projeto Automaticamente
-              </Button>
-            </div>
-          </div>
-        )}
-          </TabsContent>
-
-          {/* ─── TAB: IMPORTAR GITHUB ─── */}
-          <TabsContent value="github" className="space-y-5 mt-4">
-            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center">
-                  <FolderDown className="h-4.5 w-4.5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Importar Repositório</p>
-                  <p className="text-[11px] text-muted-foreground">Cole a URL ou owner/repo do GitHub</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Repositório *</label>
-                  <Input
-                    value={ghRepoInput}
-                    onChange={e => setGhRepoInput(e.target.value)}
-                    placeholder="owner/repo ou https://github.com/owner/repo"
-                    className="font-mono text-sm"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Nome do projeto</label>
-                    <Input
-                      value={ghImportName}
-                      onChange={e => setGhImportName(e.target.value)}
-                      placeholder="Opcional"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Branch</label>
-                    <Input
-                      value={ghBranch}
-                      onChange={e => setGhBranch(e.target.value)}
-                      placeholder="main (padrão)"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <Button
-                onClick={handleGitHubImport}
-                disabled={ghImporting || !ghRepoInput.trim()}
-                className="w-full gap-2"
-              >
-                {ghImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderDown className="h-4 w-4" />}
-                Importar Projeto
-              </Button>
-            </div>
-
-            {/* My Repos section */}
-            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Meus Repositórios</p>
-                <Button variant="outline" size="sm" onClick={loadMyRepos} disabled={ghLoadingRepos} className="gap-1.5 text-xs">
-                  {ghLoadingRepos ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Github className="h-3.5 w-3.5" />}
-                  Carregar
-                </Button>
-              </div>
-
-              {ghRepos.length > 0 && (
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    value={ghRepoSearch}
-                    onChange={e => setGhRepoSearch(e.target.value)}
-                    placeholder="Buscar repositório..."
-                    className="pl-9 h-8 text-xs"
-                  />
-                </div>
-              )}
-
-              {ghRepos.length > 0 ? (
-                <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                  {ghRepos
-                    .filter(r => !ghRepoSearch || r.full_name.toLowerCase().includes(ghRepoSearch.toLowerCase()) || (r.description || "").toLowerCase().includes(ghRepoSearch.toLowerCase()))
-                    .map((r: any) => (
-                    <div
-                      key={r.full_name}
-                      className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors group border border-transparent hover:border-border/50"
-                      onClick={() => { setGhRepoInput(r.full_name); setGhImportName(r.name); }}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <FileCode2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium truncate">{r.full_name}</p>
-                          {r.description && <p className="text-[10px] text-muted-foreground truncate">{r.description}</p>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {r.language && <Badge variant="outline" className="text-[10px] h-5">{r.language}</Badge>}
-                        {r.private && <Badge variant="secondary" className="text-[10px] h-5">Private</Badge>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : !ghLoadingRepos ? (
-                <div className="text-center py-6 text-xs text-muted-foreground">
-                  <AlertCircle className="h-5 w-5 mx-auto mb-2 opacity-40" />
-                  Clique em "Carregar" para listar seus repos
-                </div>
-              ) : null}
-            </div>
-          </TabsContent>
-        </Tabs>
+    <div className="cn-root">
+      {/* Ambient background */}
+      <div className="cn-bg">
+        <div className="cn-bg-glow" />
       </div>
-    </AppLayout>
+
+      {/* Centered content */}
+      <div className="cn-center">
+        {/* Logo/brand */}
+        <div className="cn-logo">
+          <div className="cn-logo-icon">
+            <Sparkles size={20} />
+          </div>
+          <h1 className="cn-title">Cirius</h1>
+          <p className="cn-subtitle">Descreva o que quer construir</p>
+        </div>
+
+        {/* Running state: timeline */}
+        {phase !== "idle" && (
+          <div className="cn-timeline">
+            <div className="cn-tl-header">
+              {phase === "done" ? (
+                <CheckCircle2 size={14} className="cn-tl-ico-done" />
+              ) : (
+                <Loader2 size={14} className="animate-spin cn-tl-ico-active" />
+              )}
+              <span className="cn-tl-name">{projectName}</span>
+              {taskCount > 0 && (
+                <span className="cn-tl-badge">{taskCount} tarefas</span>
+              )}
+            </div>
+
+            <div className="cn-tl-steps">
+              {allPhases.map((p, i) => {
+                const meta = PHASE_META[p];
+                const isCurrent = p === phase;
+                const isPast = phaseHistory.includes(p) && !isCurrent;
+                const isFuture = !phaseHistory.includes(p) && !isCurrent;
+
+                return (
+                  <div key={p} className={`cn-tl-step ${isCurrent ? "active" : ""} ${isPast ? "past" : ""} ${isFuture ? "future" : ""}`}>
+                    <div className={`cn-tl-step-ico ${isPast ? "past" : isCurrent ? "active" : ""}`}>
+                      {isPast ? (
+                        <CheckCircle2 size={10} />
+                      ) : isCurrent ? (
+                        <Loader2 size={10} className="animate-spin" />
+                      ) : (
+                        <div className="cn-tl-step-dot" />
+                      )}
+                    </div>
+                    <div className="cn-tl-step-text">
+                      <span className="cn-tl-step-label">{meta.label}</span>
+                      {isCurrent && <span className="cn-tl-step-sub">{meta.sub}</span>}
+                    </div>
+                    {isPast && <span className="cn-tl-check">✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* PRD summary */}
+            {prdData?.design && (
+              <div className="cn-tl-prd">
+                {prdData.design.pages?.length > 0 && (
+                  <span className="cn-tl-prd-item">📄 {prdData.design.pages.length} páginas</span>
+                )}
+                {prdData.design.tables?.length > 0 && (
+                  <span className="cn-tl-prd-item">🗃️ {prdData.design.tables.length} tabelas</span>
+                )}
+              </div>
+            )}
+
+            {/* Progress */}
+            <div className="cn-tl-progress">
+              <div
+                className={`cn-tl-progress-fill ${phase === "done" ? "done" : ""}`}
+                style={{
+                  width: `${phase === "creating" ? 15 : phase === "prd" ? 35 : phase === "dispatching" ? 55 : phase === "generating" ? 75 : 100}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="cn-error">
+            <X size={12} /> {error}
+          </div>
+        )}
+
+        {/* Chat input */}
+        <div className={`cn-input-card ${isRunning ? "disabled" : ""}`}>
+          <textarea
+            ref={taRef}
+            className="cn-textarea"
+            placeholder="Descreva seu projeto completo... ex: Um sistema de gestão com login, CRUD, dashboard e dark mode"
+            value={prompt}
+            onChange={e => { setPrompt(e.target.value); handleInput(); }}
+            onKeyDown={handleKey}
+            rows={1}
+            disabled={isRunning}
+          />
+          <div className="cn-input-footer">
+            <div className="cn-input-hints">
+              <span className="cn-hint">⌘↵ para criar</span>
+            </div>
+            <button
+              className="cn-send-btn"
+              onClick={() => handleCreate(prompt)}
+              disabled={isRunning || !prompt.trim()}
+            >
+              {isRunning ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={14} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Suggestions */}
+        {phase === "idle" && (
+          <div className="cn-suggestions">
+            {SUGGESTIONS.map((s, i) => (
+              <button
+                key={i}
+                className="cn-sug-btn"
+                onClick={() => {
+                  setPrompt(s);
+                  taRef.current?.focus();
+                  setTimeout(handleInput, 10);
+                }}
+              >
+                <Sparkles size={10} className="cn-sug-ico" />
+                <span>{s.length > 70 ? s.slice(0, 70) + "..." : s}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* GitHub import link */}
+        {phase === "idle" && (
+          <button className="cn-gh-link" onClick={() => navigate("/cirius/new?mode=github")}>
+            <Github size={12} /> Importar do GitHub
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
