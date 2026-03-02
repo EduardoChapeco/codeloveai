@@ -2,6 +2,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, Building2, Globe, Users, Shield, Palette, BarChart2, ChevronDown, Lock, CheckCircle2, Star, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
+import MeshBackground from "@/components/MeshBackground";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -61,36 +62,6 @@ const faqs = [
   { q: "E se eu precisar de funcionalidades customizadas?", a: "Projetos Enterprise podem incluir desenvolvimento personalizado. Fale com nosso time comercial para avaliar a viabilidade." },
 ];
 
-function hexToRgb(hex: string): string {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `${r}, ${g}, ${b}`;
-}
-
-function lighten(hex: string, amount: number): string {
-  const h = hex.replace("#", "");
-  let r = parseInt(h.substring(0, 2), 16);
-  let g = parseInt(h.substring(2, 4), 16);
-  let b = parseInt(h.substring(4, 6), 16);
-  r = Math.min(255, Math.round(r + (255 - r) * amount));
-  g = Math.min(255, Math.round(g + (255 - g) * amount));
-  b = Math.min(255, Math.round(b + (255 - b) * amount));
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-}
-
-function darken(hex: string, amount: number): string {
-  const h = hex.replace("#", "");
-  let r = parseInt(h.substring(0, 2), 16);
-  let g = parseInt(h.substring(2, 4), 16);
-  let b = parseInt(h.substring(4, 6), 16);
-  r = Math.max(0, Math.round(r * (1 - amount)));
-  g = Math.max(0, Math.round(g * (1 - amount)));
-  b = Math.max(0, Math.round(b * (1 - amount)));
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-}
-
 export default function WhiteLabelLanding() {
   const [searchParams] = useSearchParams();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -124,10 +95,6 @@ export default function WhiteLabelLanding() {
   }, [tenantSlug]);
 
   const isCustom = brand.id !== DEFAULT_TENANT_ID;
-  const pc = brand.primary_color || "#6366f1";
-  const sc = brand.secondary_color || darken(pc, 0.2);
-  const ac = brand.accent_color || lighten(pc, 0.3);
-  const pcLight = lighten(pc, 0.15);
   const appName = brand.name || "Starble";
   const logoInitial = appName.charAt(0).toUpperCase();
 
@@ -141,70 +108,63 @@ export default function WhiteLabelLanding() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-white/40" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   const content = (
-    <div className="min-h-screen text-white font-sans" style={{ backgroundColor: "#09090b" }}>
-      <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/5" style={{ backgroundColor: "rgba(9,9,11,0.8)", backdropFilter: "blur(16px)" }}>
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            {brand.logo_url ? (
-              <img src={brand.logo_url} alt={appName} className="h-7 w-7 rounded-lg object-cover" />
-            ) : (
-              <div className="h-7 w-7 rounded-lg flex items-center justify-center text-white font-black text-xs"
-                style={{ background: `linear-gradient(135deg, ${pc}, ${sc})` }}>
-                {logoInitial}
-              </div>
-            )}
-            <span className="font-bold text-sm">{appName}</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link to="/login" className="text-sm text-white/60 hover:text-white transition-colors">Entrar</Link>
-            <Link to={onboardingLink}
-              className="text-sm px-4 py-1.5 rounded-lg text-white font-semibold transition-colors hover:opacity-90"
-              style={{ backgroundColor: pc }}>
-              Começar agora
+    <div className="min-h-screen bg-background text-foreground">
+      {(!authLoading && !user) && <MeshBackground />}
+
+      {/* Nav */}
+      {(!authLoading && !user) && (
+        <nav className="fixed top-0 inset-x-0 z-50 clf-glass-nav">
+          <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-2">
+              {brand.logo_url ? (
+                <img src={brand.logo_url} alt={appName} className="h-7 w-7 rounded-lg object-cover" />
+              ) : (
+                <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-black text-xs">
+                  {logoInitial}
+                </div>
+              )}
+              <span className="font-bold text-sm text-foreground">{appName}</span>
             </Link>
+            <div className="flex items-center gap-4">
+              <Link to="/login" className="lv-btn-ghost h-9 px-3 text-xs">Entrar</Link>
+              <Link to={onboardingLink} className="lv-btn-primary h-9 px-4 text-xs">Começar agora</Link>
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav>
+      )}
 
       {/* Hero */}
-      <section className="pt-32 pb-24 px-6 text-center relative overflow-hidden">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] rounded-full blur-3xl pointer-events-none"
-          style={{ backgroundColor: `rgba(${hexToRgb(pc)}, 0.08)` }} />
+      <section className={`${!user ? "pt-32" : "pt-12"} pb-24 px-6 text-center relative overflow-hidden`}>
         <div className="relative max-w-4xl mx-auto">
-          <span className="inline-block px-3 py-1 rounded-full text-xs font-bold tracking-widest uppercase mb-6"
-            style={{ backgroundColor: `rgba(${hexToRgb(pc)}, 0.1)`, border: `1px solid rgba(${hexToRgb(pc)}, 0.3)`, color: pcLight }}>
-            White Label
-          </span>
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-6 bg-gradient-to-b from-white via-white to-white/40 bg-clip-text text-transparent">
-            Sua Plataforma.<br />Seu Negócio.
+          <span className="chip chip-purple mb-6">White Label</span>
+          <h1 className="lv-heading-xl mb-6">
+            Sua Plataforma. Seu Negócio.
           </h1>
-          <p className="text-xl text-white/50 mb-4 max-w-2xl mx-auto">
+          <p className="lv-body-lg text-base max-w-2xl mx-auto mb-4">
             Lance uma plataforma de IA completa com a sua marca em dias, não meses.
-            <br /><span className="text-white/80">Tecnologia que custaria R$500k para construir — disponível agora.</span>
+            <br /><span className="text-foreground">Tecnologia que custaria R$500k para construir — disponível agora.</span>
           </p>
-          <p className="text-sm text-white/30 mb-10 max-w-xl mx-auto">Perfeito para agências, empresas de tecnologia e empreendedores digitais que querem escalar com IA.</p>
+          <p className="lv-caption mb-10 max-w-xl mx-auto">Perfeito para agências, empresas de tecnologia e empreendedores digitais que querem escalar com IA.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to={onboardingLink}
-              className="px-8 py-4 rounded-xl text-white font-bold text-base hover:opacity-90 transition-opacity flex items-center gap-2 justify-center"
-              style={{ background: `linear-gradient(to right, ${pc}, ${sc})` }}>
+            <Link to={onboardingLink} className="lv-btn-primary lv-btn-lg">
               Configurar meu White Label <ArrowRight className="h-5 w-5" />
             </Link>
-            <Link to={faqLink} className="px-8 py-4 rounded-xl bg-white/5 border border-white/10 text-white font-semibold text-base hover:bg-white/[0.08] transition-colors">
-              Ver documentação →
+            <Link to={faqLink} className="lv-btn-secondary lv-btn-lg">
+              Ver documentação
             </Link>
           </div>
         </div>
       </section>
 
       {/* Numbers */}
-      <section className="py-12 border-y border-white/5">
+      <section className="py-12 border-y border-border/50">
         <div className="max-w-4xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           {[
             { value: "R$7,96", label: "custo por usuário/dia (40%)" },
@@ -213,8 +173,8 @@ export default function WhiteLabelLanding() {
             { value: "0", label: "taxa de setup" },
           ].map((s, i) => (
             <div key={i}>
-              <div className="text-3xl font-black" style={{ color: pcLight }}>{s.value}</div>
-              <div className="text-sm text-white/40 mt-1">{s.label}</div>
+              <div className="lv-stat text-3xl">{s.value}</div>
+              <p className="lv-caption mt-1">{s.label}</p>
             </div>
           ))}
         </div>
@@ -223,22 +183,17 @@ export default function WhiteLabelLanding() {
       {/* Features */}
       <section className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-14">
-            Infraestrutura <span style={{ color: pcLight }}>pronta para escalar</span>
+          <h2 className="lv-heading-lg text-center mb-14">
+            Infraestrutura <span className="text-primary">pronta para escalar</span>
           </h2>
           <div className="grid md:grid-cols-3 gap-6">
             {features.map((f, i) => (
-              <div key={i}
-                className="p-6 rounded-2xl border transition-colors group"
-                style={{ backgroundColor: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = `rgba(${hexToRgb(pc)}, 0.3)`)}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)")}>
-                <div className="h-12 w-12 rounded-xl flex items-center justify-center mb-4"
-                  style={{ backgroundColor: `rgba(${hexToRgb(pc)}, 0.1)`, border: `1px solid rgba(${hexToRgb(pc)}, 0.2)`, color: pcLight }}>
+              <div key={i} className="lv-card">
+                <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mb-4">
                   <f.icon className="h-6 w-6" />
                 </div>
-                <h3 className="font-semibold mb-2">{f.title}</h3>
-                <p className="text-sm text-white/50 leading-relaxed">{f.desc}</p>
+                <h3 className="lv-heading-sm mb-2">{f.title}</h3>
+                <p className="lv-body">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -246,33 +201,28 @@ export default function WhiteLabelLanding() {
       </section>
 
       {/* Plans */}
-      <section className="py-24 px-6 border-y border-white/5" style={{ backgroundColor: "rgba(255,255,255,0.01)" }}>
+      <section className="py-24 px-6 border-y border-border/50">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-4">Investimento</h2>
-          <p className="text-center text-white/40 text-sm mb-14">Valores personalizados de acordo com volume e funcionalidades.</p>
+          <h2 className="lv-heading-lg text-center mb-4">Investimento</h2>
+          <p className="lv-body text-center mb-14">Valores personalizados de acordo com volume e funcionalidades.</p>
           <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
             {plans.map((p, i) => (
-              <div key={i} className="p-8 rounded-2xl border"
-                style={{
-                  borderColor: p.featured ? `rgba(${hexToRgb(pc)}, 0.4)` : "rgba(255,255,255,0.06)",
-                  boxShadow: p.featured ? `0 0 0 2px rgba(${hexToRgb(pc)}, 0.15)` : "none",
-                }}>
-                {p.featured && <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: pcLight }}>Mais escolhido</div>}
-                <h3 className="text-xl font-bold mb-1">{p.name}</h3>
-                <p className="text-2xl font-black mb-0" style={{ color: pcLight }}>
-                  {p.price}<span className="text-sm font-normal text-white/40">{p.period}</span>
+              <div key={i} className={`lv-card ${p.featured ? "ring-2 ring-primary/30" : ""}`}>
+                {p.featured && <p className="lv-overline text-primary mb-3">Mais escolhido</p>}
+                <h3 className="lv-heading-sm mb-1">{p.name}</h3>
+                <p className="lv-stat text-2xl mb-0">
+                  {p.price}<span className="text-sm font-normal text-muted-foreground">{p.period}</span>
                 </p>
-                <p className="text-xs text-white/40 mb-6">{p.desc}</p>
+                <p className="lv-caption mb-6">{p.desc}</p>
                 <ul className="space-y-2 mb-8">
                   {p.features.map((feat, j) => (
-                    <li key={j} className="flex items-center gap-2 text-sm text-white/60">
-                      <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: pcLight }} />{feat}
+                    <li key={j} className="flex items-center gap-2 lv-body">
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />{feat}
                     </li>
                   ))}
                 </ul>
                 <Link to={onboardingLink}
-                  className="block text-center py-3 rounded-xl font-semibold text-sm transition-colors text-white hover:opacity-90"
-                  style={{ backgroundColor: p.featured ? pc : "rgba(255,255,255,0.05)" }}>
+                  className={p.featured ? "lv-btn-primary w-full text-center" : "lv-btn-secondary w-full text-center"}>
                   {p.cta}
                 </Link>
               </div>
@@ -285,29 +235,28 @@ export default function WhiteLabelLanding() {
       <section className="py-16 px-6">
         <div className="max-w-3xl mx-auto text-center">
           <div className="flex justify-center gap-1 mb-4">
-            {[...Array(5)].map((_, i) => <Star key={i} className="h-5 w-5" style={{ color: pcLight, fill: pcLight }} />)}
+            {[...Array(5)].map((_, i) => <Star key={i} className="h-5 w-5 text-primary fill-primary" />)}
           </div>
-          <p className="text-xl text-white/70 italic mb-4">"Lançamos nossa plataforma de IA em 4 dias. Nossa agência passou de prestadora de serviços para empresa de produto. ROI em menos de 60 dias."</p>
-          <p className="text-sm font-semibold">Ana Paula Ramos</p>
-          <p className="text-xs text-white/30">CEO, Digital Growth Agency · SP</p>
+          <p className="text-xl text-muted-foreground italic mb-4">"Lançamos nossa plataforma de IA em 4 dias. Nossa agência passou de prestadora de serviços para empresa de produto. ROI em menos de 60 dias."</p>
+          <p className="text-sm font-semibold text-foreground">Ana Paula Ramos</p>
+          <p className="lv-caption">CEO, Digital Growth Agency · SP</p>
         </div>
       </section>
 
       {/* FAQ */}
-      <section className="py-24 px-6 border-y border-white/5" style={{ backgroundColor: "rgba(255,255,255,0.01)" }}>
+      <section className="py-24 px-6 border-y border-border/50">
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-14">Perguntas Frequentes</h2>
+          <h2 className="lv-heading-lg text-center mb-14">Perguntas Frequentes</h2>
           <div className="space-y-3">
             {faqs.map((faq, i) => (
-              <button key={i} onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                className="w-full text-left p-5 rounded-xl border transition-colors"
-                style={{ backgroundColor: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
+              <div key={i} onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                className="lv-card-sm cursor-pointer">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="font-medium text-sm">{faq.q}</span>
-                  <ChevronDown className={`h-4 w-4 text-white/40 shrink-0 transition-transform ${openFaq === i ? "rotate-180" : ""}`} />
+                  <span className="lv-body-strong">{faq.q}</span>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${openFaq === i ? "rotate-180" : ""}`} />
                 </div>
-                {openFaq === i && <p className="text-sm text-white/50 mt-3 leading-relaxed">{faq.a}</p>}
-              </button>
+                {openFaq === i && <p className="lv-body mt-3 animate-fade-in">{faq.a}</p>}
+              </div>
             ))}
           </div>
         </div>
@@ -316,23 +265,21 @@ export default function WhiteLabelLanding() {
       {/* Final CTA */}
       <section className="py-24 px-6 text-center">
         <div className="max-w-xl mx-auto">
-          <h2 className="text-4xl font-black mb-4">Pronto para lançar sua plataforma?</h2>
-          <p className="text-white/50 mb-8">Configuração em 2 horas. Primeira venda em dias. Sua marca no mercado de IA.</p>
-          <Link to={onboardingLink}
-            className="inline-flex items-center gap-2 px-10 py-4 rounded-xl text-white font-bold text-base hover:opacity-90 transition-opacity"
-            style={{ background: `linear-gradient(to right, ${pc}, ${sc})` }}>
+          <h2 className="lv-heading-xl mb-4">Pronto para lançar sua plataforma?</h2>
+          <p className="lv-body-lg mb-8">Configuração em 2 horas. Primeira venda em dias. Sua marca no mercado de IA.</p>
+          <Link to={onboardingLink} className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
             Configurar agora — é gratuito <ArrowRight className="h-5 w-5" />
           </Link>
-          <p className="text-[11px] text-white/20 mt-4"><Lock className="h-3 w-3 inline mr-1" />Sem taxas de setup. Cancele quando quiser.</p>
+          <p className="lv-caption mt-4"><Lock className="h-3 w-3 inline mr-1" />Sem taxas de setup. Cancele quando quiser.</p>
         </div>
       </section>
 
-      <footer className="border-t border-white/5 py-8 px-6 text-center text-xs text-white/20">
-        <p>© 2026 {appName}. Programa White Label.</p>
+      <footer className="border-t border-border/50 py-8 px-6 text-center">
+        <p className="lv-caption">© 2026 {appName}. Programa White Label.</p>
         <div className="flex justify-center gap-6 mt-3">
-          <Link to="/termos" className="hover:text-white/40 transition-colors">Termos</Link>
-          <Link to="/afiliados" className="hover:text-white/40 transition-colors">Afiliados</Link>
-          <Link to="/ajuda" className="hover:text-white/40 transition-colors">Ajuda</Link>
+          <Link to="/termos" className="lv-caption hover:text-foreground transition-colors">Termos</Link>
+          <Link to="/afiliados" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>
+          <Link to="/ajuda" className="lv-caption hover:text-foreground transition-colors">Ajuda</Link>
         </div>
       </footer>
     </div>

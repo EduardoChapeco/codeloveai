@@ -957,21 +957,21 @@ export default function Admin() {
                     )}
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-white/5 dark:bg-black/5 p-4 rounded-2xl border border-black/5">
+                      <div className="bg-muted/40 p-4 rounded-2xl border border-border/50">
                         <p className="lv-stat text-2xl">{a.coins?.balance || 0}</p>
                         <p className="lv-overline opacity-60">COINS</p>
                       </div>
-                      <div className="bg-white/5 dark:bg-black/5 p-4 rounded-2xl border border-black/5">
+                      <div className="bg-muted/40 p-4 rounded-2xl border border-border/50">
                         <p className="lv-stat text-2xl">{a.totalReferrals}</p>
                         <p className="lv-overline opacity-60">VENDAS</p>
                       </div>
-                      <div className="bg-green-500/5 p-4 rounded-2xl border border-green-500/10">
-                        <p className="lv-stat text-2xl text-green-600">R${a.totalCommission.toFixed(2)}</p>
-                        <p className="lv-overline text-green-600 opacity-60">COMISSÃO</p>
+                      <div className="lv-badge-success/5 p-4 rounded-2xl border" style={{ background: 'var(--clf-ok-bg)', borderColor: 'var(--clf-ok)' }}>
+                        <p className="lv-stat text-2xl" style={{ color: 'var(--clf-ok)' }}>R${a.totalCommission.toFixed(2)}</p>
+                        <p className="lv-overline opacity-60" style={{ color: 'var(--clf-ok)' }}>COMISSÃO</p>
                       </div>
-                      <div className="bg-white/5 dark:bg-black/5 p-4 rounded-2xl border border-black/5">
-                        <p className="lv-stat text-2xl text-yellow-600">{a.pendingReferrals}</p>
-                        <p className="lv-overline text-yellow-600 opacity-60">PENDENTES</p>
+                      <div className="bg-muted/40 p-4 rounded-2xl border border-border/50">
+                        <p className="lv-stat text-2xl" style={{ color: 'var(--clf-warn)' }}>{a.pendingReferrals}</p>
+                        <p className="lv-overline opacity-60" style={{ color: 'var(--clf-warn)' }}>PENDENTES</p>
                       </div>
                     </div>
                   </div>
@@ -1050,7 +1050,7 @@ export default function Admin() {
                           <span className="lv-stat text-2xl">R${Number(inv.total_commission).toFixed(2)}</span>
                           <span className="lv-caption font-black uppercase tracking-widest opacity-40">Líquido</span>
                        </div>
-                       <div className="flex items-center gap-2 px-3 py-1 bg-black/5 dark:bg-white/5 rounded-full border border-black/5">
+                       <div className="flex items-center gap-2 px-3 py-1 bg-muted/40 rounded-full border border-border/50">
                           <Zap className="h-3 w-3 text-primary" />
                           <span className="text-[10px] font-bold">{inv.total_sales} vendas</span>
                        </div>
@@ -1087,7 +1087,7 @@ export default function Admin() {
                       </div>
                     )}
                     {(inv.status === "open" || inv.status === "closed") && (
-                      <button onClick={() => cancelInvoice(inv.id)} className="lv-btn-secondary h-11 px-6 text-[10px] font-black text-destructive border-destructive/20 hover:bg-destructive hover:text-white">
+                      <button onClick={() => cancelInvoice(inv.id)} className="lv-btn-secondary h-11 px-6 text-[10px] font-black text-destructive border-destructive/20 hover:bg-destructive hover:text-destructive-foreground">
                         <XCircle className="h-4 w-4 mr-2" /> CANCELAR
                       </button>
                     )}
@@ -1152,7 +1152,7 @@ export default function Admin() {
                     </span>
                   </div>
                   {ext.instructions && (
-                    <div className="bg-black/5 dark:bg-white/5 rounded-2xl p-4 border border-black/5">
+                    <div className="bg-muted/40 rounded-2xl p-4 border border-border/50">
                       <p className="lv-overline text-[8px] mb-2 opacity-40 italic">Changelog</p>
                       <pre className="text-xs text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap">{ext.instructions}</pre>
                     </div>
@@ -1220,24 +1220,24 @@ export default function Admin() {
                       className={`w-full text-left p-4 rounded-2xl border transition-all duration-300 flex items-center justify-between group ${
                         selectedChatUser === cu.user_id 
                         ? "bg-primary border-primary shadow-lg shadow-primary/20 scale-[1.02]" 
-                        : "bg-white/5 border-black/5 hover:bg-primary/5 hover:border-primary/20"
+                        : "bg-muted/40 border-border/50 hover:bg-primary/5 hover:border-primary/20"
                       }`}
                     >
                       <div className="min-w-0 pr-4">
-                        <p className={`text-[13px] font-bold truncate ${selectedChatUser === cu.user_id ? "text-white" : "text-foreground"}`}>
+                        <p className={`text-[13px] font-bold truncate ${selectedChatUser === cu.user_id ? "text-primary-foreground" : "text-foreground"}`}>
                           {cu.name || cu.email}
                         </p>
-                        <p className={`text-[10px] font-mono opacity-60 truncate ${selectedChatUser === cu.user_id ? "text-white/80" : "text-muted-foreground"}`}>
+                        <p className={`text-[10px] font-mono opacity-60 truncate ${selectedChatUser === cu.user_id ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
                           {cu.email}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {cu.unread > 0 && (
-                          <span className="h-5 min-w-[20px] rounded-full bg-white text-primary text-[10px] flex items-center justify-center font-black px-1.5 shadow-sm">
+                          <span className="h-5 min-w-[20px] rounded-full bg-primary-foreground text-primary text-[10px] flex items-center justify-center font-black px-1.5 shadow-sm">
                             {cu.unread}
                           </span>
                         )}
-                        <ChevronRight className={`h-4 w-4 transition-transform ${selectedChatUser === cu.user_id ? "text-white translate-x-1" : "text-muted-foreground/30 group-hover:text-primary"}`} />
+                        <ChevronRight className={`h-4 w-4 transition-transform ${selectedChatUser === cu.user_id ? "text-primary-foreground translate-x-1" : "text-muted-foreground/30 group-hover:text-primary"}`} />
                       </div>
                     </button>
                   ))}
@@ -1256,9 +1256,9 @@ export default function Admin() {
                 </div>
               ) : (
                 <>
-                  <div className="px-8 py-5 border-b border-black/5 bg-primary/5 flex items-center justify-between">
+                  <div className="px-8 py-5 border-b border-border/50 bg-primary/5 flex items-center justify-between">
                      <div className="flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-white font-black text-sm">
+                        <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-black text-sm">
                            {(chatUsers.find(u => u.user_id === selectedChatUser)?.name || "Z")[0].toUpperCase()}
                         </div>
                         <div>
@@ -1277,13 +1277,13 @@ export default function Admin() {
                         <div
                           className={`max-w-[85%] px-5 py-3 rounded-[20px] text-[13px] shadow-sm relative group ${
                             msg.sender_id === user?.id
-                              ? "bg-primary text-white rounded-br-none"
-                              : "bg-black/5 dark:bg-white/5 border border-black/5 text-foreground rounded-bl-none"
+                              ? "bg-primary text-primary-foreground rounded-br-none"
+                              : "bg-muted/50 border border-border/50 text-foreground rounded-bl-none"
                           }`}
                         >
                           <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                           <div className={`mt-2 flex items-center justify-end gap-2 text-[9px] font-bold opacity-0 group-hover:opacity-60 transition-opacity ${
-                            msg.sender_id === user?.id ? "text-white" : "text-muted-foreground"
+                            msg.sender_id === user?.id ? "text-primary-foreground" : "text-muted-foreground"
                           }`}>
                             <Clock className="h-2.5 w-2.5" />
                             {format(new Date(msg.created_at), "HH:mm • dd/MM")}
@@ -1294,7 +1294,7 @@ export default function Admin() {
                     <div ref={chatEndRef} />
                   </div>
 
-                  <div className="p-6 bg-black/[0.02] border-t border-black/5">
+                  <div className="p-6 bg-muted/20 border-t border-border/50">
                     <div className="relative group/chatbox flex items-center gap-3">
                       <div className="relative flex-1">
                         <input
@@ -1378,7 +1378,7 @@ export default function Admin() {
                      <CheckCircle className="h-6 w-6 text-green-600" />
                      <p className="text-sm font-black text-green-700 uppercase tracking-widest">Token Gerado com Sucesso</p>
                   </div>
-                  <div className="flex flex-col md:flex-row items-center gap-4 bg-white/20 dark:bg-black/20 p-4 rounded-2xl border border-white/10">
+                  <div className="flex flex-col md:flex-row items-center gap-4 bg-muted/40 p-4 rounded-2xl border border-border/50">
                     <code className="lv-mono text-[13px] break-all flex-1 text-center md:text-left selection:bg-green-200">
                       {workerResult.token}
                     </code>
@@ -1410,7 +1410,7 @@ export default function Admin() {
                     </button>
                   </div>
                   {searchResult && (
-                    <div className="bg-black/5 dark:bg-white/5 rounded-2xl p-4 border border-black/5 overflow-x-auto">
+                    <div className="bg-muted/40 rounded-2xl p-4 border border-border/50 overflow-x-auto">
                       <pre className="lv-mono text-[10px] opacity-60 leading-relaxed">{JSON.stringify(searchResult, null, 2)}</pre>
                     </div>
                   )}
@@ -1518,7 +1518,7 @@ export default function Admin() {
                         <h2 className="lv-heading-sm mb-1">{selectedTicket.subject}</h2>
                         <div className="flex items-center gap-3">
                           <p className="lv-body-strong text-xs">{selectedTicket.user_name || "Usuário"}</p>
-                          <span className="h-1 w-1 rounded-full bg-white/20" />
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/20" />
                           <p className="lv-body text-xs opacity-60">{selectedTicket.user_email}</p>
                         </div>
                       </div>
@@ -1530,8 +1530,8 @@ export default function Admin() {
                             onClick={() => updateTicketStatus(selectedTicket.id, s)}
                             className={`h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
                               selectedTicket.status === s
-                              ? "bg-primary text-white"
-                              : "bg-white/5 hover:bg-white/10 opacity-40 hover:opacity-100"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted/40 hover:bg-muted/60 opacity-40 hover:opacity-100"
                             }`}
                           >
                             {s.replace("_", " ")}
@@ -1539,7 +1539,7 @@ export default function Admin() {
                         ))}
                       </div>
                     </div>
-                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <div className="bg-muted/40 p-4 rounded-2xl border border-border/50">
                       <p className="text-sm italic opacity-80 leading-relaxed">
                         "{selectedTicket.description}"
                       </p>
@@ -1552,8 +1552,8 @@ export default function Admin() {
                       <div key={r.id} className={`flex ${r.is_admin ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[80%] p-4 rounded-3xl ${
                           r.is_admin 
-                          ? "bg-primary text-white rounded-tr-none" 
-                          : "bg-white/10 rounded-tl-none border border-white/10"
+                          ? "bg-primary text-primary-foreground rounded-tr-none" 
+                          : "bg-muted/40 rounded-tl-none border border-border/50"
                         }`}>
                           <p className="text-sm leading-relaxed">{r.message}</p>
                           <p className={`text-[9px] mt-2 font-bold uppercase tracking-widest opacity-40 ${r.is_admin ? "text-right" : ""}`}>
@@ -1570,7 +1570,7 @@ export default function Admin() {
                   </div>
 
                   {/* Reply Input */}
-                  <div className="p-8 border-t border-white/10 shrink-0">
+                  <div className="p-8 border-t border-border/50 shrink-0">
                     <div className="relative">
                       <textarea
                         value={replyMessage}
@@ -1581,7 +1581,7 @@ export default function Admin() {
                       <button 
                         onClick={sendTicketReply}
                         disabled={replyLoading || !replyMessage.trim()}
-                        className="absolute bottom-4 right-4 h-10 w-10 rounded-full bg-primary text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-transform disabled:opacity-50"
+                        className="absolute bottom-4 right-4 h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:scale-110 active:scale-95 transition-transform disabled:opacity-50"
                       >
                         {replyLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-4 w-4" />}
                       </button>
@@ -1590,7 +1590,7 @@ export default function Admin() {
                 </div>
               ) : (
                 <div className="clf-liquid-glass h-full flex flex-col items-center justify-center p-20 text-center opacity-40">
-                  <div className="h-24 w-24 rounded-[40px] bg-white/5 flex items-center justify-center mb-6">
+                  <div className="h-24 w-24 rounded-[40px] bg-muted/40 flex items-center justify-center mb-6">
                     <Eye className="h-10 w-10" />
                   </div>
                   <h3 className="lv-heading-sm mb-2">Selecione um Ticket</h3>
