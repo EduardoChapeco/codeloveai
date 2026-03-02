@@ -1,13 +1,14 @@
 /**
  * Cirius Deploy — Handles GitHub, Vercel, Netlify, Supabase deploys
  * Actions: github, vercel, netlify, supabase
+ * Vercel: uploads files directly via Deployments API for instant preview URLs
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function json(data: unknown, status = 200) {
@@ -41,12 +42,19 @@ async function getIntegration(sc: ReturnType<typeof createClient>, userId: strin
   return data;
 }
 
+/** Convert UTF-8 string to SHA1 hex (for Vercel file upload) */
+async function sha1Hex(content: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest("SHA-1", data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const user = await getUser(req);
-  // Allow service-key calls for internal auto-deploy (from cirius-generate refine)
   const authHeader = req.headers.get("Authorization") || "";
   const isServiceKey = authHeader === `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`;
   if (!user && !isServiceKey) return json({ error: "Unauthorized" }, 401);
@@ -58,7 +66,6 @@ Deno.serve(async (req) => {
 
   if (!projectId) return json({ error: "project_id required" }, 400);
 
-  // When called via service key (internal), skip user_id filter
   let projectQuery = sc.from("cirius_projects").select("*").eq("id", projectId);
   if (user) projectQuery = projectQuery.eq("user_id", user.id);
   const { data: project } = await projectQuery.single();
@@ -172,49 +179,148 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ─── VERCEL ───
+  // ─── VERCEL — Direct file upload deployment ───
   if (action === "vercel") {
     const integration = await getIntegration(sc, projectUserId, "vercel");
     if (!integration?.access_token_enc) return json({ error: "Vercel not connected" }, 400);
 
     const vToken = integration.access_token_enc;
-    await logDeploy(sc, projectId, "deploy_vercel", "started", "Criando projeto Vercel...");
+    const teamId = integration.account_id || undefined;
+    await logDeploy(sc, projectId, "deploy_vercel", "started", "Enviando arquivos para Vercel...");
 
     try {
-      if (project.github_repo) {
-        const createRes = await fetch("https://api.vercel.com/v9/projects", {
+      const projectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").slice(0, 50);
+
+      // Step 1: Ensure Vercel project exists (create if needed)
+      const teamQuery = teamId ? `?teamId=${teamId}` : "";
+      let vercelProjectId = project.vercel_project_id;
+
+      if (!vercelProjectId) {
+        // Try to create project
+        const cpRes = await fetch(`https://api.vercel.com/v9/projects${teamQuery}`, {
           method: "POST",
           headers: { Authorization: `Bearer ${vToken}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 50),
+            name: projectSlug,
             framework: "vite",
-            gitRepository: { type: "github", repo: project.github_repo },
+            ...(project.github_repo ? { gitRepository: { type: "github", repo: project.github_repo } } : {}),
           }),
         });
-        const vProject = await createRes.json();
-
-        // Validate response before constructing URL
-        if (!vProject || (!vProject.name && !vProject.id)) {
-          const errMsg = vProject?.error?.message || JSON.stringify(vProject).slice(0, 200);
-          await logDeploy(sc, projectId, "deploy_vercel", "failed", `Vercel API error: ${errMsg}`);
-          return json({ error: `Vercel project creation failed: ${errMsg}` }, 500);
+        const cpData = await cpRes.json();
+        if (cpRes.ok || cpData?.id) {
+          vercelProjectId = cpData.id;
+        } else if (cpRes.status === 409 || cpData?.error?.code === "project_already_exists") {
+          // Project exists, fetch it
+          const gpRes = await fetch(`https://api.vercel.com/v9/projects/${projectSlug}${teamQuery}`, {
+            headers: { Authorization: `Bearer ${vToken}` },
+          });
+          const gpData = await gpRes.json();
+          vercelProjectId = gpData?.id;
         }
 
-        const vercelName = vProject.name || vProject.id || project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 50);
-        const deployUrl = vProject?.link?.deployHooks?.[0]?.url || `https://${vercelName}.vercel.app`;
-
-        await sc.from("cirius_projects").update({
-          vercel_project_id: vProject.id, vercel_url: deployUrl,
-        }).eq("id", projectId);
-
-        await logDeploy(sc, projectId, "deploy_vercel", "completed", "Vercel linked");
-        return json({ deploy_url: deployUrl, status: "linked" });
+        if (!vercelProjectId) {
+          await logDeploy(sc, projectId, "deploy_vercel", "failed", "Could not create/find Vercel project");
+          return json({ error: "Vercel project creation failed" }, 500);
+        }
       }
 
-      return json({ error: "Deploy GitHub primeiro para conectar ao Vercel" }, 400);
+      // Step 2: Upload all files to Vercel
+      const fileEntries: { file: string; sha: string; size: number }[] = [];
+      const encoder = new TextEncoder();
+
+      for (const [path, content] of Object.entries(filesJson)) {
+        if (typeof content !== "string") continue;
+        const sha = await sha1Hex(content);
+        const size = encoder.encode(content).length;
+        fileEntries.push({ file: path, sha, size });
+
+        // Upload each file individually
+        const uploadRes = await fetch(`https://api.vercel.com/v2/files${teamQuery}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${vToken}`,
+            "Content-Type": "application/octet-stream",
+            "x-vercel-digest": sha,
+            "x-vercel-size": String(size),
+          },
+          body: encoder.encode(content),
+        });
+
+        if (!uploadRes.ok && uploadRes.status !== 409) {
+          // 409 = file already exists (fine)
+          const errText = await uploadRes.text().catch(() => "");
+          console.error(`[cirius-deploy] file upload failed: ${path} — ${uploadRes.status} ${errText}`);
+        }
+      }
+
+      // Step 3: Create deployment with all files
+      const deployPayload: any = {
+        name: projectSlug,
+        files: fileEntries,
+        projectSettings: {
+          framework: "vite",
+          buildCommand: "npm run build",
+          installCommand: "npm install",
+          outputDirectory: "dist",
+        },
+        target: "production",
+      };
+
+      // If linked to GitHub, use the project ID to deploy
+      if (vercelProjectId) {
+        deployPayload.project = vercelProjectId;
+      }
+
+      const deployRes = await fetch(`https://api.vercel.com/v13/deployments${teamQuery}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${vToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(deployPayload),
+      });
+
+      const deployData = await deployRes.json();
+
+      if (!deployRes.ok) {
+        const errMsg = deployData?.error?.message || JSON.stringify(deployData).slice(0, 300);
+        console.error("[cirius-deploy] vercel deployment error:", errMsg);
+        await logDeploy(sc, projectId, "deploy_vercel", "failed", `Vercel deploy error: ${errMsg.slice(0, 200)}`);
+        return json({ error: `Vercel deployment failed: ${errMsg}` }, 500);
+      }
+
+      // Extract the real deployment URL
+      const deploymentUrl = deployData.url
+        ? (deployData.url.startsWith("http") ? deployData.url : `https://${deployData.url}`)
+        : null;
+      const inspectorUrl = deployData.inspectorUrl || null;
+      const deploymentId = deployData.id || null;
+
+      // Also get project-level production alias
+      const aliasUrl = deployData.alias?.[0]
+        ? `https://${deployData.alias[0]}`
+        : `https://${projectSlug}.vercel.app`;
+
+      const finalUrl = deploymentUrl || aliasUrl;
+
+      await sc.from("cirius_projects").update({
+        vercel_project_id: vercelProjectId,
+        vercel_url: finalUrl,
+        preview_url: finalUrl,
+        status: "live",
+        deployed_at: new Date().toISOString(),
+      }).eq("id", projectId);
+
+      await logDeploy(sc, projectId, "deploy_vercel", "completed",
+        `Deploy live: ${finalUrl} (deployment: ${deploymentId})`);
+
+      return json({
+        deploy_url: finalUrl,
+        deployment_url: deploymentUrl,
+        deployment_id: deploymentId,
+        inspector_url: inspectorUrl,
+        status: "deployed",
+      });
     } catch (e) {
       console.error("[cirius-deploy] vercel error:", (e as Error).message);
-      await logDeploy(sc, projectId, "deploy_vercel", "failed", "Vercel deploy failed");
+      await logDeploy(sc, projectId, "deploy_vercel", "failed", `Vercel deploy failed: ${(e as Error).message?.slice(0, 150)}`);
       return json({ error: "Vercel deploy failed" }, 500);
     }
   }
@@ -230,19 +336,65 @@ Deno.serve(async (req) => {
       const nToken = integration.access_token_enc;
       const siteName = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 50);
 
-      const siteRes = await fetch("https://api.netlify.com/api/v1/sites", {
+      // Check if site already exists
+      let siteId = project.netlify_site_id;
+      if (!siteId) {
+        const siteRes = await fetch("https://api.netlify.com/api/v1/sites", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${nToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: siteName }),
+        });
+        const site = await siteRes.json();
+        siteId = site.id;
+      }
+
+      // Deploy files via zip-less deploy (file digest)
+      const fileDigests: Record<string, string> = {};
+      for (const [path, content] of Object.entries(filesJson)) {
+        if (typeof content !== "string") continue;
+        // For Netlify, only deploy output files (index.html + assets)
+        // Since this is source, we deploy as-is for static sites
+        const sha = await sha1Hex(content);
+        fileDigests[`/${path}`] = sha;
+      }
+
+      const deployRes = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}/deploys`, {
         method: "POST",
         headers: { Authorization: `Bearer ${nToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: siteName }),
+        body: JSON.stringify({
+          files: fileDigests,
+          draft: false,
+        }),
       });
-      const site = await siteRes.json();
+      const deploy = await deployRes.json();
+
+      // Upload required files
+      if (deploy.required && deploy.required.length > 0) {
+        for (const [path, content] of Object.entries(filesJson)) {
+          if (typeof content !== "string") continue;
+          const sha = await sha1Hex(content);
+          if (deploy.required.includes(sha)) {
+            await fetch(`https://api.netlify.com/api/v1/deploys/${deploy.id}/files/${encodeURIComponent(path)}`, {
+              method: "PUT",
+              headers: { Authorization: `Bearer ${nToken}`, "Content-Type": "application/octet-stream" },
+              body: new TextEncoder().encode(content),
+            });
+          }
+        }
+      }
+
+      const netlifyUrl = deploy.ssl_url || deploy.url || `https://${siteName}.netlify.app`;
 
       await sc.from("cirius_projects").update({
-        netlify_site_id: site.id, netlify_url: site.ssl_url || site.url,
+        netlify_site_id: siteId,
+        netlify_url: netlifyUrl,
+        preview_url: netlifyUrl,
+        status: "live",
+        deployed_at: new Date().toISOString(),
       }).eq("id", projectId);
 
-      await logDeploy(sc, projectId, "deploy_netlify", "completed", "Site criado");
-      return json({ deploy_url: site.ssl_url || site.url, status: "created" });
+      await logDeploy(sc, projectId, "deploy_netlify", "completed", `Site live: ${netlifyUrl}`);
+      return json({ deploy_url: netlifyUrl, status: "deployed" });
     } catch (e) {
       console.error("[cirius-deploy] netlify error:", (e as Error).message);
       await logDeploy(sc, projectId, "deploy_netlify", "failed", "Netlify deploy failed");
