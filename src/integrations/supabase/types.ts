@@ -4106,6 +4106,7 @@ export type Database = {
           brain_type: string | null
           completed_at: string | null
           created_at: string
+          depends_on: number[] | null
           id: string
           intent: string
           lovable_message_id: string | null
@@ -4126,6 +4127,7 @@ export type Database = {
           brain_type?: string | null
           completed_at?: string | null
           created_at?: string
+          depends_on?: number[] | null
           id?: string
           intent?: string
           lovable_message_id?: string | null
@@ -4146,6 +4148,7 @@ export type Database = {
           brain_type?: string | null
           completed_at?: string | null
           created_at?: string
+          depends_on?: number[] | null
           id?: string
           intent?: string
           lovable_message_id?: string | null
