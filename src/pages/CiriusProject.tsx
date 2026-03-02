@@ -64,6 +64,15 @@ export default function CiriusProject() {
 
   useEffect(() => { loadProject(); }, [loadProject]);
 
+  // Auto-redirect to editor for active projects
+  useEffect(() => {
+    if (!project || !id) return;
+    const activeStates = ["generating_prd", "generating_code", "deploying", "live", "awaiting_approval"];
+    if (activeStates.includes(project.status)) {
+      navigate(`/cirius/editor/${id}`, { replace: true });
+    }
+  }, [project?.status, id, navigate]);
+
   // Realtime
   useEffect(() => {
     if (!id) return;
