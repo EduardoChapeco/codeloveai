@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ export default function CiriusIntegrations() {
   }, [user]);
 
   async function loadIntegrations() {
+    // Only select non-sensitive fields — tokens never reach the frontend
     const { data } = await supabase
       .from("cirius_integrations" as any)
       .select("provider, account_login, is_active, updated_at")
@@ -51,49 +52,41 @@ export default function CiriusIntegrations() {
     setLoading(false);
   }
 
-  function startOAuth(provider: string) {
-    const state = btoa(JSON.stringify({ user_id: user!.id }));
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const callbackUrl = `${supabaseUrl}/functions/v1/cirius-oauth-callback?provider=${provider}`;
+  async function startOAuth(provider: string) {
+    // Generate signed state server-side via edge function
+    const { data, error } = await supabase.functions.invoke("cirius-generate", {
+      body: { action: "oauth_state", provider },
+    });
 
-    let authUrl = "";
-    if (provider === "github") {
-      const clientId = ""; // Will need CIRIUS_GITHUB_CLIENT_ID
-      authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
-    } else if (provider === "vercel") {
-      const clientId = "";
-      authUrl = `https://vercel.com/oauth/authorize?client_id=${clientId}&scope=user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
-    } else if (provider === "netlify") {
-      const clientId = "";
-      authUrl = `https://app.netlify.com/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
+    if (error || !data?.auth_url) {
+      toast.error("Falha ao iniciar OAuth. Verifique se o provider está configurado.");
+      return;
     }
 
-    if (authUrl) {
-      window.open(authUrl, "_blank", "width=600,height=700");
-    } else {
-      toast.error("OAuth Client ID não configurado. Configure nas integrações do admin.");
-    }
+    window.open(data.auth_url, "_blank", "width=600,height=700");
   }
 
   async function saveSupabase() {
     if (!sbUrl.trim() || !sbKey.trim()) { toast.error("URL e Service Key são obrigatórios"); return; }
     setSavingSb(true);
 
-    const ref = sbUrl.match(/https:\/\/([^.]+)/)?.[1] || "";
-    if (!ref) { toast.error("URL inválida"); setSavingSb(false); return; }
+    // Send to edge function — service key never stored from client side
+    const { data, error } = await supabase.functions.invoke("cirius-generate", {
+      body: {
+        action: "save_supabase_integration",
+        supabase_url: sbUrl.trim(),
+        service_key: sbKey.trim(),
+      },
+    });
 
-    const { error } = await supabase.from("cirius_integrations" as any).upsert({
-      user_id: user!.id,
-      provider: "supabase",
-      service_key_enc: sbKey.trim(),
-      project_ref: ref,
-      account_login: sbUrl.trim(),
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id,provider" });
-
-    if (error) toast.error(error.message);
-    else { toast.success("Supabase conectado!"); await loadIntegrations(); }
+    if (error || data?.error) {
+      toast.error(data?.error || "Falha ao salvar integração");
+    } else {
+      toast.success("Supabase conectado!");
+      setSbUrl("");
+      setSbKey("");
+      await loadIntegrations();
+    }
     setSavingSb(false);
   }
 

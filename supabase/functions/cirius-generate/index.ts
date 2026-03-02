@@ -1,6 +1,7 @@
 /**
  * Cirius Generate — Main pipeline orchestrator
- * Actions: init, generate_prd, generate_code, capture, status, pause, resume, cancel
+ * Actions: init, generate_prd, generate_code, capture, status, pause, resume, cancel,
+ *          oauth_state, save_supabase_integration
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -46,7 +47,7 @@ async function getUser(req: Request) {
   return user;
 }
 
-async function log(sc: SupabaseClient, projectId: string, step: string, status: string, message: string, extra?: Record<string, unknown>) {
+async function logEntry(sc: SupabaseClient, projectId: string, step: string, status: string, message: string, extra?: Record<string, unknown>) {
   await sc.from("cirius_generation_log").insert({
     project_id: projectId, step, status, message,
     level: status === "failed" ? "error" : status === "retrying" ? "warning" : "info",
@@ -60,6 +61,14 @@ function selectEngine(config: { template_type?: string; features?: string[]; com
   if (["app", "dashboard", "ecommerce"].includes(template_type || "")) return "brain";
   if (features.length > 3 || complexity_score > 7) return "orchestrator";
   return "brainchain";
+}
+
+/** HMAC-SHA256 sign */
+async function hmacSign(data: string, secret: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function generatePRD(project: Record<string, any>): Promise<any> {
@@ -146,6 +155,77 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const action = (body.action as string) || "";
 
+  // ─── OAUTH_STATE — Generate signed state for OAuth flows ───
+  if (action === "oauth_state") {
+    const provider = body.provider;
+    if (!provider || !["github", "vercel", "netlify"].includes(provider)) {
+      return json({ error: "Invalid provider" }, 400);
+    }
+
+    const stateSecret = Deno.env.get("CLF_TOKEN_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const ts = String(Date.now());
+    const payload = `${user.id}:${ts}`;
+    const sig = await hmacSign(payload, stateSecret);
+    const state = btoa(JSON.stringify({ user_id: user.id, ts, sig }));
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const callbackUrl = `${supabaseUrl}/functions/v1/cirius-oauth-callback?provider=${provider}`;
+
+    let authUrl = "";
+    if (provider === "github") {
+      const clientId = Deno.env.get("CIRIUS_GITHUB_CLIENT_ID") || "";
+      if (!clientId) return json({ error: "GitHub OAuth not configured" }, 400);
+      authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
+    } else if (provider === "vercel") {
+      const clientId = Deno.env.get("CIRIUS_VERCEL_CLIENT_ID") || "";
+      if (!clientId) return json({ error: "Vercel OAuth not configured" }, 400);
+      authUrl = `https://vercel.com/oauth/authorize?client_id=${clientId}&scope=user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
+    } else if (provider === "netlify") {
+      const clientId = Deno.env.get("CIRIUS_NETLIFY_CLIENT_ID") || "";
+      if (!clientId) return json({ error: "Netlify OAuth not configured" }, 400);
+      authUrl = `https://app.netlify.com/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
+    }
+
+    return json({ auth_url: authUrl });
+  }
+
+  // ─── SAVE_SUPABASE_INTEGRATION — Store service key server-side ───
+  if (action === "save_supabase_integration") {
+    const sbUrl = (body.supabase_url as string || "").trim();
+    const serviceKey = (body.service_key as string || "").trim();
+
+    if (!sbUrl || !serviceKey) return json({ error: "URL e Service Key são obrigatórios" }, 400);
+
+    const ref = sbUrl.match(/https:\/\/([^.]+)/)?.[1] || "";
+    if (!ref) return json({ error: "URL inválida" }, 400);
+
+    // Validate the key by making a test request
+    try {
+      const testClient = createClient(sbUrl, serviceKey);
+      const { error: testErr } = await testClient.from("_test_nonexistent_table_").select("id").limit(1);
+      // A "relation does not exist" error is fine — it means the key works
+      // Only reject if it's an auth error
+      if (testErr && testErr.message?.includes("Invalid API key")) {
+        return json({ error: "Service key inválida" }, 400);
+      }
+    } catch {
+      // Connection errors are acceptable for validation
+    }
+
+    const { error } = await sc.from("cirius_integrations").upsert({
+      user_id: user.id,
+      provider: "supabase",
+      service_key_enc: serviceKey,
+      project_ref: ref,
+      account_login: sbUrl,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,provider" });
+
+    if (error) return json({ error: "Failed to save integration" }, 500);
+    return json({ ok: true });
+  }
+
   // ─── INIT ───
   if (action === "init") {
     const config = body.config || {};
@@ -163,8 +243,8 @@ Deno.serve(async (req) => {
       status: "draft",
     }).select("id, status").single();
 
-    if (error) return json({ error: error.message }, 500);
-    await log(sc, project.id, "init", "completed", "Projeto criado");
+    if (error) return json({ error: "Failed to create project" }, 500);
+    await logEntry(sc, project.id, "init", "completed", "Projeto criado");
     return json({ project_id: project.id, status: "draft" });
   }
 
@@ -178,7 +258,7 @@ Deno.serve(async (req) => {
     if (!project) return json({ error: "Project not found" }, 404);
 
     await sc.from("cirius_projects").update({ status: "generating_prd" }).eq("id", projectId);
-    await log(sc, projectId, "prd", "started", "Gerando PRD...");
+    await logEntry(sc, projectId, "prd", "started", "Gerando PRD...");
 
     const startMs = Date.now();
     const prd = await generatePRD(project);
@@ -186,7 +266,7 @@ Deno.serve(async (req) => {
 
     if (!prd) {
       await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao gerar PRD" }).eq("id", projectId);
-      await log(sc, projectId, "prd", "failed", "PRD generation failed", { duration_ms: durationMs });
+      await logEntry(sc, projectId, "prd", "failed", "PRD generation failed", { duration_ms: durationMs });
       return json({ error: "PRD generation failed" }, 500);
     }
 
@@ -201,7 +281,7 @@ Deno.serve(async (req) => {
       prd_json: prd, generation_engine: engine, status: "draft", progress_pct: 15,
     }).eq("id", projectId);
 
-    await log(sc, projectId, "prd", "completed", `PRD gerado: ${prd.tasks.length} tasks, engine: ${engine}`, {
+    await logEntry(sc, projectId, "prd", "completed", `PRD gerado: ${prd.tasks.length} tasks, engine: ${engine}`, {
       duration_ms: durationMs, output_json: { task_count: prd.tasks.length, engine },
     });
 
@@ -222,14 +302,13 @@ Deno.serve(async (req) => {
     await sc.from("cirius_projects").update({
       status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20,
     }).eq("id", projectId);
-    await log(sc, projectId, "code", "started", `Iniciando geração via ${engine}`);
+    await logEntry(sc, projectId, "code", "started", `Iniciando geração via ${engine}`);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string }> };
 
     if (engine === "brainchain") {
-      // Fire first task via brainchain-send
       const firstTask = prd.tasks[0];
       try {
         const bcRes = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
@@ -245,19 +324,20 @@ Deno.serve(async (req) => {
 
         if (bcData.queued) {
           await sc.from("cirius_projects").update({ brainchain_queue_id: bcData.queue_id }).eq("id", projectId);
-          await log(sc, projectId, "code_task_0", "started", "Enfileirado no Brainchain", { output_json: bcData });
+          await logEntry(sc, projectId, "code_task_0", "started", "Enfileirado no Brainchain");
         } else if (bcData.ok && bcData.response) {
           await sc.from("cirius_projects").update({
             source_files_json: { _raw_response: bcData.response },
             progress_pct: 80, status: "deploying",
           }).eq("id", projectId);
-          await log(sc, projectId, "code_task_0", "completed", "Código gerado via Brainchain");
+          await logEntry(sc, projectId, "code_task_0", "completed", "Código gerado via Brainchain");
         }
 
         return json({ started: true, engine, estimated_seconds: 90 });
       } catch (e) {
-        await log(sc, projectId, "code_task_0", "failed", (e as Error).message);
-        return json({ error: (e as Error).message }, 500);
+        console.error("[cirius-generate] brainchain error:", (e as Error).message);
+        await logEntry(sc, projectId, "code_task_0", "failed", "Code generation failed");
+        return json({ error: "Code generation failed" }, 500);
       }
     }
 
@@ -282,15 +362,16 @@ Deno.serve(async (req) => {
             orchestrator_project_id: orchData.project_id, progress_pct: 25,
           }).eq("id", projectId);
         }
-        await log(sc, projectId, "code", "started", "Orquestrador iniciado", { output_json: orchData });
+        await logEntry(sc, projectId, "code", "started", "Orquestrador iniciado");
         return json({ started: true, engine, estimated_seconds: 600 });
       } catch (e) {
-        await log(sc, projectId, "code", "failed", (e as Error).message);
-        return json({ error: (e as Error).message }, 500);
+        console.error("[cirius-generate] orchestrator error:", (e as Error).message);
+        await logEntry(sc, projectId, "code", "failed", "Orchestrator start failed");
+        return json({ error: "Code generation failed" }, 500);
       }
     }
 
-    // brain engine — send via brain function
+    // brain engine
     try {
       const brainRes = await fetch(`${supabaseUrl}/functions/v1/brain`, {
         method: "POST",
@@ -302,11 +383,12 @@ Deno.serve(async (req) => {
         }),
       });
       const brainData = await brainRes.json();
-      await log(sc, projectId, "code_task_0", "started", "Enviado ao Brain pessoal", { output_json: brainData });
+      await logEntry(sc, projectId, "code_task_0", "started", "Enviado ao Brain pessoal");
       return json({ started: true, engine, estimated_seconds: 300 });
     } catch (e) {
-      await log(sc, projectId, "code", "failed", (e as Error).message);
-      return json({ error: (e as Error).message }, 500);
+      console.error("[cirius-generate] brain error:", (e as Error).message);
+      await logEntry(sc, projectId, "code", "failed", "Brain send failed");
+      return json({ error: "Code generation failed" }, 500);
     }
   }
 
@@ -342,8 +424,8 @@ Deno.serve(async (req) => {
       })
       .eq("id", projectId).eq("user_id", user.id);
 
-    if (error) return json({ error: error.message }, 500);
-    await log(sc, projectId, action, "completed", `Pipeline ${action === "cancel" ? "cancelado" : action === "pause" ? "pausado" : "retomado"}`);
+    if (error) return json({ error: "Operation failed" }, 500);
+    await logEntry(sc, projectId, action, "completed", `Pipeline ${action === "cancel" ? "cancelado" : action === "pause" ? "pausado" : "retomado"}`);
     return json({ [action === "cancel" ? "cancelled" : action === "pause" ? "paused" : "resumed"]: true });
   }
 
@@ -357,11 +439,9 @@ Deno.serve(async (req) => {
       .select("*").eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Not found" }, 404);
 
-    // Try to get source-code from lovable project
     const targetProjectId = lovableProjectId || project.lovable_project_id;
     if (!targetProjectId) return json({ error: "No lovable_project_id" }, 400);
 
-    // Get user token
     const { data: account } = await sc.from("lovable_accounts")
       .select("token_encrypted").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
 
@@ -375,7 +455,7 @@ Deno.serve(async (req) => {
       },
     });
 
-    if (!scRes.ok) return json({ error: `Source-code fetch failed: ${scRes.status}` }, 500);
+    if (!scRes.ok) return json({ error: "Source-code fetch failed" }, 500);
 
     const scData = await scRes.json();
     const files = scData.files || [];
@@ -396,7 +476,7 @@ Deno.serve(async (req) => {
       generation_ended_at: new Date().toISOString(),
     }).eq("id", projectId);
 
-    await log(sc, projectId, "capture", "completed", `${Object.keys(filesJson).length} arquivos capturados`);
+    await logEntry(sc, projectId, "capture", "completed", `${Object.keys(filesJson).length} arquivos capturados`);
     return json({ files_json: filesJson, fingerprint, file_count: Object.keys(filesJson).length });
   }
 
