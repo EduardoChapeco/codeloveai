@@ -4109,6 +4109,7 @@ export type Database = {
           id: string
           intent: string
           lovable_message_id: string | null
+          metadata: Json | null
           project_id: string
           prompt: string
           prompt_text: string | null
@@ -4128,6 +4129,7 @@ export type Database = {
           id?: string
           intent?: string
           lovable_message_id?: string | null
+          metadata?: Json | null
           project_id: string
           prompt?: string
           prompt_text?: string | null
@@ -4147,6 +4149,7 @@ export type Database = {
           id?: string
           intent?: string
           lovable_message_id?: string | null
+          metadata?: Json | null
           project_id?: string
           prompt?: string
           prompt_text?: string | null
