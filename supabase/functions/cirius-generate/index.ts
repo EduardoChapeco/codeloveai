@@ -1022,6 +1022,10 @@ Deno.serve(async (req) => {
       await logEntry(sc, projectId, "code", "failed", `Task insertion failed: ${taskErr.message}`, {
         error_msg: taskErr.message,
       });
+      await sc.from("cirius_projects").update({ status: "failed", error_message: `Task insertion failed: ${taskErr.message}` }).eq("id", projectId);
+      // Clean up orphaned orchestrator project
+      await sc.from("orchestrator_projects").delete().eq("id", orchProject.id);
+      return json({ error: `Task insertion failed: ${taskErr.message}`, hint: "Schema cache may be stale. Retry in a few seconds." }, 500);
     }
 
     await sc.from("cirius_projects").update({
