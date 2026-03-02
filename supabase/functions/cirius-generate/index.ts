@@ -10,6 +10,7 @@
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildFilesFingerprint, extractFilesFromMarkdown, extractMdBody, mergeFileMaps, parseLatestMessage } from "../_shared/md-assembly.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -236,26 +237,8 @@ async function captureBrainResponse(
       }
     } catch { /* continue */ }
 
-    try {
-      const srcRes = await fetch(`${EXT_API}/projects/${projectId}/source-code`, { headers });
-      if (srcRes.ok) {
-        const srcData = await srcRes.json().catch(() => ({}));
-        const files = srcData?.files || (Array.isArray(srcData) ? srcData : []);
-        for (const f of files) {
-          if ((f.path || f.name || "") === "src/update.md") {
-            const c = f.contents || f.content || "";
-            if (/status:\s*done/i.test(c)) {
-              const parts = c.split("---");
-              if (parts.length >= 3) {
-                const body = parts.slice(2).join("---").trim();
-                const validatedBody = validateCapturedResponse(body);
-                if (validatedBody) return validatedBody;
-              }
-            }
-          }
-        }
-      }
-    } catch { /* continue */ }
+    // Secondary fallback removed: avoid source-code crawling.
+    // Keep polling latest-message only to respect Brain markdown-first workflow.
 
     await new Promise(r => setTimeout(r, intervalMs));
   }
@@ -525,6 +508,49 @@ async function autoTriggerTick(_sc: SupabaseClient) {
       body: JSON.stringify({ _auto_trigger: true }),
     });
   } catch { /* fire and forget */ }
+}
+
+async function syncFilesFromLatestMessage(sc: SupabaseClient, projectId: string, lovableProjectId: string, token: string) {
+  const latestRes = await fetch(`${EXT_API}/projects/${lovableProjectId}/chat/latest-message`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Origin: "https://lovable.dev",
+      Referer: "https://lovable.dev/",
+      "X-Client-Git-SHA": GIT_SHA,
+    },
+  });
+
+  if (!latestRes.ok) {
+    return { ok: false, error: `latest-message HTTP ${latestRes.status}`, fileCount: 0 };
+  }
+
+  const rawLatest = await latestRes.text();
+  const msg = parseLatestMessage(rawLatest);
+  if (!msg || msg.role === "user") return { ok: false, error: "no assistant message", fileCount: 0 };
+
+  const body = extractMdBody(msg.content || "");
+  const parsedFiles = extractFilesFromMarkdown(body);
+  const parsedCount = Object.keys(parsedFiles).length;
+  if (parsedCount === 0) return { ok: false, error: "no file blocks in markdown", fileCount: 0 };
+
+  const { data: currentProject } = await sc.from("cirius_projects")
+    .select("source_files_json")
+    .eq("id", projectId)
+    .maybeSingle();
+
+  const existing = (currentProject?.source_files_json || {}) as Record<string, string>;
+  const merged = mergeFileMaps(existing, parsedFiles);
+  const fingerprint = buildFilesFingerprint(merged);
+
+  await sc.from("cirius_projects").update({
+    source_files_json: merged,
+    files_fingerprint: fingerprint,
+    lovable_project_id: lovableProjectId,
+    progress_pct: 80,
+    generation_ended_at: new Date().toISOString(),
+  }).eq("id", projectId);
+
+  return { ok: true, fileCount: Object.keys(merged).length, mergedFingerprint: fingerprint };
 }
 
 // ─── Main Handler ───
@@ -926,7 +952,7 @@ Deno.serve(async (req) => {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
     const { data: project } = await sc.from("cirius_projects")
-      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at, orchestrator_project_id")
+      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at, orchestrator_project_id, source_files_json, lovable_project_id, brain_project_id")
       .eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Not found" }, 404);
 
@@ -946,42 +972,20 @@ Deno.serve(async (req) => {
         sc.from("orchestrator_logs").select("*").eq("project_id", project.orchestrator_project_id).order("created_at", { ascending: false }).limit(30),
       ]);
 
-      // Auto-reconcile: if orchestrator is completed, finalize Cirius generation state and capture files.
+      // Auto-reconcile: if orchestrator is completed, finalize Cirius generation state and sync markdown-assembled files.
       if (orchProj?.status === "completed" && project.status === "generating_code") {
-        // Attempt to auto-capture source files if not yet captured
-        const hasFiles = !!(project as any).source_files_json && Object.keys((project as any).source_files_json || {}).length > 0;
+        const hasFiles = !!project.source_files_json && Object.keys(project.source_files_json || {}).length > 0;
         if (!hasFiles) {
-          const targetBrain = orchProj.lovable_project_id || (project as any).lovable_project_id || (project as any).brain_project_id;
+          const targetBrain = orchProj.lovable_project_id || project.lovable_project_id || project.brain_project_id;
           if (targetBrain) {
             const captureToken = await getUserToken(sc, user.id);
             if (captureToken) {
-              try {
-                const scRes = await fetch(`${EXT_API}/projects/${targetBrain}/source-code`, {
-                  headers: {
-                    Authorization: `Bearer ${captureToken}`,
-                    Origin: "https://lovable.dev", Referer: "https://lovable.dev/",
-                    "X-Client-Git-SHA": GIT_SHA,
-                  },
-                });
-                if (scRes.ok) {
-                  const scData = await scRes.json();
-                  const capturedFiles = scData.files || [];
-                  const filesJson: Record<string, string> = {};
-                  for (const f of capturedFiles) {
-                    if (f.path && !f.path.startsWith(".lovable/") && typeof f.content === "string") {
-                      filesJson[f.path] = f.content;
-                    }
-                  }
-                  if (Object.keys(filesJson).length > 0) {
-                    const fingerprint = capturedFiles.map((f: any) => `${f.path}:${f.size ?? 0}`).sort().join("|");
-                    await sc.from("cirius_projects").update({
-                      source_files_json: filesJson, files_fingerprint: fingerprint,
-                    }).eq("id", projectId).eq("user_id", user.id);
-                    await logEntry(sc, projectId, "auto_capture", "completed",
-                      `${Object.keys(filesJson).length} files auto-captured on status check`);
-                  }
-                }
-              } catch { /* best effort */ }
+              const syncResult = await syncFilesFromLatestMessage(sc, projectId, targetBrain, captureToken);
+              await logEntry(sc, projectId, "auto_capture", syncResult.ok ? "completed" : "failed",
+                syncResult.ok
+                  ? `${syncResult.fileCount} arquivos sincronizados por markdown mining no status`
+                  : `Falha no markdown mining: ${syncResult.error}`,
+              );
             }
           }
         }
@@ -1116,37 +1120,33 @@ Deno.serve(async (req) => {
       return json({ error: "No Lovable token" }, 503);
     }
     const t0 = Date.now();
-    const scRes = await fetch(`${EXT_API}/projects/${targetProjectId}/source-code`, {
-      headers: {
-        Authorization: `Bearer ${account.token_encrypted}`,
-        Origin: "https://lovable.dev", Referer: "https://lovable.dev/",
-        "X-Client-Git-SHA": GIT_SHA,
-      },
-    });
+    const syncResult = await syncFilesFromLatestMessage(sc, projectId, targetProjectId, account.token_encrypted);
     const captureDuration = Date.now() - t0;
-    if (!scRes.ok) {
-      await logEntry(sc, projectId, "capture", "failed", `Source-code fetch failed: HTTP ${scRes.status}`, {
-        duration_ms: captureDuration, error_msg: `HTTP ${scRes.status}`,
+
+    if (!syncResult.ok) {
+      await logEntry(sc, projectId, "capture", "failed", `Markdown capture failed: ${syncResult.error}`, {
+        duration_ms: captureDuration,
+        error_msg: syncResult.error,
       });
-      return json({ error: "Source-code fetch failed" }, 500);
+      return json({ error: "Markdown capture failed", details: syncResult.error }, 500);
     }
-    const scData = await scRes.json();
-    const files = scData.files || [];
-    const filesJson: Record<string, string> = {};
-    for (const f of files) {
-      if (f.path && !f.path.startsWith(".lovable/")) filesJson[f.path] = f.content || "";
-    }
-    const fingerprint = files.map((f: any) => `${f.path}:${f.size ?? 0}`).sort().join("|");
-    await sc.from("cirius_projects").update({
-      source_files_json: filesJson, files_fingerprint: fingerprint,
-      lovable_project_id: targetProjectId, progress_pct: 80,
-      generation_ended_at: new Date().toISOString(),
-    }).eq("id", projectId);
-    await logEntry(sc, projectId, "capture", "completed", `${Object.keys(filesJson).length} arquivos capturados em ${captureDuration}ms`, {
+
+    await logEntry(sc, projectId, "capture", "completed", `${syncResult.fileCount} arquivos sincronizados por markdown mining em ${captureDuration}ms`, {
       duration_ms: captureDuration,
-      metadata: { file_count: Object.keys(filesJson).length, target_project: targetProjectId },
+      metadata: { file_count: syncResult.fileCount, target_project: targetProjectId },
     });
-    return json({ files_json: filesJson, fingerprint, file_count: Object.keys(filesJson).length });
+
+    const { data: saved } = await sc.from("cirius_projects")
+      .select("source_files_json, files_fingerprint")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    return json({
+      files_json: (saved?.source_files_json || {}) as Record<string, string>,
+      fingerprint: saved?.files_fingerprint || null,
+      file_count: syncResult.fileCount,
+      capture_mode: "markdown_mining",
+    });
   }
 
   return json({ error: "unknown_action" }, 400);

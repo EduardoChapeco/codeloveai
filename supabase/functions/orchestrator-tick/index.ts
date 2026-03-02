@@ -7,6 +7,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildFilesFingerprint, extractFilesFromMarkdown, extractMdBody, mergeFileMaps, parseLatestMessage } from "../_shared/md-assembly.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,43 +88,26 @@ async function releaseBrainchainAccount(sc: SC, accountId: string) {
   }).eq("id", accountId);
 }
 
-/** Auto-capture source files from Lovable project back to cirius_projects after completion */
-async function autoCapture(sc: SC, orchProjectId: string, brainProjectId: string, userId: string) {
-  if (!brainProjectId) return;
+/** Sync markdown-generated files from latest assistant message into cirius_projects */
+async function syncLatestMarkdownFiles(
+  sc: SC,
+  orchProjectId: string,
+  brainProjectId: string,
+  token: string,
+  finalize = false,
+  taskId?: string,
+) {
+  const { data: ciriusProject } = await sc.from("cirius_projects")
+    .select("id, source_files_json")
+    .eq("orchestrator_project_id", orchProjectId)
+    .maybeSingle();
 
-  try {
-    // Find the cirius_project linked to this orchestrator project
-    const { data: ciriusProject } = await sc.from("cirius_projects")
-      .select("id, lovable_project_id")
-      .eq("orchestrator_project_id", orchProjectId)
-      .maybeSingle();
-
-    if (!ciriusProject) {
-      await addLog(sc, orchProjectId, `📦 [capture] No cirius_project linked to orchestrator ${orchProjectId.slice(0, 8)}`, "warn");
-      return;
-    }
-
-    // Get a token to fetch source code
-    const account = await getBusyAccountForProject(sc, brainProjectId);
-    if (!account) {
-      // Try user's personal token
-      const { data: userAccount } = await sc.from("lovable_accounts")
-        .select("token_encrypted").eq("user_id", userId).eq("status", "active").maybeSingle();
-      if (!userAccount?.token_encrypted) {
-        await addLog(sc, orchProjectId, `📦 [capture] No token available to capture source files`, "warn");
-        return;
-      }
-      await captureSourceFiles(sc, ciriusProject.id, brainProjectId, userAccount.token_encrypted, orchProjectId);
-    } else {
-      await captureSourceFiles(sc, ciriusProject.id, brainProjectId, account.accessToken, orchProjectId);
-    }
-  } catch (e) {
-    await addLog(sc, orchProjectId, `📦 [capture] Error: ${(e as Error).message}`, "error");
+  if (!ciriusProject) {
+    await addLog(sc, orchProjectId, `📦 [capture] No cirius_project linked to orchestrator ${orchProjectId.slice(0, 8)}`, "warn", undefined, taskId);
+    return { ok: false, reason: "no_cirius_project", fileCount: 0 };
   }
-}
 
-async function captureSourceFiles(sc: SC, ciriusProjectId: string, brainProjectId: string, token: string, orchProjectId: string) {
-  const res = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/source-code`, {
+  const latestRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat/latest-message`, {
     headers: {
       Authorization: `Bearer ${token}`,
       ...LOVABLE_HEADERS,
@@ -131,49 +115,90 @@ async function captureSourceFiles(sc: SC, ciriusProjectId: string, brainProjectI
     },
   });
 
-  if (!res.ok) {
-    await addLog(sc, orchProjectId, `📦 [capture] Source-code fetch failed: HTTP ${res.status}`, "warn");
-    return;
+  if (!latestRes.ok) {
+    await addLog(sc, orchProjectId, `📦 [capture] latest-message failed: HTTP ${latestRes.status}`, "warn", undefined, taskId);
+    return { ok: false, reason: `latest_message_http_${latestRes.status}`, fileCount: 0 };
   }
 
-  const data = await res.json();
-  const files = data.files || [];
-  const filesJson: Record<string, string> = {};
-
-  for (const f of files) {
-    if (f.path && !f.path.startsWith(".lovable/") && typeof f.content === "string") {
-      filesJson[f.path] = f.content;
-    }
+  const rawLatest = await latestRes.text();
+  const msg = parseLatestMessage(rawLatest);
+  if (!msg || msg.role === "user") {
+    await addLog(sc, orchProjectId, `📦 [capture] No assistant latest message`, "warn", undefined, taskId);
+    return { ok: false, reason: "no_assistant_message", fileCount: 0 };
   }
 
-  const fileCount = Object.keys(filesJson).length;
-  if (fileCount === 0) {
-    await addLog(sc, orchProjectId, `📦 [capture] No files captured from brain ${brainProjectId.slice(0, 8)}`, "warn");
-    return;
+  const markdownBody = extractMdBody(msg.content || "");
+  const parsedFiles = extractFilesFromMarkdown(markdownBody);
+  const parsedCount = Object.keys(parsedFiles).length;
+
+  if (parsedCount === 0) {
+    await addLog(sc, orchProjectId, `📦 [capture] No code blocks with file paths found in markdown`, "warn", {
+      latest_message_id: msg.id,
+    }, taskId);
+    return { ok: false, reason: "no_file_blocks", fileCount: 0 };
   }
 
-  const fingerprint = files.map((f: any) => `${f.path}:${f.size ?? 0}`).sort().join("|");
+  const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
+  const merged = mergeFileMaps(existing, parsedFiles);
+  const fingerprint = buildFilesFingerprint(merged);
 
-  await sc.from("cirius_projects").update({
-    source_files_json: filesJson,
+  const updatePayload: Record<string, unknown> = {
+    source_files_json: merged,
     files_fingerprint: fingerprint,
-    status: "live",
-    progress_pct: 100,
-    generation_ended_at: new Date().toISOString(),
-    error_message: null,
-  }).eq("id", ciriusProjectId);
+  };
 
-  // Save snapshot for versioning
+  if (finalize) {
+    updatePayload.status = "live";
+    updatePayload.progress_pct = 100;
+    updatePayload.generation_ended_at = new Date().toISOString();
+    updatePayload.error_message = null;
+  }
+
+  await sc.from("cirius_projects").update(updatePayload).eq("id", ciriusProject.id);
+
   await sc.from("code_snapshots").insert({
-    project_id: ciriusProjectId,
-    files_json: filesJson,
-    file_count: fileCount,
+    project_id: ciriusProject.id,
+    files_json: merged,
+    file_count: Object.keys(merged).length,
     fingerprint,
   }).then(() => {});
 
   await addLog(sc, orchProjectId,
-    `📦 [capture] ✅ ${fileCount} files synced to cirius_project ${ciriusProjectId.slice(0, 8)}`, "info",
-    { file_count: fileCount, cirius_project: ciriusProjectId, brain_project: brainProjectId });
+    `📦 [capture] ✅ markdown sync: +${parsedCount} arquivo(s), total=${Object.keys(merged).length}${finalize ? " (finalize)" : ""}`,
+    "info",
+    { file_count: Object.keys(merged).length, parsed_count: parsedCount, latest_message_id: msg.id, cirius_project: ciriusProject.id },
+    taskId,
+  );
+
+  return { ok: true, reason: "synced", fileCount: Object.keys(merged).length, latestMessageId: msg.id };
+}
+
+/** Auto-capture markdown-generated files from latest message after completion */
+async function autoCapture(sc: SC, orchProjectId: string, brainProjectId: string, userId: string) {
+  if (!brainProjectId) return;
+
+  try {
+    const account = await getBusyAccountForProject(sc, brainProjectId);
+    if (account?.accessToken) {
+      await syncLatestMarkdownFiles(sc, orchProjectId, brainProjectId, account.accessToken, true);
+      return;
+    }
+
+    const { data: userAccount } = await sc.from("lovable_accounts")
+      .select("token_encrypted")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!userAccount?.token_encrypted) {
+      await addLog(sc, orchProjectId, `📦 [capture] No token available to capture markdown files`, "warn");
+      return;
+    }
+
+    await syncLatestMarkdownFiles(sc, orchProjectId, brainProjectId, userAccount.token_encrypted, true);
+  } catch (e) {
+    await addLog(sc, orchProjectId, `📦 [capture] Error: ${(e as Error).message}`, "error");
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -307,55 +332,49 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Check completion — fingerprint
+        // Check completion — latest assistant message (markdown-first)
         let completed = false;
         let reason = "";
         let checkErrors: string[] = [];
 
         try {
-          const fpRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/source-code`, token);
-          if (fpRes.ok) {
-            const fpData = await fpRes.json() as Record<string, unknown>;
-            const files = (fpData.files || []) as Array<{ path: string; size?: number }>;
-            const fpNow = files.map(f => `${f.path}:${f.size ?? 0}`).sort().join("|");
-            const fpBefore = project.source_fingerprint as string | null;
-            if (fpBefore && fpNow !== fpBefore) {
-              completed = true;
-              reason = "fingerprint_changed";
-              await sc.from("orchestrator_projects").update({ source_fingerprint: fpNow }).eq("id", project.id);
-            } else if (!fpBefore) {
-              // First fingerprint — save it for next comparison
-              await sc.from("orchestrator_projects").update({ source_fingerprint: fpNow }).eq("id", project.id);
+          const pollRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/chat/latest-message`, token);
+          if (pollRes.ok) {
+            const rawPoll = await pollRes.text();
+            const pollData = parseLatestMessage(rawPoll);
+            const lastSeen = project.source_fingerprint as string | null;
+
+            if (!pollData) {
+              checkErrors.push("latest-message: parse_failed");
+            } else if (pollData.role !== "user" && !pollData.is_streaming && (pollData.content || "").trim().length > 20 && elapsed > 15_000) {
+              if (pollData.id && pollData.id !== lastSeen) {
+                completed = true;
+                reason = "latest_message_new";
+                await sc.from("orchestrator_projects").update({ source_fingerprint: pollData.id }).eq("id", project.id);
+              } else if (!lastSeen && pollData.id) {
+                await sc.from("orchestrator_projects").update({ source_fingerprint: pollData.id }).eq("id", project.id);
+                checkErrors.push("latest-message: seeded_last_seen");
+              }
             }
           } else {
-            checkErrors.push(`fingerprint: HTTP ${fpRes.status}`);
-            if (fpRes.status === 401) {
-              checkErrors.push("token_expired");
-            }
+            checkErrors.push(`latest-message: HTTP ${pollRes.status}`);
+            if (pollRes.status === 401) checkErrors.push("token_expired");
           }
         } catch (e) {
-          checkErrors.push(`fingerprint: ${(e as Error).message.slice(0, 60)}`);
-        }
-
-        // Check completion — streaming
-        if (!completed) {
-          try {
-            const pollRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/latest-message`, token);
-            if (pollRes.ok) {
-              const pollData = await pollRes.json() as Record<string, unknown>;
-              if (pollData && !pollData.is_streaming && pollData.content && elapsed > 15_000) {
-                completed = true;
-                reason = "streaming_complete";
-              }
-            } else {
-              checkErrors.push(`streaming: HTTP ${pollRes.status}`);
-            }
-          } catch (e) {
-            checkErrors.push(`streaming: ${(e as Error).message.slice(0, 60)}`);
-          }
+          checkErrors.push(`latest-message: ${(e as Error).message.slice(0, 60)}`);
         }
 
         if (completed) {
+          // Sync markdown files for this completed task before releasing account
+          const syncResult = await syncLatestMarkdownFiles(
+            sc,
+            project.id as string,
+            lovableProjectId,
+            token,
+            false,
+            runningTask.id as string,
+          );
+
           await sc.from("orchestrator_tasks").update({
             status: "completed", completed_at: new Date().toISOString(),
           }).eq("id", runningTask.id);
@@ -378,6 +397,7 @@ Deno.serve(async (req: Request) => {
             { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
               elapsed_ms: elapsed, reason, account_id: account.id,
               brain_project: lovableProjectId, check_errors: checkErrors.length ? checkErrors : undefined,
+              markdown_sync: syncResult,
               action: "task_completed" }, runningTask.id as string);
           tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ✅ (${reason}, ${Math.round(elapsed / 1000)}s)`);
           processed++;
