@@ -2,6 +2,8 @@
  * Cirius Generate — Main pipeline orchestrator
  * Actions: init, generate_prd, generate_code, capture, status, pause, resume, cancel,
  *          oauth_state, save_supabase_integration
+ * 
+ * PRD generation routes through the Brain system (send + capture/mining)
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -12,7 +14,7 @@ const CORS = {
 };
 
 const EXT_API = "https://api.lovable.dev";
-
+const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status, headers: { ...CORS, "Content-Type": "application/json" },
@@ -71,25 +73,170 @@ async function hmacSign(data: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function generatePRD(project: Record<string, any>): Promise<any> {
+/** Get user's active Brain project */
+async function getUserBrain(sc: SupabaseClient, userId: string): Promise<{ projectId: string; brainId: string } | null> {
+  const { data } = await sc.from("user_brain_projects")
+    .select("id, lovable_project_id")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data?.lovable_project_id || data.lovable_project_id.startsWith("creating")) return null;
+  return { projectId: data.lovable_project_id, brainId: data.id };
+}
+
+/** Get user's Lovable token */
+async function getUserToken(sc: SupabaseClient, userId: string): Promise<string | null> {
+  const { data } = await sc.from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  return data?.token_encrypted?.trim() || null;
+}
+
+/** Send prompt via venus-chat (same as Brain's sendViaBrain) */
+async function sendViaBrainProject(
+  projectId: string, token: string, message: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
+      method: "POST", signal: ctrl.signal,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({ task: message, project_id: projectId, mode: "task", lovable_token: token, skip_suffix: true }),
+    });
+    clearTimeout(timer);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, error: String(e).slice(0, 80) };
+  }
+}
+
+/** Capture response from Brain project (polls latest-message + update.md) */
+async function captureBrainResponse(
+  projectId: string, token: string,
+  maxWaitMs = 60_000, intervalMs = 5_000, initialDelayMs = 8_000,
+): Promise<string | null> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`, Origin: "https://lovable.dev",
+    Referer: "https://lovable.dev/", "X-Client-Git-SHA": GIT_SHA,
+  };
+
+  // Capture initial message ID to detect NEW messages
+  let initialMsgId: string | null = null;
+  try {
+    const initRes = await fetch(`${EXT_API}/projects/${projectId}/chat/latest-message`, { headers });
+    if (initRes.ok) {
+      const msg = await initRes.json().catch(() => null);
+      initialMsgId = msg?.id || null;
+    }
+  } catch { /* ignore */ }
+
+  await new Promise(r => setTimeout(r, initialDelayMs));
+  const deadline = Date.now() + maxWaitMs;
+
+  while (Date.now() < deadline) {
+    // PRIMARY: Poll latest-message
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const res = await fetch(`${EXT_API}/projects/${projectId}/chat/latest-message`, { signal: ctrl.signal, headers });
+      clearTimeout(t);
+      if (res.ok) {
+        const msg = await res.json().catch(() => null);
+        if (msg && msg.role !== "user" && !msg.is_streaming && msg.id !== initialMsgId) {
+          const content = (msg.content || msg.text || "").trim();
+          if (content.length > 30) return content;
+        }
+      }
+    } catch { /* continue */ }
+
+    // SECONDARY: Poll source-code for src/update.md
+    try {
+      const srcRes = await fetch(`${EXT_API}/projects/${projectId}/source-code`, { headers });
+      if (srcRes.ok) {
+        const srcData = await srcRes.json().catch(() => ({}));
+        const files = srcData?.files || (Array.isArray(srcData) ? srcData : []);
+        for (const f of files) {
+          if ((f.path || f.name || "") === "src/update.md") {
+            const c = f.contents || f.content || "";
+            if (/status:\s*done/i.test(c)) {
+              // Extract body after frontmatter
+              const parts = c.split("---");
+              if (parts.length >= 3) {
+                const body = parts.slice(2).join("---").trim();
+                if (body.length > 20) return body;
+              }
+            }
+          }
+        }
+      }
+    } catch { /* continue */ }
+
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return null;
+}
+
+async function generatePRD(sc: SupabaseClient, userId: string, project: Record<string, any>): Promise<any> {
   const features = Array.isArray(project.features) ? project.features : [];
-  const prompt = `You are a senior software architect. A client wants to build:
-Name: ${project.name}
-Type: ${project.template_type || "app"}
-Description: ${project.description || ""}
+  const prompt = `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
+
+Você é um arquiteto de software sênior. Um cliente quer construir:
+Nome: ${project.name}
+Tipo: ${project.template_type || "app"}
+Descrição: ${project.description || ""}
 Features: ${features.join(", ") || "basic"}
-Source URL reference: ${project.source_url || "none"}
+URL de referência: ${project.source_url || "none"}
 Stack: React + Tailwind + shadcn/ui + Supabase
 
-Break into 3-7 sequential implementation tasks. Return ONLY valid JSON:
-{"tasks":[{"title":"Short title","skill":"code","intent":"security_fix_v2","prompt":"Detailed implementation prompt","stop_condition":"file_exists:src/App.tsx","brain_type":"code"}]}
+Quebre em 3-7 tarefas sequenciais de implementação. Retorne APENAS JSON válido, sem markdown fences:
+{"tasks":[{"title":"Título curto","skill":"code","intent":"security_fix_v2","prompt":"Prompt detalhado de implementação","stop_condition":"file_exists:src/App.tsx","brain_type":"code"}]}
 
-Rules:
-- intent MUST be security_fix_v2
-- Prompts must be self-contained, detailed, implementation-ready
-- No questions, no clarifications
-- Maximum 7 tasks`;
+Regras:
+- intent DEVE ser security_fix_v2
+- Prompts devem ser auto-contidos, detalhados, prontos para implementação
+- Sem perguntas, sem clarificações
+- Máximo 7 tarefas
+- Retorne SOMENTE o JSON, nada mais`;
 
+  // Try Brain system first (preferred — uses mining/capture)
+  const brain = await getUserBrain(sc, userId);
+  const token = await getUserToken(sc, userId);
+
+  if (brain && token) {
+    console.log(`[cirius-generate] Sending PRD via Brain ${brain.brainId.slice(0, 8)} project=${brain.projectId.slice(0, 8)}`);
+    const sendResult = await sendViaBrainProject(brain.projectId, token, prompt);
+
+    if (sendResult.ok) {
+      // Mine response via capture (60s window)
+      const response = await captureBrainResponse(brain.projectId, token, 60_000, 4_000, 6_000);
+      if (response) {
+        const parsed = extractJSON(response);
+        if (parsed) {
+          console.log(`[cirius-generate] PRD mined from Brain: ${parsed.tasks?.length} tasks`);
+          return parsed;
+        }
+        console.warn("[cirius-generate] Brain response didn't contain valid PRD JSON, trying fallback");
+      } else {
+        console.warn("[cirius-generate] Brain capture timed out, trying fallback");
+      }
+    } else {
+      console.warn(`[cirius-generate] Brain send failed: ${sendResult.error}, trying fallback`);
+    }
+  } else {
+    console.log("[cirius-generate] No active Brain or token, using AI Gateway fallback");
+  }
+
+  // Fallback: Lovable AI Gateway
   const key = Deno.env.get("LOVABLE_API_KEY");
   if (key) {
     try {
@@ -114,7 +261,7 @@ Rules:
     } catch (e) { console.error("[cirius-generate] Gateway error:", (e as Error).message); }
   }
 
-  // Fallback: OpenRouter
+  // Fallback 2: OpenRouter
   const orKey = Deno.env.get("OPENROUTER_API_KEY");
   if (orKey) {
     try {
@@ -261,7 +408,7 @@ Deno.serve(async (req) => {
     await logEntry(sc, projectId, "prd", "started", "Gerando PRD...");
 
     const startMs = Date.now();
-    const prd = await generatePRD(project);
+    const prd = await generatePRD(sc, user.id, project);
     const durationMs = Date.now() - startMs;
 
     if (!prd) {
