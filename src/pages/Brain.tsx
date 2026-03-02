@@ -4,11 +4,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useSEO } from "@/hooks/useSEO";
 import AppLayout from "@/components/AppLayout";
+import BrainTerminalChat from "@/components/brain/BrainTerminalChat";
 import {
   Brain as BrainIcon, Send, Loader2, Sparkles, Code2, Palette, Search, Database,
   Plus, Clock, CheckCircle, XCircle, AlertTriangle, Power, LinkIcon, ExternalLink,
   MessageSquare, ChevronLeft, RotateCcw, Trash2, Shield, Server, BarChart3,
   Zap, Bot, ArrowDown, FileText, Layers, PenTool, Lightbulb, Workflow, GitBranch,
+  SkipForward, Terminal,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
@@ -493,6 +495,8 @@ export default function BrainPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [genMode, setGenMode] = useState<GenMode>("chat");
+  const [terminalView, setTerminalView] = useState(true);
+  const bootstrapStuckRef = useRef<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -653,6 +657,20 @@ export default function BrainPage() {
     }
   };
 
+  const forceCompleteBoostrap = async () => {
+    if (!activeBrainId) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("brain", {
+        body: { action: "force_complete_bootstrap", brain_id: activeBrainId },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+      toast.success("Bootstrap forçado com sucesso. Brain liberado.");
+      await loadStatus();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   const sendMsg = async () => {
     if (!message.trim() || !activeBrainId) return;
     const userMsg = message.trim();
@@ -674,8 +692,12 @@ export default function BrainPage() {
       });
       if (error || data?.error) {
         if (data?.code === "no_token" && !hasEverLoadedBrains.current) setLovableConnected(false);
-        // Do NOT reset to onboarding on send errors — user is mid-conversation
-        throw new Error(data?.error || error?.message);
+        // Handle rate limit with retry suggestion
+        const errMsg = data?.error || error?.message || "";
+        if (errMsg.toLowerCase().includes("rate") || errMsg.includes("429") || errMsg.toLowerCase().includes("limit")) {
+          toast.error("Rate limit atingido. Aguarde 30s e tente novamente.", { duration: 8000 });
+        }
+        throw new Error(errMsg);
       }
       
       const realId = data.conversation_id || tempId;
@@ -876,6 +898,18 @@ export default function BrainPage() {
               </button>
             )}
 
+            {/* Terminal/Chat view toggle */}
+            <button
+              onClick={() => setTerminalView(v => !v)}
+              className={`hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold transition-all shrink-0 ${
+                terminalView ? "bg-green-500/10 text-green-500" : "text-muted-foreground hover:bg-muted/50"
+              }`}
+              style={{ border: terminalView ? '1px solid hsl(142 71% 45% / 0.2)' : '0.5px solid var(--clf-border)' }}
+              title={terminalView ? "Modo Terminal (ativo)" : "Modo Chat"}
+            >
+              <Terminal className="h-3.5 w-3.5" /> {terminalView ? "Terminal" : "Chat"}
+            </button>
+
             {/* Skill selector chips */}
             <div className="hidden sm:flex items-center gap-1">
               {activeSkills.map(s => {
@@ -923,9 +957,17 @@ export default function BrainPage() {
               <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-primary">Configurando Brain — Fase {activeBrain?.skill_phase || 1} de 13</p>
-                <p className="text-[11px] text-muted-foreground">Injetando memória, skills e protocolos de resposta. O chat será liberado após conclusão.</p>
+                <p className="text-[11px] text-muted-foreground">Injetando memória, skills e protocolos de resposta.</p>
               </div>
-              <div className="ml-auto shrink-0">
+              <button
+                onClick={forceCompleteBoostrap}
+                className="ml-auto shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-xl text-[11px] font-semibold hover:bg-primary/10 transition-colors text-primary"
+                style={{ border: '1px solid hsl(var(--primary) / 0.2)' }}
+                title="Forçar conclusão do bootstrap"
+              >
+                <SkipForward className="h-3.5 w-3.5" /> Forçar
+              </button>
+              <div className="shrink-0">
                 <div className="h-1.5 w-20 rounded-full bg-border/30 overflow-hidden">
                   <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${Math.round(((activeBrain?.skill_phase || 1) / 13) * 100)}%` }} />
                 </div>
@@ -936,6 +978,13 @@ export default function BrainPage() {
           {/* ── Chat messages area — scrollable ── */}
           {(!activeBrainId || (activeBrainId && allConversations.length === 0 && processingIds.size === 0)) ? (
             <EmptyChat hasActiveBrain={!!activeBrainId} />
+          ) : terminalView ? (
+            <BrainTerminalChat
+              conversations={allConversations}
+              processingIds={processingIds}
+              messagesEndRef={messagesEndRef}
+              chatContainerRef={chatContainerRef}
+            />
           ) : (
             <div
               ref={chatContainerRef}
@@ -985,7 +1034,6 @@ export default function BrainPage() {
                           <div className="flex items-center gap-2 text-destructive"><XCircle className="h-4 w-4" /><span className="text-sm">{convo.ai_response || "Falha ao processar."}</span></div>
                         )}
                         {convo.status === "completed" && convo.ai_response && (() => {
-                          // Client-side cleaning as safety net
                           let cleaned = convo.ai_response;
                           cleaned = cleaned.replace(/^---[\s\S]*?---\s*/m, "").trim();
                           cleaned = cleaned.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
@@ -993,7 +1041,6 @@ export default function BrainPage() {
                           cleaned = cleaned.replace(/Sistema operacional\.\s*Aguardando instruções\.?\s*$/im, "").trim();
                           cleaned = cleaned.replace(/Aguardando instruções do usuário\.?\s*$/im, "").trim();
                           cleaned = cleaned.replace(/Aguardando instruções\.?\s*$/im, "").trim();
-                          // Remove status table boilerplate
                           cleaned = cleaned.replace(/\|\s*Item\s*\|\s*Resultado\s*\|[\s\S]*?\|\s*Ação necessária\s*\|[^\n]*/gi, "").trim();
                           cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
                           return (

@@ -408,7 +408,7 @@ Deno.serve(async (req) => {
         }
 
         // Phase 1 needs 5s, subsequent phases need to detect previous completion
-        const minAgeForPhase = phase === 1 ? 5_000 : 15_000;
+        const minAgeForPhase = phase === 1 ? 5_000 : 10_000;
         if (age < minAgeForPhase) {
           console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} too early, skipping`);
           continue;
@@ -435,11 +435,13 @@ Deno.serve(async (req) => {
                 console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase-1} confirmed done via update.md`);
               } else {
                 // Previous phase not done yet — wait
-                if (age < 180_000) {
+                // For phases > 10, reduce timeout to 60s; for earlier phases, 90s
+                const forceTimeout = phase > 10 ? 60_000 : 90_000;
+                if (age < forceTimeout) {
                   console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} prev not done, waiting...`);
                   continue;
                 }
-                // Force proceed after 3 min
+                // Force proceed after timeout
                 console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} force-proceeding after ${Math.round(age/1000)}s`);
               }
             } catch { /* parse error, proceed anyway */ }
