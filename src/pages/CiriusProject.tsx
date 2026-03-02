@@ -346,12 +346,29 @@ export default function CiriusProject() {
 
             {/* Action Bar */}
             <div className="px-4 py-3 border-t border-border/30 flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1 text-xs" disabled>
-                Details
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 text-xs gap-1.5"
+                onClick={() => navigate(`/cirius/editor/${id}`)}
+              >
+                <FileCode className="h-3.5 w-3.5" /> Abrir Editor
               </Button>
-              <Button size="sm" className="flex-1 text-xs bg-primary text-primary-foreground" disabled={!project.preview_url}>
-                Preview
-              </Button>
+              {project.lovable_project_id ? (
+                <Button
+                  size="sm"
+                  className="flex-1 text-xs gap-1.5"
+                  variant={showPreview ? "secondary" : "default"}
+                  onClick={() => setShowPreview(p => !p)}
+                >
+                  {showPreview ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  {showPreview ? "Fechar Preview" : "Preview"}
+                </Button>
+              ) : (
+                <Button size="sm" className="flex-1 text-xs" disabled>
+                  Preview
+                </Button>
+              )}
             </div>
           </div>
         )}
