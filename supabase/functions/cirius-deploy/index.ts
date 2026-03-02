@@ -192,7 +192,16 @@ Deno.serve(async (req) => {
           }),
         });
         const vProject = await createRes.json();
-        const deployUrl = vProject?.link?.deployHooks?.[0]?.url || `https://${vProject.name}.vercel.app`;
+
+        // Validate response before constructing URL
+        if (!vProject || (!vProject.name && !vProject.id)) {
+          const errMsg = vProject?.error?.message || JSON.stringify(vProject).slice(0, 200);
+          await logDeploy(sc, projectId, "deploy_vercel", "failed", `Vercel API error: ${errMsg}`);
+          return json({ error: `Vercel project creation failed: ${errMsg}` }, 500);
+        }
+
+        const vercelName = vProject.name || vProject.id || project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 50);
+        const deployUrl = vProject?.link?.deployHooks?.[0]?.url || `https://${vercelName}.vercel.app`;
 
         await sc.from("cirius_projects").update({
           vercel_project_id: vProject.id, vercel_url: deployUrl,

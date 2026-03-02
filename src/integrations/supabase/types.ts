@@ -4103,6 +4103,7 @@ export type Database = {
       orchestrator_tasks: {
         Row: {
           brain_skill: string | null
+          brain_type: string | null
           completed_at: string | null
           created_at: string
           id: string
@@ -4121,6 +4122,7 @@ export type Database = {
         }
         Insert: {
           brain_skill?: string | null
+          brain_type?: string | null
           completed_at?: string | null
           created_at?: string
           id?: string
@@ -4139,6 +4141,7 @@ export type Database = {
         }
         Update: {
           brain_skill?: string | null
+          brain_type?: string | null
           completed_at?: string | null
           created_at?: string
           id?: string

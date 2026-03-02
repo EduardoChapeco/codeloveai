@@ -1,0 +1,1 @@
+ALTER TABLE public.orchestrator_tasks ADD COLUMN IF NOT EXISTS brain_type TEXT DEFAULT 'code';
