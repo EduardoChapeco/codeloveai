@@ -13,6 +13,7 @@ export type ProjectIntent =
 
 export interface ProjectBlueprint {
   intent: ProjectIntent;
+  confidence: number;
   needsDatabase: boolean;
   needsAuth: boolean;
   needsPayments: boolean;
@@ -33,44 +34,61 @@ export interface PRDTask {
   brain_skill: "design" | "frontend" | "backend" | "database" | "review" | "general";
 }
 
-// ─── Keyword maps ───────────────────────────────────────────────────────────
+// ─── Keyword maps with weights ──────────────────────────────────────────────
 
-const INTENT_KEYWORDS: Record<ProjectIntent, string[]> = {
+interface WeightedKeyword {
+  kw: string;
+  w: number; // weight multiplier
+}
+
+function kws(words: string[], weight = 1): WeightedKeyword[] {
+  return words.map((kw) => ({ kw, w: weight }));
+}
+
+const INTENT_KEYWORDS: Record<ProjectIntent, WeightedKeyword[]> = {
   landing_page: [
-    "landing", "landing page", "página", "pagina", "one page", "onepage",
-    "single page", "lp", "captura", "squeeze", "hero",
+    ...kws(["landing page", "página de vendas", "pagina de vendas", "one page", "página única", "pagina unica"], 3),
+    ...kws(["landing", "lp", "squeeze", "hero", "captura", "onepage", "single page"], 2),
+    ...kws(["apresentação", "apresentacao", "portfólio", "portfolio", "homepage", "home page"], 1.5),
   ],
   marketing_site: [
-    "site", "website", "institucional", "portfolio", "portfólio",
-    "multi page", "blog", "sobre nós", "contato",
+    ...kws(["site completo", "site institucional", "site multi-página", "site multi-pagina", "website completo"], 3),
+    ...kws(["blog", "sobre nós", "sobre nos", "contato", "serviços", "servicos"], 2),
+    ...kws(["site", "website", "institucional", "multi page", "site de divulgação", "site de divulgacao"], 1.5),
   ],
   crud_system: [
-    "sistema", "crud", "gerenciar", "gerenciamento", "cadastro", "cadastrar",
-    "tabela", "listagem", "formulário", "registro", "controle", "admin",
-    "backoffice", "back office", "gestão", "gestao",
+    ...kws(["sistema crud", "crud completo", "gerenciamento de", "gestão de", "gestao de", "controle de"], 3),
+    ...kws(["sistema", "crud", "gerenciar", "cadastrar", "cadastro", "administrar", "gerenciamento"], 2),
+    ...kws(["tabela", "listar", "editar", "deletar", "formulário de", "formulario de", "registro de", "listagem"], 1.5),
+    ...kws(["backoffice", "back office", "admin"], 1),
   ],
   dashboard: [
-    "dashboard", "painel", "métricas", "metricas", "relatório", "relatorio",
-    "analytics", "gráfico", "grafico", "chart", "kpi", "indicador",
-    "monitoramento", "overview",
+    ...kws(["dashboard", "painel de controle", "painel de métricas", "painel de metricas"], 3),
+    ...kws(["analytics", "relatório", "relatorio", "métricas", "metricas", "kpi", "indicadores"], 2),
+    ...kws(["painel", "gráfico", "grafico", "chart", "indicador", "monitoramento", "overview"], 1.5),
+    ...kws(["acompanhar", "visualizar dados"], 1),
   ],
   ecommerce: [
-    "loja", "ecommerce", "e-commerce", "produto", "carrinho", "cart",
-    "checkout", "vender", "venda", "pedido", "order", "catálogo",
-    "catalogo", "shop", "store", "marketplace",
+    ...kws(["e-commerce", "ecommerce", "loja virtual", "loja online"], 3),
+    ...kws(["loja", "carrinho", "cart", "checkout", "marketplace", "catálogo", "catalogo"], 2),
+    ...kws(["produto", "vender", "venda", "pedido", "order", "shop", "store", "estoque"], 1.5),
+    ...kws(["compra", "comprar"], 1),
   ],
   saas_app: [
-    "saas", "assinatura", "plano", "billing", "subscription", "multi-tenant",
-    "multitenant", "tenant", "recurring", "pricing", "freemium",
-    "onboarding", "trial",
+    ...kws(["saas", "multi-tenant", "multitenant"], 3),
+    ...kws(["assinatura", "subscription", "billing", "cobrança", "cobranca", "recorrente"], 2),
+    ...kws(["plano", "pricing", "freemium", "onboarding", "trial", "tenant", "workspace"], 1.5),
+    ...kws(["usuários", "usuarios"], 1),
   ],
   api_only: [
-    "api", "endpoint", "backend", "edge function", "webhook", "rest",
-    "graphql", "microservice", "serviço", "servico",
+    ...kws(["edge function", "api rest", "restful api", "microservice"], 3),
+    ...kws(["api", "endpoint", "backend", "webhook", "graphql"], 2),
+    ...kws(["serviço", "servico", "rest"], 1),
   ],
   component: [
-    "componente", "component", "widget", "botão", "botao", "modal",
-    "card", "ui element", "ui kit", "design system",
+    ...kws(["componente react", "ui component", "design system", "ui kit"], 3),
+    ...kws(["componente", "component", "widget"], 2),
+    ...kws(["botão", "botao", "modal", "card", "ui element"], 1),
   ],
   custom: [],
 };
@@ -100,18 +118,27 @@ function scoreIntent(prompt: string): { intent: ProjectIntent; score: number }[]
   const norm = normalise(prompt);
   const scores: { intent: ProjectIntent; score: number }[] = [];
 
-  for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS) as [ProjectIntent, string[]][]) {
+  for (const [intent, wkws] of Object.entries(INTENT_KEYWORDS) as [ProjectIntent, WeightedKeyword[]][]) {
     let score = 0;
-    for (const kw of keywords) {
+    for (const { kw, w } of wkws) {
       if (norm.includes(kw)) {
-        // longer keyword = higher confidence
-        score += kw.length;
+        score += kw.length * w;
       }
     }
     scores.push({ intent, score });
   }
 
   return scores.sort((a, b) => b.score - a.score);
+}
+
+function computeConfidence(ranked: { intent: ProjectIntent; score: number }[]): number {
+  const top = ranked[0].score;
+  if (top === 0) return 0;
+  const second = ranked[1]?.score ?? 0;
+  // Confidence based on absolute score and gap to second
+  const absConf = Math.min(1, top / 30); // 30+ chars of matched keywords → full confidence
+  const gapConf = second > 0 ? Math.min(1, (top - second) / top) : 1;
+  return Math.round((absConf * 0.6 + gapConf * 0.4) * 100) / 100;
 }
 
 function detectFeatures(prompt: string): string[] {
@@ -129,26 +156,24 @@ function detectFeatures(prompt: string): string[] {
 function detectTableNames(prompt: string, intent: ProjectIntent): string[] {
   const norm = normalise(prompt);
 
-  // Common entity extraction via simple patterns
   const entityHints: string[] = [];
   const patterns = [
-    /(?:cadastro|tabela|lista|gerenciar|crud)\s+(?:de\s+)?(\w+)/gi,
+    /(?:cadastro|tabela|lista|gerenciar|crud|gestao|controle)\s+(?:de\s+)?(\w+)/gi,
     /(\w+)\s+(?:management|manager|listing)/gi,
   ];
   for (const p of patterns) {
     let m: RegExpExecArray | null;
     while ((m = p.exec(norm)) !== null) {
-      const w = m[1].replace(/s$/, ""); // naive singular
+      const w = m[1].replace(/s$/, "");
       if (w.length > 2) entityHints.push(w);
     }
   }
 
-  // Defaults per intent
   const defaults: Record<string, string[]> = {
     crud_system: entityHints.length ? entityHints : ["items"],
     ecommerce: ["products", "orders", "order_items", "customers"],
-    saas_app: ["profiles", "subscriptions", "plans", "usage_logs"],
-    dashboard: ["metrics", "reports"],
+    saas_app: ["profiles", "plans", "subscriptions", "usage_logs"],
+    dashboard: ["metrics", "events"],
   };
 
   return defaults[intent] ?? [];
@@ -160,6 +185,7 @@ export function classifyIntent(userPrompt: string): ProjectBlueprint {
   const ranked = scoreIntent(userPrompt);
   const top = ranked[0];
   const intent: ProjectIntent = top.score > 0 ? top.intent : "custom";
+  const confidence = computeConfidence(ranked);
 
   const features = detectFeatures(userPrompt);
   const tables = detectTableNames(userPrompt, intent);
@@ -210,7 +236,9 @@ export function classifyIntent(userPrompt: string): ProjectBlueprint {
 
   // Generation strategy
   let generationStrategy: ProjectBlueprint["generationStrategy"] = "single_shot";
-  if (estimatedTasks >= 5) generationStrategy = "multi_task";
+  if (["landing_page"].includes(intent)) generationStrategy = "single_shot";
+  else if (["marketing_site"].includes(intent)) generationStrategy = "multi_task";
+  else if (estimatedTasks >= 5) generationStrategy = "multi_task";
   else if (estimatedTasks >= 3) generationStrategy = "iterative";
 
   // Collect feature labels
@@ -221,6 +249,7 @@ export function classifyIntent(userPrompt: string): ProjectBlueprint {
 
   return {
     intent,
+    confidence,
     needsDatabase,
     needsAuth,
     needsPayments,
@@ -245,7 +274,6 @@ export function generateSupabaseSchema(blueprint: ProjectBlueprint): string {
     "",
   ];
 
-  // Reusable updated_at trigger
   lines.push(`CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
@@ -256,9 +284,10 @@ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
   } else if (blueprint.intent === "saas_app") {
     lines.push(saasSchema());
   } else if (blueprint.intent === "dashboard") {
-    lines.push(dashboardSchema(blueprint.supabaseTables));
+    lines.push(dashboardSchema());
+  } else if (blueprint.intent === "crud_system") {
+    lines.push(crudSystemSchema(blueprint.supabaseTables));
   } else {
-    // Generic CRUD tables
     for (const table of blueprint.supabaseTables) {
       lines.push(genericTableSchema(table, blueprint.needsAuth));
     }
@@ -306,6 +335,28 @@ CREATE TABLE public.${table} (
 ${withAuth ? rlsBlock(table) : ""}${updatedAtTrigger(table)}`;
 }
 
+function crudSystemSchema(tables: string[]): string {
+  const out: string[] = [];
+  for (const table of tables) {
+    out.push(`
+CREATE TABLE IF NOT EXISTS public.${table} (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'active',
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_${table}_user_id ON public.${table}(user_id);
+CREATE INDEX IF NOT EXISTS idx_${table}_status ON public.${table}(status);
+${rlsBlock(table)}${updatedAtTrigger(table)}`);
+  }
+  return out.join("\n");
+}
+
 function ecommerceSchema(): string {
   return `
 CREATE TABLE public.products (
@@ -314,12 +365,15 @@ CREATE TABLE public.products (
   name TEXT NOT NULL,
   description TEXT,
   price NUMERIC(12,2) NOT NULL DEFAULT 0,
-  image_url TEXT,
   stock INTEGER NOT NULL DEFAULT 0,
+  images JSONB DEFAULT '[]',
+  category TEXT,
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX idx_products_user ON public.products(user_id);
+CREATE INDEX idx_products_category ON public.products(category);
 ${rlsBlock("products")}${updatedAtTrigger("products")}
 
 CREATE TABLE public.customers (
@@ -328,6 +382,7 @@ CREATE TABLE public.customers (
   name TEXT NOT NULL,
   email TEXT,
   phone TEXT,
+  address JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -339,9 +394,11 @@ CREATE TABLE public.orders (
   customer_id UUID REFERENCES public.customers(id),
   status TEXT NOT NULL DEFAULT 'pending',
   total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  shipping_address JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX idx_orders_status ON public.orders(status);
 ${rlsBlock("orders")}${updatedAtTrigger("orders")}
 
 CREATE TABLE public.order_items (
@@ -358,12 +415,24 @@ ${rlsBlock("order_items")}`;
 
 function saasSchema(): string {
   return `
+CREATE TABLE public.profiles_saas (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE,
+  full_name TEXT,
+  avatar_url TEXT,
+  plan_id UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+${rlsBlock("profiles_saas")}${updatedAtTrigger("profiles_saas")}
+
 CREATE TABLE public.plans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   price NUMERIC(12,2) NOT NULL DEFAULT 0,
   interval TEXT NOT NULL DEFAULT 'monthly',
   features JSONB DEFAULT '[]',
+  limits JSONB DEFAULT '{}',
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -385,19 +454,38 @@ ${rlsBlock("subscriptions")}${updatedAtTrigger("subscriptions")}
 CREATE TABLE public.usage_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
-  event TEXT NOT NULL,
-  quantity INTEGER NOT NULL DEFAULT 1,
+  action TEXT NOT NULL,
+  credits_used INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX idx_usage_logs_user ON public.usage_logs(user_id);
 ${rlsBlock("usage_logs")}`;
 }
 
-function dashboardSchema(tables: string[]): string {
-  const out: string[] = [];
-  for (const t of tables) {
-    out.push(genericTableSchema(t, true));
-  }
-  return out.join("\n");
+function dashboardSchema(): string {
+  return `
+CREATE TABLE public.metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  metric_name TEXT NOT NULL,
+  value NUMERIC(16,4) NOT NULL DEFAULT 0,
+  period TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_metrics_user ON public.metrics(user_id);
+CREATE INDEX idx_metrics_name ON public.metrics(metric_name);
+${rlsBlock("metrics")}
+
+CREATE TABLE public.events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  event_type TEXT NOT NULL,
+  properties JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_events_user ON public.events(user_id);
+CREATE INDEX idx_events_type ON public.events(event_type);
+${rlsBlock("events")}`;
 }
 
 // ─── PRD Task Generator ─────────────────────────────────────────────────────
@@ -405,7 +493,6 @@ function dashboardSchema(tables: string[]): string {
 export function generatePRDTasks(userPrompt: string, blueprint: ProjectBlueprint): PRDTask[] {
   const tasks: PRDTask[] = [];
 
-  // 1 — Setup base (always)
   tasks.push({
     title: "Setup Base do Projeto",
     prompt: `Crie a estrutura base do projeto React + Vite + Tailwind CSS. Configure o index.html, App.tsx, main.tsx e os estilos globais. O projeto é: ${userPrompt}`,
@@ -414,7 +501,6 @@ export function generatePRDTasks(userPrompt: string, blueprint: ProjectBlueprint
     brain_skill: "frontend",
   });
 
-  // 2 — Database schema
   if (blueprint.needsDatabase) {
     const schema = generateSupabaseSchema(blueprint);
     tasks.push({
@@ -426,7 +512,6 @@ export function generatePRDTasks(userPrompt: string, blueprint: ProjectBlueprint
     });
   }
 
-  // 3 — Auth
   if (blueprint.needsAuth) {
     tasks.push({
       title: "Autenticação de Usuários",
@@ -437,7 +522,6 @@ export function generatePRDTasks(userPrompt: string, blueprint: ProjectBlueprint
     });
   }
 
-  // 4 — Core features
   const corePrompt = buildCorePrompt(userPrompt, blueprint);
   tasks.push({
     title: "Features Principais",
@@ -447,7 +531,6 @@ export function generatePRDTasks(userPrompt: string, blueprint: ProjectBlueprint
     brain_skill: blueprint.suggestedSkill === "design" ? "frontend" : "backend",
   });
 
-  // 5 — UI / Dashboard
   if (["dashboard", "saas_app", "ecommerce", "crud_system"].includes(blueprint.intent)) {
     tasks.push({
       title: "Interface e Dashboard",
@@ -458,7 +541,6 @@ export function generatePRDTasks(userPrompt: string, blueprint: ProjectBlueprint
     });
   }
 
-  // 6 — Payments integration
   if (blueprint.needsPayments) {
     tasks.push({
       title: "Integração de Pagamentos",
@@ -469,7 +551,6 @@ export function generatePRDTasks(userPrompt: string, blueprint: ProjectBlueprint
     });
   }
 
-  // 7 — Storage
   if (blueprint.needsStorage) {
     tasks.push({
       title: "Upload e Storage",
@@ -480,7 +561,6 @@ export function generatePRDTasks(userPrompt: string, blueprint: ProjectBlueprint
     });
   }
 
-  // 8 — Polish & deploy (always last)
   tasks.push({
     title: "Revisão e Deploy",
     prompt: "Revise todo o código gerado. Corrija erros de TypeScript, melhore responsividade, adicione loading states, tratamento de erros e estados vazios. Prepare para deploy.",
