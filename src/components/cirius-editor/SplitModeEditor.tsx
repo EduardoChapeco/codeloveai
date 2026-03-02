@@ -111,13 +111,6 @@ export default function SplitModeEditor({
       />
 
       <div className="sp-body">
-        {/* File sidebar */}
-        {showFiles && hasFiles && (
-          <div className="sp-file-sidebar">
-            <FileExplorer files={files} selectedFile={selectedFile} onSelectFile={(f) => { setSelectedFile(f); setRightPanel("code"); }} />
-          </div>
-        )}
-
         {/* Chat panel */}
         <div style={{ width: chatWidth, flexShrink: 0 }}>
           <SplitChatPanel
@@ -146,6 +139,13 @@ export default function SplitModeEditor({
             onRetryTask={onRetryTask}
           />
         </div>
+
+        {/* File sidebar — between chat and preview */}
+        {showFiles && hasFiles && (
+          <div className="sp-file-sidebar">
+            <FileExplorer files={files} selectedFile={selectedFile} onSelectFile={(f) => { setSelectedFile(f); setRightPanel("code"); }} />
+          </div>
+        )}
 
         <SplitResizer onResize={setChatWidth} currentWidth={chatWidth} />
 
