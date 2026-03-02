@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-02T12:45:00Z
+updated_at: 2026-03-02T13:15:00Z
 status: done
-task: Fix brain capture - wrong /latest-message endpoint and SSE parsing in cron
+task: Fix brain prompt to use update.md and improve capture strategy
 ---

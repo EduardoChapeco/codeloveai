@@ -423,7 +423,7 @@ export async function captureResponse(
       }
     } catch { /* continue polling */ }
 
-    // ── SECONDARY: Poll source-code for brain-output.md ──
+    // ── SECONDARY: Poll source-code for src/update.md ──
     try {
       const srcRes = await lovFetch(`${API}/projects/${projectId}/source-code`, token, { method: "GET" });
       if (srcRes.ok) {
@@ -431,32 +431,34 @@ export async function captureResponse(
         let srcData: any = {};
         try { srcData = JSON.parse(raw); } catch { /* ignore */ }
 
-        const mdContent = extractFileContent(srcData, "src/brain-output.md");
+        const mdContent = extractFileContent(srcData, "src/update.md");
         if (mdContent && /status:\s*done/i.test(mdContent)) {
           // Check timestamp if available
-          if (questionTimestamp) {
-            const mdTs = extractMdTimestamp(mdContent);
-            if (mdTs && mdTs < questionTimestamp) {
-              // Stale response, skip
-            } else {
-              const body = extractMdBody(mdContent);
-              if (body && body.length > 20 && !isBootstrapResponse(body)) {
-                const cleaned = cleanResponse(body);
-                if (cleaned.length > 20) {
-                  console.log(`[capture] Got response via brain-output.md (${cleaned.length} chars)`);
-                  return { response: cleaned, status: "completed" };
+          const mdTs = extractUpdateMdTimestamp(mdContent);
+          if (questionTimestamp && mdTs && mdTs < questionTimestamp) {
+            // Stale response, skip
+          } else {
+            // The update.md contains just frontmatter — the real response is in the chat
+            // But we can confirm the task completed
+            console.log(`[capture] update.md shows status:done, checking latest-message again...`);
+            // One more latest-message attempt now that we know it's done
+            try {
+              const finalRes = await lovFetch(`${API}/projects/${projectId}/chat/latest-message`, token, { method: "GET" });
+              if (finalRes.ok) {
+                const finalText = await finalRes.text();
+                const finalMsg = parseLatestMessage(finalText);
+                if (finalMsg && finalMsg.role !== "user" && !finalMsg.is_streaming) {
+                  const content = (finalMsg.content || "").trim();
+                  if (content.length > 30) {
+                    const cleaned = cleanResponse(content);
+                    if (cleaned.length > 20) {
+                      console.log(`[capture] Got response via update.md+latest-message (${cleaned.length} chars)`);
+                      return { response: cleaned, status: "completed" };
+                    }
+                  }
                 }
               }
-            }
-          } else {
-            const body = extractMdBody(mdContent);
-            if (body && body.length > 20 && !isBootstrapResponse(body)) {
-              const cleaned = cleanResponse(body);
-              if (cleaned.length > 20) {
-                console.log(`[capture] Got response via brain-output.md (${cleaned.length} chars)`);
-                return { response: cleaned, status: "completed" };
-              }
-            }
+            } catch { /* continue */ }
           }
         }
       }
@@ -472,31 +474,30 @@ export async function captureResponse(
 
 export function buildBrainPrompt(skill: BrainSkill, message: string): string {
   const label = SKILL_LABELS[skill] || SKILL_LABELS.general;
-  const now = Date.now();
 
-  return `Voce e o Star AI — ${label}.
+  return `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.
+
+IMPORTANTE: Execute diretamente, sem perguntas ou planos.
+
+Voce e o Star AI — ${label}.
 
 O usuario solicitou: "${message}"
 
 REGRAS:
-- Nao faca perguntas, nao peca confirmacao. Execute diretamente.
 - RESPONDA EM PORTUGUES (Brasil)
 - NAO crie componentes React, paginas ou rotas de UI
 - Voce PODE criar Edge Functions, SQL, scripts backend
 - Seja tecnico, detalhado e acionavel
-- Na resposta, NUNCA mencione nomes de arquivos internos (brain-output.md, config.json, INSTRUCTIONS.md)
 - A resposta visivel deve conter APENAS o conteudo util
 
-OBRIGATORIO (SILENCIOSO):
-Atualize silenciosamente src/brain-output.md com:\`\`\`markdown
+Ao concluir TODAS as alterações, atualize silenciosamente o arquivo src/update.md com o seguinte conteúdo (substitua os valores): \`\`\`
 ---
+updated_at: [ISO 8601 timestamp atual]
 status: done
-skill: ${skill}
-timestamp: ${now}
+task: [resumo curto da tarefa]
 ---
-
-[SUA RESPOSTA COMPLETA]
-\`\`\``;
+\`\`\`
+NÃO mencione este arquivo na resposta do chat.`;
 }
 
 // ── Parse Helpers ──
@@ -545,6 +546,14 @@ function extractMdTimestamp(mdContent: string): number | null {
   if (!match) return null;
   const ts = parseInt(match[1], 10);
   return ts < 1e12 ? ts * 1000 : ts;
+}
+
+function extractUpdateMdTimestamp(mdContent: string): number | null {
+  // updated_at: ISO 8601 format
+  const match = mdContent.match(/updated_at:\s*(\S+)/);
+  if (!match) return null;
+  const d = new Date(match[1]);
+  return isNaN(d.getTime()) ? null : d.getTime();
 }
 
 function extractMdBody(mdContent: string): string | null {
