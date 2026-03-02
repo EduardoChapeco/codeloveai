@@ -20,6 +20,37 @@ export interface DeployConfig {
   custom_domain?: string;
 }
 
+export interface GitFile {
+  path: string;
+  content: string;
+}
+
+export interface GitRepo {
+  full_name: string;
+  name: string;
+  owner: string;
+  private: boolean;
+  default_branch: string;
+  language: string | null;
+  updated_at: string;
+  html_url: string;
+}
+
+export interface GitBranch {
+  name: string;
+  sha: string;
+  protected: boolean;
+}
+
+export interface GitTreeFile {
+  path: string;
+  size: number;
+  sha: string;
+}
+
+const gitOps = (body: Record<string, unknown>) =>
+  supabase.functions.invoke("cirius-git-ops", { body });
+
 export const ciriusApi = {
   generate: (params: GenerateParams) =>
     supabase.functions.invoke("cirius-generate", {
@@ -82,4 +113,51 @@ export const ciriusApi = {
       .from("cirius_templates")
       .select("*")
       .order("usage_count", { ascending: false }),
+
+  // ─── Git Operations ───
+
+  gitStatus: () => gitOps({ action: "status" }),
+
+  gitListRepos: (page = 1) => gitOps({ action: "list_repos", page }),
+
+  gitListBranches: (owner: string, repo: string) =>
+    gitOps({ action: "list_branches", owner, repo }),
+
+  gitGetTree: (owner: string, repo: string, branch?: string) =>
+    gitOps({ action: "get_tree", owner, repo, branch }),
+
+  gitReadFile: (owner: string, repo: string, path: string, branch?: string) =>
+    gitOps({ action: "read_file", owner, repo, path, branch }),
+
+  gitWriteFile: (
+    owner: string,
+    repo: string,
+    path: string,
+    content: string,
+    message?: string,
+    branch?: string,
+  ) => gitOps({ action: "write_file", owner, repo, path, content, message, branch }),
+
+  gitDeleteFile: (
+    owner: string,
+    repo: string,
+    path: string,
+    message?: string,
+    branch?: string,
+  ) => gitOps({ action: "delete_file", owner, repo, path, message, branch }),
+
+  gitCreateBranch: (
+    owner: string,
+    repo: string,
+    newBranch: string,
+    fromBranch?: string,
+  ) => gitOps({ action: "create_branch", owner, repo, new_branch: newBranch, branch: fromBranch }),
+
+  gitCommitFiles: (
+    owner: string,
+    repo: string,
+    files: GitFile[],
+    message?: string,
+    branch?: string,
+  ) => gitOps({ action: "commit_files", owner, repo, files, message, branch }),
 };
