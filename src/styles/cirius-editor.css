@@ -362,72 +362,95 @@
   -webkit-backdrop-filter: blur(20px);
 }
 
-/* ── Task Bubbles ── */
+/* ── Task Bubbles (Unified Card) ── */
 .ce-bubbles {
-  position: fixed; bottom: 110px; right: 20px;
-  display: flex; flex-direction: column; gap: 8px;
-  align-items: flex-end; z-index: 250;
-  pointer-events: none; max-width: 320px;
+  display: flex; flex-direction: column; gap: 0;
+  pointer-events: all; max-width: 100%;
 }
-/* Inline bubbles inside split chat */
-.sp-chat-bubbles .ce-bubbles {
-  position: static;
-  max-width: 100%;
-  align-items: stretch;
-  pointer-events: all;
-  z-index: auto;
-}
-.sp-chat-bubbles .task-bubble {
-  max-width: 100%;
-  min-width: 0;
-}
-.sp-chat-bubbles {
-  padding: 4px 8px 8px;
-}
-.task-bubble {
-  pointer-events: all;
+.sp-chat-bubbles { padding: 4px 8px 8px; }
+
+.tb-unified-card {
   background: linear-gradient(160deg, rgba(16,16,22,0.97), rgba(12,12,17,0.99));
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--r4);
-  padding: 12px 14px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 2px 6px rgba(0,0,0,0.4);
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
-  min-width: 240px; max-width: 320px;
   animation: bubble-in 0.35s var(--ease-spring) both;
 }
 @keyframes bubble-in {
   from { opacity: 0; transform: translateY(12px) scale(0.96); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
-.bubble-out { animation: bubble-out 0.3s var(--ease-spring) both !important; }
-@keyframes bubble-out {
-  to { opacity: 0; transform: translateY(8px) scale(0.96); }
+
+.tb-uc-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; cursor: pointer;
+  transition: background 0.15s;
+}
+.tb-uc-header:hover { background: rgba(255,255,255,0.03); }
+
+.tb-uc-status { display: flex; align-items: center; gap: 8px; }
+.tb-uc-ico.running { color: var(--blue-l); }
+.tb-uc-ico.done { color: var(--green-l); }
+.tb-uc-ico.error { color: var(--red-l); }
+.tb-uc-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+
+.tb-uc-meta { display: flex; align-items: center; gap: 8px; color: var(--text-quaternary); font-size: 11px; }
+.tb-uc-count { font-family: var(--mono); font-size: 10px; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; }
+.tb-timer { font-family: var(--mono); font-size: 10px; color: var(--text-tertiary); }
+
+.tb-uc-progress { height: 2px; background: var(--bg-4); }
+.tb-uc-progress-bar { height: 100%; background: linear-gradient(90deg, var(--indigo), var(--purple)); transition: width 0.5s ease; }
+.tb-uc-progress-bar.complete { background: var(--green); }
+
+.tb-uc-tasks { padding: 4px 0; }
+
+.tb-uc-task { padding: 6px 12px; border-left: 2px solid transparent; transition: all 0.15s; }
+.tb-uc-task.running { border-left-color: var(--blue-l); background: rgba(59,130,246,0.04); }
+.tb-uc-task.done { opacity: 0.7; }
+.tb-uc-task.error { border-left-color: var(--red-l); }
+
+.tb-uc-task-row { display: flex; align-items: center; gap: 8px; }
+.tb-uc-task-num {
+  width: 16px; height: 16px; border-radius: 50%; font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: rgba(255,255,255,0.06); color: var(--text-tertiary); font-family: var(--mono);
+}
+.tb-uc-task.done .tb-uc-task-num { background: rgba(34,197,94,0.15); color: var(--green-l); }
+.tb-uc-task.running .tb-uc-task-num { background: rgba(59,130,246,0.15); color: var(--blue-l); }
+
+.tb-uc-task-ico { display: flex; align-items: center; flex-shrink: 0; }
+.tb-uc-task.running .tb-uc-task-ico { color: var(--blue-l); }
+.tb-uc-task.done .tb-uc-task-ico { color: var(--green-l); }
+.tb-uc-task.error .tb-uc-task-ico { color: var(--red-l); }
+
+.tb-uc-task-title { font-size: 11px; color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-uc-task.running .tb-uc-task-title { color: var(--text-primary); font-weight: 500; }
+
+.tb-uc-brain {
+  display: flex; align-items: center; gap: 3px; font-size: 9px;
+  color: var(--text-quaternary); font-family: var(--mono);
+  background: rgba(255,255,255,0.04); padding: 1px 5px; border-radius: 3px;
 }
 
-.tb-phase-ico {
-  width: 24px; height: 24px;
-  border-radius: 7px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.tb-phase-ico.running { background: rgba(59,130,246,0.2); color: var(--blue-l); animation: phase-pulse 1.5s ease infinite; }
-.tb-phase-ico.done    { background: rgba(34,197,94,0.2); color: var(--green-l); }
-.tb-phase-ico.error   { background: rgba(239,68,68,0.2); color: var(--red-l); }
+.tb-uc-steps { padding: 4px 0 2px 32px; display: flex; flex-direction: column; gap: 3px; }
+.tb-uc-step { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-quaternary); }
+.tb-uc-step.done { color: var(--text-tertiary); }
+.tb-uc-step.run { color: var(--blue-l); }
 
-@keyframes phase-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.3); }
-  50%       { box-shadow: 0 0 0 6px rgba(59,130,246,0); }
-}
-
-.tb-step-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-.tb-step-dot.done { background: var(--green); }
-.tb-step-dot.run  { background: var(--blue); animation: dot-blink 1s ease infinite; }
-.tb-step-dot.wait { background: var(--bg-5); }
+.tb-uc-step-dot { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; }
+.tb-uc-step-dot.done { background: var(--green); }
+.tb-uc-step-dot.run { background: var(--blue); animation: dot-blink 1s ease infinite; }
+.tb-uc-step-dot.wait { background: var(--bg-5); }
 @keyframes dot-blink { 50% { opacity: 0.3; } }
 
-.tb-progress { height: 2px; border-radius: 1px; background: var(--bg-4); overflow: hidden; margin-top: 8px; }
-.tb-progress-bar { height: 100%; background: linear-gradient(90deg, var(--indigo), var(--purple)); transition: width 0.5s ease; }
+.tb-uc-dismiss {
+  width: 100%; padding: 6px; border: none; border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02); color: var(--text-tertiary); font-size: 10px;
+  cursor: pointer; transition: all 0.15s;
+}
+.tb-uc-dismiss:hover { background: rgba(255,255,255,0.05); color: var(--text-secondary); }
 
 /* ── CMD Panel ── */
 .cmd-overlay {
