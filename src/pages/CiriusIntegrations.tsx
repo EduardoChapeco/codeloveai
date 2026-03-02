@@ -12,8 +12,8 @@ import { ArrowLeft, Github, Globe, Database, Check, ExternalLink } from "lucide-
 
 const PROVIDERS = [
   { id: "github", name: "GitHub", icon: Github, desc: "Push código + criar repos", scopes: "Personal Access Token (repo, read:user)", isOAuth: false, tokenField: true },
-  { id: "vercel", name: "Vercel", icon: Globe, desc: "Deploy automático de apps", scopes: "API Token", isOAuth: false, tokenField: true },
-  { id: "netlify", name: "Netlify", icon: Globe, desc: "Deploy por ZIP ou Git", scopes: "all", isOAuth: true },
+  { id: "netlify", name: "Netlify", icon: Globe, desc: "Hosting principal — Deploy automático via OAuth", scopes: "all", isOAuth: true, primary: true },
+  { id: "vercel", name: "Vercel", icon: Globe, desc: "Hosting secundário — Deploy via API Token", scopes: "API Token", isOAuth: false, tokenField: true },
   { id: "supabase", name: "Supabase", icon: Database, desc: "Banco de dados, auth e storage via OAuth", scopes: "all (organizations, projects)", isOAuth: true },
 ];
 
