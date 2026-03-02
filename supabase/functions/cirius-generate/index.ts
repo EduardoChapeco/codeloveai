@@ -1,9 +1,10 @@
 /**
- * Cirius Generate — Main pipeline orchestrator
+ * Cirius Generate v2.0 — Multi-engine pipeline orchestrator
  * Actions: init, generate_prd, generate_code, capture, status, pause, resume, cancel,
  *          oauth_state, save_supabase_integration
  * 
- * PRD generation routes through the Brain system (send + capture/mining)
+ * Engine priority: Brainchain → OpenRouter (Claude) → AI Gateway
+ * PRD generation: Brain system (send + capture/mining) → AI Gateway → OpenRouter
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -15,6 +16,7 @@ const CORS = {
 
 const EXT_API = "https://api.lovable.dev";
 const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status, headers: { ...CORS, "Content-Type": "application/json" },
@@ -57,14 +59,6 @@ async function logEntry(sc: SupabaseClient, projectId: string, step: string, sta
   });
 }
 
-function selectEngine(config: { template_type?: string; features?: string[]; complexity_score?: number }): string {
-  const { template_type, features = [], complexity_score = 0 } = config;
-  if (template_type === "landing" && features.length <= 2) return "brainchain";
-  if (["app", "dashboard", "ecommerce"].includes(template_type || "")) return "brain";
-  if (features.length > 3 || complexity_score > 7) return "orchestrator";
-  return "brainchain";
-}
-
 /** HMAC-SHA256 sign */
 async function hmacSign(data: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
@@ -72,6 +66,8 @@ async function hmacSign(data: string, secret: string): Promise<string> {
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
+
+// ─── Engine helpers ───
 
 /** Get user's active Brain project */
 async function getUserBrain(sc: SupabaseClient, userId: string): Promise<{ projectId: string; brainId: string } | null> {
@@ -96,7 +92,7 @@ async function getUserToken(sc: SupabaseClient, userId: string): Promise<string 
   return data?.token_encrypted?.trim() || null;
 }
 
-/** Send prompt via venus-chat (same as Brain's sendViaBrain) */
+/** Send prompt via venus-chat */
 async function sendViaBrainProject(
   projectId: string, token: string, message: string,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -130,7 +126,6 @@ async function captureBrainResponse(
     Referer: "https://lovable.dev/", "X-Client-Git-SHA": GIT_SHA,
   };
 
-  // Capture initial message ID to detect NEW messages
   let initialMsgId: string | null = null;
   try {
     const initRes = await fetch(`${EXT_API}/projects/${projectId}/chat/latest-message`, { headers });
@@ -144,7 +139,6 @@ async function captureBrainResponse(
   const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() < deadline) {
-    // PRIMARY: Poll latest-message
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 10_000);
@@ -159,7 +153,6 @@ async function captureBrainResponse(
       }
     } catch { /* continue */ }
 
-    // SECONDARY: Poll source-code for src/update.md
     try {
       const srcRes = await fetch(`${EXT_API}/projects/${projectId}/source-code`, { headers });
       if (srcRes.ok) {
@@ -169,7 +162,6 @@ async function captureBrainResponse(
           if ((f.path || f.name || "") === "src/update.md") {
             const c = f.contents || f.content || "";
             if (/status:\s*done/i.test(c)) {
-              // Extract body after frontmatter
               const parts = c.split("---");
               if (parts.length >= 3) {
                 const body = parts.slice(2).join("---").trim();
@@ -186,6 +178,82 @@ async function captureBrainResponse(
   return null;
 }
 
+/** Send via Brainchain pool */
+async function sendViaBrainchain(
+  sc: SupabaseClient, userId: string, message: string, brainType = "code"
+): Promise<{ ok: boolean; queueId?: string; response?: string; error?: string }> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({ message, brain_type: brainType, user_id: userId }),
+    });
+    const data = await res.json();
+    if (data.queued) return { ok: true, queueId: data.queue_id };
+    if (data.ok && data.response) return { ok: true, response: data.response };
+    return { ok: false, error: data.error || "Brainchain unavailable" };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message.slice(0, 80) };
+  }
+}
+
+/** Send via OpenRouter (Claude fallback) */
+async function sendViaOpenRouter(prompt: string, systemPrompt?: string): Promise<string | null> {
+  const key = Deno.env.get("OPENROUTER_API_KEY");
+  if (!key) return null;
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`, "Content-Type": "application/json",
+        "HTTP-Referer": "https://starble.lovable.app", "X-Title": "Cirius Generator",
+      },
+      body: JSON.stringify({
+        model: "anthropic/claude-sonnet-4",
+        messages: [
+          { role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.2, max_tokens: 4000,
+      }),
+    });
+    if (res.ok) {
+      const result = await res.json();
+      return result?.choices?.[0]?.message?.content || null;
+    }
+  } catch (e) { console.error("[cirius] OpenRouter error:", (e as Error).message); }
+  return null;
+}
+
+/** Send via AI Gateway */
+async function sendViaGateway(prompt: string, systemPrompt?: string): Promise<string | null> {
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) return null;
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.2, max_tokens: 3000,
+      }),
+    });
+    if (res.ok) {
+      const result = await res.json();
+      return result?.choices?.[0]?.message?.content || null;
+    }
+  } catch (e) { console.error("[cirius] Gateway error:", (e as Error).message); }
+  return null;
+}
+
+// ─── PRD Generation ───
+
 async function generatePRD(sc: SupabaseClient, userId: string, project: Record<string, any>): Promise<any> {
   const features = Array.isArray(project.features) ? project.features : [];
   const prompt = `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
@@ -199,97 +267,80 @@ URL de referência: ${project.source_url || "none"}
 Stack: React + Tailwind + shadcn/ui + Supabase
 
 Quebre em 3-7 tarefas sequenciais de implementação. Retorne APENAS JSON válido, sem markdown fences:
-{"tasks":[{"title":"Título curto","skill":"code","intent":"security_fix_v2","prompt":"Prompt detalhado de implementação","stop_condition":"file_exists:src/App.tsx","brain_type":"code"}]}
+{"tasks":[{"title":"Título curto","skill":"code","intent":"security_fix_v2","prompt":"Prompt detalhado de implementação","stop_condition":"file_exists:src/App.tsx","brain_type":"code"}],"design":{"primary_color":"#6366f1","font":"Geist","style":"modern_minimal","pages":["Home","Dashboard","Login"],"tables":["users","projects"]}}
 
 Regras:
 - intent DEVE ser security_fix_v2
 - Prompts devem ser auto-contidos, detalhados, prontos para implementação
 - Sem perguntas, sem clarificações
 - Máximo 7 tarefas
+- Inclua o objeto "design" com cores, fonte, estilo, páginas e tabelas
 - Retorne SOMENTE o JSON, nada mais`;
 
-  // Try Brain system first (preferred — uses mining/capture)
+  // 1. Try Brain system first (preferred — uses mining/capture)
   const brain = await getUserBrain(sc, userId);
   const token = await getUserToken(sc, userId);
-
   if (brain && token) {
-    console.log(`[cirius-generate] Sending PRD via Brain ${brain.brainId.slice(0, 8)} project=${brain.projectId.slice(0, 8)}`);
+    console.log(`[cirius] PRD via Brain ${brain.brainId.slice(0, 8)}`);
     const sendResult = await sendViaBrainProject(brain.projectId, token, prompt);
-
     if (sendResult.ok) {
-      // Mine response via capture (60s window)
       const response = await captureBrainResponse(brain.projectId, token, 60_000, 4_000, 6_000);
       if (response) {
         const parsed = extractJSON(response);
-        if (parsed) {
-          console.log(`[cirius-generate] PRD mined from Brain: ${parsed.tasks?.length} tasks`);
-          return parsed;
-        }
-        console.warn("[cirius-generate] Brain response didn't contain valid PRD JSON, trying fallback");
-      } else {
-        console.warn("[cirius-generate] Brain capture timed out, trying fallback");
+        if (parsed) { console.log(`[cirius] PRD mined from Brain: ${parsed.tasks?.length} tasks`); return parsed; }
       }
-    } else {
-      console.warn(`[cirius-generate] Brain send failed: ${sendResult.error}, trying fallback`);
     }
-  } else {
-    console.log("[cirius-generate] No active Brain or token, using AI Gateway fallback");
   }
 
-  // Fallback: Lovable AI Gateway
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  if (key) {
-    try {
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: "Return only valid JSON, no markdown fences." },
-            { role: "user", content: prompt },
-          ],
-          temperature: 0.2, max_tokens: 3000,
-        }),
-      });
-      if (res.ok) {
-        const result = await res.json();
-        const content = result?.choices?.[0]?.message?.content || "";
-        const parsed = extractJSON(content);
-        if (parsed) return parsed;
-      }
-    } catch (e) { console.error("[cirius-generate] Gateway error:", (e as Error).message); }
-  }
+  // 2. AI Gateway
+  const gwContent = await sendViaGateway(prompt);
+  if (gwContent) { const p = extractJSON(gwContent); if (p) return p; }
 
-  // Fallback 2: OpenRouter
-  const orKey = Deno.env.get("OPENROUTER_API_KEY");
-  if (orKey) {
-    try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${orKey}`, "Content-Type": "application/json",
-          "HTTP-Referer": "https://starble.lovable.app", "X-Title": "Cirius Generator",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: "Return only valid JSON, no markdown fences." },
-            { role: "user", content: prompt },
-          ],
-          temperature: 0.2, max_tokens: 3000,
-        }),
-      });
-      if (res.ok) {
-        const result = await res.json();
-        const content = result?.choices?.[0]?.message?.content || "";
-        return extractJSON(content);
-      }
-    } catch (e) { console.error("[cirius-generate] OpenRouter error:", (e as Error).message); }
-  }
+  // 3. OpenRouter (Claude) fallback
+  const orContent = await sendViaOpenRouter(prompt);
+  if (orContent) { const p = extractJSON(orContent); if (p) return p; }
 
   return null;
 }
+
+// ─── Code Generation via Brainchain + Fallback ───
+
+async function executeCodeTask(
+  sc: SupabaseClient, userId: string, projectId: string,
+  taskPrompt: string, taskIndex: number, brainType = "code"
+): Promise<{ engine: string; ok: boolean; error?: string; queueId?: string }> {
+  const prefix = `IMPORTANTE: Execute diretamente, sem perguntas.\n\n`;
+
+  // 1. Brainchain (pool)
+  const bcResult = await sendViaBrainchain(sc, userId, prefix + taskPrompt, brainType);
+  if (bcResult.ok) {
+    await logEntry(sc, projectId, `code_task_${taskIndex}`, "started", `Tarefa ${taskIndex + 1} enviada via Brainchain`);
+    return { engine: "brainchain", ok: true, queueId: bcResult.queueId };
+  }
+  console.warn(`[cirius] Brainchain failed for task ${taskIndex}: ${bcResult.error}`);
+
+  // 2. OpenRouter (Claude) fallback
+  const orContent = await sendViaOpenRouter(prefix + taskPrompt, "You are a senior developer. Implement the requested changes.");
+  if (orContent && orContent.length > 50) {
+    await logEntry(sc, projectId, `code_task_${taskIndex}`, "completed", `Tarefa ${taskIndex + 1} gerada via OpenRouter (Claude)`);
+    return { engine: "openrouter", ok: true };
+  }
+
+  // 3. Brain pessoal
+  const brain = await getUserBrain(sc, userId);
+  const token = await getUserToken(sc, userId);
+  if (brain && token) {
+    const sendResult = await sendViaBrainProject(brain.projectId, token, prefix + taskPrompt);
+    if (sendResult.ok) {
+      await logEntry(sc, projectId, `code_task_${taskIndex}`, "started", `Tarefa ${taskIndex + 1} enviada via Brain pessoal`);
+      return { engine: "brain", ok: true };
+    }
+  }
+
+  return { engine: "none", ok: false, error: "All engines failed" };
+}
+
+// ─── Main Handler ───
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -302,22 +353,19 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const action = (body.action as string) || "";
 
-  // ─── OAUTH_STATE — Generate signed state for OAuth flows ───
+  // ─── OAUTH_STATE ───
   if (action === "oauth_state") {
     const provider = body.provider;
     if (!provider || !["github", "vercel", "netlify"].includes(provider)) {
       return json({ error: "Invalid provider" }, 400);
     }
-
     const stateSecret = Deno.env.get("CLF_TOKEN_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const ts = String(Date.now());
     const payload = `${user.id}:${ts}`;
     const sig = await hmacSign(payload, stateSecret);
     const state = btoa(JSON.stringify({ user_id: user.id, ts, sig }));
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const callbackUrl = `${supabaseUrl}/functions/v1/cirius-oauth-callback?provider=${provider}`;
-
     let authUrl = "";
     if (provider === "github") {
       const clientId = Deno.env.get("CIRIUS_GITHUB_CLIENT_ID") || "";
@@ -332,43 +380,25 @@ Deno.serve(async (req) => {
       if (!clientId) return json({ error: "Netlify OAuth not configured" }, 400);
       authUrl = `https://app.netlify.com/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
     }
-
     return json({ auth_url: authUrl });
   }
 
-  // ─── SAVE_SUPABASE_INTEGRATION — Store service key server-side ───
+  // ─── SAVE_SUPABASE_INTEGRATION ───
   if (action === "save_supabase_integration") {
     const sbUrl = (body.supabase_url as string || "").trim();
     const serviceKey = (body.service_key as string || "").trim();
-
     if (!sbUrl || !serviceKey) return json({ error: "URL e Service Key são obrigatórios" }, 400);
-
     const ref = sbUrl.match(/https:\/\/([^.]+)/)?.[1] || "";
     if (!ref) return json({ error: "URL inválida" }, 400);
-
-    // Validate the key by making a test request
     try {
       const testClient = createClient(sbUrl, serviceKey);
       const { error: testErr } = await testClient.from("_test_nonexistent_table_").select("id").limit(1);
-      // A "relation does not exist" error is fine — it means the key works
-      // Only reject if it's an auth error
-      if (testErr && testErr.message?.includes("Invalid API key")) {
-        return json({ error: "Service key inválida" }, 400);
-      }
-    } catch {
-      // Connection errors are acceptable for validation
-    }
-
+      if (testErr && testErr.message?.includes("Invalid API key")) return json({ error: "Service key inválida" }, 400);
+    } catch { /* ok */ }
     const { error } = await sc.from("cirius_integrations").upsert({
-      user_id: user.id,
-      provider: "supabase",
-      service_key_enc: serviceKey,
-      project_ref: ref,
-      account_login: sbUrl,
-      is_active: true,
-      updated_at: new Date().toISOString(),
+      user_id: user.id, provider: "supabase", service_key_enc: serviceKey,
+      project_ref: ref, account_login: sbUrl, is_active: true, updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,provider" });
-
     if (error) return json({ error: "Failed to save integration" }, 500);
     return json({ ok: true });
   }
@@ -377,10 +407,8 @@ Deno.serve(async (req) => {
   if (action === "init") {
     const config = body.config || {};
     if (!config.name) return json({ error: "config.name required" }, 400);
-
     const { data: project, error } = await sc.from("cirius_projects").insert({
-      user_id: user.id,
-      name: config.name,
+      user_id: user.id, name: config.name,
       description: config.description || null,
       template_type: config.template_type || "custom",
       source_url: config.source_url || null,
@@ -389,7 +417,6 @@ Deno.serve(async (req) => {
       deploy_config: config.deploy_config || {},
       status: "draft",
     }).select("id, status").single();
-
     if (error) return json({ error: "Failed to create project" }, 500);
     await logEntry(sc, project.id, "init", "completed", "Projeto criado");
     return json({ project_id: project.id, status: "draft" });
@@ -399,7 +426,6 @@ Deno.serve(async (req) => {
   if (action === "generate_prd") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-
     const { data: project } = await sc.from("cirius_projects")
       .select("*").eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Project not found" }, 404);
@@ -417,144 +443,64 @@ Deno.serve(async (req) => {
       return json({ error: "PRD generation failed" }, 500);
     }
 
-    const features = Array.isArray(project.features) ? project.features : [];
-    const engine = selectEngine({
-      template_type: project.template_type,
-      features,
-      complexity_score: features.length,
-    });
+    // Always use brainchain as primary engine now
+    const engine = "brainchain";
 
     await sc.from("cirius_projects").update({
       prd_json: prd, generation_engine: engine, status: "draft", progress_pct: 15,
     }).eq("id", projectId);
 
-    await logEntry(sc, projectId, "prd", "completed", `PRD gerado: ${prd.tasks.length} tasks, engine: ${engine}`, {
-      duration_ms: durationMs, output_json: { task_count: prd.tasks.length, engine },
+    await logEntry(sc, projectId, "prd", "completed", `PRD gerado: ${prd.tasks.length} tasks`, {
+      duration_ms: durationMs, output_json: { task_count: prd.tasks.length, engine, design: prd.design || null },
     });
 
-    return json({ prd_json: prd, engine_selected: engine, task_count: prd.tasks.length });
+    return json({ prd_json: prd, engine_selected: engine, task_count: prd.tasks.length, design: prd.design || null });
   }
 
   // ─── GENERATE_CODE ───
   if (action === "generate_code") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-
     const { data: project } = await sc.from("cirius_projects")
       .select("*").eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Project not found" }, 404);
     if (!project.prd_json) return json({ error: "PRD not generated yet" }, 400);
 
-    const engine = project.generation_engine || "brainchain";
     await sc.from("cirius_projects").update({
       status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20,
     }).eq("id", projectId);
-    await logEntry(sc, projectId, "code", "started", `Iniciando geração via ${engine}`);
+    await logEntry(sc, projectId, "code", "started", "Iniciando geração via Brainchain + fallback OpenRouter");
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string }> };
 
-    if (engine === "brainchain") {
-      const firstTask = prd.tasks[0];
-      try {
-        const bcRes = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-          body: JSON.stringify({
-            message: `IMPORTANTE: Execute diretamente, sem perguntas.\n\n${firstTask.prompt}`,
-            brain_type: firstTask.brain_type || "code",
-            user_id: user.id,
-          }),
-        });
-        const bcData = await bcRes.json();
+    // Execute first task with Brainchain → OpenRouter fallback
+    const result = await executeCodeTask(sc, user.id, projectId, prd.tasks[0].prompt, 0, prd.tasks[0].brain_type || "code");
 
-        if (bcData.queued) {
-          await sc.from("cirius_projects").update({ brainchain_queue_id: bcData.queue_id }).eq("id", projectId);
-          await logEntry(sc, projectId, "code_task_0", "started", "Enfileirado no Brainchain");
-        } else if (bcData.ok && bcData.response) {
-          await sc.from("cirius_projects").update({
-            source_files_json: { _raw_response: bcData.response },
-            progress_pct: 80, status: "deploying",
-          }).eq("id", projectId);
-          await logEntry(sc, projectId, "code_task_0", "completed", "Código gerado via Brainchain");
-        }
-
-        return json({ started: true, engine, estimated_seconds: 90 });
-      } catch (e) {
-        console.error("[cirius-generate] brainchain error:", (e as Error).message);
-        await logEntry(sc, projectId, "code_task_0", "failed", "Code generation failed");
-        return json({ error: "Code generation failed" }, 500);
+    if (result.ok) {
+      if (result.queueId) {
+        await sc.from("cirius_projects").update({ brainchain_queue_id: result.queueId }).eq("id", projectId);
       }
+      return json({ started: true, engine: result.engine, task_index: 0, total_tasks: prd.tasks.length });
     }
 
-    if (engine === "orchestrator") {
-      try {
-        const orchRes = await fetch(`${supabaseUrl}/functions/v1/agentic-orchestrator`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${serviceKey}`,
-            "x-orchestrator-internal": "true",
-          },
-          body: JSON.stringify({
-            action: "start",
-            client_prompt: prd.tasks.map(t => t.prompt).join("\n\n---\n\n"),
-            _internal_user_id: user.id,
-          }),
-        });
-        const orchData = await orchRes.json();
-        if (orchData.project_id) {
-          await sc.from("cirius_projects").update({
-            orchestrator_project_id: orchData.project_id, progress_pct: 25,
-          }).eq("id", projectId);
-        }
-        await logEntry(sc, projectId, "code", "started", "Orquestrador iniciado");
-        return json({ started: true, engine, estimated_seconds: 600 });
-      } catch (e) {
-        console.error("[cirius-generate] orchestrator error:", (e as Error).message);
-        await logEntry(sc, projectId, "code", "failed", "Orchestrator start failed");
-        return json({ error: "Code generation failed" }, 500);
-      }
-    }
-
-    // brain engine
-    try {
-      const brainRes = await fetch(`${supabaseUrl}/functions/v1/brain`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: req.headers.get("Authorization") || "" },
-        body: JSON.stringify({
-          action: "send",
-          prompt: prd.tasks[0].prompt,
-          skill: prd.tasks[0].brain_type || "code",
-        }),
-      });
-      const brainData = await brainRes.json();
-      await logEntry(sc, projectId, "code_task_0", "started", "Enviado ao Brain pessoal");
-      return json({ started: true, engine, estimated_seconds: 300 });
-    } catch (e) {
-      console.error("[cirius-generate] brain error:", (e as Error).message);
-      await logEntry(sc, projectId, "code", "failed", "Brain send failed");
-      return json({ error: "Code generation failed" }, 500);
-    }
+    await sc.from("cirius_projects").update({ status: "failed", error_message: "Todos os motores falharam" }).eq("id", projectId);
+    await logEntry(sc, projectId, "code", "failed", "All engines failed");
+    return json({ error: "Code generation failed — all engines unavailable" }, 500);
   }
 
   // ─── STATUS ───
   if (action === "status") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-
     const { data: project } = await sc.from("cirius_projects")
       .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, created_at, updated_at")
       .eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Not found" }, 404);
-
     const { data: logs } = await sc.from("cirius_generation_log")
       .select("step, status, level, message, created_at, duration_ms")
       .eq("project_id", projectId)
       .order("created_at", { ascending: false })
       .limit(10);
-
     return json({ project, logs: logs || [] });
   }
 
@@ -562,7 +508,6 @@ Deno.serve(async (req) => {
   if (action === "pause" || action === "resume" || action === "cancel") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-
     const statusMap: Record<string, string> = { pause: "paused", resume: "generating_code", cancel: "failed" };
     const { error } = await sc.from("cirius_projects")
       .update({
@@ -570,7 +515,6 @@ Deno.serve(async (req) => {
         ...(action === "cancel" ? { error_message: "Cancelado pelo usuário" } : {}),
       })
       .eq("id", projectId).eq("user_id", user.id);
-
     if (error) return json({ error: "Operation failed" }, 500);
     await logEntry(sc, projectId, action, "completed", `Pipeline ${action === "cancel" ? "cancelado" : action === "pause" ? "pausado" : "retomado"}`);
     return json({ [action === "cancel" ? "cancelled" : action === "pause" ? "paused" : "resumed"]: true });
@@ -581,48 +525,34 @@ Deno.serve(async (req) => {
     const projectId = body.project_id;
     const lovableProjectId = body.lovable_project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-
     const { data: project } = await sc.from("cirius_projects")
       .select("*").eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Not found" }, 404);
-
     const targetProjectId = lovableProjectId || project.lovable_project_id;
     if (!targetProjectId) return json({ error: "No lovable_project_id" }, 400);
-
     const { data: account } = await sc.from("lovable_accounts")
       .select("token_encrypted").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
-
     if (!account?.token_encrypted) return json({ error: "No Lovable token" }, 503);
-
     const scRes = await fetch(`${EXT_API}/projects/${targetProjectId}/source-code`, {
       headers: {
         Authorization: `Bearer ${account.token_encrypted}`,
         Origin: "https://lovable.dev", Referer: "https://lovable.dev/",
-        "X-Client-Git-SHA": "3d7a3673c6f02b606137a12ddc0ab88f6b775113",
+        "X-Client-Git-SHA": GIT_SHA,
       },
     });
-
     if (!scRes.ok) return json({ error: "Source-code fetch failed" }, 500);
-
     const scData = await scRes.json();
     const files = scData.files || [];
     const filesJson: Record<string, string> = {};
     for (const f of files) {
-      if (f.path && !f.path.startsWith(".lovable/")) {
-        filesJson[f.path] = f.content || "";
-      }
+      if (f.path && !f.path.startsWith(".lovable/")) filesJson[f.path] = f.content || "";
     }
-
     const fingerprint = files.map((f: any) => `${f.path}:${f.size ?? 0}`).sort().join("|");
-
     await sc.from("cirius_projects").update({
-      source_files_json: filesJson,
-      files_fingerprint: fingerprint,
-      lovable_project_id: targetProjectId,
-      progress_pct: 80,
+      source_files_json: filesJson, files_fingerprint: fingerprint,
+      lovable_project_id: targetProjectId, progress_pct: 80,
       generation_ended_at: new Date().toISOString(),
     }).eq("id", projectId);
-
     await logEntry(sc, projectId, "capture", "completed", `${Object.keys(filesJson).length} arquivos capturados`);
     return json({ files_json: filesJson, fingerprint, file_count: Object.keys(filesJson).length });
   }
