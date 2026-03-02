@@ -16,3 +16,10 @@ export interface EditorToast {
   msg: string;
   type: "success" | "info";
 }
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
