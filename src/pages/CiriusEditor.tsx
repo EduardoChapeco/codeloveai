@@ -278,7 +278,9 @@ export default function CiriusEditor() {
     });
   }, [id, user]);
 
-  // ─── AI CHAT MODE: Brain pipeline via cirius-ai-chat ───
+  // ─── AI CHAT MODE: Unified pipeline via cirius-ai-chat ───
+  // Supports commands: build (PRD→Orchestrator), fix, improve, refine, chat
+  // Routes through: OpenRouter (Claude) → Brainchain → AI Gateway
   const sendAiChat = useCallback(async (msg: string) => {
     if (!msg.trim() || !id || !user) return;
 
@@ -288,12 +290,10 @@ export default function CiriusEditor() {
     setChatLoading(true);
 
     try {
-      // Persist user message on server
       await supabase.from("cirius_chat_messages" as any).upsert({
         id: userMsg.id, project_id: id, user_id: user.id, role: "user", content: msg,
       });
 
-      // Build messages history for context
       const historyMsgs = chatMessages.slice(-20).map(m => ({ role: m.role, content: m.content }));
       historyMsgs.push({ role: "user", content: msg });
 
@@ -313,26 +313,58 @@ export default function CiriusEditor() {
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(data?.error || `Error ${resp.status}`);
 
-      const assistantContent = String(data?.content || "");
-      if (!assistantContent) throw new Error("Resposta vazia da IA");
+      const summaryContent = String(data?.content || "");
+      if (!summaryContent) throw new Error("Resposta vazia da IA");
 
-      const cleanText = stripFileBlocks(assistantContent);
+      // Show summary in chat (not raw code)
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: cleanText || "✅ Resposta processada.",
+        content: summaryContent,
         timestamp: Date.now(),
       };
       setChatMessages(prev => [...prev, assistantMsg]);
 
-      const newFiles = extractFileBlocks(assistantContent);
-      if (Object.keys(newFiles).length > 0) {
-        const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
-        setSourceFiles(merged);
-        sourceFilesRef.current = merged;
-        setPreviewHtml(buildPreviewFromFiles(merged));
-        setProject((prev: any) => ({ ...prev, source_files_json: merged }));
-        addToast(`${Object.keys(newFiles).length} arquivo(s) atualizado(s)`, "success");
+      // Handle file updates (fix/improve/refine/chat commands)
+      const filesUpdated = data?.files_updated || 0;
+      if (filesUpdated > 0 && data?.raw_content) {
+        const newFiles = extractFileBlocks(data.raw_content);
+        if (Object.keys(newFiles).length > 0) {
+          const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
+          setSourceFiles(merged);
+          sourceFilesRef.current = merged;
+          setPreviewHtml(buildPreviewFromFiles(merged));
+          setProject((prev: any) => ({ ...prev, source_files_json: merged }));
+        }
+      }
+
+      // Handle build pipeline (orchestrator dispatched)
+      if (data?.command_type === "build" && data?.orchestrator) {
+        const bubbleId = `orch_${Date.now()}`;
+        setBubbles(prev => [...prev, {
+          id: bubbleId,
+          title: `Pipeline (${data.pipeline?.task_count || 0} tasks)`,
+          phase: "running",
+          steps: [{ s: "run", t: "Tarefas distribuídas para os Brains..." }],
+          pct: 25,
+          startTime: Date.now(),
+        }]);
+        addToast(`🚀 Pipeline: ${data.pipeline?.task_count || 0} tarefas em execução`, "success");
+        // Bubble will auto-update via orchestrator polling
+        setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 120000);
+      } else if (filesUpdated > 0) {
+        const cmdLabels: Record<string, string> = {
+          fix: "🔧 Correção aplicada",
+          improve: "✨ Melhoria aplicada",
+          refine: "🔍 Refinamento completo",
+          chat: "✅ Atualizado",
+        };
+        addToast(cmdLabels[data?.command_type] || `${filesUpdated} arquivo(s) atualizado(s)`, "success");
+      }
+
+      // Reload project to sync state
+      if (data?.command_type === "build") {
+        await loadProject();
       }
     } catch (e) {
       const errText = e instanceof Error ? e.message : "Erro";
@@ -341,7 +373,7 @@ export default function CiriusEditor() {
     }
 
     setChatLoading(false);
-  }, [id, user, chatMessages, persistMsg, addToast]);
+  }, [id, user, chatMessages, persistMsg, addToast, loadProject]);
 
   // ─── BUILD MODE: pipeline PRD ───
   const sendMsg = useCallback(async (msg: string) => {
