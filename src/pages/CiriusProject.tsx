@@ -113,12 +113,12 @@ export default function CiriusProject() {
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
-          {project.status === "draft" && project.prd_json && (
+          {project.status === "draft" && (project.prd_json || project.has_prd) && (
             <Button onClick={() => doAction("generate_code")} disabled={acting} className="gap-2">
               <Play className="h-4 w-4" /> Gerar Código
             </Button>
           )}
-          {project.status === "draft" && !project.prd_json && (
+          {project.status === "draft" && !project.prd_json && !project.has_prd && (
             <Button onClick={() => doAction("generate_prd")} disabled={acting} className="gap-2">
               <Sparkles className="h-4 w-4" /> Gerar PRD
             </Button>
