@@ -753,7 +753,7 @@ Deno.serve(async (req) => {
   // ─── OAUTH_STATE ───
   if (action === "oauth_state") {
     const provider = body.provider;
-    if (!provider || !["github", "vercel", "netlify"].includes(provider)) {
+    if (!provider || !["github", "vercel", "netlify", "supabase"].includes(provider)) {
       return json({ error: "Invalid provider" }, 400);
     }
     const stateSecret = Deno.env.get("CLF_TOKEN_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -783,6 +783,8 @@ Deno.serve(async (req) => {
       authUrl = `https://vercel.com/oauth/authorize?client_id=${clientId}&scope=user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
     } else if (provider === "netlify") {
       authUrl = `https://app.netlify.com/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
+    } else if (provider === "supabase") {
+      authUrl = `https://api.supabase.com/v1/oauth/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}&scope=all`;
     }
     return json({ auth_url: authUrl });
   }
