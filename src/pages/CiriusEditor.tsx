@@ -237,7 +237,7 @@ export default function CiriusEditor() {
           onBuildClick={() => toggleDrawer("build")}
           onFilesClick={() => toggleDrawer("files")}
           onDeployClick={() => toggleDrawer("deploy")}
-          onPublishClick={() => addToast("Deploy iniciado", "success")}
+          onPublishClick={() => toggleDrawer("deploy")}
         />
       </div>
 
@@ -279,7 +279,7 @@ export default function CiriusEditor() {
       )}
 
       {/* Drawers */}
-      <DrawerDeploy visible={activeDrawers.has("deploy")} onClose={() => toggleDrawer("deploy")} project={project} />
+      <DrawerDeploy visible={activeDrawers.has("deploy")} onClose={() => toggleDrawer("deploy")} project={project} onNavigateIntegrations={() => navigate("/cirius/integrations")} />
       <DrawerFiles visible={activeDrawers.has("files")} onClose={() => toggleDrawer("files")} sourceFiles={project?.source_files_json} />
       <DrawerSEO visible={activeDrawers.has("seo")} onClose={() => toggleDrawer("seo")} />
       <DrawerBuild visible={activeDrawers.has("build")} onClose={() => toggleDrawer("build")} project={project} tasks={tasks} logs={logs} />
