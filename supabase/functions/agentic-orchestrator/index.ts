@@ -368,6 +368,8 @@ Deno.serve(async (req: Request) => {
           brainSkills = (brainRow.brain_skills as string[]) || [];
           brainName = (brainRow.name as string) || "";
         }
+        await addLog(sc, "", `🔍 Brain lookup: ${brainId.slice(0, 8)} → ${brainRow ? `found (${brainSkills.length} skills)` : "NOT FOUND"}`, "debug",
+          { brain_id: brainId, skills: brainSkills, brain_name: brainName });
       }
 
       // Create project record
@@ -377,14 +379,20 @@ Deno.serve(async (req: Request) => {
         status: "planning",
       }).select("id").single();
 
-      if (projErr || !project) return json({ error: "Failed to create project" }, 500);
+      if (projErr || !project) {
+        console.error("[orch] start: project creation failed:", projErr?.message);
+        return json({ error: "Failed to create project", details: projErr?.message }, 500);
+      }
       const projectId = project.id as string;
 
-      await addLog(sc, projectId, `🚀 Orchestrator started${brainName ? ` (Brain: ${brainName})` : ""}: "${clientPrompt.slice(0, 80)}…"`, "info");
+      await addLog(sc, projectId, `🚀 Orchestrator started${brainName ? ` (Brain: ${brainName})` : ""}: "${clientPrompt.slice(0, 80)}…"`, "info",
+        { user_id: userId, brain_id: brainId, prompt_length: clientPrompt.length });
 
       // Generate PRD INLINE
       await addLog(sc, projectId, "🧠 Generating PRD…", "info");
+      const prdT0 = Date.now();
       const prd = await generatePRD(clientPrompt, brainSkills);
+      const prdDuration = Date.now() - prdT0;
 
       if (!prd || !prd.tasks?.length) {
         const fallback = [{ title: "Implementar projeto completo", intent: "chat", prompt: clientPrompt }];
@@ -395,7 +403,8 @@ Deno.serve(async (req: Request) => {
           status: "paused", total_tasks: fallback.length,
           prd_json: { tasks: fallback, note: "PRD unavailable — fallback" },
         }).eq("id", projectId);
-        await addLog(sc, projectId, "⚠️ PRD unavailable — fallback task created.", "warn");
+        await addLog(sc, projectId, `⚠️ PRD FAILED after ${prdDuration}ms — fallback single task created`, "warn",
+          { prd_duration_ms: prdDuration, fallback: true, reason: prd === null ? "all_engines_failed" : "empty_tasks" });
       } else {
         await sc.from("orchestrator_projects").update({
           prd_json: prd, total_tasks: prd.tasks.length, status: "paused",
@@ -407,7 +416,9 @@ Deno.serve(async (req: Request) => {
             prompt: t.prompt, stop_condition: t.stop_condition || null,
           }))
         );
-        await addLog(sc, projectId, `✅ PRD ready: ${prd.tasks.length} tasks. Brainchain pool will execute.`, "info");
+        await addLog(sc, projectId, `✅ PRD ready: ${prd.tasks.length} tasks in ${prdDuration}ms. Brainchain pool will execute.`, "info",
+          { prd_duration_ms: prdDuration, task_count: prd.tasks.length,
+            task_titles: prd.tasks.map(t => t.title) });
       }
 
       return json({ success: true, project_id: projectId, status: "paused" });
@@ -424,19 +435,35 @@ Deno.serve(async (req: Request) => {
       const { data: project } = await q.maybeSingle();
 
       if (!project) return json({ error: "Project not found" }, 404);
-      if (project.status === "completed") return json({ status: "already_completed" });
-      if (project.status === "failed") return json({ status: "failed", error: project.last_error });
-      if (project.status === "executing") return json({ status: "already_executing" });
+      if (project.status === "completed") {
+        await addLog(sc, projectId, `⏭ execute_next called but project already completed`, "debug");
+        return json({ status: "already_completed" });
+      }
+      if (project.status === "failed") {
+        await addLog(sc, projectId, `⏭ execute_next called but project is failed: ${project.last_error}`, "debug");
+        return json({ status: "failed", error: project.last_error });
+      }
+      if (project.status === "executing") {
+        await addLog(sc, projectId, `⏭ execute_next called but project already executing`, "debug");
+        return json({ status: "already_executing" });
+      }
 
       // Acquire a brainchain account from the pool
+      const acqT0 = Date.now();
       const account = await acquireBrainchainAccount(sc);
+      const acqDuration = Date.now() - acqT0;
+
       if (!account) {
-        await addLog(sc, projectId, "⚠️ No brainchain accounts available — will retry on next tick", "warn");
+        await addLog(sc, projectId, `⚠️ No brainchain accounts available — will retry on next tick (acq took ${acqDuration}ms)`, "warn",
+          { acquire_duration_ms: acqDuration, action: "no_accounts_backoff" });
         await sc.from("orchestrator_projects").update({
           next_tick_at: new Date(Date.now() + 30_000).toISOString(),
         }).eq("id", projectId);
         return json({ error: "No brainchain accounts available", retry_after: 30 }, 503);
       }
+
+      await addLog(sc, projectId, `🔑 Acquired brainchain account ${account.id.slice(0, 8)} (brain: ${account.brainProjectId.slice(0, 8)}) in ${acqDuration}ms`, "debug",
+        { account_id: account.id, brain_project: account.brainProjectId, acquire_duration_ms: acqDuration });
 
       // Get next pending task
       const { data: task } = await sc.from("orchestrator_tasks")
@@ -446,7 +473,8 @@ Deno.serve(async (req: Request) => {
       if (!task) {
         await releaseBrainchainAccount(sc, account.id, true);
         await sc.from("orchestrator_projects").update({ status: "completed" }).eq("id", projectId);
-        await addLog(sc, projectId, "🎉 All tasks completed!", "info");
+        await addLog(sc, projectId, "🎉 All tasks completed! Released account.", "info",
+          { account_id: account.id });
         return json({ status: "completed" });
       }
 
@@ -456,14 +484,23 @@ Deno.serve(async (req: Request) => {
         next_tick_at: new Date(Date.now() + 30_000).toISOString(),
       }).eq("id", projectId);
 
+      const execT0 = Date.now();
       const result = await executeTaskViaBrainchain(
         sc,
         { id: task.id as string, prompt: task.prompt as string, intent: task.intent as string, task_index: task.task_index as number },
         projectId, account,
       );
+      const execDuration = Date.now() - execT0;
 
       if (!result.success) {
         const retries = ((task.retry_count as number) || 0) + 1;
+        await addLog(sc, projectId,
+          `❌ Task #${task.task_index} "${task.title}" FAILED (attempt ${retries}/3): ${result.error}`, "error",
+          { task_id: task.id, task_index: task.task_index, retry_count: retries,
+            error: result.error, exec_duration_ms: execDuration,
+            account_id: account.id, brain_project: account.brainProjectId },
+          task.id as string);
+
         if (retries >= 3) {
           await sc.from("orchestrator_tasks").update({ status: "failed", retry_count: retries }).eq("id", task.id);
           await sc.from("orchestrator_projects").update({ status: "failed", last_error: result.error }).eq("id", projectId);
@@ -473,6 +510,13 @@ Deno.serve(async (req: Request) => {
         await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", projectId);
         return json({ status: "task_retry", retry_count: retries, error: result.error });
       }
+
+      await addLog(sc, projectId,
+        `📤 Task #${task.task_index} "${task.title}" dispatched successfully via account ${account.id.slice(0, 8)} in ${execDuration}ms`, "info",
+        { task_id: task.id, task_index: task.task_index, message_id: result.messageId,
+          exec_duration_ms: execDuration, account_id: account.id,
+          brain_project: account.brainProjectId },
+        task.id as string);
 
       return json({
         status: "executing",
