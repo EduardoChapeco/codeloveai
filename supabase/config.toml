@@ -201,3 +201,6 @@ verify_jwt = false
 
 [functions.brain-memory]
 verify_jwt = false
+
+[functions.cirius-github-import]
+verify_jwt = false
