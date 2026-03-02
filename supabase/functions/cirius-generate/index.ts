@@ -946,8 +946,46 @@ Deno.serve(async (req) => {
         sc.from("orchestrator_logs").select("*").eq("project_id", project.orchestrator_project_id).order("created_at", { ascending: false }).limit(30),
       ]);
 
-      // Auto-reconcile: if orchestrator is completed, finalize Cirius generation state.
+      // Auto-reconcile: if orchestrator is completed, finalize Cirius generation state and capture files.
       if (orchProj?.status === "completed" && project.status === "generating_code") {
+        // Attempt to auto-capture source files if not yet captured
+        const hasFiles = !!(project as any).source_files_json && Object.keys((project as any).source_files_json || {}).length > 0;
+        if (!hasFiles) {
+          const targetBrain = orchProj.lovable_project_id || (project as any).lovable_project_id || (project as any).brain_project_id;
+          if (targetBrain) {
+            const captureToken = await getUserToken(sc, user.id);
+            if (captureToken) {
+              try {
+                const scRes = await fetch(`${EXT_API}/projects/${targetBrain}/source-code`, {
+                  headers: {
+                    Authorization: `Bearer ${captureToken}`,
+                    Origin: "https://lovable.dev", Referer: "https://lovable.dev/",
+                    "X-Client-Git-SHA": GIT_SHA,
+                  },
+                });
+                if (scRes.ok) {
+                  const scData = await scRes.json();
+                  const capturedFiles = scData.files || [];
+                  const filesJson: Record<string, string> = {};
+                  for (const f of capturedFiles) {
+                    if (f.path && !f.path.startsWith(".lovable/") && typeof f.content === "string") {
+                      filesJson[f.path] = f.content;
+                    }
+                  }
+                  if (Object.keys(filesJson).length > 0) {
+                    const fingerprint = capturedFiles.map((f: any) => `${f.path}:${f.size ?? 0}`).sort().join("|");
+                    await sc.from("cirius_projects").update({
+                      source_files_json: filesJson, files_fingerprint: fingerprint,
+                    }).eq("id", projectId).eq("user_id", user.id);
+                    await logEntry(sc, projectId, "auto_capture", "completed",
+                      `${Object.keys(filesJson).length} files auto-captured on status check`);
+                  }
+                }
+              } catch { /* best effort */ }
+            }
+          }
+        }
+
         await sc.from("cirius_projects").update({
           status: "live",
           current_step: "completed",
