@@ -1158,3 +1158,62 @@
 
 /* ── Brain type badge on bubbles ── */
 .tb-brain-type { display: flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+
+/* ── Mode Toggle (AI Chat vs Build) ── */
+.sp-mode-toggle {
+  display: flex; gap: 2px; padding: 4px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sp-mt-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 5px 0; border-radius: 6px; border: none;
+  background: transparent; color: var(--text-quaternary);
+  font-size: 11px; font-weight: 500; cursor: pointer;
+  transition: all 0.15s;
+}
+.sp-mt-btn:hover { color: var(--text-secondary); background: var(--bg-3); }
+.sp-mt-btn.on { color: var(--indigo-l); background: rgba(99,102,241,0.1); }
+
+/* ── File Explorer ── */
+.sp-file-sidebar {
+  width: 200px; flex-shrink: 0; border-right: 1px solid var(--border-subtle);
+  overflow-y: auto; background: var(--bg-1);
+}
+.fe-panel { display: flex; flex-direction: column; height: 100%; }
+.fe-header {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+  font-size: 11px; font-weight: 600; color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.fe-count {
+  font-size: 9px; padding: 0 5px; border-radius: 99px;
+  background: var(--bg-4); color: var(--text-quaternary);
+}
+.fe-tree { flex: 1; overflow-y: auto; padding: 4px 0; }
+.fe-row {
+  display: flex; align-items: center; gap: 4px; width: 100%;
+  padding: 3px 8px; border: none; background: none;
+  color: var(--text-tertiary); font-size: 11px; cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+}
+.fe-row:hover { background: var(--bg-3); color: var(--text-secondary); }
+.fe-file.fe-active { background: rgba(99,102,241,0.1); color: var(--indigo-l); }
+.fe-icon-dir { color: var(--text-quaternary); flex-shrink: 0; }
+.fe-icon-file { color: var(--indigo-l); opacity: 0.6; flex-shrink: 0; }
+.fe-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fe-empty { padding: 16px; text-align: center; font-size: 11px; color: var(--text-quaternary); }
+
+/* ── Markdown in chat bubbles ── */
+.sp-msg-md { font-size: 12px; line-height: 1.6; }
+.sp-msg-md p { margin: 0 0 6px; }
+.sp-msg-md p:last-child { margin-bottom: 0; }
+.sp-msg-md code { font-family: var(--mono); font-size: 11px; padding: 1px 4px; border-radius: 3px; background: var(--bg-4); }
+.sp-msg-md pre { background: var(--bg-3); border-radius: 6px; padding: 8px 10px; overflow-x: auto; margin: 6px 0; }
+.sp-msg-md pre code { padding: 0; background: none; }
+.sp-msg-md ul, .sp-msg-md ol { margin: 4px 0; padding-left: 18px; }
+.sp-msg-md li { margin-bottom: 2px; }
+.sp-msg-md h1, .sp-msg-md h2, .sp-msg-md h3 { font-weight: 600; margin: 8px 0 4px; }
+.sp-msg-md h1 { font-size: 15px; }
+.sp-msg-md h2 { font-size: 13px; }
+.sp-msg-md h3 { font-size: 12px; }

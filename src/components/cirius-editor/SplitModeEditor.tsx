@@ -4,6 +4,7 @@ import SplitChatPanel from "./SplitChatPanel";
 import SplitResizer from "./SplitResizer";
 import SplitPreviewPanel from "./SplitPreviewPanel";
 import EditorToasts from "./EditorToasts";
+import FileExplorer from "./FileExplorer";
 import type { FrameMode, ActiveMode, EditorToast, ChatMessage } from "./types";
 import type { EditorMode } from "./SplitTopBar";
 
@@ -21,6 +22,9 @@ interface Props {
   onApprovePrd?: (prd: any) => void;
   approvingPrd?: boolean;
   approvedPrdId?: string | null;
+  chatMode?: "build" | "ai-chat";
+  onChatModeChange?: (mode: "build" | "ai-chat") => void;
+  sourceFiles?: Record<string, string>;
 }
 
 export default function SplitModeEditor({
@@ -28,17 +32,25 @@ export default function SplitModeEditor({
   chatMessages, chatLoading, onSendMsg, onSendChat,
   onEditorModeChange, isLive, toasts,
   onApprovePrd, approvingPrd, approvedPrdId,
+  chatMode = "ai-chat", onChatModeChange, sourceFiles,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
   const [chatWidth, setChatWidth] = useState(400);
-  
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [showFiles, setShowFiles] = useState(false);
 
   const projectName = project?.name || "Novo Projeto";
+  const files = sourceFiles || project?.source_files_json || {};
+  const hasFiles = Object.keys(files).length > 0;
 
   const handleSend = useCallback((msg: string) => {
-    onSendMsg(msg);
-  }, [onSendMsg]);
+    if (chatMode === "ai-chat") {
+      onSendChat(msg);
+    } else {
+      onSendMsg(msg);
+    }
+  }, [chatMode, onSendMsg, onSendChat]);
 
   const handleClear = useCallback(() => {
     // Parent handles clearing
@@ -59,6 +71,17 @@ export default function SplitModeEditor({
       />
 
       <div className="sp-body">
+        {/* File Explorer sidebar */}
+        {showFiles && hasFiles && (
+          <div className="sp-file-sidebar">
+            <FileExplorer
+              files={files}
+              selectedFile={selectedFile}
+              onSelectFile={setSelectedFile}
+            />
+          </div>
+        )}
+
         <div style={{ width: chatWidth, flexShrink: 0 }}>
           <SplitChatPanel
             messages={chatMessages}
@@ -70,6 +93,8 @@ export default function SplitModeEditor({
             onApprovePrd={onApprovePrd}
             approvingPrd={approvingPrd}
             approvedPrdId={approvedPrdId}
+            chatMode={chatMode}
+            onChatModeChange={onChatModeChange}
           />
         </div>
 

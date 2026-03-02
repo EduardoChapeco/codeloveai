@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   MessageCircle, Trash2, Clock, Code, CheckSquare, Info, Shield,
-  Paperclip, Camera, ArrowUp, X, Sparkles
+  Paperclip, Camera, ArrowUp, X, Sparkles, Zap, MessageSquare
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import PRDCard from "./PRDCard";
 import type { ChatMessage, ActiveMode } from "./types";
 
@@ -16,6 +17,9 @@ interface Props {
   onApprovePrd?: (prd: any) => void;
   approvingPrd?: boolean;
   approvedPrdId?: string | null;
+  /** AI chat streaming mode */
+  chatMode?: "build" | "ai-chat";
+  onChatModeChange?: (mode: "build" | "ai-chat") => void;
 }
 
 const SUGGESTIONS = [
@@ -24,7 +28,11 @@ const SUGGESTIONS = [
   { icon: "📱", text: "Tornar responsivo" },
 ];
 
-export default function SplitChatPanel({ messages, onSend, isGenerating, activeMode, setActiveMode, onClear, onApprovePrd, approvingPrd, approvedPrdId }: Props) {
+export default function SplitChatPanel({
+  messages, onSend, isGenerating, activeMode, setActiveMode, onClear,
+  onApprovePrd, approvingPrd, approvedPrdId,
+  chatMode = "ai-chat", onChatModeChange,
+}: Props) {
   const [text, setText] = useState("");
   const [modesOpen, setModesOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "history" | "versions">("chat");
@@ -81,6 +89,24 @@ export default function SplitChatPanel({ messages, onSend, isGenerating, activeM
         </div>
       </div>
 
+      {/* Mode toggle: AI Chat vs Build */}
+      {onChatModeChange && (
+        <div className="sp-mode-toggle">
+          <button
+            className={`sp-mt-btn ${chatMode === "ai-chat" ? "on" : ""}`}
+            onClick={() => onChatModeChange("ai-chat")}
+          >
+            <Zap size={11} /> Conversar
+          </button>
+          <button
+            className={`sp-mt-btn ${chatMode === "build" ? "on" : ""}`}
+            onClick={() => onChatModeChange("build")}
+          >
+            <MessageSquare size={11} /> Construir
+          </button>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="sp-chat-tabs">
         {(["chat", "history", "versions"] as const).map(tab => (
@@ -100,7 +126,9 @@ export default function SplitChatPanel({ messages, onSend, isGenerating, activeM
             <div className="sp-msg-avatar sp-ai-av">C</div>
             <div className="sp-msg-body">
               <div className="sp-msg-bubble">
-                Olá! Sou o Cirius Brain. Descreva o que deseja criar e vou gerar o código para você.
+                {chatMode === "ai-chat"
+                  ? "Olá! Descreva o que deseja criar e vou gerar o código diretamente."
+                  : "Olá! Sou o Cirius Brain. Descreva o que deseja criar e vou gerar o código para você."}
               </div>
               <div className="sp-suggestions">
                 {SUGGESTIONS.map((s, i) => (
@@ -114,7 +142,6 @@ export default function SplitChatPanel({ messages, onSend, isGenerating, activeM
         )}
 
         {messages.map(m => {
-          // Detect PRD messages (assistant messages with prd_json metadata)
           const prdData = m.role === "assistant" && m.prdData ? m.prdData : null;
 
           if (prdData) {
@@ -145,7 +172,13 @@ export default function SplitChatPanel({ messages, onSend, isGenerating, activeM
                 )}
               </div>
               <div className="sp-msg-body">
-                <div className="sp-msg-bubble">{m.content}</div>
+                <div className="sp-msg-bubble sp-msg-md">
+                  {m.role === "assistant" ? (
+                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                  ) : (
+                    m.content
+                  )}
+                </div>
                 <div className="sp-msg-time">{formatTime(m.timestamp)}</div>
               </div>
             </div>
@@ -202,7 +235,7 @@ export default function SplitChatPanel({ messages, onSend, isGenerating, activeM
           <textarea
             ref={taRef}
             className="sp-ci-textarea"
-            placeholder="Descreva o que quer criar ou alterar..."
+            placeholder={chatMode === "ai-chat" ? "Descreva o que quer criar..." : "Descreva o que quer criar ou alterar..."}
             value={text}
             onChange={e => { setText(e.target.value); handleInput(); }}
             onFocus={() => setModesOpen(true)}
