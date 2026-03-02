@@ -19,6 +19,7 @@ import DrawerChain from "@/components/cirius-editor/DrawerChain";
 import EditorToasts from "@/components/cirius-editor/EditorToasts";
 import SplitModeEditor from "@/components/cirius-editor/SplitModeEditor";
 import { extractFileBlocks, mergeFileMaps, stripFileBlocks } from "@/lib/ai-file-parser";
+import type { BuildStage } from "@/components/cirius-editor/BuildProgressCard";
 import { REACT_VITE_TEMPLATE } from "@/lib/project-template";
 import "@/styles/cirius-editor.css";
 
@@ -82,6 +83,11 @@ export default function CiriusEditor() {
   const [approvingPrd, setApprovingPrd] = useState(false);
   const [approvedPrdId, setApprovedPrdId] = useState<string | null>(null);
   const [sourceFiles, setSourceFiles] = useState<Record<string, string>>({});
+  const [buildStages, setBuildStages] = useState<BuildStage[]>([]);
+  const [buildProgress, setBuildProgress] = useState(0);
+  const [buildComplete, setBuildComplete] = useState(false);
+  const [buildError, setBuildError] = useState(false);
+  const [deployUrls, setDeployUrls] = useState<{ github?: string; vercel?: string; netlify?: string }>({});
 
   const sourceFilesRef = useRef<Record<string, string>>({});
 
@@ -110,6 +116,28 @@ export default function CiriusEditor() {
     if (isDone) {
       setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== stepId)), 4000);
     }
+
+    // Update build progress card stages
+    const stageStatus: BuildStage["status"] = isError ? "error" : isDone ? "done" : "running";
+    setBuildStages(prev => {
+      const existing = prev.find(s => s.id === stepId);
+      if (existing) {
+        return prev.map(s => s.id === stepId ? { ...s, status: stageStatus, detail: log?.message } : s);
+      }
+      return [...prev, { id: stepId, label: stepId.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "), status: stageStatus, icon: stepId.includes("deploy") ? "deploy" : stepId.includes("refine") ? "refine" : stepId.includes("prd") ? "prd" : "code", detail: log?.message }];
+    });
+
+    // Update overall progress
+    setBuildStages(prev => {
+      const done = prev.filter(s => s.status === "done").length;
+      const total = Math.max(prev.length, 1);
+      setBuildProgress(Math.round((done / total) * 100));
+      const allDone = prev.length > 0 && prev.every(s => s.status === "done");
+      const anyError = prev.some(s => s.status === "error");
+      setBuildComplete(allDone);
+      setBuildError(anyError && !allDone);
+      return prev;
+    });
   }, []);
 
   // ─── Load project ───
@@ -123,14 +151,22 @@ export default function CiriusEditor() {
       setLogs(data.logs || []);
       (data.logs || []).slice().reverse().forEach((log: any) => upsertBubbleFromLog(log));
 
+      // Priority: vercel > netlify > custom_domain > any non-lovable preview_url
       const deployedUrl = data.project.vercel_url || data.project.netlify_url || data.project.custom_domain;
       if (deployedUrl) {
-        setLivePreviewUrl(deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`);
+        const url = deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`;
+        setLivePreviewUrl(url);
       } else if (data.project.preview_url && !data.project.preview_url.includes("lovable.app")) {
         setLivePreviewUrl(data.project.preview_url);
       } else {
         setLivePreviewUrl(null);
       }
+      // Track deploy URLs for the build card
+      setDeployUrls({
+        github: data.project.github_url || undefined,
+        vercel: data.project.vercel_url ? (data.project.vercel_url.startsWith("http") ? data.project.vercel_url : `https://${data.project.vercel_url}`) : undefined,
+        netlify: data.project.netlify_url ? (data.project.netlify_url.startsWith("http") ? data.project.netlify_url : `https://${data.project.netlify_url}`) : undefined,
+      });
 
       // Load source files
       const { data: filesData } = await supabase
@@ -466,6 +502,11 @@ export default function CiriusEditor() {
         chatMode={chatMode}
         onChatModeChange={setChatMode}
         sourceFiles={sourceFiles}
+        buildStages={buildStages}
+        buildProgress={buildProgress}
+        buildComplete={buildComplete}
+        buildError={buildError}
+        deployUrls={deployUrls}
       />
     );
   }
