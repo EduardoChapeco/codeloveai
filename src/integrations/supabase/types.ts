@@ -5491,6 +5491,213 @@ export type Database = {
         }
         Relationships: []
       }
+      venus_brain_projects: {
+        Row: {
+          brain_project_id: string | null
+          connected: boolean | null
+          created_at: string | null
+          id: string
+          last_sync: string | null
+          lovable_project_id: string
+        }
+        Insert: {
+          brain_project_id?: string | null
+          connected?: boolean | null
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          lovable_project_id: string
+        }
+        Update: {
+          brain_project_id?: string | null
+          connected?: boolean | null
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          lovable_project_id?: string
+        }
+        Relationships: []
+      }
+      venus_github_tokens: {
+        Row: {
+          created_at: string | null
+          gh_token: string
+          gh_user: string | null
+          id: string
+          license_key: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          gh_token: string
+          gh_user?: string | null
+          id?: string
+          license_key: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          gh_token?: string
+          gh_user?: string | null
+          id?: string
+          license_key?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      venus_licenses: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          license_key: string
+          plan_name: string | null
+          plan_type: string | null
+          quota: number | null
+          tenant_id: string | null
+          used: number | null
+          user_id: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          license_key: string
+          plan_name?: string | null
+          plan_type?: string | null
+          quota?: number | null
+          tenant_id?: string | null
+          used?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          license_key?: string
+          plan_name?: string | null
+          plan_type?: string | null
+          quota?: number | null
+          tenant_id?: string | null
+          used?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      venus_notes: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          id: string
+          license_key: string
+          project_id: string
+          text: string
+          ts: number | null
+          x: number | null
+          y: number | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          license_key: string
+          project_id: string
+          text: string
+          ts?: number | null
+          x?: number | null
+          y?: number | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          license_key?: string
+          project_id?: string
+          text?: string
+          ts?: number | null
+          x?: number | null
+          y?: number | null
+        }
+        Relationships: []
+      }
+      venus_orch_projects: {
+        Row: {
+          client_prompt: string | null
+          created_at: string | null
+          current_task_index: number | null
+          id: string
+          license_key: string | null
+          lovable_project_id: string
+          prd: string | null
+          status: string | null
+          tasks: Json | null
+          total_tasks: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_prompt?: string | null
+          created_at?: string | null
+          current_task_index?: number | null
+          id?: string
+          license_key?: string | null
+          lovable_project_id: string
+          prd?: string | null
+          status?: string | null
+          tasks?: Json | null
+          total_tasks?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_prompt?: string | null
+          created_at?: string | null
+          current_task_index?: number | null
+          id?: string
+          license_key?: string | null
+          lovable_project_id?: string
+          prd?: string | null
+          status?: string | null
+          tasks?: Json | null
+          total_tasks?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      venus_tenants: {
+        Row: {
+          affiliate_url: string | null
+          color: string | null
+          created_at: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          plans_url: string | null
+          url: string | null
+        }
+        Insert: {
+          affiliate_url?: string | null
+          color?: string | null
+          created_at?: string | null
+          id: string
+          logo_url?: string | null
+          name: string
+          plans_url?: string | null
+          url?: string | null
+        }
+        Update: {
+          affiliate_url?: string | null
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          plans_url?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
       whatsapp_instances: {
         Row: {
           created_at: string | null

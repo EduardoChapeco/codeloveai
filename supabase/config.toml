@@ -159,3 +159,12 @@ verify_jwt = false
 
 [functions.get-whatsapp-status]
 verify_jwt = false
+
+[functions.venus-notes]
+verify_jwt = false
+
+[functions.venus-styles]
+verify_jwt = false
+
+[functions.venus-github]
+verify_jwt = false
