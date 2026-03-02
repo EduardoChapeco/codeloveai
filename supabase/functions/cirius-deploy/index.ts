@@ -251,8 +251,8 @@ Deno.serve(async (req) => {
       for (const sql of migrations) {
         try {
           const clientSc = createClient(clientUrl, integration.service_key_enc);
-          // Use rpc if available, otherwise skip
-          await clientSc.rpc("exec_sql", { query: sql }).throwOnError();
+          const { error: rpcErr } = await clientSc.rpc("exec_sql", { query: sql });
+          if (rpcErr) throw new Error(rpcErr.message);
           applied++;
         } catch (e) {
           errors.push((e as Error).message);

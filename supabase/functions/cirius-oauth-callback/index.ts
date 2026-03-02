@@ -144,6 +144,6 @@ Deno.serve(async (req) => {
     return Response.redirect(`${appUrl}/cirius/integrations?connected=${provider}`, 302);
   } catch (e) {
     console.error(`[cirius-oauth] ${provider} error:`, (e as Error).message);
-    return errorHtml((e as Error).message);
+    return errorHtml("Authentication failed. Please try again.");
   }
 });

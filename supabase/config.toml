@@ -183,3 +183,15 @@ verify_jwt = false
 
 [functions.brainchain-status]
 verify_jwt = false
+
+[functions.cirius-generate]
+verify_jwt = false
+
+[functions.cirius-deploy]
+verify_jwt = false
+
+[functions.cirius-status]
+verify_jwt = false
+
+[functions.cirius-oauth-callback]
+verify_jwt = false
