@@ -901,8 +901,14 @@ Deno.serve(async (req) => {
   if (action === "generate_code") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
-    const { data: project } = await sc.from("cirius_projects")
-      .select("*").eq("id", projectId).eq("user_id", user.id).single();
+    
+    // For service-key calls, use body.user_id; for user calls, use user.id
+    const effectiveUserId = user?.id || (isServiceKey ? body.user_id : null);
+    if (!effectiveUserId) return json({ error: "user_id required" }, 400);
+    
+    let projectQuery = sc.from("cirius_projects").select("*").eq("id", projectId);
+    if (user) projectQuery = projectQuery.eq("user_id", user.id);
+    const { data: project } = await projectQuery.single();
     if (!project) return json({ error: "Project not found" }, 404);
     if (!project.prd_json) return json({ error: "PRD not generated yet" }, 400);
 

@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     if (!projectId) return json({ error: "project_id required" }, 400);
 
     const { data: project } = await sc.from("cirius_projects")
-      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, template_type, created_at, updated_at, deployed_at, prd_json, source_files_json, lovable_project_id, brain_project_id, custom_domain, deploy_config")
+      .select("id, name, status, current_step, progress_pct, generation_engine, error_message, preview_url, github_url, vercel_url, netlify_url, supabase_url, template_type, created_at, updated_at, deployed_at, lovable_project_id, brain_project_id, custom_domain, deploy_config")
       .eq("id", projectId).eq("user_id", user.id).single();
     if (!project) return json({ error: "Not found" }, 404);
 
@@ -54,12 +54,25 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: false })
       .limit(15);
 
+    // Check if source_files_json exists (don't send full content via status endpoint)
+    const { data: filesCheck } = await sc.from("cirius_projects")
+      .select("source_files_json")
+      .eq("id", projectId)
+      .maybeSingle();
+    const hasFiles = !!filesCheck?.source_files_json && Object.keys(filesCheck.source_files_json as any || {}).length > 0;
+
+    // Check if PRD exists (don't send full content)
+    const { data: prdCheck } = await sc.from("cirius_projects")
+      .select("prd_json")
+      .eq("id", projectId)
+      .maybeSingle();
+    const hasPrd = !!prdCheck?.prd_json && Array.isArray((prdCheck.prd_json as any)?.tasks);
+
     return json({
       project: {
         ...project,
-        has_prd: !!project.prd_json,
-        has_files: !!project.source_files_json,
-        prd_json: project.prd_json,
+        has_prd: hasPrd,
+        has_files: hasFiles,
       },
       logs: logs || [],
       deploy: {
