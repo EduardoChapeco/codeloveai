@@ -37,6 +37,7 @@ interface Props {
   bubbles?: Bubble[];
   onRemoveBubble?: (id: string) => void;
   streamingText?: string;
+  updatedFiles?: string[];
   terminalLines?: TerminalLine[];
   onClearTerminal?: () => void;
 }
@@ -48,7 +49,7 @@ export default function SplitModeEditor({
   onApprovePrd, approvingPrd, approvedPrdId,
   chatMode = "ai-chat", onChatModeChange, sourceFiles,
   buildStages, buildProgress, buildComplete, buildError, deployUrls,
-  bubbles, onRemoveBubble, streamingText,
+  bubbles, onRemoveBubble, streamingText, updatedFiles,
   terminalLines = [], onClearTerminal,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
@@ -136,6 +137,7 @@ export default function SplitModeEditor({
             bubbles={bubbles}
             onRemoveBubble={onRemoveBubble}
             streamingText={streamingText}
+            updatedFiles={updatedFiles}
           />
         </div>
 

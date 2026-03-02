@@ -160,6 +160,7 @@ export default function CiriusEditor() {
   const [deployUrls, setDeployUrls] = useState<{ github?: string; vercel?: string; netlify?: string }>({});
   const [streamingText, setStreamingText] = useState<string>("");
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+  const [updatedFiles, setUpdatedFiles] = useState<string[]>([]);
 
   const sourceFilesRef = useRef<Record<string, string>>({});
 
@@ -367,6 +368,7 @@ export default function CiriusEditor() {
     persistMsg(userMsg);
     setChatLoading(true);
     setStreamingText("");
+    setUpdatedFiles([]);
     addTerminalLine(`➜ ${msg.slice(0, 80)}${msg.length > 80 ? "..." : ""}`, "cmd");
 
     try {
@@ -450,6 +452,8 @@ export default function CiriusEditor() {
         setStreamingText("");
 
         if (filesUpdated > 0) {
+          const fileNames = Object.keys(newFiles);
+          setUpdatedFiles(fileNames);
           const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
           setSourceFiles(merged);
           sourceFilesRef.current = merged;
@@ -459,7 +463,7 @@ export default function CiriusEditor() {
           // Save to DB
           await supabase.from("cirius_projects" as any).update({ source_files_json: merged }).eq("id", id);
 
-          addTerminalLine(`${filesUpdated} arquivo(s) atualizado(s): ${Object.keys(newFiles).join(", ")}`, "success");
+          addTerminalLine(`${filesUpdated} arquivo(s) atualizado(s): ${fileNames.join(", ")}`, "success");
           addToast(`✅ ${filesUpdated} arquivo(s) atualizado(s)`, "success");
         } else {
           addTerminalLine("Resposta recebida (sem alterações de arquivo)", "info");
@@ -666,6 +670,7 @@ export default function CiriusEditor() {
         bubbles={bubbles}
         onRemoveBubble={removeBubble}
         streamingText={streamingText}
+        updatedFiles={updatedFiles}
         terminalLines={terminalLines}
         onClearTerminal={clearTerminal}
       />

@@ -6,6 +6,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import PRDCard from "./PRDCard";
 import BuildProgressCard from "./BuildProgressCard";
+import ChatTaskCard from "./ChatTaskCard";
 import type { ChatMessage, ActiveMode, Bubble } from "./types";
 import type { BuildStage } from "./BuildProgressCard";
 
@@ -31,6 +32,8 @@ interface Props {
   bubbles?: Bubble[];
   onRemoveBubble?: (id: string) => void;
   streamingText?: string;
+  /** Files updated in last generation */
+  updatedFiles?: string[];
 }
 
 const SUGGESTIONS = [
@@ -44,7 +47,7 @@ export default function SplitChatPanel({
   onApprovePrd, approvingPrd, approvedPrdId,
   chatMode = "ai-chat", onChatModeChange,
   buildStages, buildProgress, buildComplete, buildError, deployUrls, projectName,
-  bubbles, onRemoveBubble, streamingText,
+  bubbles, onRemoveBubble, streamingText, updatedFiles,
 }: Props) {
   const [text, setText] = useState("");
   const [modesOpen, setModesOpen] = useState(false);
@@ -220,23 +223,37 @@ export default function SplitChatPanel({
         {isGenerating && !showBuildCard && (
           <div className="sp-msg sp-msg-ai">
             <div className="sp-msg-avatar sp-ai-av">C</div>
-            <div className="sp-msg-body">
-              {streamingText ? (
-                <div className="sp-msg-bubble sp-msg-md">
+            <div className="sp-msg-body" style={{ width: "100%" }}>
+              <ChatTaskCard
+                active={isGenerating}
+                hasStreamContent={!!streamingText}
+                complete={false}
+                updatedFiles={updatedFiles}
+              />
+              {streamingText && (
+                <div className="sp-msg-bubble sp-msg-md" style={{ marginTop: 8 }}>
                   <ReactMarkdown>{streamingText}</ReactMarkdown>
-                </div>
-              ) : (
-                <div className="sp-typing-bubble">
-                  <div className="sp-typing-dot" />
-                  <div className="sp-typing-dot" />
-                  <div className="sp-typing-dot" />
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Task bubbles removed — BuildProgressCard handles all task progress inline */}
+        {/* Completed task card for last message */}
+        {!isGenerating && updatedFiles && updatedFiles.length > 0 && (
+          <div className="sp-msg sp-msg-ai" style={{ animation: "ctcSlideIn 0.3s ease-out" }}>
+            <div className="sp-msg-avatar sp-ai-av">C</div>
+            <div className="sp-msg-body" style={{ width: "100%" }}>
+              <ChatTaskCard
+                active={false}
+                complete={true}
+                updatedFiles={updatedFiles}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Task bubbles removed — ChatTaskCard handles all task progress inline */}
       </div>
 
       {/* Input area */}

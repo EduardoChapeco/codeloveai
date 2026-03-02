@@ -1627,3 +1627,150 @@
 }
 .sp-bb-btn:hover { color: var(--text-secondary); }
 .sp-bb-btn.on { color: var(--indigo-l); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   CHAT TASK CARD — Lovable-style inline task timeline
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.ctc-root {
+  background: linear-gradient(160deg, rgba(16,16,22,0.95), rgba(10,10,14,0.97));
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+  animation: ctcSlideIn 0.3s ease-out;
+  width: 100%;
+}
+@keyframes ctcSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ctc-root.ctc-done {
+  border-color: rgba(52,211,153,0.25);
+}
+
+/* Header */
+.ctc-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.ctc-h-left {
+  display: flex; align-items: center; gap: 7px;
+}
+.ctc-ico-done { color: #34d399; }
+.ctc-ico-active { color: var(--indigo-l); }
+.ctc-h-title {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-primary);
+}
+.ctc-h-right {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--text-quaternary);
+  font-size: 10px;
+  font-family: var(--mono);
+}
+.ctc-h-time { opacity: 0.7; }
+
+/* Steps */
+.ctc-steps {
+  display: flex; flex-direction: column;
+  padding: 0 14px 8px;
+  gap: 2px;
+}
+.ctc-step {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+.ctc-step.active {
+  background: rgba(99,102,241,0.08);
+}
+.ctc-step.future { opacity: 0.25; }
+.ctc-step.past { opacity: 0.55; }
+
+.ctc-step-ico {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-quaternary);
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+.ctc-step-ico.past {
+  background: rgba(52,211,153,0.15);
+  color: #34d399;
+}
+.ctc-step-ico.active {
+  background: rgba(99,102,241,0.15);
+  color: var(--indigo-l);
+}
+
+.ctc-step-text {
+  display: flex; flex-direction: column; flex: 1; min-width: 0;
+}
+.ctc-step-label {
+  font-size: 11px; font-weight: 500;
+  color: var(--text-secondary);
+}
+.ctc-step.active .ctc-step-label { color: var(--text-primary); }
+.ctc-step.past .ctc-step-label { color: var(--text-tertiary); }
+
+.ctc-step-sub {
+  font-size: 10px;
+  color: var(--text-quaternary);
+  animation: ctcFadeIn 0.3s ease;
+}
+@keyframes ctcFadeIn {
+  from { opacity: 0; } to { opacity: 1; }
+}
+
+.ctc-step-ok {
+  font-size: 9px; color: #34d399;
+  font-weight: 600;
+}
+.ctc-step-pulse {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--indigo-l);
+  animation: pulse 1.5s infinite;
+  margin-left: auto;
+}
+
+/* Files list */
+.ctc-files {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  padding: 6px 14px 10px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+.ctc-files-ico { color: #34d399; flex-shrink: 0; }
+.ctc-files-list {
+  display: flex; flex-wrap: wrap; gap: 3px;
+}
+.ctc-file-pill {
+  background: rgba(52,211,153,0.1);
+  border: 1px solid rgba(52,211,153,0.18);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: rgba(52,211,153,0.9);
+}
+
+/* Progress bar */
+.ctc-progress {
+  height: 2px;
+  background: rgba(255,255,255,0.04);
+}
+.ctc-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--indigo), var(--indigo-l));
+  transition: width 0.7s ease-out;
+  border-radius: 2px;
+}
+.ctc-progress-fill.done {
+  background: linear-gradient(90deg, #34d399, #6ee7b7);
+}
