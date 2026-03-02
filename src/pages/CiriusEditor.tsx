@@ -19,7 +19,7 @@ import DrawerChain from "@/components/cirius-editor/DrawerChain";
 import EditorToasts from "@/components/cirius-editor/EditorToasts";
 import "@/styles/cirius-editor.css";
 
-import type { FrameMode, ActiveMode, CmdMode, Bubble, EditorToast } from "@/components/cirius-editor/types";
+import type { FrameMode, ActiveMode, CmdMode, Bubble, EditorToast, ChatMessage } from "@/components/cirius-editor/types";
 
 export default function CiriusEditor() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +42,8 @@ export default function CiriusEditor() {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [toasts, setToasts] = useState<EditorToast[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
 
   const drawerPositions: Record<string, "left" | "right"> = {
     deploy: "right", files: "right", seo: "left", build: "left", chain: "left",
@@ -188,6 +190,26 @@ export default function CiriusEditor() {
     setBubbles(prev => prev.filter(b => b.id !== bubbleId));
   }, []);
 
+  const sendChatMsg = useCallback(async (msg: string) => {
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatLoading(true);
+    try {
+      const history = chatMessages.slice(-10).map(m => ({ role: m.role === "assistant" ? "ai" : "user", content: m.content }));
+      const contextPrefix = project?.name ? `[Projeto: ${project.name}] ` : "";
+      const { data } = await supabase.functions.invoke("gemini-chat", {
+        body: { message: contextPrefix + msg, history },
+      });
+      const reply = data?.reply || data?.response || data?.text || "Desculpe, não consegui processar.";
+      const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: reply, timestamp: Date.now() };
+      setChatMessages(prev => [...prev, aiMsg]);
+    } catch {
+      const errMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "Erro ao processar. Tente novamente.", timestamp: Date.now() };
+      setChatMessages(prev => [...prev, errMsg]);
+    }
+    setChatLoading(false);
+  }, [project, chatMessages]);
+
   if (!user) { navigate("/login"); return null; }
   if (loading) return <div className="ce-root" />;
 
@@ -250,6 +272,9 @@ export default function CiriusEditor() {
           onModeChange={setCmdMode}
           onClose={() => setCmdOpen(false)}
           sourceFiles={project?.source_files_json}
+          chatMessages={chatMessages}
+          onChatSend={sendChatMsg}
+          chatLoading={chatLoading}
         />
       )}
 
