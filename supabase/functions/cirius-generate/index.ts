@@ -514,6 +514,19 @@ async function executeCodeTask(
   return { engine: "none", ok: false, error: "All engines failed" };
 }
 
+/** Auto-trigger orchestrator-tick (fire-and-forget) */
+async function autoTriggerTick(_sc: SupabaseClient) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  try {
+    await fetch(`${supabaseUrl}/functions/v1/orchestrator-tick`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({ _auto_trigger: true }),
+    });
+  } catch { /* fire and forget */ }
+}
+
 // ─── Main Handler ───
 
 Deno.serve(async (req) => {
@@ -785,18 +798,60 @@ Deno.serve(async (req) => {
     if (!project) return json({ error: "Project not found" }, 404);
     if (!project.prd_json) return json({ error: "PRD not generated yet" }, 400);
 
-    // ★ Skip if already linked to orchestrator
+    // ★ Acquire a brainchain account to get the target lovable_project_id
+    const { data: bcAccounts } = await sc.from("brainchain_accounts")
+      .select("id, brain_project_id, access_token, brain_type")
+      .eq("is_active", true)
+      .eq("is_busy", false)
+      .lt("error_count", 5)
+      .not("brain_project_id", "is", null)
+      .order("last_used_at", { ascending: true, nullsFirst: true })
+      .limit(1);
+
+    let brainProjectId = bcAccounts?.[0]?.brain_project_id || null;
+
+    // Fallback: try user's personal Brain
+    if (!brainProjectId) {
+      const brain = await getUserBrain(sc, user.id);
+      brainProjectId = brain?.projectId || null;
+    }
+
+    if (!brainProjectId) {
+      await logEntry(sc, projectId, "code", "failed", "No brain project available — cannot generate code", {
+        error_msg: "No brainchain accounts or personal brain found",
+      });
+      await sc.from("cirius_projects").update({ status: "failed", error_message: "Nenhum Brain disponível para geração" }).eq("id", projectId);
+      return json({ error: "No brain project available for code generation" }, 503);
+    }
+
+    // Set preview URL immediately
+    const previewUrl = `https://id-preview--${brainProjectId}.lovable.app`;
+    await sc.from("cirius_projects").update({
+      lovable_project_id: brainProjectId,
+      brain_project_id: brainProjectId,
+      preview_url: previewUrl,
+    }).eq("id", projectId);
+
+    // ★ Skip if already linked to orchestrator — reset and re-trigger
     if (project.orchestrator_project_id) {
       await logEntry(sc, projectId, "code_orchestrator_reuse", "info",
         `Already linked to orchestrator ${(project.orchestrator_project_id as string).slice(0, 8)}, resetting for retry`, {
         metadata: { orchestrator_id: project.orchestrator_project_id, action: "reset_to_paused" },
       });
-      await sc.from("orchestrator_projects").update({ status: "paused", quality_score: 0 }).eq("id", project.orchestrator_project_id);
+      // Set lovable_project_id on the orchestrator project too
+      await sc.from("orchestrator_projects").update({
+        status: "paused", quality_score: 0, lovable_project_id: brainProjectId,
+      }).eq("id", project.orchestrator_project_id);
       await sc.from("cirius_projects").update({ status: "generating_code", error_message: null, progress_pct: 25 }).eq("id", projectId);
+
+      // Auto-trigger orchestrator-tick
+      autoTriggerTick(sc).catch(() => {});
+
       return json({
         started: true, engine: "orchestrator",
         orchestrator_project_id: project.orchestrator_project_id,
-        note: "Orchestrator project already exists. Reset to paused for retry.",
+        preview_url: previewUrl,
+        note: "Pipeline resumed automatically.",
         resumed: true,
       });
     }
@@ -805,7 +860,7 @@ Deno.serve(async (req) => {
       status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20,
     }).eq("id", projectId);
     await logEntry(sc, projectId, "code", "started", "Registrando tarefas no orquestrador...", {
-      metadata: { prd_task_count: (project.prd_json as any).tasks?.length },
+      metadata: { prd_task_count: (project.prd_json as any).tasks?.length, brain_project: brainProjectId },
     });
 
     const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string; intent?: string; stop_condition?: string }> };
@@ -814,6 +869,7 @@ Deno.serve(async (req) => {
     const { data: orchProject, error: orchErr } = await sc.from("orchestrator_projects").insert({
       user_id: user.id, client_prompt: clientPrompt,
       status: "paused", total_tasks: prd.tasks.length, prd_json: project.prd_json,
+      lovable_project_id: brainProjectId,
     }).select("id").single();
 
     if (orchErr || !orchProject) {
@@ -843,19 +899,25 @@ Deno.serve(async (req) => {
     }).eq("id", projectId);
 
     await logEntry(sc, projectId, "code", "started",
-      `Orquestrador iniciado: ${prd.tasks.length} tarefas registradas (orch: ${orchProject.id.slice(0, 8)})`, {
+      `Pipeline automático iniciado: ${prd.tasks.length} tarefas → Brain ${brainProjectId.slice(0, 8)} (orch: ${orchProject.id.slice(0, 8)})`, {
       metadata: {
         orchestrator_id: orchProject.id,
+        brain_project: brainProjectId,
+        preview_url: previewUrl,
         task_count: prd.tasks.length,
         task_titles: prd.tasks.map(t => t.title || "untitled"),
       },
     });
 
+    // ★ Auto-trigger orchestrator-tick immediately (don't wait for cron)
+    autoTriggerTick(sc).catch(() => {});
+
     return json({
       started: true, engine: "orchestrator",
       orchestrator_project_id: orchProject.id,
+      preview_url: previewUrl,
       task_count: prd.tasks.length, total_tasks: prd.tasks.length,
-      note: "Tasks registered. orchestrator-tick will execute sequentially via Brainchain.",
+      note: "Pipeline started automatically. Tasks will execute sequentially.",
     });
   }
 
