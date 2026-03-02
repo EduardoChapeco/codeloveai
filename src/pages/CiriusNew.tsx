@@ -21,6 +21,7 @@ const ENGINE_LABELS: Record<string, { label: string; desc: string }> = {
   brainchain: { label: "Brainchain", desc: "Pool rápido — geração instantânea" },
   brain: { label: "Brain", desc: "IA pessoal — código especializado" },
   orchestrator: { label: "Orchestrator", desc: "Multi-task — projetos complexos" },
+  claude_direct: { label: "Claude Direct", desc: "Sem Brains — geração direta via Claude" },
 };
 
 const INTENT_LABELS: Record<string, string> = {
@@ -78,6 +79,7 @@ export default function CiriusNew() {
   const [deployGithub, setDeployGithub] = useState(true);
   const [deployVercel, setDeployVercel] = useState(false);
   const [createSupabase, setCreateSupabase] = useState(false);
+  const [noBrains, setNoBrains] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -124,6 +126,7 @@ export default function CiriusNew() {
             deploy_github: deployGithub,
             deploy_vercel: deployVercel,
             create_supabase: createSupabase,
+            no_brains: noBrains,
           },
         },
       });
@@ -140,7 +143,7 @@ export default function CiriusNew() {
     } finally {
       setLoading(false);
     }
-  }, [prompt, projectName, sourceUrl, deployGithub, deployVercel, createSupabase, user, navigate]);
+  }, [prompt, projectName, sourceUrl, deployGithub, deployVercel, createSupabase, noBrains, user, navigate]);
 
   return (
     <div className="min-h-screen" style={{ background: "#08080a" }}>
@@ -211,6 +214,15 @@ export default function CiriusNew() {
                     <span className="flex items-center gap-2"><Database className="h-3.5 w-3.5" /> Criar banco Supabase</span>
                     <Switch checked={createSupabase} onCheckedChange={setCreateSupabase} />
                   </label>
+                  <label className="flex items-center justify-between text-xs text-neutral-400">
+                    <span className="flex items-center gap-2"><Cpu className="h-3.5 w-3.5" /> No Brains (Claude direto)</span>
+                    <Switch checked={noBrains} onCheckedChange={setNoBrains} />
+                  </label>
+                  {noBrains && (
+                    <p className="text-[10px] text-amber-400/70 pl-6">
+                      Gera o projeto inteiro via Claude/OpenRouter em uma única chamada — sem orquestrador nem Brain.
+                    </p>
+                  )}
                 </div>
               </CollapsibleContent>
             </Collapsible>
@@ -278,13 +290,13 @@ export default function CiriusNew() {
                     <Badge variant="secondary" className="bg-blue-600/15 text-blue-400 border-blue-600/20 text-xs">
                       {INTENT_LABELS[blueprint.intent] || blueprint.intent}
                     </Badge>
-                    <Badge variant="outline" className="text-[11px] text-neutral-500 border-neutral-700/50">
-                      {ENGINE_LABELS[blueprint.suggestedEngine]?.label}
+                    <Badge variant="outline" className={`text-[11px] border-neutral-700/50 ${noBrains ? "text-amber-400 border-amber-500/30" : "text-neutral-500"}`}>
+                      {noBrains ? ENGINE_LABELS.claude_direct.label : ENGINE_LABELS[blueprint.suggestedEngine]?.label}
                     </Badge>
                   </div>
 
                   <p className="text-[11px] text-neutral-600">
-                    {ENGINE_LABELS[blueprint.suggestedEngine]?.desc}
+                    {noBrains ? ENGINE_LABELS.claude_direct.desc : ENGINE_LABELS[blueprint.suggestedEngine]?.desc}
                   </p>
 
                   {/* Capabilities */}
