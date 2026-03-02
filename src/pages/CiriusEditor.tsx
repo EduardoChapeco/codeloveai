@@ -390,10 +390,72 @@ export default function CiriusEditor() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
+      const applyJsonResult = async (payload: any) => {
+        const summaryContent = String(payload?.content || "Resposta recebida.");
+
+        const assistantMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: summaryContent,
+          timestamp: Date.now(),
+        };
+        setChatMessages(prev => [...prev, assistantMsg]);
+
+        const filesUpdated = payload?.files_updated || 0;
+        if (filesUpdated > 0 && payload?.raw_content) {
+          const newFiles = extractFileBlocks(payload.raw_content);
+          if (Object.keys(newFiles).length > 0) {
+            const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
+            setSourceFiles(merged);
+            sourceFilesRef.current = merged;
+            setPreviewHtml(buildPreviewFromFiles(merged));
+            setProject((prev: any) => ({ ...prev, source_files_json: merged }));
+            await supabase.from("cirius_projects" as any).update({ source_files_json: merged }).eq("id", id);
+            addTerminalLine(`${filesUpdated} arquivo(s) atualizado(s)`, "success");
+          }
+        }
+
+        if (payload?.command_type === "build" && payload?.orchestrator) {
+          addTerminalLine(`Pipeline: ${payload.pipeline?.task_count || 0} tarefas disparadas`, "system");
+          const bubbleId = `orch_${Date.now()}`;
+          setBubbles(prev => [...prev, {
+            id: bubbleId,
+            title: `Pipeline (${payload.pipeline?.task_count || 0} tasks)`,
+            phase: "running",
+            steps: [{ s: "run", t: "Tarefas distribuídas para os Brains..." }],
+            pct: 25,
+            startTime: Date.now(),
+          }]);
+          addToast(`🚀 Pipeline: ${payload.pipeline?.task_count || 0} tarefas em execução`, "success");
+          setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 120000);
+        }
+      };
+
+      const runJsonFallback = async (reason: string) => {
+        addTerminalLine(`Fallback sem streaming (${reason})...`, "warn");
+        const { data, error } = await supabase.functions.invoke("cirius-ai-chat", {
+          body: { messages: historyMsgs, project_id: id, stream: false },
+        });
+        if (error || data?.error) {
+          throw new Error(data?.error || error?.message || "Erro no fallback de chat");
+        }
+        await applyJsonResult(data || {});
+      };
+
+      if (!token) {
+        await runJsonFallback("sessão sem token");
+        setChatLoading(false);
+        return;
+      }
+
       addTerminalLine("Conectando ao Cirius Brain (streaming)...", "system");
+
+      const controller = new AbortController();
+      const connectTimeout = setTimeout(() => controller.abort(), 45000);
 
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cirius-ai-chat`, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -402,9 +464,11 @@ export default function CiriusEditor() {
         body: JSON.stringify({ messages: historyMsgs, project_id: id, stream: true }),
       });
 
+      clearTimeout(connectTimeout);
       if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData?.error || `Error ${resp.status}`);
+        await runJsonFallback(`HTTP ${resp.status}`);
+        setChatLoading(false);
+        return;
       }
 
       // Check if response is SSE stream
@@ -441,6 +505,13 @@ export default function CiriusEditor() {
               // Non-JSON SSE line, skip
             }
           }
+        }
+
+        if (!fullText.trim()) {
+          setStreamingText("");
+          await runJsonFallback("stream vazio");
+          setChatLoading(false);
+          return;
         }
 
         // Final: extract files from streamed content
@@ -480,45 +551,10 @@ export default function CiriusEditor() {
         // Fallback: JSON response
         addTerminalLine("Resposta JSON recebida", "info");
         const data = await resp.json().catch(() => ({}));
-        const summaryContent = String(data?.content || "");
-        if (!summaryContent) throw new Error("Resposta vazia da IA");
-
-        const assistantMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: summaryContent,
-          timestamp: Date.now(),
-        };
-        setChatMessages(prev => [...prev, assistantMsg]);
+        await applyJsonResult(data || {});
 
         const filesUpdated = data?.files_updated || 0;
-        if (filesUpdated > 0 && data?.raw_content) {
-          const newFiles = extractFileBlocks(data.raw_content);
-          if (Object.keys(newFiles).length > 0) {
-            const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
-            setSourceFiles(merged);
-            sourceFilesRef.current = merged;
-            setPreviewHtml(buildPreviewFromFiles(merged));
-            setProject((prev: any) => ({ ...prev, source_files_json: merged }));
-            addTerminalLine(`${filesUpdated} arquivo(s) atualizado(s)`, "success");
-          }
-        }
-
-        // Handle build pipeline
-        if (data?.command_type === "build" && data?.orchestrator) {
-          addTerminalLine(`Pipeline: ${data.pipeline?.task_count || 0} tarefas disparadas`, "system");
-          const bubbleId = `orch_${Date.now()}`;
-          setBubbles(prev => [...prev, {
-            id: bubbleId,
-            title: `Pipeline (${data.pipeline?.task_count || 0} tasks)`,
-            phase: "running",
-            steps: [{ s: "run", t: "Tarefas distribuídas para os Brains..." }],
-            pct: 25,
-            startTime: Date.now(),
-          }]);
-          addToast(`🚀 Pipeline: ${data.pipeline?.task_count || 0} tarefas em execução`, "success");
-          setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 120000);
-        } else if (filesUpdated > 0) {
+        if (filesUpdated > 0) {
           const cmdLabels: Record<string, string> = {
             fix: "🔧 Correção aplicada",
             improve: "✨ Melhoria aplicada",

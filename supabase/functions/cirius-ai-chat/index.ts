@@ -735,8 +735,16 @@ serve(async (req) => {
     }
 
     if (!assistantContent || assistantContent.trim().length < 2) {
-      return new Response(JSON.stringify({ error: "Empty AI response" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({
+        ok: false,
+        error: "Empty AI response",
+        content: "⚠️ Não consegui gerar resposta agora. Tente novamente em alguns segundos.",
+        command_type: command.type,
+        provider,
+        files_updated: 0,
+        updated_paths: [],
+      }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -776,8 +784,14 @@ serve(async (req) => {
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("cirius-ai-chat error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({
+      ok: false,
+      error: e instanceof Error ? e.message : "Unknown error",
+      content: "⚠️ O Cirius teve uma falha temporária e já aplicou fallback. Tente novamente.",
+      files_updated: 0,
+      updated_paths: [],
+    }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
