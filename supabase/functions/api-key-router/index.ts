@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "add") {
-      const { provider, label, key_encrypted } = body;
+      const { provider, label, key_encrypted, extra_config } = body;
       if (!provider || !label || !key_encrypted) return json({ error: "provider, label and key_encrypted are required" }, 400);
       const { data, error } = await sc
         .from("api_key_vault")
@@ -82,6 +82,7 @@ Deno.serve(async (req) => {
           provider,
           label,
           api_key_encrypted: key_encrypted,
+          extra_config: extra_config || {},
           is_active: true,
         })
         .select()
@@ -127,7 +128,7 @@ Deno.serve(async (req) => {
 
     const { data: keys, error: keysErr } = await sc
       .from("api_key_vault")
-      .select("id, api_key_encrypted, requests_count")
+      .select("id, api_key_encrypted, extra_config, requests_count")
       .eq("provider", provider)
       .eq("is_active", true)
       .order("requests_count", { ascending: true });
@@ -148,6 +149,7 @@ Deno.serve(async (req) => {
     return json({
       id: chosen.id,
       key: chosen.api_key_encrypted,
+      extra_config: (chosen as any).extra_config || {},
     });
 
   } catch (e) {

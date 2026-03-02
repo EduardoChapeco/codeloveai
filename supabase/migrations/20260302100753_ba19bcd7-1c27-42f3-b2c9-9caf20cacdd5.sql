@@ -1,0 +1,2 @@
+-- Add extra_config column to api_key_vault for storing additional fields (e.g. client_secret for OAuth providers)
+ALTER TABLE public.api_key_vault ADD COLUMN IF NOT EXISTS extra_config jsonb DEFAULT '{}'::jsonb;

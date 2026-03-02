@@ -474,18 +474,25 @@ Deno.serve(async (req) => {
     const state = btoa(JSON.stringify({ user_id: user.id, ts, sig }));
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const callbackUrl = `${supabaseUrl}/functions/v1/cirius-oauth-callback?provider=${provider}`;
+
+    // Fetch OAuth credentials from api_key_vault (Admin > Integrações)
+    const { data: vaultKey } = await sc.from("api_key_vault")
+      .select("api_key_encrypted")
+      .eq("provider", provider)
+      .eq("is_active", true)
+      .order("requests_count", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const clientId = vaultKey?.api_key_encrypted || Deno.env.get(`CIRIUS_${provider.toUpperCase()}_CLIENT_ID`) || "";
+    if (!clientId) return json({ error: `${provider} OAuth not configured. Configure em Admin > Integrações.` }, 400);
+
     let authUrl = "";
     if (provider === "github") {
-      const clientId = Deno.env.get("CIRIUS_GITHUB_CLIENT_ID") || "";
-      if (!clientId) return json({ error: "GitHub OAuth not configured" }, 400);
       authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
     } else if (provider === "vercel") {
-      const clientId = Deno.env.get("CIRIUS_VERCEL_CLIENT_ID") || "";
-      if (!clientId) return json({ error: "Vercel OAuth not configured" }, 400);
       authUrl = `https://vercel.com/oauth/authorize?client_id=${clientId}&scope=user&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
     } else if (provider === "netlify") {
-      const clientId = Deno.env.get("CIRIUS_NETLIFY_CLIENT_ID") || "";
-      if (!clientId) return json({ error: "Netlify OAuth not configured" }, 400);
       authUrl = `https://app.netlify.com/authorize?client_id=${clientId}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
     }
     return json({ auth_url: authUrl });
