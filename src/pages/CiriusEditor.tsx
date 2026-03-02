@@ -311,7 +311,7 @@ export default function CiriusEditor() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      addTerminalLine("Conectando ao Cirius Brain...", "system");
+      addTerminalLine("Conectando ao Cirius Brain (streaming)...", "system");
 
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cirius-ai-chat`, {
         method: "POST",
@@ -332,7 +332,7 @@ export default function CiriusEditor() {
       const contentType = resp.headers.get("content-type") || "";
       
       if (contentType.includes("text/event-stream") && resp.body) {
-        addTerminalLine("Stream SSE conectado", "success");
+        addTerminalLine("Stream SSE conectado (Brain/Gateway)", "success");
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let fullText = "";
