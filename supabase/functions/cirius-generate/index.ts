@@ -469,23 +469,53 @@ Deno.serve(async (req) => {
     await sc.from("cirius_projects").update({
       status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20,
     }).eq("id", projectId);
-    await logEntry(sc, projectId, "code", "started", "Iniciando geração via Brainchain + fallback OpenRouter");
+    await logEntry(sc, projectId, "code", "started", "Registrando tarefas no orquestrador");
 
-    const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string }> };
+    const prd = project.prd_json as { tasks: Array<{ prompt: string; brain_type?: string; title?: string; intent?: string; stop_condition?: string }> };
 
-    // Execute first task with Brainchain → OpenRouter fallback
-    const result = await executeCodeTask(sc, user.id, projectId, prd.tasks[0].prompt, 0, prd.tasks[0].brain_type || "code");
+    // Bridge: register in orchestrator_projects + orchestrator_tasks
+    // so orchestrator-tick handles ghost-create, execution, and completion detection
+    const clientPrompt = project.description || project.name || "Cirius project";
+    const { data: orchProject, error: orchErr } = await sc.from("orchestrator_projects").insert({
+      user_id: user.id,
+      client_prompt: clientPrompt,
+      status: "paused",
+      total_tasks: prd.tasks.length,
+      prd_json: project.prd_json,
+    }).select("id").single();
 
-    if (result.ok) {
-      if (result.queueId) {
-        await sc.from("cirius_projects").update({ brainchain_queue_id: result.queueId }).eq("id", projectId);
-      }
-      return json({ started: true, engine: result.engine, task_index: 0, total_tasks: prd.tasks.length });
+    if (orchErr || !orchProject) {
+      await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao registrar no orquestrador" }).eq("id", projectId);
+      await logEntry(sc, projectId, "code", "failed", "Failed to create orchestrator project");
+      return json({ error: "Orchestrator registration failed" }, 500);
     }
 
-    await sc.from("cirius_projects").update({ status: "failed", error_message: "Todos os motores falharam" }).eq("id", projectId);
-    await logEntry(sc, projectId, "code", "failed", "All engines failed");
-    return json({ error: "Code generation failed — all engines unavailable" }, 500);
+    // Insert all tasks into orchestrator_tasks
+    const taskInserts = prd.tasks.map((t, i) => ({
+      project_id: orchProject.id,
+      task_index: i,
+      title: t.title || `Task ${i + 1}`,
+      intent: t.intent || "security_fix_v2",
+      prompt: t.prompt,
+      stop_condition: t.stop_condition || null,
+    }));
+    await sc.from("orchestrator_tasks").insert(taskInserts);
+
+    // Link cirius project to orchestrator project
+    await sc.from("cirius_projects").update({
+      orchestrator_project_id: orchProject.id, progress_pct: 25,
+    }).eq("id", projectId);
+
+    await logEntry(sc, projectId, "code", "started", `Orquestrador iniciado: ${prd.tasks.length} tarefas registradas (orch: ${orchProject.id.slice(0, 8)})`);
+
+    return json({
+      started: true,
+      engine: "orchestrator",
+      orchestrator_project_id: orchProject.id,
+      task_count: prd.tasks.length,
+      total_tasks: prd.tasks.length,
+      note: "Tasks registered. orchestrator-tick will ghost-create a project and execute sequentially.",
+    });
   }
 
   // ─── STATUS ───
