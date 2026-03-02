@@ -7,6 +7,7 @@ import EditorToasts from "./EditorToasts";
 import FileExplorer from "./FileExplorer";
 import type { FrameMode, ActiveMode, EditorToast, ChatMessage } from "./types";
 import type { EditorMode } from "./SplitTopBar";
+import type { BuildStage } from "./BuildProgressCard";
 
 interface Props {
   project: any;
@@ -25,6 +26,11 @@ interface Props {
   chatMode?: "build" | "ai-chat";
   onChatModeChange?: (mode: "build" | "ai-chat") => void;
   sourceFiles?: Record<string, string>;
+  buildStages?: BuildStage[];
+  buildProgress?: number;
+  buildComplete?: boolean;
+  buildError?: boolean;
+  deployUrls?: { github?: string; vercel?: string; netlify?: string };
 }
 
 export default function SplitModeEditor({
@@ -33,6 +39,7 @@ export default function SplitModeEditor({
   onEditorModeChange, isLive, toasts,
   onApprovePrd, approvingPrd, approvedPrdId,
   chatMode = "ai-chat", onChatModeChange, sourceFiles,
+  buildStages, buildProgress, buildComplete, buildError, deployUrls,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
@@ -52,9 +59,7 @@ export default function SplitModeEditor({
     }
   }, [chatMode, onSendMsg, onSendChat]);
 
-  const handleClear = useCallback(() => {
-    // Parent handles clearing
-  }, []);
+  const handleClear = useCallback(() => {}, []);
 
   return (
     <div className="sp-root dark">
@@ -71,14 +76,9 @@ export default function SplitModeEditor({
       />
 
       <div className="sp-body">
-        {/* File Explorer sidebar */}
         {showFiles && hasFiles && (
           <div className="sp-file-sidebar">
-            <FileExplorer
-              files={files}
-              selectedFile={selectedFile}
-              onSelectFile={setSelectedFile}
-            />
+            <FileExplorer files={files} selectedFile={selectedFile} onSelectFile={setSelectedFile} />
           </div>
         )}
 
@@ -95,16 +95,18 @@ export default function SplitModeEditor({
             approvedPrdId={approvedPrdId}
             chatMode={chatMode}
             onChatModeChange={onChatModeChange}
+            buildStages={buildStages}
+            buildProgress={buildProgress}
+            buildComplete={buildComplete}
+            buildError={buildError}
+            deployUrls={deployUrls}
+            projectName={projectName}
           />
         </div>
 
         <SplitResizer onResize={setChatWidth} currentWidth={chatWidth} />
 
-        <SplitPreviewPanel
-          frameMode={frameMode}
-          previewHtml={previewHtml}
-          livePreviewUrl={livePreviewUrl}
-        />
+        <SplitPreviewPanel frameMode={frameMode} previewHtml={previewHtml} livePreviewUrl={livePreviewUrl} />
       </div>
 
       <EditorToasts toasts={toasts} />

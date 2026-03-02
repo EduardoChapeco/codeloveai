@@ -5,7 +5,9 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import PRDCard from "./PRDCard";
+import BuildProgressCard from "./BuildProgressCard";
 import type { ChatMessage, ActiveMode } from "./types";
+import type { BuildStage } from "./BuildProgressCard";
 
 interface Props {
   messages: ChatMessage[];
@@ -17,9 +19,14 @@ interface Props {
   onApprovePrd?: (prd: any) => void;
   approvingPrd?: boolean;
   approvedPrdId?: string | null;
-  /** AI chat streaming mode */
   chatMode?: "build" | "ai-chat";
   onChatModeChange?: (mode: "build" | "ai-chat") => void;
+  buildStages?: BuildStage[];
+  buildProgress?: number;
+  buildComplete?: boolean;
+  buildError?: boolean;
+  deployUrls?: { github?: string; vercel?: string; netlify?: string };
+  projectName?: string;
 }
 
 const SUGGESTIONS = [
@@ -32,6 +39,7 @@ export default function SplitChatPanel({
   messages, onSend, isGenerating, activeMode, setActiveMode, onClear,
   onApprovePrd, approvingPrd, approvedPrdId,
   chatMode = "ai-chat", onChatModeChange,
+  buildStages, buildProgress, buildComplete, buildError, deployUrls, projectName,
 }: Props) {
   const [text, setText] = useState("");
   const [modesOpen, setModesOpen] = useState(false);
@@ -44,7 +52,7 @@ export default function SplitChatPanel({
     if (msgsRef.current) setTimeout(() => msgsRef.current!.scrollTop = msgsRef.current!.scrollHeight, 50);
   }, []);
 
-  useEffect(() => { scrollBottom(); }, [messages, scrollBottom]);
+  useEffect(() => { scrollBottom(); }, [messages, buildStages, scrollBottom]);
 
   const handleInput = useCallback(() => {
     const el = taRef.current;
@@ -71,6 +79,8 @@ export default function SplitChatPanel({
     const d = new Date(ts);
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
   };
+
+  const showBuildCard = buildStages && buildStages.length > 0;
 
   return (
     <div className="sp-chat-panel">
@@ -121,7 +131,7 @@ export default function SplitChatPanel({
 
       {/* Messages */}
       <div className="sp-messages" ref={msgsRef}>
-        {messages.length === 0 && (
+        {messages.length === 0 && !showBuildCard && (
           <div className="sp-msg sp-msg-ai" style={{ animationDelay: "0s" }}>
             <div className="sp-msg-avatar sp-ai-av">C</div>
             <div className="sp-msg-body">
@@ -185,7 +195,24 @@ export default function SplitChatPanel({
           );
         })}
 
-        {isGenerating && (
+        {/* Build Progress Card — shown during/after generation */}
+        {showBuildCard && (
+          <div className="sp-msg sp-msg-ai">
+            <div className="sp-msg-avatar sp-ai-av">C</div>
+            <div className="sp-msg-body" style={{ width: "100%" }}>
+              <BuildProgressCard
+                stages={buildStages!}
+                projectName={projectName}
+                progress={buildProgress}
+                isComplete={buildComplete}
+                isError={buildError}
+                deployUrls={deployUrls}
+              />
+            </div>
+          </div>
+        )}
+
+        {isGenerating && !showBuildCard && (
           <div className="sp-msg sp-msg-ai">
             <div className="sp-msg-avatar sp-ai-av">C</div>
             <div className="sp-msg-body">
