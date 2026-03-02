@@ -231,6 +231,7 @@ const App = () => (
                 {/* Cirius */}
                 <Route path="/cirius" element={<CiriusDashboard />} />
                 <Route path="/cirius/new" element={<CiriusNew />} />
+                <Route path="/cirius/create" element={<CiriusNew />} />
                 <Route path="/cirius/project/:id" element={<CiriusProject />} />
                 <Route path="/cirius/integrations" element={<CiriusIntegrations />} />
                 <Route path="/cirius/editor/:id" element={<CiriusEditor />} />
