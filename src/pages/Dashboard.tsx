@@ -177,7 +177,7 @@ export default function Dashboard() {
           });
           if (!error && data?.token) {
             setTokens([{ id: "auto", token: data.token, is_active: true }]);
-            toast.success("Acesso Master Vitalício ativado! 👑");
+            toast.success("Acesso Master Vitalício ativado!");
           }
         } else {
           // Regular user gets free 10msg/day license via edge function
@@ -190,7 +190,7 @@ export default function Dashboard() {
               .select("id, key, active, plan, plan_type, status, expires_at, daily_messages, messages_used_today")
               .eq("id", data.license_id).maybeSingle();
             if (newLic) setLicense(newLic as unknown as MemberLicense);
-            toast.success("Free Master ativado — 30 dias grátis, tudo liberado! 🚀");
+            toast.success("Free Master ativado — 30 dias grátis, tudo liberado!");
           }
         }
         localStorage.setItem(tokenKey, "true");
@@ -356,7 +356,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 {extensionDetected && (
-                  <span className="lv-badge lv-badge-success scale-110">✓</span>
+                  <span className="lv-badge lv-badge-success scale-110"><CheckCircle className="h-3 w-3" /></span>
                 )}
               </div>
               {extensionDetected ? (
@@ -423,7 +423,7 @@ export default function Dashboard() {
               </div>
               {lovableStatus === "active" ? (
                 <div className="bg-green-500/5 rounded-xl p-3 border border-green-500/10 text-center">
-                  <span className="lv-badge lv-badge-success">✓ Conectado</span>
+                  <span className="lv-badge lv-badge-success flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Conectado</span>
                 </div>
               ) : (
                 <Link to="/lovable/connect" className="lv-btn-secondary w-full h-11 px-4 text-sm inline-flex items-center justify-center gap-1.5 shadow-sm">

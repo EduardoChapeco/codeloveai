@@ -759,7 +759,7 @@ function CreateGroupModal({ user, onClose, onCreated }: { user: any; onClose: ()
       // Auto-join as admin
       await supabase.from("community_group_members").insert({ group_id: group.id, user_id: user.id, role: "admin" } as any);
 
-      toast.success("Grupo criado! 🎉");
+      toast.success("Grupo criado!");
       onCreated({ ...group, isMember: true, isCreator: true, memberRole: "admin" } as CommunityGroup);
       onClose();
     } catch (err: any) {
@@ -1150,7 +1150,7 @@ export default function Community() {
     if (!user) return;
     await supabase.from("community_group_members").insert({ group_id: groupId, user_id: user.id } as any);
     await supabase.from("community_groups").update({ members_count: (groups.find(g => g.id === groupId)?.members_count || 0) + 1 } as any).eq("id", groupId);
-    toast.success("Você entrou no grupo! 🎉");
+    toast.success("Você entrou no grupo!");
     fetchGroups();
   };
 
@@ -1347,7 +1347,7 @@ export default function Community() {
       const { data: currentProfile } = await supabase.from("user_profiles").select("posts_count").eq("user_id", user.id).maybeSingle();
       if (currentProfile) await supabase.from("user_profiles").update({ posts_count: (currentProfile.posts_count || 0) + 1 }).eq("user_id", user.id);
 
-      toast.success("Publicado! 🎉");
+      toast.success("Publicado!");
       await fetchPosts(true);
     } catch (err: any) {
       toast.error("Erro ao publicar: " + (err.message || ""));
@@ -1799,7 +1799,7 @@ export default function Community() {
                 <Check className="h-6 w-6 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-bold text-foreground">Tudo por hoje! 🎉</p>
+                <p className="text-sm font-bold text-foreground">Tudo por hoje!</p>
                 <p className="text-xs text-muted-foreground mt-1">Você viu todas as publicações. Volte mais tarde para novidades!</p>
               </div>
             </div>

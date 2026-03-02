@@ -380,9 +380,9 @@ export default function AppSidebar() {
 
   // ─── Default sidebar — Big Glass Buttons ───
   const mainItems = [
-    { to: "/community", label: "CodeLovers", icon: MessageCircle, desc: "Comunidade de devs", badge: "🔥" },
+    { to: "/community", label: "CodeLovers", icon: MessageCircle, desc: "Comunidade de devs", badge: "Hot" },
     { to: "/marketplace", label: "Loja de Projetos", icon: Package, desc: "Compre e venda projetos", badge: "Novo" },
-    { to: "/extensoes/venus", label: "Venus AI", icon: Sparkles, desc: "Extensão God Mode", badge: "⚡" },
+    { to: "/extensoes/venus", label: "Venus AI", icon: Sparkles, desc: "Extensão God Mode", badge: "Pro" },
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos" },
     { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
     { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de projetos" },

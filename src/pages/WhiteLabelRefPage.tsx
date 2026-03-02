@@ -246,7 +246,7 @@ export default function WhiteLabelRefPage() {
                     )}
                     {plan.setup_is_free && (
                       <p className="lv-caption text-primary mb-4">
-                        ✓ Setup gratuito
+                        Setup gratuito
                       </p>
                     )}
 

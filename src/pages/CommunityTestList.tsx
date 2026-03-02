@@ -75,7 +75,7 @@ export default function CommunityTestList() {
         project_name: projectName.trim(),
       } as any).select("*").single();
       if (error) throw error;
-      toast({ title: "Sessão criada! 🎉" });
+      toast({ title: "Sessão criada!" });
       navigate(`/community/test/${data.id}`);
     } catch (err: any) {
       toast({ title: "Erro: " + (err.message || ""), variant: "destructive" });

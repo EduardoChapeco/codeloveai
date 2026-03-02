@@ -11,13 +11,13 @@ import {
 
 const REACTIONS = [
   { key: "❤️", icon: Heart, label: "Love" },
-  { key: "👍", icon: ThumbsUp, label: "Like" },
-  { key: "👎", icon: ThumbsDown, label: "Dislike" },
-  { key: "⭐", icon: Star, label: "Star" },
-  { key: "🔥", icon: Flame, label: "Fire" },
-  { key: "🎉", icon: PartyPopper, label: "Party" },
-  { key: "✨", icon: Sparkles, label: "Magic" },
-  { key: "🎁", icon: Gift, label: "Gift" },
+  { key: "like", icon: ThumbsUp, label: "Like" },
+  { key: "dislike", icon: ThumbsDown, label: "Dislike" },
+  { key: "star", icon: Star, label: "Star" },
+  { key: "fire", icon: Flame, label: "Fire" },
+  { key: "party", icon: PartyPopper, label: "Party" },
+  { key: "magic", icon: Sparkles, label: "Magic" },
+  { key: "gift", icon: Gift, label: "Gift" },
 ];
 
 interface FeedbackMsg {
@@ -224,7 +224,7 @@ export default function CommunityTestSession() {
                         </div>
                       </div>
                       <span className="lv-caption">{prof?.name || "Anônimo"}</span>
-                      <span className="text-lg animate-in zoom-in duration-300">{msg.reaction_type}</span>
+                      {(() => { const R = REACTIONS.find(r => r.key === msg.reaction_type); return R ? <R.icon className="h-5 w-5 text-primary" /> : <span className="text-lg">{msg.reaction_type}</span>; })()}
                     </div>
                   );
                 }
@@ -267,7 +267,7 @@ export default function CommunityTestSession() {
                       className="h-10 w-10 rounded-[12px] hover:bg-muted flex items-center justify-center transition-all hover:scale-110 active:scale-95"
                       title={r.label}
                     >
-                      <span className="text-xl">{r.key}</span>
+                      <r.icon className="h-5 w-5" />
                     </button>
                   ))}
                 </div>

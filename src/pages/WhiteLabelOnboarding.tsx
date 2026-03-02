@@ -343,7 +343,7 @@ export default function WhiteLabelOnboarding() {
         {state.step === 5 && (
           <div className="lv-card p-6 space-y-4 text-center">
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
-            <h2 className="lv-heading-md">Seu White Label está pronto! 🎉</h2>
+            <h2 className="lv-heading-md">Seu White Label está pronto!</h2>
             <div className="lv-card-sm bg-accent/50">
               <p className="lv-body-strong">URL da sua plataforma:</p>
               <p className="lv-mono text-primary">{state.branding.subdomain}.Starble.app</p>

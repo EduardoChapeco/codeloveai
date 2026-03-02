@@ -199,7 +199,7 @@ export default function MarketplaceSell() {
       .update({ status: "published" } as any).eq("id", id);
     if (error) return toast.error("Erro ao publicar");
     setListings(prev => prev.map(l => l.id === id ? { ...l, status: "published" } : l));
-    toast.success("Publicado na loja! 🎉");
+    toast.success("Publicado na loja!");
   };
 
   const handleDelete = async (id: string) => {

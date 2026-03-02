@@ -48,10 +48,10 @@ const categories = [
 ];
 
 const sortOptions = [
-  { value: "recent", label: "Recentes", icon: "⏰" },
-  { value: "popular", label: "🔥 Hot", icon: "🔥" },
-  { value: "price_asc", label: "Menor preço", icon: "💰" },
-  { value: "price_desc", label: "Maior preço", icon: "💎" },
+  { value: "recent", label: "Recentes", icon: "" },
+  { value: "popular", label: "Hot", icon: "" },
+  { value: "price_asc", label: "Menor preço", icon: "" },
+  { value: "price_desc", label: "Maior preço", icon: "" },
 ];
 
 export default function Marketplace() {
