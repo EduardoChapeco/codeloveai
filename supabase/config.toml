@@ -171,3 +171,15 @@ verify_jwt = false
 
 [functions.venus-file-upload]
 verify_jwt = false
+
+[functions.brainchain-admin]
+verify_jwt = false
+
+[functions.brainchain-token-manager]
+verify_jwt = false
+
+[functions.brainchain-send]
+verify_jwt = false
+
+[functions.brainchain-status]
+verify_jwt = false
