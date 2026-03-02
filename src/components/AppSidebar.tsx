@@ -420,6 +420,7 @@ export default function AppSidebar() {
       { to: "/admin/global", label: "Admin Global", icon: Building2, desc: "Multi-tenant" },
       { to: "/admin/integrations", label: "Integrações", icon: Key, desc: "API Keys & Email" },
       { to: "/admin/cloud", label: "Lovable Cloud", icon: Zap, desc: "Infra & deploy" },
+      { to: "/admin/brainchain", label: "Brainchain", icon: Brain, desc: "Pool de contas" },
     ] : []),
   ];
 
