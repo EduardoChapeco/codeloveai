@@ -303,17 +303,17 @@ export async function createFreshBrain(
       } catch { /* best effort */ }
     }
 
-    // Update record to active
+    // Update record to active WITH bootstrap auto-start
     await sc.from("user_brain_projects")
       .update({
         lovable_project_id: projectId,
         lovable_workspace_id: workspaceId,
         status: "active",
-        skill_phase: 0,
+        skill_phase: 1,
       })
       .eq("id", lockId);
 
-    console.log(`[Brain] Created project=${projectId} brain=${lockId}`);
+    console.log(`[Brain] Created project=${projectId} brain=${lockId}, bootstrap queued (phase=1)`);
     return { projectId, workspaceId, brainId: lockId };
   } catch (err) {
     console.error("[Brain] createFreshBrain error:", err);

@@ -337,10 +337,10 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Each phase needs ~90s to complete; skip if not enough time has passed
-        const minAgeForPhase = phase === 1 ? 5_000 : (phase - 1) * 90_000;
+        // Phase 1 needs 5s, subsequent phases need to detect previous completion
+        const minAgeForPhase = phase === 1 ? 5_000 : 15_000;
         if (age < minAgeForPhase) {
-          console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} too early (${Math.round(age/1000)}s < ${Math.round(minAgeForPhase/1000)}s), skipping`);
+          console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} too early, skipping`);
           continue;
         }
 
@@ -352,6 +352,28 @@ Deno.serve(async (req) => {
         if (!acct?.token_encrypted) {
           console.log(`[bc] brain=${brain.id.slice(0,8)} no-token, skipping`);
           continue;
+        }
+
+        // Check if previous phase completed by polling update.md for status:done
+        if (phase > 1) {
+          const checkRes = await fetchText(`${API}/projects/${brain.lovable_project_id}/source-code`, acct.token_encrypted, 5000, 8000);
+          if (checkRes && checkRes.status === 200) {
+            try {
+              const parsed = JSON.parse(checkRes.body);
+              const md = findUpdateMd(parsed);
+              if (md && /status:\s*done/i.test(md)) {
+                console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase-1} confirmed done via update.md`);
+              } else {
+                // Previous phase not done yet — wait
+                if (age < 180_000) {
+                  console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} prev not done, waiting...`);
+                  continue;
+                }
+                // Force proceed after 3 min
+                console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} force-proceeding after ${Math.round(age/1000)}s`);
+              }
+            } catch { /* parse error, proceed anyway */ }
+          }
         }
 
         const prompt = buildPhasePrompt(phase, brain.brain_skill, { supabaseUrl, userId: brain.user_id });
