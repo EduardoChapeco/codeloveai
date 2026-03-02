@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Mic, Volume2, Radio, Activity, ArrowRight, Lock, CheckCircle2, ChevronDown, Sparkles } from "lucide-react";
+
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 
 const LabBadge = () => (
