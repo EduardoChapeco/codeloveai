@@ -80,8 +80,8 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    const adminSecret = Deno.env.get("Starble_ADMIN_SECRET");
-    const webhookSecret = Deno.env.get("Starble_WEBHOOK_SECRET");
+    const adminSecret = Deno.env.get("CODELOVE_ADMIN_SECRET");
+    const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
 
     if (!adminSecret || !webhookSecret) {
       return new Response(JSON.stringify({ error: "Secrets não configurados" }), {

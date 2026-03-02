@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      const webhookSecret = Deno.env.get("Starble_WEBHOOK_SECRET");
+      const webhookSecret = Deno.env.get("CODELOVE_WEBHOOK_SECRET");
       if (webhookSecret) {
         const workerPlan = plan === "1_day" ? "test_1d" :
                           plan === "7_days" ? "days_15" :

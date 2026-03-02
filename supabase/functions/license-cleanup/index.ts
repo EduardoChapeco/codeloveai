@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminSecret = Deno.env.get("Starble_ADMIN_SECRET");
+    const adminSecret = Deno.env.get("CODELOVE_ADMIN_SECRET");
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 

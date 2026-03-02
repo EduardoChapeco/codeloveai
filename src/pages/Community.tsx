@@ -929,9 +929,14 @@ function useViewTracker(userId: string | undefined) {
     if (!userId || trackedRef.current.has(postId)) return;
     trackedRef.current.add(postId);
     try {
-      await supabase.from("post_views").insert({ post_id: postId, user_id: userId });
-      const { data: post } = await supabase.from("community_posts").select("views_count").eq("id", postId).single();
-      if (post) await supabase.from("community_posts").update({ views_count: post.views_count + 1 }).eq("id", postId);
+      const { error } = await supabase.from("post_views").upsert(
+        { post_id: postId, user_id: userId },
+        { onConflict: "post_id,user_id", ignoreDuplicates: true }
+      );
+      if (!error) {
+        const { data: post } = await supabase.from("community_posts").select("views_count").eq("id", postId).single();
+        if (post) await supabase.from("community_posts").update({ views_count: post.views_count + 1 }).eq("id", postId);
+      }
     } catch {}
   }, [userId]);
   return trackView;
