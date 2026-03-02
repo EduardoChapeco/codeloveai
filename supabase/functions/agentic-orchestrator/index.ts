@@ -394,7 +394,11 @@ Deno.serve(async (req: Request) => {
 
       const adminTk = await getUserToken(sc, project.user_id as string);
       if (!adminTk) {
-        await addLog(sc, projectId, "❌ Token indisponível — pausando", "error");
+        await addLog(sc, projectId, "❌ Token indisponível — marcando como falho", "error");
+        await sc.from("orchestrator_projects").update({
+          status: "failed",
+          last_error: "Token Lovable não encontrado. Reconecte em /lovable/connect.",
+        }).eq("id", projectId);
         return json({ error: "Token Lovable não encontrado." }, 503);
       }
 
@@ -403,6 +407,13 @@ Deno.serve(async (req: Request) => {
         const result = await ghostCreate(sc, projectId, adminTk);
         if ("error" in result) {
           await addLog(sc, projectId, `❌ Ghost create failed: ${result.error}`, "error");
+          // If 401, mark as failed immediately
+          if (result.error.includes("401") || result.error.includes("Unauthorized")) {
+            await sc.from("orchestrator_projects").update({
+              status: "failed",
+              last_error: "Token Lovable expirado. Reconecte em /lovable/connect.",
+            }).eq("id", projectId);
+          }
           return json({ error: result.error }, 502);
         }
         project.lovable_project_id = result.lovableProjectId;
