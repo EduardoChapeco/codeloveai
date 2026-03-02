@@ -17,9 +17,11 @@ import DrawerSEO from "@/components/cirius-editor/DrawerSEO";
 import DrawerBuild from "@/components/cirius-editor/DrawerBuild";
 import DrawerChain from "@/components/cirius-editor/DrawerChain";
 import EditorToasts from "@/components/cirius-editor/EditorToasts";
+import SplitModeEditor from "@/components/cirius-editor/SplitModeEditor";
 import "@/styles/cirius-editor.css";
 
 import type { FrameMode, ActiveMode, CmdMode, Bubble, EditorToast, ChatMessage } from "@/components/cirius-editor/types";
+import type { EditorMode } from "@/components/cirius-editor/SplitTopBar";
 
 export default function CiriusEditor() {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +32,9 @@ export default function CiriusEditor() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
+
+  // Editor mode: full (floating islands) or split (side-by-side)
+  const [editorMode, setEditorMode] = useState<EditorMode>("full");
 
   // Editor state
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
@@ -235,6 +240,25 @@ export default function CiriusEditor() {
   const prd = project?.prd_json as { tasks?: any[] } | null;
   const tasks = prd?.tasks || [];
 
+  // ─── SPLIT MODE ───
+  if (editorMode === "split") {
+    return (
+      <SplitModeEditor
+        project={project}
+        previewHtml={previewHtml}
+        livePreviewUrl={livePreviewUrl}
+        chatMessages={chatMessages}
+        chatLoading={chatLoading}
+        onSendMsg={sendMsg}
+        onSendChat={sendChatMsg}
+        onEditorModeChange={setEditorMode}
+        isLive={isLive}
+        toasts={toasts}
+      />
+    );
+  }
+
+  // ─── FULL MODE (existing floating islands UI) ───
   return (
     <div className="ce-root dark">
       {/* Preview */}
@@ -246,6 +270,8 @@ export default function CiriusEditor() {
           projectName={projectName}
           onDomainClick={() => setDomainVisible(prev => !prev)}
           onSeoClick={() => toggleDrawer("seo")}
+          editorMode={editorMode}
+          onEditorModeChange={setEditorMode}
         />
         <IslandCenter frameMode={frameMode} onFrameChange={setFrameMode} />
         <IslandRight
