@@ -270,8 +270,17 @@ Deno.serve(async (req: Request) => {
             status: "completed", completed_at: new Date().toISOString(),
           }).eq("id", runningTask.id);
           await releaseBrainchainAccount(sc, account.id);
+
+          // Count completed tasks to update progress
+          const { count: completedCount } = await sc
+            .from("orchestrator_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", project.id)
+            .eq("status", "completed");
+
           await sc.from("orchestrator_projects").update({
             status: "paused",
+            current_task_index: completedCount || (taskIdx + 1),
             next_tick_at: new Date(Date.now() + INTER_TASK_DELAY_MS).toISOString(),
           }).eq("id", project.id);
           await addLog(sc, project.id as string,
@@ -377,7 +386,11 @@ Deno.serve(async (req: Request) => {
             continue;
           }
 
-          await sc.from("orchestrator_projects").update({ status: "completed" }).eq("id", project.id);
+          await sc.from("orchestrator_projects").update({
+            status: "completed",
+            current_task_index: project.total_tasks as number,
+            quality_score: 100,
+          }).eq("id", project.id);
           await addLog(sc, project.id as string,
             `🎉 [tick] All tasks completed!`, "info",
             { phase: "paused", action: "project_completed",
