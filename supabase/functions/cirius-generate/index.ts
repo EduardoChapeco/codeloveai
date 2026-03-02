@@ -498,6 +498,35 @@ Deno.serve(async (req) => {
     return json({ auth_url: authUrl });
   }
 
+  // ─── SAVE_GITHUB_INTEGRATION (PAT) ───
+  if (action === "save_github_integration") {
+    const ghToken = (body.github_token as string || "").trim();
+    if (!ghToken) return json({ error: "Personal Access Token é obrigatório" }, 400);
+    let accountLogin = "";
+    let accountId = "";
+    try {
+      const res = await fetch("https://api.github.com/user", {
+        headers: { Authorization: `Bearer ${ghToken}`, "User-Agent": "Cirius-Starble" },
+      });
+      if (!res.ok) {
+        await res.text().catch(() => {});
+        return json({ error: "Token inválido — verifique em github.com/settings/tokens" }, 400);
+      }
+      const ghUser = await res.json();
+      accountLogin = ghUser.login || "";
+      accountId = String(ghUser.id || "");
+    } catch {
+      return json({ error: "Falha ao validar token GitHub" }, 400);
+    }
+    const { error } = await sc.from("cirius_integrations").upsert({
+      user_id: user.id, provider: "github", access_token_enc: ghToken,
+      account_login: accountLogin, account_id: accountId,
+      is_active: true, updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,provider" });
+    if (error) return json({ error: "Failed to save integration" }, 500);
+    return json({ ok: true, account: accountLogin });
+  }
+
   // ─── SAVE_VERCEL_INTEGRATION ───
   if (action === "save_vercel_integration") {
     const vToken = (body.vercel_token as string || "").trim();
