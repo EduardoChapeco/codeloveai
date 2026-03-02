@@ -68,7 +68,7 @@ const adminGlobalTabs = [
   { id: "commissions", label: "Comissões", icon: BarChart3, desc: "Split & repasse" },
   { id: "wallets", label: "Wallets", icon: Wallet, desc: "Saldos por tenant" },
   { id: "ledger", label: "Ledger", icon: BookOpen, desc: "Extrato contábil" },
-  { id: "api_keys", label: "API Keys", icon: Key, desc: "Chaves de acesso" },
+  
   { id: "activity", label: "Atividade", icon: Activity, desc: "Dashboard de uso" },
   { id: "operations", label: "Operações", icon: Shield, desc: "Ações globais" },
 ];
