@@ -300,10 +300,10 @@ Deno.serve(async (req) => {
 
       console.log(`[Brain:send] Message sent, mining response... convo=${convoId?.slice(0, 8)}`);
 
-      // Quick capture (15s window — increased from 8s)
+      // Quick capture (25s window — longer to catch most responses inline)
       let quickResponse: string | null = null;
       try {
-        const result = await captureResponse(brainProjectId, lovableToken, 15_000, 3_000, 5_000, questionTs);
+        const result = await captureResponse(brainProjectId, lovableToken, 25_000, 4_000, 6_000, questionTs);
         if (result.status === "completed") quickResponse = result.response;
       } catch (e) {
         console.warn("[Brain:send] Quick capture error:", e);
@@ -353,7 +353,7 @@ Deno.serve(async (req) => {
       if (!projectId) return json({ response: null, status: "processing" });
 
       const convoTs = convo.created_at ? new Date(convo.created_at).getTime() : undefined;
-      const capture = await captureResponse(projectId, lovableToken, 45_000, 4_000, 0, convoTs);
+      const capture = await captureResponse(projectId, lovableToken, 20_000, 3_000, 0, convoTs);
 
       if (capture.response) {
         await sc.from("loveai_conversations").update({

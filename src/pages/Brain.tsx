@@ -570,32 +570,52 @@ export default function BrainPage() {
     } catch (e: any) { toast.error(e.message); }
   };
 
-  // Realtime polling — poll for ALL processing conversations independently
+  // Realtime polling — actively mine responses for processing conversations
+  const pollCountRef = useRef<Record<string, number>>({});
   useEffect(() => {
     const processingConvos = allConversations.filter(c => c.status === "processing" && c.id !== "temp");
     if (processingConvos.length === 0) return;
     
     const interval = setInterval(async () => {
       for (const pc of processingConvos) {
+        const count = (pollCountRef.current[pc.id] || 0) + 1;
+        pollCountRef.current[pc.id] = count;
+        
+        // Give up after 40 polls (~2 min)
+        if (count > 40) {
+          setAllConversations(prev =>
+            prev.map(c => c.id === pc.id ? { ...c, status: "timeout" as ConvoStatus } : c)
+          );
+          setProcessingIds(prev => { const n = new Set(prev); n.delete(pc.id); return n; });
+          delete pollCountRef.current[pc.id];
+          continue;
+        }
+
         try {
-          const { data } = await supabase
-            .from("loveai_conversations")
-            .select("ai_response, status")
-            .eq("id", pc.id)
-            .single();
+          // Use active capture action — this triggers server-side mining
+          const { data } = await supabase.functions.invoke("brain", {
+            body: { action: "capture", conversation_id: pc.id },
+          });
           
-          if (data && data.status !== "processing" && data.ai_response) {
+          if (data?.response && data.response.length > 10) {
             setAllConversations(prev =>
               prev.map(c => c.id === pc.id
-                ? { ...c, ai_response: data.ai_response, status: data.status as ConvoStatus }
+                ? { ...c, ai_response: data.response, status: "completed" as ConvoStatus }
                 : c
               )
             );
             setProcessingIds(prev => { const n = new Set(prev); n.delete(pc.id); return n; });
+            delete pollCountRef.current[pc.id];
+          } else if (data?.status === "timeout") {
+            setAllConversations(prev =>
+              prev.map(c => c.id === pc.id ? { ...c, status: "timeout" as ConvoStatus } : c)
+            );
+            setProcessingIds(prev => { const n = new Set(prev); n.delete(pc.id); return n; });
+            delete pollCountRef.current[pc.id];
           }
         } catch { /* ignore */ }
       }
-    }, 3000);
+    }, 4000);
     
     return () => clearInterval(interval);
   }, [allConversations]);
