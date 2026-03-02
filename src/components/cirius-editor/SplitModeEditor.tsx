@@ -5,7 +5,7 @@ import SplitResizer from "./SplitResizer";
 import SplitPreviewPanel from "./SplitPreviewPanel";
 import EditorToasts from "./EditorToasts";
 import FileExplorer from "./FileExplorer";
-import type { FrameMode, ActiveMode, EditorToast, ChatMessage } from "./types";
+import type { FrameMode, ActiveMode, EditorToast, ChatMessage, Bubble } from "./types";
 import type { EditorMode } from "./SplitTopBar";
 import type { BuildStage } from "./BuildProgressCard";
 
@@ -31,6 +31,8 @@ interface Props {
   buildComplete?: boolean;
   buildError?: boolean;
   deployUrls?: { github?: string; vercel?: string; netlify?: string };
+  bubbles?: Bubble[];
+  onRemoveBubble?: (id: string) => void;
 }
 
 export default function SplitModeEditor({
@@ -40,6 +42,7 @@ export default function SplitModeEditor({
   onApprovePrd, approvingPrd, approvedPrdId,
   chatMode = "ai-chat", onChatModeChange, sourceFiles,
   buildStages, buildProgress, buildComplete, buildError, deployUrls,
+  bubbles, onRemoveBubble,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
@@ -101,6 +104,8 @@ export default function SplitModeEditor({
             buildError={buildError}
             deployUrls={deployUrls}
             projectName={projectName}
+            bubbles={bubbles}
+            onRemoveBubble={onRemoveBubble}
           />
         </div>
 
