@@ -1,6 +1,7 @@
 /**
  * Cirius OAuth Callback — Processes OAuth callbacks for GitHub, Vercel, Netlify
  * GET ?provider=github&code=xxx&state=xxx
+ * State is HMAC-signed to prevent forgery.
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -17,6 +18,25 @@ function errorHtml(msg: string) {
   );
 }
 
+/** HMAC-SHA256 sign */
+async function hmacSign(data: string, secret: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** HMAC-SHA256 verify */
+async function hmacVerify(data: string, signature: string, secret: string): Promise<boolean> {
+  const expected = await hmacSign(data, secret);
+  if (expected.length !== signature.length) return false;
+  let result = 0;
+  for (let i = 0; i < expected.length; i++) {
+    result |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
@@ -27,14 +47,27 @@ Deno.serve(async (req) => {
 
   if (!provider || !code || !stateRaw) return errorHtml("Missing params");
 
-  // Decode state — contains user_id
+  // Decode & verify signed state
+  const stateSecret = Deno.env.get("CLF_TOKEN_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   let userId: string;
   try {
+    // State format: base64({ user_id, ts, sig })
     const decoded = JSON.parse(atob(stateRaw));
     userId = decoded.user_id;
-    if (!userId) throw new Error("no user_id");
+    const ts = decoded.ts;
+    const sig = decoded.sig;
+    if (!userId || !ts || !sig) throw new Error("incomplete state");
+
+    // Verify HMAC signature
+    const payload = `${userId}:${ts}`;
+    const valid = await hmacVerify(payload, sig, stateSecret);
+    if (!valid) throw new Error("invalid signature");
+
+    // Check timestamp (max 10 min)
+    const age = Date.now() - Number(ts);
+    if (age > 600_000 || age < 0) throw new Error("state expired");
   } catch {
-    return errorHtml("Invalid state");
+    return errorHtml("Invalid or expired state");
   }
 
   const sc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -58,7 +91,7 @@ Deno.serve(async (req) => {
       });
       const tokenData = await tokenRes.json();
       accessToken = tokenData.access_token || "";
-      if (!accessToken) return errorHtml("GitHub OAuth failed");
+      if (!accessToken) return errorHtml("Authentication failed. Please try again.");
 
       const userRes = await fetch("https://api.github.com/user", {
         headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "Cirius-Starble" },
@@ -84,7 +117,7 @@ Deno.serve(async (req) => {
       });
       const tokenData = await tokenRes.json();
       accessToken = tokenData.access_token || "";
-      if (!accessToken) return errorHtml("Vercel OAuth failed");
+      if (!accessToken) return errorHtml("Authentication failed. Please try again.");
 
       const userRes = await fetch("https://api.vercel.com/v2/user", {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -111,7 +144,7 @@ Deno.serve(async (req) => {
       const tokenData = await tokenRes.json();
       accessToken = tokenData.access_token || "";
       refreshToken = tokenData.refresh_token || "";
-      if (!accessToken) return errorHtml("Netlify OAuth failed");
+      if (!accessToken) return errorHtml("Authentication failed. Please try again.");
 
       const userRes = await fetch("https://api.netlify.com/api/v1/user", {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -122,10 +155,10 @@ Deno.serve(async (req) => {
     }
 
     else {
-      return errorHtml(`Provider "${provider}" not supported`);
+      return errorHtml("Provider not supported");
     }
 
-    // Upsert integration
+    // Upsert integration — tokens stored server-side only
     await sc.from("cirius_integrations").upsert({
       user_id: userId,
       provider,

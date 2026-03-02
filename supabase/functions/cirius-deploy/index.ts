@@ -28,7 +28,7 @@ async function getUser(req: Request) {
   return user;
 }
 
-async function log(sc: ReturnType<typeof createClient>, projectId: string, step: string, status: string, message: string) {
+async function logDeploy(sc: ReturnType<typeof createClient>, projectId: string, step: string, status: string, message: string) {
   await sc.from("cirius_generation_log").insert({
     project_id: projectId, step, status, message,
     level: status === "failed" ? "error" : "info",
@@ -67,15 +67,14 @@ Deno.serve(async (req) => {
   // ─── GITHUB ───
   if (action === "github") {
     const integration = await getIntegration(sc, user.id, "github");
-    if (!integration?.access_token_enc) return json({ error: "GitHub not connected. Connect via /cirius/settings." }, 400);
+    if (!integration?.access_token_enc) return json({ error: "GitHub not connected. Connect via integrations page." }, 400);
 
     const ghToken = integration.access_token_enc;
     const repoName = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").slice(0, 50);
 
-    await log(sc, projectId, "deploy_github", "started", "Criando repositório...");
+    await logDeploy(sc, projectId, "deploy_github", "started", "Criando repositório...");
 
     try {
-      // Create repo
       const createRes = await fetch("https://api.github.com/user/repos", {
         method: "POST",
         headers: { Authorization: `Bearer ${ghToken}`, "Content-Type": "application/json", "User-Agent": "Cirius-Starble" },
@@ -84,7 +83,6 @@ Deno.serve(async (req) => {
 
       let repoData: any;
       if (createRes.status === 422) {
-        // Repo may already exist — try to get it
         const userRes = await fetch("https://api.github.com/user", {
           headers: { Authorization: `Bearer ${ghToken}`, "User-Agent": "Cirius-Starble" },
         });
@@ -93,11 +91,14 @@ Deno.serve(async (req) => {
         const getRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}`, {
           headers: { Authorization: `Bearer ${ghToken}`, "User-Agent": "Cirius-Starble" },
         });
-        if (!getRes.ok) return json({ error: "Repo creation failed and existing not found" }, 500);
+        if (!getRes.ok) {
+          await getRes.text().catch(() => {});
+          return json({ error: "Repository creation failed" }, 500);
+        }
         repoData = await getRes.json();
       } else if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}));
-        return json({ error: err.message || `GitHub ${createRes.status}` }, 500);
+        await createRes.text().catch(() => {});
+        return json({ error: "Repository creation failed" }, 500);
       } else {
         repoData = await createRes.json();
       }
@@ -106,11 +107,9 @@ Deno.serve(async (req) => {
       const repo = repoData.name;
       let pushed = 0;
 
-      // Push files
       for (const [path, content] of Object.entries(filesJson)) {
         if (typeof content !== "string") continue;
 
-        // Check if file exists
         const existRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=main`, {
           headers: { Authorization: `Bearer ${ghToken}`, "User-Agent": "Cirius-Starble" },
         });
@@ -143,11 +142,12 @@ Deno.serve(async (req) => {
         status: "live", deployed_at: new Date().toISOString(),
       }).eq("id", projectId);
 
-      await log(sc, projectId, "deploy_github", "completed", `${pushed} arquivos pushados para ${repoUrl}`);
+      await logDeploy(sc, projectId, "deploy_github", "completed", `${pushed} arquivos pushados`);
       return json({ repo_url: repoUrl, files_pushed: pushed });
     } catch (e) {
-      await log(sc, projectId, "deploy_github", "failed", (e as Error).message);
-      return json({ error: (e as Error).message }, 500);
+      console.error("[cirius-deploy] github error:", (e as Error).message);
+      await logDeploy(sc, projectId, "deploy_github", "failed", "GitHub deploy failed");
+      return json({ error: "GitHub deploy failed" }, 500);
     }
   }
 
@@ -157,10 +157,9 @@ Deno.serve(async (req) => {
     if (!integration?.access_token_enc) return json({ error: "Vercel not connected" }, 400);
 
     const vToken = integration.access_token_enc;
-    await log(sc, projectId, "deploy_vercel", "started", "Criando projeto Vercel...");
+    await logDeploy(sc, projectId, "deploy_vercel", "started", "Criando projeto Vercel...");
 
     try {
-      // If github repo linked, use git deploy
       if (project.github_repo) {
         const createRes = await fetch("https://api.vercel.com/v9/projects", {
           method: "POST",
@@ -178,14 +177,15 @@ Deno.serve(async (req) => {
           vercel_project_id: vProject.id, vercel_url: deployUrl,
         }).eq("id", projectId);
 
-        await log(sc, projectId, "deploy_vercel", "completed", `Vercel linked to ${project.github_repo}`);
+        await logDeploy(sc, projectId, "deploy_vercel", "completed", "Vercel linked");
         return json({ deploy_url: deployUrl, status: "linked" });
       }
 
       return json({ error: "Deploy GitHub primeiro para conectar ao Vercel" }, 400);
     } catch (e) {
-      await log(sc, projectId, "deploy_vercel", "failed", (e as Error).message);
-      return json({ error: (e as Error).message }, 500);
+      console.error("[cirius-deploy] vercel error:", (e as Error).message);
+      await logDeploy(sc, projectId, "deploy_vercel", "failed", "Vercel deploy failed");
+      return json({ error: "Vercel deploy failed" }, 500);
     }
   }
 
@@ -194,13 +194,12 @@ Deno.serve(async (req) => {
     const integration = await getIntegration(sc, user.id, "netlify");
     if (!integration?.access_token_enc) return json({ error: "Netlify not connected" }, 400);
 
-    await log(sc, projectId, "deploy_netlify", "started", "Criando site Netlify...");
+    await logDeploy(sc, projectId, "deploy_netlify", "started", "Criando site Netlify...");
 
     try {
       const nToken = integration.access_token_enc;
       const siteName = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 50);
 
-      // Create site
       const siteRes = await fetch("https://api.netlify.com/api/v1/sites", {
         method: "POST",
         headers: { Authorization: `Bearer ${nToken}`, "Content-Type": "application/json" },
@@ -208,16 +207,16 @@ Deno.serve(async (req) => {
       });
       const site = await siteRes.json();
 
-      // For Netlify, we'd need to create a ZIP and deploy — simplified for now
       await sc.from("cirius_projects").update({
         netlify_site_id: site.id, netlify_url: site.ssl_url || site.url,
       }).eq("id", projectId);
 
-      await log(sc, projectId, "deploy_netlify", "completed", `Site criado: ${site.ssl_url || site.url}`);
+      await logDeploy(sc, projectId, "deploy_netlify", "completed", "Site criado");
       return json({ deploy_url: site.ssl_url || site.url, status: "created" });
     } catch (e) {
-      await log(sc, projectId, "deploy_netlify", "failed", (e as Error).message);
-      return json({ error: (e as Error).message }, 500);
+      console.error("[cirius-deploy] netlify error:", (e as Error).message);
+      await logDeploy(sc, projectId, "deploy_netlify", "failed", "Netlify deploy failed");
+      return json({ error: "Netlify deploy failed" }, 500);
     }
   }
 
@@ -225,13 +224,12 @@ Deno.serve(async (req) => {
   if (action === "supabase") {
     const integration = await getIntegration(sc, user.id, "supabase");
     if (!integration?.service_key_enc || !integration?.project_ref) {
-      return json({ error: "Supabase not configured. Add project URL and service key." }, 400);
+      return json({ error: "Supabase not configured" }, 400);
     }
 
-    await log(sc, projectId, "deploy_supabase", "started", "Aplicando migrations...");
+    await logDeploy(sc, projectId, "deploy_supabase", "started", "Aplicando migrations...");
 
     try {
-      // Extract SQL migrations from files
       const migrations: string[] = [];
       for (const [path, content] of Object.entries(filesJson)) {
         if (path.startsWith("supabase/migrations/") && path.endsWith(".sql") && typeof content === "string") {
@@ -240,7 +238,7 @@ Deno.serve(async (req) => {
       }
 
       if (migrations.length === 0) {
-        await log(sc, projectId, "deploy_supabase", "completed", "Nenhuma migration encontrada");
+        await logDeploy(sc, projectId, "deploy_supabase", "completed", "Nenhuma migration encontrada");
         return json({ migrations_applied: 0, errors: [] });
       }
 
@@ -255,7 +253,7 @@ Deno.serve(async (req) => {
           if (rpcErr) throw new Error(rpcErr.message);
           applied++;
         } catch (e) {
-          errors.push((e as Error).message);
+          errors.push(`Migration failed: ${(e as Error).message?.slice(0, 100)}`);
         }
       }
 
@@ -264,13 +262,14 @@ Deno.serve(async (req) => {
         supabase_url: clientUrl,
       }).eq("id", projectId);
 
-      await log(sc, projectId, "deploy_supabase", applied > 0 ? "completed" : "failed",
+      await logDeploy(sc, projectId, "deploy_supabase", applied > 0 ? "completed" : "failed",
         `${applied}/${migrations.length} migrations aplicadas`);
 
       return json({ migrations_applied: applied, errors });
     } catch (e) {
-      await log(sc, projectId, "deploy_supabase", "failed", (e as Error).message);
-      return json({ error: (e as Error).message }, 500);
+      console.error("[cirius-deploy] supabase error:", (e as Error).message);
+      await logDeploy(sc, projectId, "deploy_supabase", "failed", "Supabase deploy failed");
+      return json({ error: "Supabase deploy failed" }, 500);
     }
   }
 
