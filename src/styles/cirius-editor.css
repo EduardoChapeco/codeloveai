@@ -1450,3 +1450,84 @@
 .bpc-url-chip.bpc-url-live:hover {
   background: rgba(52,211,153,0.2);
 }
+
+/* ── Code Viewer Panel ── */
+.cv-panel {
+  flex: 1; display: flex; flex-direction: column;
+  background: var(--bg-0); min-height: 0;
+}
+.cv-toolbar {
+  height: 36px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--b1);
+  background: rgba(14,14,18,0.9);
+}
+.cv-tabs {
+  display: flex; align-items: center; gap: 1px;
+  overflow-x: auto; max-width: 70%;
+  scrollbar-width: none;
+}
+.cv-tabs::-webkit-scrollbar { display: none; }
+.cv-tab {
+  height: 28px; padding: 0 10px;
+  display: flex; align-items: center; gap: 5px;
+  border: none; background: transparent;
+  font-size: 11px; font-family: var(--mono);
+  color: var(--text-tertiary); cursor: pointer;
+  white-space: nowrap; transition: all 0.12s;
+  border-radius: var(--r2);
+}
+.cv-tab:hover { background: rgba(255,255,255,0.05); color: var(--text-secondary); }
+.cv-tab.on {
+  background: rgba(99,102,241,0.1); color: var(--indigo-l);
+  border: 1px solid rgba(99,102,241,0.2);
+}
+.cv-tab-close {
+  margin-left: 4px; opacity: 0.5; cursor: pointer;
+  display: flex; align-items: center;
+}
+.cv-tab-close:hover { opacity: 1; }
+.cv-toolbar-right {
+  display: flex; align-items: center; gap: 6px;
+}
+.cv-lang {
+  font-size: 10px; color: var(--text-quaternary);
+  font-family: var(--mono); padding: 2px 6px;
+  background: rgba(255,255,255,0.04); border-radius: 4px;
+}
+.cv-code-area {
+  flex: 1; overflow: auto; padding: 8px 0;
+  font: 12px/1.7 var(--mono); color: #a8b1d0;
+  scrollbar-width: thin; scrollbar-color: var(--bg-5) transparent;
+}
+.cv-code-area::-webkit-scrollbar { width: 4px; }
+.cv-code-area::-webkit-scrollbar-thumb { background: var(--bg-5); border-radius: 4px; }
+.cv-line {
+  display: flex; gap: 12px; padding: 0 16px;
+  min-height: 20px;
+}
+.cv-line:hover { background: rgba(255,255,255,0.02); }
+.cv-ln {
+  min-width: 32px; text-align: right;
+  color: var(--text-quaternary); user-select: none;
+  font-size: 11px;
+}
+.cv-content { flex: 1; white-space: pre; overflow-x: visible; }
+.cv-kw { color: #c084fc; }
+.cv-str { color: #4ade80; }
+.cv-cmt { color: #4a4a5a; font-style: italic; }
+.cv-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px;
+  color: var(--text-quaternary); font-size: 12px;
+}
+
+/* File sidebar improvements */
+.sp-file-sidebar {
+  width: 200px; flex-shrink: 0;
+  border-right: 1px solid var(--b1);
+  background: var(--bg-1);
+  overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--bg-5) transparent;
+}

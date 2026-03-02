@@ -1,6 +1,6 @@
 import {
-  Folder, ChevronDown, Globe, Monitor, Tablet, Smartphone,
-  Clock, Share2, Layers, Maximize2, Columns2
+  Folder, FolderOpen, ChevronDown, Globe, Monitor, Tablet, Smartphone,
+  Clock, Share2, Layers, Maximize2, Columns2, Code, Eye
 } from "lucide-react";
 import type { FrameMode } from "./types";
 
@@ -16,11 +16,18 @@ interface Props {
   onPublish: () => void;
   onHistoryClick: () => void;
   onShareClick: () => void;
+  rightPanel?: "preview" | "code";
+  onRightPanelChange?: (p: "preview" | "code") => void;
+  showFiles?: boolean;
+  onToggleFiles?: () => void;
+  fileCount?: number;
 }
 
 export default function SplitTopBar({
   projectName, frameMode, onFrameChange, editorMode, onEditorModeChange,
   isLive, onPublish, onHistoryClick, onShareClick,
+  rightPanel = "preview", onRightPanelChange,
+  showFiles, onToggleFiles, fileCount = 0,
 }: Props) {
   const frames: { mode: FrameMode; icon: typeof Monitor; label: string }[] = [
     { mode: "desktop", icon: Monitor, label: "Desktop" },
@@ -44,6 +51,20 @@ export default function SplitTopBar({
 
         <div className="sp-tb-sep" />
 
+        {/* File explorer toggle */}
+        {onToggleFiles && (
+          <button
+            className={`sp-msw-btn ${showFiles ? "on" : ""}`}
+            onClick={onToggleFiles}
+            style={{ gap: 4, padding: "0 8px" }}
+          >
+            {showFiles ? <FolderOpen size={11} /> : <Folder size={11} />}
+            {fileCount > 0 && <span style={{ fontSize: 10, fontFamily: "var(--mono)" }}>{fileCount}</span>}
+          </button>
+        )}
+
+        <div className="sp-tb-sep" />
+
         {/* Mode Switch */}
         <div className="sp-mode-switch">
           <button className={`sp-msw-btn ${editorMode === "full" ? "on" : ""}`} onClick={() => onEditorModeChange("full")}>
@@ -55,9 +76,27 @@ export default function SplitTopBar({
         </div>
       </div>
 
-      {/* Center — Frame Selector */}
+      {/* Center — Frame/Panel Selector */}
       <div className="sp-tb-center">
-        {frames.map(f => (
+        {/* Right panel toggle */}
+        {onRightPanelChange && (
+          <div className="sp-mode-switch" style={{ marginRight: 12 }}>
+            <button
+              className={`sp-msw-btn ${rightPanel === "preview" ? "on" : ""}`}
+              onClick={() => onRightPanelChange("preview")}
+            >
+              <Eye size={11} /> Preview
+            </button>
+            <button
+              className={`sp-msw-btn ${rightPanel === "code" ? "on" : ""}`}
+              onClick={() => onRightPanelChange("code")}
+            >
+              <Code size={11} /> Código
+            </button>
+          </div>
+        )}
+
+        {rightPanel === "preview" && frames.map(f => (
           <button
             key={f.mode}
             className={`frm-btn ${frameMode === f.mode ? "on" : ""}`}
