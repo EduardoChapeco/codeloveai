@@ -932,12 +932,11 @@ Deno.serve(async (req) => {
       return json({ error: "No brain project available for code generation" }, 503);
     }
 
-    // Set preview URL immediately
-    const previewUrl = `https://id-preview--${brainProjectId}.lovable.app`;
+    // Save brain_project_id as internal reference for orchestrator (NOT for preview)
+    // The Brain is a shared code-generation tool, NOT the user's project.
+    // Preview comes from source_files_json (assembled code) or deployed URLs.
     await sc.from("cirius_projects").update({
-      lovable_project_id: brainProjectId,
       brain_project_id: brainProjectId,
-      preview_url: previewUrl,
     }).eq("id", projectId);
 
     // ★ Skip if already linked to orchestrator — reset and re-trigger
@@ -958,7 +957,6 @@ Deno.serve(async (req) => {
       return json({
         started: true, engine: "orchestrator",
         orchestrator_project_id: project.orchestrator_project_id,
-        preview_url: previewUrl,
         note: "Pipeline resumed automatically.",
         resumed: true,
       });
@@ -1011,7 +1009,6 @@ Deno.serve(async (req) => {
       metadata: {
         orchestrator_id: orchProject.id,
         brain_project: brainProjectId,
-        preview_url: previewUrl,
         task_count: prd.tasks.length,
         task_titles: prd.tasks.map(t => t.title || "untitled"),
       },

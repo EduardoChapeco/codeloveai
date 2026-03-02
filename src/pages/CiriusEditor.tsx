@@ -23,6 +23,37 @@ import "@/styles/cirius-editor.css";
 import type { FrameMode, ActiveMode, CmdMode, Bubble, EditorToast, ChatMessage } from "@/components/cirius-editor/types";
 import type { EditorMode } from "@/components/cirius-editor/SplitTopBar";
 
+/** Build a self-contained HTML preview from source_files_json */
+function buildPreviewFromFiles(files: Record<string, string>): string | null {
+  const html = files["index.html"] || files["dist/index.html"];
+  if (!html) return null;
+
+  // Collect CSS and JS to inline
+  const cssFiles = Object.entries(files).filter(([k]) => k.endsWith(".css"));
+  const jsFiles = Object.entries(files).filter(([k]) => k.endsWith(".js") || k.endsWith(".tsx") || k.endsWith(".ts"));
+
+  let assembled = html;
+
+  // Inline CSS before </head>
+  if (cssFiles.length > 0) {
+    const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
+    assembled = assembled.includes("</head>")
+      ? assembled.replace("</head>", `${cssBlock}\n</head>`)
+      : `${cssBlock}\n${assembled}`;
+  }
+
+  // Inline JS before </body>
+  const plainJs = jsFiles.filter(([k]) => k.endsWith(".js"));
+  if (plainJs.length > 0) {
+    const jsBlock = plainJs.map(([, v]) => `<script>${v}</script>`).join("\n");
+    assembled = assembled.includes("</body>")
+      ? assembled.replace("</body>", `${jsBlock}\n</body>`)
+      : `${assembled}\n${jsBlock}`;
+  }
+
+  return assembled;
+}
+
 export default function CiriusEditor() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -106,21 +137,20 @@ export default function CiriusEditor() {
         .reverse()
         .forEach((log: any) => upsertBubbleFromLog(log));
 
-      // Live preview URL: use lovable_project_id or brain_project_id for real-time preview (like Lovable)
-      const lpId = data.project.lovable_project_id || data.project.brain_project_id;
-      if (lpId && !String(lpId).startsWith("creating")) {
-        setLivePreviewUrl(`https://id-preview--${lpId}.lovable.app`);
-      } else if (data.project.preview_url) {
+      // Live preview URL: only use actual deployed URLs (Vercel/Netlify/custom), never Brain project URLs
+      const deployedUrl = data.project.vercel_url || data.project.netlify_url || data.project.custom_domain;
+      if (deployedUrl) {
+        setLivePreviewUrl(deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`);
+      } else if (data.project.preview_url && !data.project.preview_url.includes("lovable.app")) {
+        // Only use preview_url if it's a real deployed URL, not a Brain/Lovable preview
         setLivePreviewUrl(data.project.preview_url);
       } else {
         setLivePreviewUrl(null);
       }
 
-      // Fallback: static srcDoc from source files
+      // Primary preview: build from source_files_json (the assembled code)
       if (data.project.source_files_json) {
-        const files = data.project.source_files_json as any;
-        const indexHtml = files?.["index.html"] || files?.["dist/index.html"];
-        setPreviewHtml(indexHtml || null);
+        setPreviewHtml(buildPreviewFromFiles(data.project.source_files_json as Record<string, string>));
       } else {
         setPreviewHtml(null);
       }
@@ -167,19 +197,18 @@ export default function CiriusEditor() {
           const updated = payload.new as any;
           setProject(updated);
 
-          const lpId = updated.lovable_project_id || updated.brain_project_id;
-          if (lpId && !String(lpId).startsWith("creating")) {
-            setLivePreviewUrl(`https://id-preview--${lpId}.lovable.app`);
-          } else if (updated.preview_url) {
+          // Only use real deployed URLs, never Brain project URLs
+          const deployedUrl = updated.vercel_url || updated.netlify_url || updated.custom_domain;
+          if (deployedUrl) {
+            setLivePreviewUrl(deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`);
+          } else if (updated.preview_url && !String(updated.preview_url).includes("lovable.app")) {
             setLivePreviewUrl(updated.preview_url);
           } else {
             setLivePreviewUrl(null);
           }
 
           if (updated.source_files_json) {
-            const files = updated.source_files_json;
-            const indexHtml = files?.["index.html"] || files?.["dist/index.html"];
-            setPreviewHtml(indexHtml || null);
+            setPreviewHtml(buildPreviewFromFiles(updated.source_files_json as Record<string, string>));
           } else {
             setPreviewHtml(null);
           }
