@@ -181,23 +181,71 @@ async function autoCapture(sc: SC, orchProjectId: string, brainProjectId: string
     const account = await getBusyAccountForProject(sc, brainProjectId);
     if (account?.accessToken) {
       await syncLatestMarkdownFiles(sc, orchProjectId, brainProjectId, account.accessToken, true);
+    } else {
+      const { data: userAccount } = await sc.from("lovable_accounts")
+        .select("token_encrypted")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!userAccount?.token_encrypted) {
+        await addLog(sc, orchProjectId, `📦 [capture] No token available to capture markdown files`, "warn");
+        return;
+      }
+
+      await syncLatestMarkdownFiles(sc, orchProjectId, brainProjectId, userAccount.token_encrypted, true);
+    }
+
+    // ★ Trigger post-orchestration AI refinement on the linked cirius_project
+    await triggerRefinement(sc, orchProjectId, userId);
+  } catch (e) {
+    await addLog(sc, orchProjectId, `📦 [capture] Error: ${(e as Error).message}`, "error");
+  }
+}
+
+/** Trigger cirius-generate refine action after all tasks complete (fire-and-forget) */
+async function triggerRefinement(sc: SC, orchProjectId: string, userId: string) {
+  try {
+    const { data: ciriusProject } = await sc.from("cirius_projects")
+      .select("id, user_id")
+      .eq("orchestrator_project_id", orchProjectId)
+      .maybeSingle();
+
+    if (!ciriusProject) {
+      await addLog(sc, orchProjectId, `🔧 [refine] No cirius_project linked — skipping refinement`, "warn");
       return;
     }
 
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Get user token to authenticate the refine call
     const { data: userAccount } = await sc.from("lovable_accounts")
       .select("token_encrypted")
       .eq("user_id", userId)
       .eq("status", "active")
       .maybeSingle();
 
-    if (!userAccount?.token_encrypted) {
-      await addLog(sc, orchProjectId, `📦 [capture] No token available to capture markdown files`, "warn");
-      return;
-    }
+    // Create a service-level auth header for internal call
+    // The refine action requires user auth, so we use the user's session
+    await addLog(sc, orchProjectId, `🔧 [refine] Triggering AI refinement for cirius project ${ciriusProject.id.slice(0, 8)}`, "info");
 
-    await syncLatestMarkdownFiles(sc, orchProjectId, brainProjectId, userAccount.token_encrypted, true);
+    // Fire-and-forget refinement call via internal service key
+    fetch(`${supabaseUrl}/functions/v1/cirius-generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({
+        action: "refine",
+        project_id: ciriusProject.id,
+      }),
+    }).catch((e) => {
+      console.error("[tick] refine trigger failed:", e.message);
+    });
   } catch (e) {
-    await addLog(sc, orchProjectId, `📦 [capture] Error: ${(e as Error).message}`, "error");
+    await addLog(sc, orchProjectId, `🔧 [refine] Error: ${(e as Error).message}`, "error");
   }
 }
 
