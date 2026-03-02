@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   Loader2, Play, Pause, ExternalLink, ChevronDown, ChevronRight,
   CheckCircle, XCircle, Clock, Zap, Shield, AlertTriangle, RefreshCw, Plus, ArrowRight,
-  Brain as BrainIcon,
+  Brain as BrainIcon, Eye, EyeOff, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -168,6 +168,8 @@ export default function OrchestratorDashboard() {
   const logEndRef = useRef<HTMLDivElement>(null);
   const [brains, setBrains] = useState<UserBrain[]>([]);
   const [selectedBrainId, setSelectedBrainId] = useState<string>("");
+  const [showPreview, setShowPreview] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
   // Fetch user's brains
   const fetchBrains = useCallback(async () => {
@@ -288,6 +290,27 @@ export default function OrchestratorDashboard() {
     else { fetchProjects(); }
   };
 
+  // Verify project health via debug_log
+  const verifyProject = async () => {
+    if (!selectedId) return;
+    setVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cirius-generate", {
+        body: { action: "debug_log", project_id: selectedId },
+      });
+      if (error) {
+        toast.error("Verificação falhou: " + error.message);
+      } else {
+        const summary = data?.summary || JSON.stringify(data).substring(0, 200);
+        toast.success("Diagnóstico concluído", { description: summary, duration: 8000 });
+      }
+    } catch (e) {
+      toast.error("Erro na verificação");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const selected = projects.find(p => p.id === selectedId);
   const progress = selected && selected.total_tasks > 0
     ? Math.round(((selected.current_task_index) / selected.total_tasks) * 100)
@@ -394,15 +417,47 @@ export default function OrchestratorDashboard() {
               <div className="lv-card">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="lv-body-strong truncate">{selected.prd_json?.project_name || "Projeto"}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="lv-body-strong truncate">{selected.prd_json?.project_name || "Projeto"}</p>
+                      {selected.lovable_project_id ? (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Projeto ativo
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-destructive/20 text-destructive text-[10px] font-medium">
+                          <XCircle className="h-3 w-3" />
+                          Sem projeto
+                        </span>
+                      )}
+                    </div>
                     <p className="lv-caption text-muted-foreground truncate">{selected.prd_json?.summary || selected.client_prompt.substring(0, 100)}</p>
                   </div>
-                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => navigate(`/orquestrador/${selected.id}`)}
                       className="lv-btn-primary h-8 px-3 text-xs flex items-center gap-1"
                     >
                       <ArrowRight className="h-3.5 w-3.5" /> Abrir Painel
+                    </button>
+                    {selected.lovable_project_id && (
+                      <button
+                        onClick={() => setShowPreview(p => !p)}
+                        className={`lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1 ${showPreview ? "ring-2 ring-primary" : ""}`}
+                        title="Preview ao vivo do projeto"
+                      >
+                        {showPreview ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        Preview
+                      </button>
+                    )}
+                    <button
+                      onClick={verifyProject}
+                      disabled={verifying}
+                      className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1"
+                      title="Verificar saúde do projeto"
+                    >
+                      {verifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                      Verificar
                     </button>
                     {selected.lovable_project_id && (
                       <a
@@ -411,7 +466,7 @@ export default function OrchestratorDashboard() {
                         rel="noopener noreferrer"
                         className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1"
                       >
-                        <ExternalLink className="h-3 w-3" /> Ver projeto
+                        <ExternalLink className="h-3 w-3" /> Lovable
                       </a>
                     )}
                     <button
@@ -460,6 +515,32 @@ export default function OrchestratorDashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Live Preview iframe */}
+              {showPreview && selected.lovable_project_id && (
+                <div className="lv-card p-0 overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30 border-b border-border/40">
+                    <span className="flex items-center gap-1.5 text-[10px] font-medium text-emerald-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      LIVE PREVIEW
+                    </span>
+                    <a
+                      href={`https://id-preview--${selected.lovable_project_id}.lovable.app`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Abrir em nova aba ↗
+                    </a>
+                  </div>
+                  <iframe
+                    src={`https://id-preview--${selected.lovable_project_id}.lovable.app`}
+                    className="w-full h-[400px] border-0"
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                    title="Live Preview"
+                  />
+                </div>
+              )}
 
               {/* Tasks */}
               {loadingDetails ? (
