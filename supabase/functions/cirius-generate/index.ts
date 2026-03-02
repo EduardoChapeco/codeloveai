@@ -336,6 +336,49 @@ async function sendViaGateway(prompt: string, systemPrompt?: string): Promise<{ 
   }
 }
 
+/** Send via Gemini Direct (uses API key from api_key_vault) */
+async function sendViaGeminiDirect(sc: SupabaseClient, prompt: string, systemPrompt?: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
+  const t0 = Date.now();
+  // Get Gemini key from api_key_vault
+  const { data: vaultKey } = await sc.from("api_key_vault")
+    .select("id, api_key_encrypted, requests_count")
+    .eq("provider", "gemini")
+    .eq("is_active", true)
+    .order("requests_count", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const apiKey = vaultKey?.api_key_encrypted;
+  if (!apiKey) return { content: null, durationMs: 0, error: "No Gemini key in vault" };
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${systemPrompt || "Return only valid JSON, no markdown fences."}\n\n${prompt}` }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 4000 },
+      }),
+    });
+    const durationMs = Date.now() - t0;
+
+    // Increment usage counter
+    if (vaultKey) {
+      await sc.from("api_key_vault").update({ requests_count: (vaultKey as any).requests_count + 1, last_used_at: new Date().toISOString() }).eq("id", (vaultKey as any).id);
+    }
+
+    if (res.ok) {
+      const result = await res.json();
+      const content = result?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+      return { content, durationMs };
+    }
+    const errBody = await res.text().catch(() => "");
+    return { content: null, durationMs, error: `HTTP ${res.status}: ${errBody.slice(0, 100)}` };
+  } catch (e) {
+    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) };
+  }
+}
+
 // ─── PRD Generation with full logging ───
 
 async function generatePRD(sc: SupabaseClient, userId: string, project: Record<string, any>, projectId: string): Promise<any> {
@@ -376,43 +419,7 @@ Regras:
 
   const engineAttempts: Array<{ engine: string; ok: boolean; durationMs: number; error?: string; taskCount?: number }> = [];
 
-  // 1. AI Gateway (fastest, most reliable — no token dependency)
-  const gwResult = await sendViaGateway(prompt);
-  if (gwResult.content) {
-    const p = extractJSON(gwResult.content);
-    await logEntry(sc, projectId, "prd_gateway", p ? "completed" : "failed",
-      p ? `Gateway PRD: ${p.tasks?.length} tasks` : `Gateway response not parseable (len=${gwResult.content.length})`, {
-      duration_ms: gwResult.durationMs,
-      metadata: { response_length: gwResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
-    });
-    engineAttempts.push({ engine: "gateway", ok: !!p, durationMs: gwResult.durationMs, taskCount: p?.tasks?.length });
-    if (p) return p;
-  } else {
-    await logEntry(sc, projectId, "prd_gateway", "failed", `Gateway failed: ${gwResult.error || "empty response"}`, {
-      duration_ms: gwResult.durationMs, error_msg: gwResult.error,
-    });
-    engineAttempts.push({ engine: "gateway", ok: false, durationMs: gwResult.durationMs, error: gwResult.error });
-  }
-
-  // 2. OpenRouter (Claude) fallback
-  const orResult = await sendViaOpenRouter(prompt);
-  if (orResult.content) {
-    const p = extractJSON(orResult.content);
-    await logEntry(sc, projectId, "prd_openrouter", p ? "completed" : "failed",
-      p ? `OpenRouter PRD: ${p.tasks?.length} tasks` : `OpenRouter response not parseable (len=${orResult.content.length})`, {
-      duration_ms: orResult.durationMs,
-      metadata: { response_length: orResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
-    });
-    engineAttempts.push({ engine: "openrouter", ok: !!p, durationMs: orResult.durationMs, taskCount: p?.tasks?.length });
-    if (p) return p;
-  } else {
-    await logEntry(sc, projectId, "prd_openrouter", "failed", `OpenRouter failed: ${orResult.error || "empty response"}`, {
-      duration_ms: orResult.durationMs, error_msg: orResult.error,
-    });
-    engineAttempts.push({ engine: "openrouter", ok: false, durationMs: orResult.durationMs, error: orResult.error });
-  }
-
-  // 3. Brainchain pool (uses pool accounts — no user token needed)
+  // 1. BRAINCHAIN POOL (principal — usa contas do pool, sem token do usuário)
   const bcResult = await sendViaBrainchain(sc, userId, prompt, "prd");
   if (bcResult.ok && bcResult.response) {
     const p = extractJSON(bcResult.response);
@@ -423,7 +430,6 @@ Regras:
     engineAttempts.push({ engine: "brainchain", ok: !!p, durationMs: bcResult.durationMs || 0, taskCount: p?.tasks?.length });
     if (p) return p;
   } else if (bcResult.ok && bcResult.queueId) {
-    // Queued — poll for result
     const t0 = Date.now();
     let pollResult: string | null = null;
     for (let i = 0; i < 20; i++) {
@@ -443,55 +449,65 @@ Regras:
       engineAttempts.push({ engine: "brainchain", ok: false, durationMs: Date.now() - t0, error: "poll timeout" });
     }
   } else {
+    await logEntry(sc, projectId, "prd_brainchain", "failed", `Brainchain failed: ${bcResult.error || "unavailable"}`, {
+      duration_ms: bcResult.durationMs, error_msg: bcResult.error,
+    });
     engineAttempts.push({ engine: "brainchain", ok: false, durationMs: bcResult.durationMs || 0, error: bcResult.error });
   }
 
-  // 4. Brain system last (requires user Lovable token — may be expired)
-  const brain = await getUserBrain(sc, userId);
-  const token = await getUserToken(sc, userId);
-
-  await logEntry(sc, projectId, "prd_engine_check", "info", `Brain: ${brain ? `found (${brain.brainId.slice(0, 8)})` : "NOT FOUND"}, Token: ${token ? "present" : "MISSING"}`, {
-    metadata: { brain_id: brain?.brainId, brain_project: brain?.projectId, has_token: !!token },
-  });
-
-  if (brain && token) {
-    const sendResult = await sendViaBrainProject(brain.projectId, token, prompt);
-    await logEntry(sc, projectId, "prd_brain_send", sendResult.ok ? "completed" : "failed",
-      `Brain send: ${sendResult.ok ? "OK" : sendResult.error}`, {
-      duration_ms: sendResult.durationMs, error_msg: sendResult.error,
-      metadata: { brain_project: brain.projectId },
+  // 2. OPENROUTER / CLAUDE (fallback principal)
+  const orResult = await sendViaOpenRouter(prompt);
+  if (orResult.content) {
+    const p = extractJSON(orResult.content);
+    await logEntry(sc, projectId, "prd_openrouter", p ? "completed" : "failed",
+      p ? `OpenRouter PRD: ${p.tasks?.length} tasks` : `OpenRouter response not parseable (len=${orResult.content.length})`, {
+      duration_ms: orResult.durationMs,
+      metadata: { response_length: orResult.content.length, parsed_ok: !!p, task_count: p?.tasks?.length },
     });
-
-    if (sendResult.ok) {
-      const t0 = Date.now();
-      const response = await captureBrainResponse(brain.projectId, token, 60_000, 4_000, 6_000);
-      const captureDuration = Date.now() - t0;
-
-      if (response) {
-        const parsed = extractJSON(response);
-        await logEntry(sc, projectId, "prd_brain_capture", parsed ? "completed" : "failed",
-          parsed ? `Brain PRD mined: ${parsed.tasks?.length} tasks` : `Brain response not parseable (len=${response.length})`, {
-          duration_ms: captureDuration,
-          metadata: { response_length: response.length, parsed_ok: !!parsed, task_count: parsed?.tasks?.length },
-        });
-        engineAttempts.push({ engine: "brain", ok: !!parsed, durationMs: captureDuration, taskCount: parsed?.tasks?.length });
-        if (parsed) return parsed;
-      } else {
-        await logEntry(sc, projectId, "prd_brain_capture", "failed", `Brain capture timeout (${captureDuration}ms) — no response mined`, {
-          duration_ms: captureDuration,
-        });
-        engineAttempts.push({ engine: "brain", ok: false, durationMs: captureDuration, error: "capture timeout" });
-      }
-    } else {
-      engineAttempts.push({ engine: "brain", ok: false, durationMs: sendResult.durationMs || 0, error: sendResult.error });
-    }
+    engineAttempts.push({ engine: "openrouter", ok: !!p, durationMs: orResult.durationMs, taskCount: p?.tasks?.length });
+    if (p) return p;
   } else {
-    engineAttempts.push({ engine: "brain", ok: false, durationMs: 0, error: !brain ? "no brain project" : "no lovable token" });
+    await logEntry(sc, projectId, "prd_openrouter", "failed", `OpenRouter failed: ${orResult.error || "empty response"}`, {
+      duration_ms: orResult.durationMs, error_msg: orResult.error,
+    });
+    engineAttempts.push({ engine: "openrouter", ok: false, durationMs: orResult.durationMs, error: orResult.error });
   }
 
-  // (Gateway, OpenRouter, and Brainchain already tried above — Brain was last resort)
+  // 3. GEMINI via API Key Vault (integração própria)
+  const geminiResult = await sendViaGeminiDirect(sc, prompt);
+  if (geminiResult.content) {
+    const p = extractJSON(geminiResult.content);
+    await logEntry(sc, projectId, "prd_gemini", p ? "completed" : "failed",
+      p ? `Gemini PRD: ${p.tasks?.length} tasks` : `Gemini response not parseable (len=${geminiResult.content.length})`, {
+      duration_ms: geminiResult.durationMs,
+    });
+    engineAttempts.push({ engine: "gemini", ok: !!p, durationMs: geminiResult.durationMs, taskCount: p?.tasks?.length });
+    if (p) return p;
+  } else {
+    await logEntry(sc, projectId, "prd_gemini", "failed", `Gemini failed: ${geminiResult.error || "empty response"}`, {
+      duration_ms: geminiResult.durationMs, error_msg: geminiResult.error,
+    });
+    engineAttempts.push({ engine: "gemini", ok: false, durationMs: geminiResult.durationMs, error: geminiResult.error });
+  }
 
-  // ALL engines failed — log comprehensive summary
+  // 4. AI GATEWAY LOVABLE (último recurso)
+  const gwResult = await sendViaGateway(prompt);
+  if (gwResult.content) {
+    const p = extractJSON(gwResult.content);
+    await logEntry(sc, projectId, "prd_gateway", p ? "completed" : "failed",
+      p ? `Gateway PRD: ${p.tasks?.length} tasks` : `Gateway response not parseable (len=${gwResult.content.length})`, {
+      duration_ms: gwResult.durationMs,
+    });
+    engineAttempts.push({ engine: "gateway", ok: !!p, durationMs: gwResult.durationMs, taskCount: p?.tasks?.length });
+    if (p) return p;
+  } else {
+    await logEntry(sc, projectId, "prd_gateway", "failed", `Gateway failed: ${gwResult.error || "empty response"}`, {
+      duration_ms: gwResult.durationMs, error_msg: gwResult.error,
+    });
+    engineAttempts.push({ engine: "gateway", ok: false, durationMs: gwResult.durationMs, error: gwResult.error });
+  }
+
+  // ALL engines failed
   await logEntry(sc, projectId, "prd_all_failed", "failed",
     `ALL PRD engines failed. Attempts: ${engineAttempts.map(a => `${a.engine}(${a.ok ? "ok" : a.error})`).join(", ")}`, {
     metadata: { engine_attempts: engineAttempts },
