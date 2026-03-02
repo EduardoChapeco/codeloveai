@@ -9,6 +9,7 @@ export interface Bubble {
   steps: { s: "run" | "done" | "wait"; t: string }[];
   pct: number;
   startTime: number;
+  brainType?: string;
 }
 
 export interface EditorToast {
@@ -22,4 +23,5 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  prdData?: any;
 }
