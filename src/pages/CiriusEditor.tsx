@@ -475,6 +475,8 @@ export default function CiriusEditor() {
         buildComplete={buildComplete}
         buildError={buildError}
         deployUrls={deployUrls}
+        bubbles={bubbles}
+        onRemoveBubble={removeBubble}
       />
     );
   }

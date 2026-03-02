@@ -6,8 +6,9 @@ import {
 import ReactMarkdown from "react-markdown";
 import PRDCard from "./PRDCard";
 import BuildProgressCard from "./BuildProgressCard";
-import type { ChatMessage, ActiveMode } from "./types";
+import type { ChatMessage, ActiveMode, Bubble } from "./types";
 import type { BuildStage } from "./BuildProgressCard";
+import TaskBubbles from "./TaskBubbles";
 
 interface Props {
   messages: ChatMessage[];
@@ -27,6 +28,8 @@ interface Props {
   buildError?: boolean;
   deployUrls?: { github?: string; vercel?: string; netlify?: string };
   projectName?: string;
+  bubbles?: Bubble[];
+  onRemoveBubble?: (id: string) => void;
 }
 
 const SUGGESTIONS = [
@@ -40,6 +43,7 @@ export default function SplitChatPanel({
   onApprovePrd, approvingPrd, approvedPrdId,
   chatMode = "ai-chat", onChatModeChange,
   buildStages, buildProgress, buildComplete, buildError, deployUrls, projectName,
+  bubbles, onRemoveBubble,
 }: Props) {
   const [text, setText] = useState("");
   const [modesOpen, setModesOpen] = useState(false);
@@ -222,6 +226,13 @@ export default function SplitChatPanel({
                 <div className="sp-typing-dot" />
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Task Bubbles inline in chat */}
+        {bubbles && bubbles.length > 0 && (
+          <div className="sp-chat-bubbles">
+            <TaskBubbles bubbles={bubbles} onRemove={onRemoveBubble || (() => {})} />
           </div>
         )}
       </div>

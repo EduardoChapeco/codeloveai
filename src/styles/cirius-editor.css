@@ -369,6 +369,21 @@
   align-items: flex-end; z-index: 250;
   pointer-events: none; max-width: 320px;
 }
+/* Inline bubbles inside split chat */
+.sp-chat-bubbles .ce-bubbles {
+  position: static;
+  max-width: 100%;
+  align-items: stretch;
+  pointer-events: all;
+  z-index: auto;
+}
+.sp-chat-bubbles .task-bubble {
+  max-width: 100%;
+  min-width: 0;
+}
+.sp-chat-bubbles {
+  padding: 4px 8px 8px;
+}
 .task-bubble {
   pointer-events: all;
   background: linear-gradient(160deg, rgba(16,16,22,0.97), rgba(12,12,17,0.99));
