@@ -8,6 +8,7 @@ import FileExplorer from "./FileExplorer";
 import CodeViewer from "./CodeViewer";
 import TerminalPanel, { type TerminalLine } from "./TerminalPanel";
 import type { FrameMode, ActiveMode, EditorToast, ChatMessage, Bubble } from "./types";
+import type { TaskItem } from "./ChatTaskCard";
 import type { EditorMode } from "./SplitTopBar";
 import type { BuildStage } from "./BuildProgressCard";
 import { Terminal, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -40,6 +41,8 @@ interface Props {
   updatedFiles?: string[];
   terminalLines?: TerminalLine[];
   onClearTerminal?: () => void;
+  taskItems?: TaskItem[];
+  onRetryTask?: (taskId: string) => void;
 }
 
 export default function SplitModeEditor({
@@ -51,6 +54,7 @@ export default function SplitModeEditor({
   buildStages, buildProgress, buildComplete, buildError, deployUrls,
   bubbles, onRemoveBubble, streamingText, updatedFiles,
   terminalLines = [], onClearTerminal,
+  taskItems, onRetryTask,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
@@ -138,6 +142,8 @@ export default function SplitModeEditor({
             onRemoveBubble={onRemoveBubble}
             streamingText={streamingText}
             updatedFiles={updatedFiles}
+            taskItems={taskItems}
+            onRetryTask={onRetryTask}
           />
         </div>
 

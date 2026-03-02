@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import PRDCard from "./PRDCard";
 import BuildProgressCard from "./BuildProgressCard";
 import ChatTaskCard from "./ChatTaskCard";
+import type { TaskItem } from "./ChatTaskCard";
 import type { ChatMessage, ActiveMode, Bubble } from "./types";
 import type { BuildStage } from "./BuildProgressCard";
 
@@ -34,6 +35,9 @@ interface Props {
   streamingText?: string;
   /** Files updated in last generation */
   updatedFiles?: string[];
+  /** Multi-task items for timeline */
+  taskItems?: TaskItem[];
+  onRetryTask?: (taskId: string) => void;
 }
 
 const SUGGESTIONS = [
@@ -48,6 +52,7 @@ export default function SplitChatPanel({
   chatMode = "ai-chat", onChatModeChange,
   buildStages, buildProgress, buildComplete, buildError, deployUrls, projectName,
   bubbles, onRemoveBubble, streamingText, updatedFiles,
+  taskItems, onRetryTask,
 }: Props) {
   const [text, setText] = useState("");
   const [modesOpen, setModesOpen] = useState(false);
@@ -229,6 +234,8 @@ export default function SplitChatPanel({
                 hasStreamContent={!!streamingText}
                 complete={false}
                 updatedFiles={updatedFiles}
+                tasks={taskItems}
+                onRetryTask={onRetryTask}
               />
               {streamingText && (
                 <div className="sp-msg-bubble sp-msg-md" style={{ marginTop: 8 }}>
@@ -248,6 +255,7 @@ export default function SplitChatPanel({
                 active={false}
                 complete={true}
                 updatedFiles={updatedFiles}
+                tasks={taskItems}
               />
             </div>
           </div>
