@@ -961,7 +961,12 @@ export default function BrainPage() {
               <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-primary">Configurando Brain — Fase {activeBrain?.skill_phase || 1} de 13</p>
-                <p className="text-[11px] text-muted-foreground">Injetando memória, skills e protocolos de resposta.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {(activeBrain?.skill_phase || 1) <= 10
+                    ? "Injetando memória, skills e protocolos de resposta."
+                    : "Criando interface visual terminal do Brain."
+                  }
+                </p>
               </div>
               <button
                 onClick={forceCompleteBoostrap}

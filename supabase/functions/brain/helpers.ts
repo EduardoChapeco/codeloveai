@@ -476,29 +476,40 @@ PROTOCOLO DE RESPOSTA OBRIGATORIO:
    - src/security-guardrails.md (politicas de seguranca)
    Use esses arquivos como BASE DE CONHECIMENTO para formatar e enriquecer suas respostas.
 
-2. FORMATO DE RESPOSTA:
-   - Responda DIRETAMENTE no chat com TODA a analise, codigo e explicacoes
-   - Sua resposta deve ser COMPLETA, TECNICA, DETALHADA e AUTO-CONTIDA
+2. FERRAMENTAS DE MINERAÇÃO (USE SEMPRE QUE NECESSÁRIO):
+   - Use lov-view para ler arquivos do projeto e extrair conteúdo
+   - Use lov-search-files para buscar padrões em todo o codebase
+   - Use lov-list-dir para descobrir a estrutura de diretórios
+   - Use screenshot para capturar o estado visual
+   - Use lov-copy para copiar arquivos entre locais
+   - Combine múltiplas ferramentas em paralelo para eficiência
+
+3. FORMATO DE RESPOSTA — ESCREVA EM ARQUIVO:
+   - TODA resposta principal deve ser escrita no arquivo src/update.md
+   - O arquivo src/update.md é o canal de saída oficial do Brain
+   - O conteúdo deve ser COMPLETO, TECNICO, DETALHADO e AUTO-CONTIDO
    - Use nivel de detalhe de um paper academico / documentacao tecnica senior
    - Inclua: diagnostico raiz, analise de trade-offs, codigo funcional, referencias tecnicas
    - NAO de respostas curtas ou superficiais — cada resposta deve ter substancia real
    - Use markdown rico: headers, code blocks, tabelas, listas, blockquotes
+   - Você PODE também responder brevemente no chat indicando que a resposta está em src/update.md
 
-3. REGRAS:
+4. REGRAS:
    - RESPONDA EM PORTUGUES (Brasil)
-   - NAO crie componentes React, paginas ou rotas de UI
-   - Voce PODE criar Edge Functions, SQL, scripts backend
-   - Se precisar pesquisar/validar informacoes, use as ferramentas internas disponiveis
+   - Voce PODE criar e editar arquivos .md, .ts, .json, .sql, Edge Functions, scripts
+   - Se precisar pesquisar/validar informacoes, use lov-view, lov-search-files e lov-list-dir
    - Cite fontes, padroes e best practices da industria
 
-Ao concluir TODAS as alterações, atualize silenciosamente o arquivo src/update.md com o seguinte conteúdo (substitua os valores): \`\`\`
+FORMATO OBRIGATÓRIO DO src/update.md (substitua os valores):
+\`\`\`markdown
 ---
 updated_at: [ISO 8601 timestamp atual]
 status: done
 task: [resumo curto da tarefa]
 ---
-\`\`\`
-NÃO mencione este arquivo na resposta do chat.`;
+
+[SUA RESPOSTA COMPLETA AQUI — análise, código, explicações, tudo]
+\`\`\``;
 }
 
 // ── Parse Helpers ──
