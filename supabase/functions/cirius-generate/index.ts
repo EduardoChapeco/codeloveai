@@ -459,7 +459,45 @@ Deno.serve(async (req) => {
 
   const sc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const body = await req.json().catch(() => ({}));
-  const action = (body.action as string) || "";
+  let action = (body.action as string) || "";
+
+  // ─── BUILD_PROMPT (single-entry real pipeline trigger) ───
+  if (action === "build_prompt") {
+    const projectId = body.project_id as string;
+    const prompt = (body.prompt as string || "").trim();
+    if (!projectId) return json({ error: "project_id required" }, 400);
+    if (!prompt) return json({ error: "prompt required" }, 400);
+
+    const { data: project } = await sc.from("cirius_projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!project) return json({ error: "Project not found" }, 404);
+
+    await logEntry(sc, projectId, "prompt", "started", "Prompt recebido, iniciando pipeline", {
+      input_json: { prompt_length: prompt.length, prompt_preview: prompt.slice(0, 120) },
+    });
+
+    await sc.from("cirius_projects").update({ description: prompt, status: "generating_prd", progress_pct: 5 }).eq("id", projectId);
+
+    let prd = project.prd_json as any;
+    if (!prd || !Array.isArray(prd?.tasks) || prd.tasks.length === 0) {
+      const generatedPrd = await generatePRD(sc, user.id, { ...project, description: prompt }, projectId);
+      if (!generatedPrd) {
+        await sc.from("cirius_projects").update({ status: "failed", error_message: "Falha ao gerar PRD" }).eq("id", projectId);
+        await logEntry(sc, projectId, "prompt", "failed", "Pipeline interrompido: PRD não foi gerado");
+        return json({ error: "PRD generation failed" }, 500);
+      }
+      prd = generatedPrd;
+      await sc.from("cirius_projects").update({ prd_json: prd, status: "draft", progress_pct: 20 }).eq("id", projectId);
+      await logEntry(sc, projectId, "prd", "completed", `PRD gerado via build_prompt (${prd.tasks?.length || 0} tasks)`);
+    }
+
+    body.project_id = projectId;
+    action = "generate_code";
+  }
 
   // ─── OAUTH_STATE ───
   if (action === "oauth_state") {

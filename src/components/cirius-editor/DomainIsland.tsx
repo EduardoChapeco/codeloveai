@@ -1,13 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Globe, X } from "lucide-react";
 
 interface Props {
   onClose: () => void;
   onSave: (domain: string) => void;
+  initialDomain?: string;
 }
 
-export default function DomainIsland({ onClose, onSave }: Props) {
-  const [domain, setDomain] = useState("");
+export default function DomainIsland({ onClose, onSave, initialDomain = "" }: Props) {
+  const [domain, setDomain] = useState(initialDomain);
+
+  useEffect(() => {
+    setDomain(initialDomain);
+  }, [initialDomain]);
 
   return (
     <div className="ce-domain-island">
@@ -20,7 +25,7 @@ export default function DomainIsland({ onClose, onSave }: Props) {
           onChange={(e) => setDomain(e.target.value)}
           autoFocus
         />
-        <button className="gl sm blue" onClick={() => onSave(domain)}>Salvar</button>
+        <button className="gl sm blue" onClick={() => onSave(domain.trim())}>Salvar</button>
         <button className="gl sm ico" onClick={onClose}><X size={12} /></button>
       </div>
     </div>

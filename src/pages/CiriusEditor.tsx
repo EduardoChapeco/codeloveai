@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { toast as sonnerToast } from "sonner";
+
 import IslandLeft from "@/components/cirius-editor/IslandLeft";
 import IslandCenter from "@/components/cirius-editor/IslandCenter";
 import IslandRight from "@/components/cirius-editor/IslandRight";
@@ -55,6 +55,41 @@ export default function CiriusEditor() {
     deploy: "right", files: "right", seo: "left", build: "left", chain: "left",
   };
 
+  const upsertBubbleFromLog = useCallback((log: any) => {
+    const stepId = String(log?.step || crypto.randomUUID());
+    const isDone = log?.status === "completed";
+    const isError = log?.status === "failed";
+    const phase: Bubble["phase"] = isError ? "error" : isDone ? "done" : "running";
+    const pct = isError || isDone ? 100 : 55;
+
+    setBubbles(prev => {
+      const found = prev.find(b => b.id === stepId);
+      const nextStep = { s: isError ? "wait" as const : isDone ? "done" as const : "run" as const, t: log?.message || stepId };
+
+      if (!found) {
+        const created: Bubble = {
+          id: stepId,
+          title: stepId.split("_").join(" "),
+          phase,
+          steps: [nextStep],
+          pct,
+          startTime: Date.now(),
+        };
+        return [...prev, created];
+      }
+
+      return prev.map(b => b.id === stepId
+        ? { ...b, phase, pct, steps: [nextStep] }
+        : b);
+    });
+
+    if (isDone) {
+      setTimeout(() => {
+        setBubbles(prev => prev.filter(b => b.id !== stepId));
+      }, 4000);
+    }
+  }, []);
+
   const loadProject = useCallback(async () => {
     if (!id) return;
     const { data } = await supabase.functions.invoke("cirius-status", {
@@ -62,25 +97,36 @@ export default function CiriusEditor() {
     });
     if (data?.project) {
       setProject(data.project);
-      setLogs(data.logs || []);
+      const nextLogs = data.logs || [];
+      setLogs(nextLogs);
+
+      // Prime bubbles from latest real backend logs
+      nextLogs
+        .slice()
+        .reverse()
+        .forEach((log: any) => upsertBubbleFromLog(log));
 
       // Live preview URL: use lovable_project_id or brain_project_id for real-time preview (like Lovable)
       const lpId = data.project.lovable_project_id || data.project.brain_project_id;
-      if (lpId && !lpId.startsWith("creating")) {
+      if (lpId && !String(lpId).startsWith("creating")) {
         setLivePreviewUrl(`https://id-preview--${lpId}.lovable.app`);
       } else if (data.project.preview_url) {
         setLivePreviewUrl(data.project.preview_url);
+      } else {
+        setLivePreviewUrl(null);
       }
 
       // Fallback: static srcDoc from source files
       if (data.project.source_files_json) {
         const files = data.project.source_files_json as any;
         const indexHtml = files?.["index.html"] || files?.["dist/index.html"];
-        if (indexHtml) setPreviewHtml(indexHtml);
+        setPreviewHtml(indexHtml || null);
+      } else {
+        setPreviewHtml(null);
       }
     }
     setLoading(false);
-  }, [id]);
+  }, [id, upsertBubbleFromLog]);
 
   useEffect(() => { loadProject(); }, [loadProject]);
 
@@ -90,28 +136,36 @@ export default function CiriusEditor() {
     const channel = supabase
       .channel(`cirius-editor:${id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "cirius_generation_log", filter: `project_id=eq.${id}` },
-        (payload) => { setLogs(prev => [payload.new, ...prev].slice(0, 50)); })
+        (payload) => {
+          const nextLog = payload.new;
+          setLogs(prev => [nextLog, ...prev].slice(0, 100));
+          upsertBubbleFromLog(nextLog);
+        })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "cirius_projects", filter: `id=eq.${id}` },
         (payload) => {
           const updated = payload.new as any;
           setProject(updated);
-          // Update live preview URL in realtime
+
           const lpId = updated.lovable_project_id || updated.brain_project_id;
-          if (lpId && !lpId.startsWith("creating")) {
+          if (lpId && !String(lpId).startsWith("creating")) {
             setLivePreviewUrl(`https://id-preview--${lpId}.lovable.app`);
           } else if (updated.preview_url) {
             setLivePreviewUrl(updated.preview_url);
+          } else {
+            setLivePreviewUrl(null);
           }
-          // Extract preview HTML from updated source files in realtime
+
           if (updated.source_files_json) {
             const files = updated.source_files_json;
             const indexHtml = files?.["index.html"] || files?.["dist/index.html"];
-            if (indexHtml) setPreviewHtml(indexHtml);
+            setPreviewHtml(indexHtml || null);
+          } else {
+            setPreviewHtml(null);
           }
         })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [id]);
+  }, [id, upsertBubbleFromLog]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -135,6 +189,10 @@ export default function CiriusEditor() {
     setTimeout(() => setToasts(prev => prev.filter(x => x.id !== t.id)), 3100);
   }, []);
 
+  useEffect(() => {
+    setQueueCount(bubbles.filter(b => b.phase === "running").length);
+  }, [bubbles]);
+
   const toggleDrawer = useCallback((name: string) => {
     setActiveDrawers(prev => {
       const next = new Set(prev);
@@ -153,57 +211,45 @@ export default function CiriusEditor() {
   }, []);
 
   const sendMsg = useCallback(async (msg: string) => {
-    if (!msg.trim()) return;
+    if (!msg.trim() || !id) return;
 
-    // Create bubble
+    const bubbleId = `prompt_${Date.now()}`;
     const bubble: Bubble = {
-      id: crypto.randomUUID(),
-      title: msg.length > 32 ? msg.slice(0, 32) + "..." : msg,
+      id: bubbleId,
+      title: msg.length > 36 ? msg.slice(0, 36) + "..." : msg,
       phase: "running",
-      steps: [
-        { s: "run", t: "Brain → analisando prompt" },
-        { s: "wait", t: "Geração de código" },
-        { s: "wait", t: "Captura source-code" },
-      ],
-      pct: 8,
+      steps: [{ s: "run", t: "Enviando prompt para geração" }],
+      pct: 20,
       startTime: Date.now(),
     };
     setBubbles(prev => [...prev, bubble]);
-    setQueueCount(prev => prev + 1);
 
-    // Simulate progress
-    let p = 8;
-    const iv = setInterval(() => {
-      p = Math.min(p + 15 + Math.random() * 12, 98);
-      setBubbles(prev => prev.map(b => b.id === bubble.id ? { ...b, pct: p } : b));
-      if (p >= 95) {
-        clearInterval(iv);
-      }
-    }, 900);
-
-    // Actually send to backend
     try {
-      const { data } = await supabase.functions.invoke("cirius-generate", {
-        body: { action: "build_prompt", project_id: id, prompt: msg },
+      const { data, error } = await supabase.functions.invoke("cirius-generate", {
+        body: { action: "build_prompt", project_id: id, prompt: msg.trim() },
       });
-      clearInterval(iv);
-      setBubbles(prev => prev.map(b => b.id === bubble.id ? {
+
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || "Falha na geração");
+      }
+
+      setBubbles(prev => prev.map(b => b.id === bubbleId ? {
         ...b,
         phase: "done",
         pct: 100,
-        steps: b.steps.map(s => ({ ...s, s: "done" as const })),
+        steps: [{ s: "done", t: "Prompt aceito, pipeline iniciado" }],
       } : b));
-      setQueueCount(prev => Math.max(0, prev - 1));
-      addToast("Task concluída!", "success");
+
+      addToast("Pipeline iniciado", "success");
       await loadProject();
-      // Auto-dismiss after 4s
-      setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 4000);
-    } catch {
-      clearInterval(iv);
-      setBubbles(prev => prev.map(b => b.id === bubble.id ? {
-        ...b, phase: "error", steps: b.steps.map(s => ({ ...s, s: s.s === "run" ? "done" as const : s.s })),
+      setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 4000);
+    } catch (e) {
+      setBubbles(prev => prev.map(b => b.id === bubbleId ? {
+        ...b,
+        phase: "error",
+        pct: 100,
+        steps: [{ s: "wait", t: e instanceof Error ? e.message : "Erro ao processar" }],
       } : b));
-      setQueueCount(prev => Math.max(0, prev - 1));
       addToast("Erro ao processar", "info");
     }
   }, [id, loadProject, addToast]);
@@ -287,8 +333,18 @@ export default function CiriusEditor() {
       {/* Domain Island */}
       {domainVisible && (
         <DomainIsland
+          initialDomain={project?.custom_domain || ""}
           onClose={() => setDomainVisible(false)}
-          onSave={(domain) => { addToast(`Domínio ${domain} salvo`, "success"); setDomainVisible(false); }}
+          onSave={async (domain) => {
+            if (!id) return;
+            const { error } = await supabase.from("cirius_projects" as any).update({ custom_domain: domain || null }).eq("id", id);
+            if (error) addToast("Erro ao salvar domínio", "info");
+            else {
+              setProject((prev: any) => ({ ...prev, custom_domain: domain || null }));
+              addToast(`Domínio ${domain || "removido"} salvo`, "success");
+              setDomainVisible(false);
+            }
+          }}
         />
       )}
 
@@ -324,7 +380,7 @@ export default function CiriusEditor() {
       {/* Drawers */}
       <DrawerDeploy visible={activeDrawers.has("deploy")} onClose={() => toggleDrawer("deploy")} project={project} onNavigateIntegrations={() => navigate("/cirius/integrations")} />
       <DrawerFiles visible={activeDrawers.has("files")} onClose={() => toggleDrawer("files")} sourceFiles={project?.source_files_json} />
-      <DrawerSEO visible={activeDrawers.has("seo")} onClose={() => toggleDrawer("seo")} />
+      <DrawerSEO visible={activeDrawers.has("seo")} onClose={() => toggleDrawer("seo")} projectId={id} project={project} />
       <DrawerBuild visible={activeDrawers.has("build")} onClose={() => toggleDrawer("build")} project={project} tasks={tasks} logs={logs} />
       <DrawerChain visible={activeDrawers.has("chain")} onClose={() => toggleDrawer("chain")} tasks={tasks} />
 
