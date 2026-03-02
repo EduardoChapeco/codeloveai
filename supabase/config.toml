@@ -168,3 +168,6 @@ verify_jwt = false
 
 [functions.venus-github]
 verify_jwt = false
+
+[functions.venus-file-upload]
+verify_jwt = false

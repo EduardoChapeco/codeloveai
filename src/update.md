@@ -1,5 +1,5 @@
 ---
-updated_at: 2026-03-02T03:15:00Z
+updated_at: 2026-03-02T04:30:00Z
 status: done
-task: Fix bootstrap stuck, terminal UI, scraper validation, rate limit handling, brain opt-in at registration
+task: Create venus-file-upload edge function for GCS presigned URL upload proxy
 ---
