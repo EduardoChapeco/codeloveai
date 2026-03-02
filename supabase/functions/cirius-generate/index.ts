@@ -415,26 +415,77 @@ async function refineSourceFiles(sc: SupabaseClient, projectId: string, files: R
     const prd = typeof prdJson === "string" ? (() => { try { return JSON.parse(prdJson); } catch { return null; } })() : prdJson;
     if (prd?.tasks) prdCtx = `\n## PRD: ${projectName}\nTasks:\n${prd.tasks.map((t: any, i: number) => `${i + 1}. ${t.title}`).join("\n")}\n`;
   }
-  const prompt = `You are a senior engineer performing holistic code review.${prdCtx}\nSOURCE FILES:\n${truncated}\n\nReturn ONLY valid JSON: {"files":{"path":"content"}} with ALL files corrected.`;
-  const sys = "You are a code reviewer. Return only valid JSON with all corrected source files.";
+  const prompt = `You are a senior engineer performing holistic code review.${prdCtx}\nSOURCE FILES:\n${truncated}\n\nReturn corrected files using <file path="path/to/file.tsx">corrected content</file> tags. Include ALL files, even unchanged ones.`;
+  const sys = "You are a code reviewer. Return all source files wrapped in <file path=\"...\">content</file> tags. Do NOT wrap in JSON.";
   const t0 = Date.now();
+
+  // Try Gateway first
   const gw = await sendViaGateway(prompt, sys);
-  if (gw.content) { const p = tryParseRefinement(gw.content); if (p) return { ok: true, files: mergeFileMaps(files, p), durationMs: Date.now() - t0 }; }
+  if (gw.content) {
+    const p = tryParseRefinement(gw.content);
+    if (p) return { ok: true, files: mergeFileMaps(files, p), durationMs: Date.now() - t0 };
+  }
+
+  // Fallback to OpenRouter
   const or2 = await sendViaOpenRouter(prompt, sys);
-  if (or2.content) { const p = tryParseRefinement(or2.content); if (p) return { ok: true, files: mergeFileMaps(files, p), durationMs: Date.now() - t0 }; }
-  return { ok: false, durationMs: Date.now() - t0, error: "Refinement engines returned no parseable result" };
+  if (or2.content) {
+    const p = tryParseRefinement(or2.content);
+    if (p) return { ok: true, files: mergeFileMaps(files, p), durationMs: Date.now() - t0 };
+  }
+
+  // Graceful degradation: keep originals instead of hard-failing
+  console.warn(`[refine] No parseable result for project=${projectId}, keeping originals`);
+  return { ok: true, files, durationMs: Date.now() - t0, warning: "Refinement skipped — AI response unparseable, original files preserved" };
 }
 
 function tryParseRefinement(content: string): Record<string, string> | null {
+  if (!content || content.trim().length < 10) return null;
+
+  // Strategy 1: Extract <file path="...">content</file> blocks (most reliable)
+  const fileTagRe = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
+  const tagFiles: Record<string, string> = {};
+  let tagMatch: RegExpExecArray | null;
+  while ((tagMatch = fileTagRe.exec(content)) !== null) {
+    const p = tagMatch[1].trim().replace(/^\.\//, "");
+    const c = tagMatch[2].replace(/^\n/, "").replace(/\s+$/, "") + "\n";
+    if (p && c.trim().length > 1) tagFiles[p] = c;
+  }
+  if (Object.keys(tagFiles).length > 0) return tagFiles;
+
+  // Strategy 2: Direct JSON parse with cleanup
   try {
     let s = content.trim();
-    const m = s.match(/```(?:json)?\s*([\s\S]*?)```/); if (m) s = m[1].trim();
-    const i = s.indexOf("{"); if (i >= 0) s = s.slice(i);
-    const j = s.lastIndexOf("}"); if (j >= 0) s = s.slice(0, j + 1);
+    // Strip markdown code fences
+    const mdMatch = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (mdMatch) s = mdMatch[1].trim();
+    // Find JSON boundaries
+    const openIdx = s.indexOf("{");
+    if (openIdx < 0) throw new Error("no json");
+    s = s.slice(openIdx);
+    const closeIdx = s.lastIndexOf("}");
+    if (closeIdx < 0) throw new Error("no json close");
+    s = s.slice(0, closeIdx + 1);
+    // Clean common LLM artifacts
+    s = s
+      .replace(/,\s*}/g, "}")       // trailing commas in objects
+      .replace(/,\s*]/g, "]")       // trailing commas in arrays
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ""); // control chars (keep \n \r \t)
     const parsed = JSON.parse(s);
     const refined = parsed.files || parsed;
-    if (typeof refined === "object" && Object.keys(refined).length > 0) return refined;
-  } catch {}
+    if (typeof refined === "object" && !Array.isArray(refined) && Object.keys(refined).length > 0) return refined;
+  } catch { /* fall through */ }
+
+  // Strategy 3: Extract code fences with path hints (```lang path\n...```)
+  const fenceRe = /```(?:\w+)?\s+((?:src|public|index|vite|tailwind|tsconfig|package|supabase)[^\n]*)\n([\s\S]*?)```/g;
+  const fenceFiles: Record<string, string> = {};
+  let fm: RegExpExecArray | null;
+  while ((fm = fenceRe.exec(content)) !== null) {
+    const p = fm[1].trim().replace(/^\.\//, "");
+    const c = fm[2].replace(/^\n/, "").replace(/\s+$/, "") + "\n";
+    if (p.includes(".") && c.trim().length > 1) fenceFiles[p] = c;
+  }
+  if (Object.keys(fenceFiles).length > 0) return fenceFiles;
+
   return null;
 }
 
