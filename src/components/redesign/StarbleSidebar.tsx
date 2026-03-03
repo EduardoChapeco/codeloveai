@@ -65,9 +65,13 @@ export default function StarbleSidebar() {
       {/* Header */}
       <div className="sb-header">
         <div className="sb-logo" onClick={() => navigate("/dashboard")}>
-          <div className="sb-logo-mark">
-            <Star size={14} color="#000" strokeWidth={2.5} />
-          </div>
+          {tenant?.logo_url ? (
+            <img src={tenant.logo_url} alt={brandName} className="sb-logo-img" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain" }} />
+          ) : (
+            <div className="sb-logo-mark">
+              <Star size={14} color="#000" strokeWidth={2.5} />
+            </div>
+          )}
           {!collapsed && <span className="sb-logo-text">{brandName}</span>}
         </div>
         <button
