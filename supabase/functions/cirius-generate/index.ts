@@ -21,6 +21,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFilesFingerprint, extractFilesFromMarkdown, extractMdBody, mergeFileMaps, parseLatestMessage } from "../_shared/md-assembly.ts";
+import { smartMergeFiles } from "../_shared/smart-merge.ts";
+import { getCodeSystemPrompt, buildSpecializedPrdPrompt, type ProjectTemplateType } from "../_shared/cirius-templates.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -736,7 +738,7 @@ Return ALL files using <file path="path/to/file.tsx">COMPLETE file content</file
       if (genContent) {
         const parsed = tryParseRefinement(genContent);
         if (parsed && Object.keys(parsed).length > 0) {
-          currentFiles = { ...currentFiles, ...parsed };
+          currentFiles = smartMergeFiles(currentFiles, parsed);
           tasksDone++;
           // Persist intermediate
           await sc.from("cirius_projects").update({
