@@ -144,28 +144,8 @@ export default function AssistantPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col h-[calc(100vh-3rem)]">
-        {/* Header */}
-        <div className="px-4 sm:px-6 py-3 flex items-center gap-3 shrink-0 border-b border-border/40">
-          <div className="h-9 w-9 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <Sparkles className="h-5 w-5 text-primary" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold truncate">Assistente Starble</p>
-            <p className="text-[11px] text-muted-foreground">IA com conhecimento completo da plataforma</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button onClick={() => setShowTicketForm(true)}
-              className="h-8 px-3.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors hover:bg-accent text-muted-foreground hover:text-foreground border border-border/50">
-              <Headphones className="h-3.5 w-3.5" /> Abrir Ticket
-            </button>
-            {messages.length > 0 && (
-              <button onClick={() => setMessages([])} className="h-8 w-8 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Nova conversa">
-                <RotateCcw className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="flex flex-col" style={{ height: 'calc(100vh - 48px)', background: 'var(--bg-0)' }}>
+        {/* Messages */}
 
         {/* Ticket form modal */}
         {showTicketForm && (
@@ -206,20 +186,34 @@ export default function AssistantPage() {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4" style={{ scrollbarWidth: "none" }}>
+        <div className="flex-1 overflow-y-auto px-8 py-6" style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent' }}>
           {messages.length === 0 && (
-            <div className="text-center py-12 sm:py-16">
-              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <Sparkles className="h-8 w-8 text-primary" />
+            <div className="chat-hero" style={{ paddingTop: 48 }}>
+              <div className="chat-hero-badge">
+                <Sparkles className="h-3 w-3" /> Starble IA
               </div>
-              <p className="font-semibold mb-1">Como posso ajudar?</p>
-              <p className="text-sm text-muted-foreground mb-6">
-                Conheço todos os detalhes da plataforma Starble
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg mx-auto">
+              <div className="chat-hero-title">
+                O que você quer <span>criar</span> hoje?
+              </div>
+              <div className="chat-hero-sub">
+                IA poderosa para criar sites, apps e muito mais. Conheço todos os detalhes da plataforma.
+              </div>
+              <div className="chat-mode-row" style={{ maxWidth: 520 }}>
+                <div className="mode-card active">
+                  <div className="mc-ico ib-orange"><Sparkles /></div>
+                  <div className="mc-title">Chat IA</div>
+                  <div className="mc-desc">Converse e obtenha respostas instantâneas</div>
+                </div>
+                <div className="mode-card mode-build">
+                  <div className="mc-ico ib-blue"><Stars /></div>
+                  <div className="mc-title">Construtor</div>
+                  <div className="mc-desc">Crie sites e apps completos com IA</div>
+                  <div className="mc-badge ch-blue">Novo</div>
+                </div>
+              </div>
+              <div className="suggestions" style={{ justifyContent: 'center' }}>
                 {QUICK_QUESTIONS.map(q => (
-                  <button key={q} onClick={() => sendMessage(q)} 
-                    className="text-left px-4 py-2.5 rounded-xl border border-border/50 text-sm text-muted-foreground transition-all hover:text-foreground hover:border-primary/30 hover:bg-accent/50">
+                  <button key={q} onClick={() => sendMessage(q)} className="sug-btn">
                     {q}
                   </button>
                 ))}
@@ -270,21 +264,34 @@ export default function AssistantPage() {
         </div>
 
         {/* Input */}
-        <div className="px-4 sm:px-6 py-3 shrink-0 border-t border-border/40">
-          <div className="max-w-3xl mx-auto flex items-end gap-2 sm:gap-3">
+        <div style={{ flexShrink: 0, padding: '12px 32px 18px' }}>
+          <div className="chat-input-box">
             <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder="Pergunte sobre a plataforma Starble..."
+              placeholder="Descreva o que você quer criar ou perguntar..."
               rows={1}
-              className="flex-1 resize-none rounded-2xl px-4 py-3 text-sm bg-muted/30 border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[44px] max-h-[120px]"
-              style={{ scrollbarWidth: "none" }}
+              className="cib-ta"
             />
-            <button onClick={() => sendMessage()} disabled={loading || !input.trim()}
-              className="h-11 w-11 flex items-center justify-center rounded-2xl bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
+            <div className="cib-toolbar">
+              <div className="cib-tl">
+                <button className="cib-tbtn" onClick={() => setShowTicketForm(true)}>
+                  <Headphones className="h-3 w-3" /> Ticket
+                </button>
+                {messages.length > 0 && (
+                  <button className="cib-tbtn" onClick={() => setMessages([])}>
+                    <RotateCcw className="h-3 w-3" /> Limpar
+                  </button>
+                )}
+              </div>
+              <div className="cib-tr">
+                <span style={{ fontSize: 10, color: 'var(--text-quaternary)', fontFamily: 'var(--mono)' }}>⌘↵</span>
+                <button className="cib-send" onClick={() => sendMessage()} disabled={loading || !input.trim()}>
+                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

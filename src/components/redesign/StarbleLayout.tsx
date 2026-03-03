@@ -11,14 +11,14 @@ export default function StarbleLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <>
+    <div className="dark">
       <StarbleSidebar />
       <div id="main">
         <StarbleTopbar />
-        <div className="page active">
+        <div className="page">
           {children}
         </div>
       </div>
-    </>
+    </div>
   );
 }
