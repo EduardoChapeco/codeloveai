@@ -4082,6 +4082,7 @@ export type Database = {
           last_error: string | null
           lovable_project_id: string | null
           next_tick_at: string | null
+          pipeline_phase: string | null
           prd_json: Json | null
           quality_score: number | null
           source_fingerprint: string | null
@@ -4104,6 +4105,7 @@ export type Database = {
           last_error?: string | null
           lovable_project_id?: string | null
           next_tick_at?: string | null
+          pipeline_phase?: string | null
           prd_json?: Json | null
           quality_score?: number | null
           source_fingerprint?: string | null
@@ -4126,6 +4128,7 @@ export type Database = {
           last_error?: string | null
           lovable_project_id?: string | null
           next_tick_at?: string | null
+          pipeline_phase?: string | null
           prd_json?: Json | null
           quality_score?: number | null
           source_fingerprint?: string | null
@@ -4156,6 +4159,7 @@ export type Database = {
           intent: string
           lovable_message_id: string | null
           metadata: Json | null
+          phase: string | null
           project_id: string
           prompt: string
           prompt_text: string | null
@@ -4164,6 +4168,7 @@ export type Database = {
           started_at: string | null
           status: string
           stop_condition: string | null
+          sub_tasks: Json | null
           task_index: number
           title: string
         }
@@ -4177,6 +4182,7 @@ export type Database = {
           intent?: string
           lovable_message_id?: string | null
           metadata?: Json | null
+          phase?: string | null
           project_id: string
           prompt?: string
           prompt_text?: string | null
@@ -4185,6 +4191,7 @@ export type Database = {
           started_at?: string | null
           status?: string
           stop_condition?: string | null
+          sub_tasks?: Json | null
           task_index?: number
           title?: string
         }
@@ -4198,6 +4205,7 @@ export type Database = {
           intent?: string
           lovable_message_id?: string | null
           metadata?: Json | null
+          phase?: string | null
           project_id?: string
           prompt?: string
           prompt_text?: string | null
@@ -4206,6 +4214,7 @@ export type Database = {
           started_at?: string | null
           status?: string
           stop_condition?: string | null
+          sub_tasks?: Json | null
           task_index?: number
           title?: string
         }

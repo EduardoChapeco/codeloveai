@@ -1,8 +1,10 @@
 /**
- * orchestrator-tick v4.1 — Brainchain-powered polling with comprehensive logging
+ * orchestrator-tick v5.0 — Brain Chain Pipeline with source-code-first mining
  *
- * Every decision, failure, skip, timeout, and state transition is logged
- * to orchestrator_logs with structured metadata for debugging.
+ * Key changes from v4.1:
+ *  - PRIMARY mining via source-code endpoint (not chat/latest-message which 404s)
+ *  - 2-phase support: prd_expansion tasks create dynamic sub-tasks
+ *  - Integrated brain_output registration for unified tracking
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -37,7 +39,7 @@ async function extFetch(url: string, token: string) {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       ...LOVABLE_HEADERS,
-      "X-Client-Git-SHA": "3d7a3673c6f02b606137a12ddc0ab88f6b775113",
+      "X-Client-Git-SHA": GIT_SHA,
     },
   });
 }
@@ -88,9 +90,92 @@ async function releaseBrainchainAccount(sc: SC, accountId: string) {
   }).eq("id", accountId);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ★ PRIMARY MINING: source-code endpoint (replaces chat/latest-message)
+// ═══════════════════════════════════════════════════════════════
+
+/** Read source-code from brain project and find update.md content */
+async function readSourceCode(brainProjectId: string, token: string): Promise<string | null> {
+  // Try full source-code endpoint first (returns all files)
+  try {
+    const res = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/source-code`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...LOVABLE_HEADERS,
+        "X-Client-Git-SHA": GIT_SHA,
+      },
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data) {
+        const md = findUpdateMd(data);
+        if (md && md.length > 30) return md;
+      }
+    }
+  } catch { /* continue */ }
+
+  // Try specific file path
+  for (const filePath of ["src/update.md"]) {
+    try {
+      const res = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/source-code?path=${encodeURIComponent(filePath)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...LOVABLE_HEADERS,
+          "X-Client-Git-SHA": GIT_SHA,
+        },
+      });
+      if (!res.ok) continue;
+      const data = await res.json().catch(() => null);
+      const content = data?.content || data?.source || "";
+      if (content && content.length > 30) return content;
+    } catch { continue; }
+  }
+  return null;
+}
+
+/** Find update.md in nested source-code response */
+function findUpdateMd(obj: any): string | null {
+  const target = "src/update.md";
+  if (!obj || typeof obj !== "object") return null;
+
+  if (obj[target]) {
+    const v = obj[target];
+    if (typeof v === "string") return v;
+    if (typeof v === "object") return v.contents || v.content || v.source || null;
+  }
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      if (!item || typeof item !== "object") continue;
+      const p = item.path || item.name || item.file_path || "";
+      if (p === target || p.endsWith("update.md")) {
+        const c = item.contents || item.content || item.source || item.code;
+        if (typeof c === "string") return c;
+      }
+    }
+    return null;
+  }
+
+  for (const key of ["files", "data", "source", "source_code", "project", "code"]) {
+    if (obj[key]) {
+      const result = findUpdateMd(obj[key]);
+      if (result) return result;
+    }
+  }
+
+  for (const key of Object.keys(obj)) {
+    if (key.endsWith("update.md")) {
+      const v = obj[key];
+      if (typeof v === "string") return v;
+      if (typeof v === "object") return v?.contents || v?.content || v?.source || null;
+    }
+  }
+
+  return null;
+}
+
 /** Try to read timestamped cirius-out .md files from Brain project source-code as fallback */
 async function trySourceCodeFallback(brainProjectId: string, token: string, outputMarker?: string): Promise<Record<string, string>> {
-  // If we have a specific output marker, try that file first
   const pathsToTry = outputMarker
     ? [`src/${outputMarker}.md`, "src/update.md"]
     : ["src/update.md"];
@@ -111,14 +196,15 @@ async function trySourceCodeFallback(brainProjectId: string, token: string, outp
       const body = extractMdBody(content);
       const files = extractFilesFromMarkdown(body);
       if (Object.keys(files).length > 0) return files;
-    } catch {
-      continue;
-    }
+    } catch { continue; }
   }
   return {};
 }
 
-/** Sync markdown-generated files from latest assistant message into cirius_projects */
+// ═══════════════════════════════════════════════════════════════
+// ★ SMART MINING: source-code FIRST, chat/latest-message as fallback
+// ═══════════════════════════════════════════════════════════════
+
 async function syncLatestMarkdownFiles(
   sc: SC,
   orchProjectId: string,
@@ -138,21 +224,15 @@ async function syncLatestMarkdownFiles(
     return { ok: false, reason: "no_cirius_project", fileCount: 0 };
   }
 
-  const latestRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat/latest-message`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...LOVABLE_HEADERS,
-      "X-Client-Git-SHA": GIT_SHA,
-    },
-  });
-
-  if (!latestRes.ok) {
-    await addLog(sc, orchProjectId, `📦 [capture] latest-message failed: HTTP ${latestRes.status} — trying source-code fallback`, "warn", undefined, taskId);
-    // ★ FIX: Instead of returning immediately, fall through to trySourceCodeFallback
-    const fallbackFiles = await trySourceCodeFallback(brainProjectId, token, outputMarker);
-    if (Object.keys(fallbackFiles).length > 0) {
+  // ★ STRATEGY 1: source-code endpoint (PRIMARY — no more 404s)
+  const sourceContent = await readSourceCode(brainProjectId, token);
+  if (sourceContent && sourceContent.length > 50) {
+    const body = extractMdBody(sourceContent);
+    const parsedFiles = extractFilesFromMarkdown(body);
+    
+    if (Object.keys(parsedFiles).length > 0) {
       const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
-      const merged = mergeFileMaps(existing, fallbackFiles);
+      const merged = mergeFileMaps(existing, parsedFiles);
       const fingerprint = buildFilesFingerprint(merged);
       const updatePayload: Record<string, unknown> = {
         source_files_json: merged,
@@ -165,88 +245,227 @@ async function syncLatestMarkdownFiles(
         updatePayload.error_message = null;
       }
       await sc.from("cirius_projects").update(updatePayload).eq("id", ciriusProject.id);
+
+      await sc.from("code_snapshots").insert({
+        project_id: ciriusProject.id,
+        files_json: merged,
+        file_count: Object.keys(merged).length,
+        fingerprint,
+      }).then(() => {});
+
       await addLog(sc, orchProjectId,
-        `📦 [capture] ✅ source-code fallback after chat 404: +${Object.keys(fallbackFiles).length} arquivo(s)${finalize ? " (finalize)" : ""}`,
-        "info", { fallback: true, file_count: Object.keys(fallbackFiles).length, trigger: "chat_404" }, taskId);
-      return { ok: true, reason: "source_code_fallback_after_404", fileCount: Object.keys(merged).length };
+        `📦 [capture] ✅ source-code sync: +${Object.keys(parsedFiles).length} arquivo(s), total=${Object.keys(merged).length}${finalize ? " (finalize)" : ""}`,
+        "info", { strategy: "source_code", file_count: Object.keys(merged).length, parsed_count: Object.keys(parsedFiles).length, cirius_project: ciriusProject.id }, taskId);
+      return { ok: true, reason: "source_code_sync", fileCount: Object.keys(merged).length };
     }
-    return { ok: false, reason: `latest_message_http_${latestRes.status}_no_fallback`, fileCount: 0 };
   }
 
-  const rawLatest = await latestRes.text();
-  const msg = parseLatestMessage(rawLatest);
-  if (!msg || msg.role === "user") {
-    await addLog(sc, orchProjectId, `📦 [capture] No assistant latest message`, "warn", undefined, taskId);
-    return { ok: false, reason: "no_assistant_message", fileCount: 0 };
+  // ★ STRATEGY 2: Try specific output marker files
+  const fallbackFiles = await trySourceCodeFallback(brainProjectId, token, outputMarker);
+  if (Object.keys(fallbackFiles).length > 0) {
+    const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
+    const merged = mergeFileMaps(existing, fallbackFiles);
+    const fingerprint = buildFilesFingerprint(merged);
+    const updatePayload: Record<string, unknown> = {
+      source_files_json: merged,
+      files_fingerprint: fingerprint,
+    };
+    if (finalize) {
+      updatePayload.status = "live";
+      updatePayload.progress_pct = 100;
+      updatePayload.generation_ended_at = new Date().toISOString();
+      updatePayload.error_message = null;
+    }
+    await sc.from("cirius_projects").update(updatePayload).eq("id", ciriusProject.id);
+    await addLog(sc, orchProjectId,
+      `📦 [capture] ✅ source-code fallback: +${Object.keys(fallbackFiles).length} arquivo(s)${finalize ? " (finalize)" : ""}`,
+      "info", { strategy: "source_code_fallback", file_count: Object.keys(merged).length }, taskId);
+    return { ok: true, reason: "source_code_fallback", fileCount: Object.keys(merged).length };
   }
 
-  const markdownBody = extractMdBody(msg.content || "");
-  const parsedFiles = extractFilesFromMarkdown(markdownBody);
-  const parsedCount = Object.keys(parsedFiles).length;
+  // ★ STRATEGY 3: chat/latest-message (LAST RESORT)
+  try {
+    const latestRes = await fetch(`${LOVABLE_API}/projects/${brainProjectId}/chat/latest-message`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...LOVABLE_HEADERS,
+        "X-Client-Git-SHA": GIT_SHA,
+      },
+    });
 
-  if (parsedCount === 0) {
-    // Fallback: try reading timestamped cirius-out .md from the Brain project's source code
-    const fallbackFiles = await trySourceCodeFallback(brainProjectId, token, outputMarker);
-    if (Object.keys(fallbackFiles).length > 0) {
-      const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
-      const merged = mergeFileMaps(existing, fallbackFiles);
-      const fingerprint = buildFilesFingerprint(merged);
-      const updatePayload: Record<string, unknown> = {
-        source_files_json: merged,
-        files_fingerprint: fingerprint,
-      };
-      if (finalize) {
-        updatePayload.status = "live";
-        updatePayload.progress_pct = 100;
-        updatePayload.generation_ended_at = new Date().toISOString();
-        updatePayload.error_message = null;
+    if (latestRes.ok) {
+      const rawLatest = await latestRes.text();
+      const msg = parseLatestMessage(rawLatest);
+      if (msg && msg.role !== "user") {
+        const markdownBody = extractMdBody(msg.content || "");
+        const parsedFiles = extractFilesFromMarkdown(markdownBody);
+        if (Object.keys(parsedFiles).length > 0) {
+          const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
+          const merged = mergeFileMaps(existing, parsedFiles);
+          const fingerprint = buildFilesFingerprint(merged);
+          const updatePayload: Record<string, unknown> = {
+            source_files_json: merged,
+            files_fingerprint: fingerprint,
+          };
+          if (finalize) {
+            updatePayload.status = "live";
+            updatePayload.progress_pct = 100;
+            updatePayload.generation_ended_at = new Date().toISOString();
+            updatePayload.error_message = null;
+          }
+          await sc.from("cirius_projects").update(updatePayload).eq("id", ciriusProject.id);
+          await addLog(sc, orchProjectId,
+            `📦 [capture] ✅ chat fallback: +${Object.keys(parsedFiles).length} arquivo(s)`,
+            "info", { strategy: "chat_latest_message", file_count: Object.keys(merged).length }, taskId);
+          return { ok: true, reason: "chat_fallback", fileCount: Object.keys(merged).length };
+        }
       }
-      await sc.from("cirius_projects").update(updatePayload).eq("id", ciriusProject.id);
-      await addLog(sc, orchProjectId,
-        `📦 [capture] ✅ source-code fallback: +${Object.keys(fallbackFiles).length} arquivo(s)${finalize ? " (finalize)" : ""}`,
-        "info", { fallback: true, file_count: Object.keys(fallbackFiles).length }, taskId);
-      return { ok: true, reason: "source_code_fallback", fileCount: Object.keys(merged).length };
     }
+  } catch { /* chat endpoint failed, already tried source-code */ }
 
-    await addLog(sc, orchProjectId, `📦 [capture] No code blocks with file paths found in markdown or source-code`, "warn", {
-      latest_message_id: msg.id,
-    }, taskId);
-    return { ok: false, reason: "no_file_blocks", fileCount: 0 };
+  await addLog(sc, orchProjectId, `📦 [capture] No files found via any strategy`, "warn", undefined, taskId);
+  return { ok: false, reason: "no_files_any_strategy", fileCount: 0 };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★ COMPLETION DETECTION: source-code timestamp-based (no chat polling)
+// ═══════════════════════════════════════════════════════════════
+
+async function checkTaskCompletion(
+  brainProjectId: string, token: string, taskStartedAt: number
+): Promise<{ completed: boolean; reason: string }> {
+  // Check if update.md has been updated AFTER task was sent
+  const sourceContent = await readSourceCode(brainProjectId, token);
+  if (!sourceContent) return { completed: false, reason: "no_source_content" };
+
+  // Check for status: done in frontmatter
+  const hasDone = /status:\s*done/i.test(sourceContent);
+  
+  // Extract timestamp from update.md
+  const tsMatch = sourceContent.match(/updated_at:\s*(\S+)/);
+  if (tsMatch) {
+    const mdTs = new Date(tsMatch[1]).getTime();
+    if (!isNaN(mdTs) && mdTs > taskStartedAt) {
+      if (hasDone) return { completed: true, reason: "source_code_done" };
+      // Has new timestamp but no done status — check content size
+      const body = extractMdBody(sourceContent);
+      if (body && body.length > 100) return { completed: true, reason: "source_code_new_content" };
+    }
   }
 
-  const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
-  const merged = mergeFileMaps(existing, parsedFiles);
-  const fingerprint = buildFilesFingerprint(merged);
-
-  const updatePayload: Record<string, unknown> = {
-    source_files_json: merged,
-    files_fingerprint: fingerprint,
-  };
-
-  if (finalize) {
-    updatePayload.status = "live";
-    updatePayload.progress_pct = 100;
-    updatePayload.generation_ended_at = new Date().toISOString();
-    updatePayload.error_message = null;
+  // Fallback: check timestamp marker
+  const timestampMatch = sourceContent.match(/timestamp:\s*(\d{10,15})/);
+  if (timestampMatch) {
+    let ts = parseInt(timestampMatch[1], 10);
+    if (ts < 1e12) ts *= 1000;
+    if (ts > taskStartedAt && hasDone) return { completed: true, reason: "source_code_timestamp_done" };
   }
 
-  await sc.from("cirius_projects").update(updatePayload).eq("id", ciriusProject.id);
+  // After 30s, accept content even without done marker
+  const elapsed = Date.now() - taskStartedAt;
+  if (elapsed > 30_000 && hasDone) return { completed: true, reason: "source_code_delayed_done" };
 
-  await sc.from("code_snapshots").insert({
-    project_id: ciriusProject.id,
-    files_json: merged,
-    file_count: Object.keys(merged).length,
-    fingerprint,
-  }).then(() => {});
+  return { completed: false, reason: "not_ready" };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★ PRD EXPANSION: Extract sub-tasks from brain's expanded PRD
+// ═══════════════════════════════════════════════════════════════
+
+async function extractPrdSubTasks(
+  sc: SC, orchProjectId: string, brainProjectId: string, token: string, taskId: string
+): Promise<number> {
+  const sourceContent = await readSourceCode(brainProjectId, token);
+  if (!sourceContent) return 0;
+
+  const body = extractMdBody(sourceContent);
+  if (!body) return 0;
+
+  // Try to extract JSON sub-PRD from the response
+  let subTasks: Array<{ title: string; prompt: string; brain_type?: string }> = [];
+
+  // Strategy 1: Look for JSON block
+  const jsonMatch = body.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1].trim());
+      if (parsed.tasks && Array.isArray(parsed.tasks)) {
+        subTasks = parsed.tasks;
+      }
+    } catch { /* not JSON */ }
+  }
+
+  // Strategy 2: Look for numbered tasks in markdown
+  if (subTasks.length === 0) {
+    const taskMatches = body.matchAll(/(?:^|\n)\s*(?:\d+[\.\)]\s*|[-*]\s*\*\*Task\s*\d+\*\*[:\s]*)(.*?)(?=\n\s*(?:\d+[\.\)]|[-*]\s*\*\*Task|$))/gs);
+    for (const match of taskMatches) {
+      const content = match[1]?.trim();
+      if (content && content.length > 20) {
+        subTasks.push({ title: content.slice(0, 80), prompt: content, brain_type: "code" });
+      }
+    }
+  }
+
+  if (subTasks.length === 0) return 0;
+
+  // Get current max task_index
+  const { data: existingTasks } = await sc.from("orchestrator_tasks")
+    .select("task_index")
+    .eq("project_id", orchProjectId)
+    .order("task_index", { ascending: false })
+    .limit(1);
+
+  const maxIndex = existingTasks?.[0]?.task_index as number || 0;
+
+  // Insert dynamic sub-tasks
+  const newTasks = subTasks.slice(0, 10).map((t, i) => ({
+    project_id: orchProjectId,
+    task_index: maxIndex + 1 + i,
+    title: t.title.slice(0, 200),
+    intent: "security_fix_v2",
+    prompt: t.prompt,
+    brain_type: t.brain_type || "code",
+    phase: "code_generation",
+    status: "pending",
+  }));
+
+  await sc.from("orchestrator_tasks").insert(newTasks);
+
+  // Update project total_tasks
+  const { count: totalTasks } = await sc.from("orchestrator_tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", orchProjectId);
+
+  await sc.from("orchestrator_projects").update({
+    total_tasks: totalTasks || 0,
+    pipeline_phase: "code_generation",
+  }).eq("id", orchProjectId);
+
+  // Store sub-tasks on the PRD expansion task
+  await sc.from("orchestrator_tasks").update({
+    sub_tasks: newTasks.map(t => ({ title: t.title, brain_type: t.brain_type })),
+  }).eq("id", taskId);
 
   await addLog(sc, orchProjectId,
-    `📦 [capture] ✅ markdown sync: +${parsedCount} arquivo(s), total=${Object.keys(merged).length}${finalize ? " (finalize)" : ""}`,
-    "info",
-    { file_count: Object.keys(merged).length, parsed_count: parsedCount, latest_message_id: msg.id, cirius_project: ciriusProject.id },
-    taskId,
-  );
+    `🧠 [prd_expansion] Created ${newTasks.length} dynamic sub-tasks from brain PRD expansion`,
+    "info", { sub_task_count: newTasks.length, task_titles: newTasks.map(t => t.title) }, taskId);
 
-  return { ok: true, reason: "synced", fileCount: Object.keys(merged).length, latestMessageId: msg.id };
+  return newTasks.length;
+}
+
+/** Register brain output for unified tracking */
+async function registerBrainOutput(
+  sc: SC, userId: string, brainProjectId: string, 
+  orchProjectId: string, taskId: string, skill: string, content: string
+) {
+  await sc.from("brain_outputs").insert({
+    user_id: userId,
+    skill: skill || "code",
+    request: `orchestrator_task:${taskId}`,
+    response: content.slice(0, 5000),
+    status: "done",
+    brain_project_id: brainProjectId,
+  }).catch(() => {});
 }
 
 /** Auto-capture markdown-generated files from latest message after completion */
@@ -272,7 +491,6 @@ async function autoCapture(sc: SC, orchProjectId: string, brainProjectId: string
       await syncLatestMarkdownFiles(sc, orchProjectId, brainProjectId, userAccount.token_encrypted, true);
     }
 
-    // ★ Trigger post-orchestration AI refinement on the linked cirius_project
     await triggerRefinement(sc, orchProjectId, userId);
   } catch (e) {
     await addLog(sc, orchProjectId, `📦 [capture] Error: ${(e as Error).message}`, "error");
@@ -314,7 +532,6 @@ async function triggerRefinement(sc: SC, orchProjectId: string, userId: string) 
     if (!refineRes.ok) {
       const fileCount = Object.keys((ciriusProject.source_files_json || {}) as Record<string, string>).length;
 
-      // Fallback: avoid infinite "generating_code" when internal refine auth/invoke fails
       if (fileCount > 0) {
         await sc.from("cirius_projects").update({
           status: "live",
@@ -324,21 +541,13 @@ async function triggerRefinement(sc: SC, orchProjectId: string, userId: string) 
           error_message: null,
         }).eq("id", ciriusProject.id);
 
-        await addLog(
-          sc,
-          orchProjectId,
+        await addLog(sc, orchProjectId,
           `🔧 [refine] HTTP ${refineRes.status} on refine — fallback applied (marked live with existing files)`,
-          "warn",
-          { refine_status: refineRes.status, refine_body: refineBody.slice(0, 180), file_count: fileCount }
-        );
+          "warn", { refine_status: refineRes.status, refine_body: refineBody.slice(0, 180), file_count: fileCount });
       } else {
-        await addLog(
-          sc,
-          orchProjectId,
+        await addLog(sc, orchProjectId,
           `🔧 [refine] HTTP ${refineRes.status} on refine and no files available`,
-          "error",
-          { refine_status: refineRes.status, refine_body: refineBody.slice(0, 180), file_count: 0 }
-        );
+          "error", { refine_status: refineRes.status, refine_body: refineBody.slice(0, 180), file_count: 0 });
       }
     }
   } catch (e) {
@@ -378,7 +587,7 @@ Deno.serve(async (req: Request) => {
       try {
         const lovableProjectId = project.lovable_project_id as string;
         if (!lovableProjectId) {
-          // Recovery path for legacy/partial records that lost lovable_project_id.
+          // Recovery path for legacy/partial records
           const [{ count: pendingCount }, { data: runningTasks }] = await Promise.all([
             sc.from("orchestrator_tasks")
               .select("id", { count: "exact", head: true })
@@ -393,46 +602,37 @@ Deno.serve(async (req: Request) => {
           if ((pendingCount || 0) === 0 && (runningTasks?.length || 0) > 0) {
             const runningIds = (runningTasks || []).map((t) => t.id as string);
             await sc.from("orchestrator_tasks").update({
-              status: "completed",
-              completed_at: new Date().toISOString(),
+              status: "completed", completed_at: new Date().toISOString(),
             }).in("id", runningIds);
 
             await sc.from("orchestrator_projects").update({
-              status: "completed",
-              next_tick_at: null,
+              status: "completed", next_tick_at: null,
             }).eq("id", project.id);
 
             await addLog(sc, project.id as string,
-              `🛠️ [tick] Recovery: project had no lovable_project_id with ${runningIds.length} running tasks and no pending tasks — force-completed and finalized`, "warn",
-              { phase: "executing", action: "recover_missing_project_id_finalize", running_tasks: runningIds.length });
-            tickLog.push(`→ [exec] ${projId8}: recovery finalize (${runningIds.length} running)`);
+              `🛠️ [tick] Recovery: force-completed ${runningIds.length} running tasks`, "warn");
+            tickLog.push(`→ [exec] ${projId8}: recovery finalize`);
             processed++;
             continue;
           }
 
           await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", project.id);
-          await addLog(sc, project.id as string,
-            `🔄 [tick] No lovable_project_id set — reset to paused`, "warn",
-            { phase: "executing", action: "reset_to_paused", reason: "missing_project_id" });
           tickLog.push(`→ [exec] ${projId8}: no project ID → paused`);
           processed++;
           continue;
         }
 
-        // Get the brainchain account token
         const account = await getBusyAccountForProject(sc, lovableProjectId);
         if (!account) {
           await addLog(sc, project.id as string,
-            `⚠️ [tick] No brainchain account found for brain ${lovableProjectId.slice(0, 8)} — cannot poll`, "warn",
-            { phase: "executing", brain_project: lovableProjectId, action: "skip", reason: "no_account" });
-          tickLog.push(`→ [exec] ${projId8}: no account for brain ${lovableProjectId.slice(0, 8)} → skip`);
+            `⚠️ [tick] No account for brain ${lovableProjectId.slice(0, 8)}`, "warn");
+          tickLog.push(`→ [exec] ${projId8}: no account → skip`);
           skipped++;
           continue;
         }
 
         const token = account.accessToken;
 
-        // Get ALL running tasks (parallel support)
         const { data: runningTasks } = await sc.from("orchestrator_tasks")
           .select("*")
           .eq("project_id", project.id)
@@ -442,9 +642,6 @@ Deno.serve(async (req: Request) => {
         if (!runningTasks || runningTasks.length === 0) {
           await releaseBrainchainAccount(sc, account.id);
           await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", project.id);
-          await addLog(sc, project.id as string,
-            `🔧 [tick] Status=executing but no running task — released account ${account.id.slice(0, 8)}, reset to paused`, "warn",
-            { phase: "executing", account_id: account.id, action: "reset_to_paused", reason: "no_running_task" });
           tickLog.push(`→ [exec] ${projId8}: no running task → paused`);
           processed++;
           continue;
@@ -457,110 +654,69 @@ Deno.serve(async (req: Request) => {
           const startedAt = runningTask.started_at ? new Date(runningTask.started_at as string).getTime() : Date.now();
           const elapsed = Date.now() - startedAt;
           const taskIdx = runningTask.task_index as number;
+          const taskPhase = (runningTask as any).phase as string || "code_generation";
 
           // Timeout check
           if (elapsed > EXECUTING_TIMEOUT_MS) {
-            // ★ FIX: Try to mine code BEFORE force-completing the timed-out task
             try {
               const timeoutSync = await syncLatestMarkdownFiles(
                 sc, project.id as string, lovableProjectId, token,
-                `task_${taskIdx}`, false, runningTask.id as string
+                false, runningTask.id as string
               );
               await addLog(sc, project.id as string,
-                `⏰ [tick] Task #${taskIdx} TIMEOUT after ${Math.round(elapsed / 1000)}s — pre-complete sync: ${timeoutSync.ok ? `✅ ${timeoutSync.fileCount} files` : `⚠ ${timeoutSync.reason}`}`, "warn",
-                { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
-                  elapsed_ms: elapsed, timeout_ms: EXECUTING_TIMEOUT_MS,
-                  brain_project: lovableProjectId,
-                  sync_result: timeoutSync,
-                  action: "force_complete_timeout_with_sync" }, runningTask.id as string);
-            } catch (syncErr) {
-              await addLog(sc, project.id as string,
-                `⏰ [tick] Task #${taskIdx} TIMEOUT sync failed: ${syncErr}`, "warn",
-                { phase: "executing", task_id: runningTask.id, action: "timeout_sync_error" }, runningTask.id as string);
-            }
+                `⏰ [tick] Task #${taskIdx} TIMEOUT (${Math.round(elapsed / 1000)}s) — sync: ${timeoutSync.ok ? `✅ ${timeoutSync.fileCount} files` : `⚠ ${timeoutSync.reason}`}`, "warn",
+                { task_id: runningTask.id, sync_result: timeoutSync }, runningTask.id as string);
+            } catch { /* ignore */ }
+
             await sc.from("orchestrator_tasks").update({
               status: "completed", completed_at: new Date().toISOString(),
             }).eq("id", runningTask.id);
-            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} timeout (${Math.round(elapsed / 1000)}s) — synced before complete`);
             anyCompleted = true;
             continue;
           }
 
-          // Check completion — latest assistant message (compare against initial snapshot)
-          let completed = false;
-          let reason = "";
-          let checkErrors: string[] = [];
+          // ★ COMPLETION DETECTION via source-code (PRIMARY)
+          const completion = await checkTaskCompletion(lovableProjectId, token, startedAt);
 
-          // Get the initial message ID stored when task was dispatched
-          const taskInitialMsgId = (runningTask as any).metadata?.initial_msg_id as string | null;
-          const lastSeen = taskInitialMsgId || (project.source_fingerprint as string | null);
-
-          // Each parallel task may use a different brain — try to get account for that brain
-          const taskAccount = await getBusyAccountForProject(sc, lovableProjectId);
-          const taskToken = taskAccount?.accessToken || token;
-
-          try {
-            const pollRes = await extFetch(`${LOVABLE_API}/projects/${lovableProjectId}/chat/latest-message`, taskToken);
-            if (pollRes.ok) {
-              const rawPoll = await pollRes.text();
-              const pollData = parseLatestMessage(rawPoll);
-
-              if (!pollData) {
-                checkErrors.push("latest-message: parse_failed");
-              } else if (pollData.role !== "user" && !pollData.is_streaming && (pollData.content || "").trim().length > 20 && elapsed > 15_000) {
-                if (pollData.id && pollData.id !== lastSeen) {
-                  completed = true;
-                  reason = "latest_message_new";
-                  await sc.from("orchestrator_projects").update({ source_fingerprint: pollData.id }).eq("id", project.id);
-                } else if (!lastSeen && pollData.id) {
-                  await sc.from("orchestrator_projects").update({ source_fingerprint: pollData.id }).eq("id", project.id);
-                  checkErrors.push("latest-message: seeded_last_seen");
-                }
-              }
-            } else {
-              checkErrors.push(`latest-message: HTTP ${pollRes.status}`);
-              if (pollRes.status === 401) checkErrors.push("token_expired");
-            }
-          } catch (e) {
-            checkErrors.push(`latest-message: ${(e as Error).message.slice(0, 60)}`);
-          }
-
-          if (completed) {
+          if (completion.completed) {
             const taskOutputMarker = (runningTask as any).metadata?.output_marker as string | undefined;
             const syncResult = await syncLatestMarkdownFiles(
-              sc,
-              project.id as string,
-              lovableProjectId,
-              taskToken,
-              false,
-              runningTask.id as string,
-              taskOutputMarker,
+              sc, project.id as string, lovableProjectId, token,
+              false, runningTask.id as string, taskOutputMarker,
             );
+
+            // ★ If this is a PRD expansion task, extract sub-tasks
+            if (taskPhase === "prd_expansion") {
+              const subTaskCount = await extractPrdSubTasks(
+                sc, project.id as string, lovableProjectId, token, runningTask.id as string
+              );
+              await addLog(sc, project.id as string,
+                `🧠 [tick] PRD expansion task #${taskIdx} completed → ${subTaskCount} sub-tasks created`, "info",
+                { phase: "prd_expansion", sub_tasks: subTaskCount }, runningTask.id as string);
+            }
+
+            // Register brain output for tracking
+            const sourceContent = await readSourceCode(lovableProjectId, token);
+            if (sourceContent) {
+              await registerBrainOutput(
+                sc, project.user_id as string, lovableProjectId,
+                project.id as string, runningTask.id as string,
+                (runningTask as any).brain_type || "code", sourceContent
+              );
+            }
 
             await sc.from("orchestrator_tasks").update({
               status: "completed", completed_at: new Date().toISOString(),
             }).eq("id", runningTask.id);
 
             await addLog(sc, project.id as string,
-              `✅ [tick] Task #${taskIdx} completed (${reason}) after ${Math.round(elapsed / 1000)}s`, "info",
-              { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
-                elapsed_ms: elapsed, reason,
-                brain_project: lovableProjectId, check_errors: checkErrors.length ? checkErrors : undefined,
-                markdown_sync: syncResult,
-                action: "task_completed" }, runningTask.id as string);
-            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ✅ (${reason}, ${Math.round(elapsed / 1000)}s)`);
+              `✅ [tick] Task #${taskIdx} completed (${completion.reason}) after ${Math.round(elapsed / 1000)}s`, "info",
+              { task_index: taskIdx, reason: completion.reason, markdown_sync: syncResult }, runningTask.id as string);
+            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ✅ (${completion.reason})`);
             anyCompleted = true;
           } else {
             allDone = false;
-            if (checkErrors.length > 0) {
-              await addLog(sc, project.id as string,
-                `⏳ [tick] Task #${taskIdx} still running (${Math.round(elapsed / 1000)}s) — check errors: ${checkErrors.join("; ")}`, "debug",
-                { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
-                  elapsed_ms: elapsed, check_errors: checkErrors,
-                  brain_project: lovableProjectId,
-                  action: "still_running_with_errors" }, runningTask.id as string);
-            }
-            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ⏳ (${Math.round(elapsed / 1000)}s)${checkErrors.length ? ` [${checkErrors.join(",")}]` : ""}`);
+            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} ⏳ (${Math.round(elapsed / 1000)}s)`);
           }
         }
 
@@ -586,7 +742,6 @@ Deno.serve(async (req: Request) => {
             .eq("project_id", project.id)
             .eq("status", "running");
 
-          // ★ If ALL tasks are done (no pending, no running), finalize immediately
           if ((pendingCount || 0) === 0 && (stillRunning || 0) === 0) {
             await sc.from("orchestrator_projects").update({
               status: "completed",
@@ -596,12 +751,9 @@ Deno.serve(async (req: Request) => {
             }).eq("id", project.id);
 
             await addLog(sc, project.id as string,
-              `🎉 [tick] All ${completedCount} tasks completed — finalizing immediately!`, "info",
-              { phase: "executing", action: "project_completed_inline",
-                total_tasks: project.total_tasks, completed: completedCount });
-            tickLog.push(`→ [exec] ${projId8}: ✅ all ${completedCount} tasks done — finalized!`);
+              `🎉 [tick] All ${completedCount} tasks completed — finalizing!`, "info");
+            tickLog.push(`→ [exec] ${projId8}: ✅ all done!`);
 
-            // ★ Auto-capture and finalize cirius project
             await autoCapture(sc, project.id as string, lovableProjectId, project.user_id as string);
             processed++;
           } else {
@@ -618,16 +770,16 @@ Deno.serve(async (req: Request) => {
       } catch (e) {
         const errMsg = (e as Error).message;
         await addLog(sc, project.id as string,
-          `❌ [tick] EXCEPTION in executing check: ${errMsg}`, "error",
-          { phase: "executing", error: errMsg, stack: (e as Error).stack?.slice(0, 200) });
+          `❌ [tick] EXCEPTION: ${errMsg}`, "error",
+          { error: errMsg, stack: (e as Error).stack?.slice(0, 200) });
         tickLog.push(`→ [exec] ${projId8}: ❌ ${errMsg.slice(0, 60)}`);
       }
     }
 
     // ═══════════════════════════════════════════════════════
-    // PHASE 2: Process "paused" projects — dispatch next task(s) in PARALLEL
+    // PHASE 2: Process "paused" projects — dispatch next task(s)
     // ═══════════════════════════════════════════════════════
-    const MAX_PARALLEL = 3; // Max concurrent brain tasks per project
+    const MAX_PARALLEL = 3;
     const now = new Date().toISOString();
     const { data: pausedProjects, error: pauseErr } = await sc
       .from("orchestrator_projects")
@@ -638,13 +790,11 @@ Deno.serve(async (req: Request) => {
 
     if (pauseErr) {
       console.error("[tick] Failed to fetch paused projects:", pauseErr.message);
-      tickLog.push(`❌ DB error fetching paused: ${pauseErr.message}`);
     }
 
     for (const project of (pausedProjects || [])) {
       const projId8 = (project.id as string).slice(0, 8);
       try {
-        // Count currently running tasks for this project
         const { count: runningCount } = await sc
           .from("orchestrator_tasks")
           .select("id", { count: "exact", head: true })
@@ -654,19 +804,14 @@ Deno.serve(async (req: Request) => {
         const currentRunning = runningCount || 0;
         const slotsAvailable = MAX_PARALLEL - currentRunning;
 
-        // Get pending tasks (up to available slots)
-        // Check dependency satisfaction: only dispatch tasks whose depends_on are all completed
         const { data: allTasks } = await sc
           .from("orchestrator_tasks")
-          .select("id, task_index, title, status, brain_type, depends_on, prompt")
+          .select("id, task_index, title, status, brain_type, depends_on, prompt, phase")
           .eq("project_id", project.id)
           .order("task_index", { ascending: true });
 
         const completedIndexes = new Set(
           (allTasks || []).filter(t => t.status === "completed").map(t => t.task_index as number)
-        );
-        const runningIndexes = new Set(
-          (allTasks || []).filter(t => t.status === "running").map(t => t.task_index as number)
         );
 
         const pendingTasks = (allTasks || [])
@@ -678,24 +823,16 @@ Deno.serve(async (req: Request) => {
           .slice(0, Math.max(slotsAvailable, 1));
 
         if (!pendingTasks || pendingTasks.length === 0) {
-          // No pending tasks — check if there are still running ones
           if (currentRunning > 0) {
-            // Tasks still running — switch to executing
             await sc.from("orchestrator_projects").update({
               status: "executing",
               next_tick_at: new Date(Date.now() + 5_000).toISOString(),
             }).eq("id", project.id);
-
-            await addLog(sc, project.id as string,
-              `🔄 [tick] No pending tasks but ${currentRunning} running — switching to executing`, "warn",
-              { phase: "paused", action: "recover_running_state", running_count: currentRunning });
-
             tickLog.push(`→ [paused] ${projId8}: ${currentRunning} running → executing`);
             skipped++;
             continue;
           }
 
-          // No pending and no running — check for failures
           const { count: failedCount } = await sc
             .from("orchestrator_tasks")
             .select("id", { count: "exact", head: true })
@@ -704,10 +841,7 @@ Deno.serve(async (req: Request) => {
 
           if ((failedCount || 0) > 0) {
             await sc.from("orchestrator_projects").update({ status: "failed" }).eq("id", project.id);
-            await addLog(sc, project.id as string,
-              `❌ [tick] Project marked as failed — ${failedCount} failed tasks`, "error",
-              { phase: "paused", action: "project_failed", failed_tasks: failedCount });
-            tickLog.push(`→ [paused] ${projId8}: failed tasks=${failedCount} → failed`);
+            tickLog.push(`→ [paused] ${projId8}: failed`);
             processed++;
             continue;
           }
@@ -718,26 +852,20 @@ Deno.serve(async (req: Request) => {
             current_task_index: project.total_tasks as number,
             quality_score: 100,
           }).eq("id", project.id);
-          await addLog(sc, project.id as string,
-            `🎉 [tick] All tasks completed!`, "info",
-            { phase: "paused", action: "project_completed",
-              total_tasks: project.total_tasks, user_id: project.user_id });
           tickLog.push(`→ [paused] ${projId8}: ✅ all done!`);
           processed++;
 
-          // ★ Auto-capture source files back to cirius_projects
           await autoCapture(sc, project.id as string, project.lovable_project_id as string, project.user_id as string);
-
           continue;
         }
 
-        // Dispatch multiple tasks in parallel (up to available slots)
+        // Dispatch tasks
         const tasksToDispatch = slotsAvailable > 0 ? pendingTasks.slice(0, slotsAvailable) : [pendingTasks[0]];
         let anySuccess = false;
         let anyBackoff = false;
 
         for (const nextTask of tasksToDispatch) {
-          // ★ For "review" brain tasks, enrich the prompt with current file inventory
+          // Enrich review tasks with file inventory
           if ((nextTask as any).brain_type === "review") {
             const { data: ciriusPrj } = await sc.from("cirius_projects")
               .select("source_files_json")
@@ -747,15 +875,11 @@ Deno.serve(async (req: Request) => {
             const fileList = Object.keys(filesMap);
             if (fileList.length > 0) {
               const fileSummary = fileList.map(f => `- ${f} (${filesMap[f].length} chars)`).join("\n");
-              const enrichedPrompt = (nextTask as any).prompt + `\n\n--- CURRENT PROJECT FILES (${fileList.length} files) ---\n${fileSummary}\n\nReview ALL these files holistically. Ensure imports, exports, types, and component composition are consistent across the entire codebase.`;
+              const enrichedPrompt = (nextTask as any).prompt + `\n\n--- CURRENT PROJECT FILES (${fileList.length} files) ---\n${fileSummary}\n\nReview ALL these files holistically.`;
               await sc.from("orchestrator_tasks").update({ prompt: enrichedPrompt }).eq("id", nextTask.id);
-              await addLog(sc, project.id as string,
-                `🔍 [tick] Enriched review task #${nextTask.task_index} with ${fileList.length} file inventory`, "info",
-                { phase: "paused", file_count: fileList.length, brain_type: "review" }, nextTask.id as string);
             }
           }
 
-          const dispatchT0 = Date.now();
           const execRes = await fetch(`${supabaseUrl}${ORCHESTRATOR_FN}`, {
             method: "POST",
             headers: {
@@ -770,69 +894,48 @@ Deno.serve(async (req: Request) => {
               _target_task_id: nextTask.id,
             }),
           });
-          const dispatchDuration = Date.now() - dispatchT0;
           const execData = await execRes.json().catch(() => ({})) as Record<string, unknown>;
 
           if (execRes.status === 503) {
             anyBackoff = true;
-            await addLog(sc, project.id as string,
-              `⚠️ [tick] No brainchain accounts for task #${nextTask.task_index} "${nextTask.title}" — backoff`, "warn",
-              { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
-                dispatch_duration_ms: dispatchDuration, action: "backoff_no_accounts" }, nextTask.id as string);
             tickLog.push(`→ [paused] ${projId8}: no accounts for #${nextTask.task_index} → backoff`);
-            break; // No more accounts available
+            break;
           } else if (execRes.status >= 400) {
-            await addLog(sc, project.id as string,
-              `❌ [tick] execute_next failed for #${nextTask.task_index}: HTTP ${execRes.status}`, "error",
-              { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
-                dispatch_status: execRes.status, dispatch_response: execData,
-                dispatch_duration_ms: dispatchDuration, action: "dispatch_failed" }, nextTask.id as string);
             tickLog.push(`→ [paused] ${projId8}: dispatch #${nextTask.task_index} failed (${execRes.status})`);
           } else {
             anySuccess = true;
-            await addLog(sc, project.id as string,
-              `📤 [tick] Dispatched task #${nextTask.task_index} "${nextTask.title}" → parallel (${dispatchDuration}ms)`, "info",
-              { phase: "paused", task_id: nextTask.id, task_index: nextTask.task_index,
-                dispatch_status: execRes.status, dispatch_response: execData,
-                dispatch_duration_ms: dispatchDuration, parallel_slot: tasksToDispatch.indexOf(nextTask) + 1,
-                total_parallel: tasksToDispatch.length, action: "task_dispatched_parallel" }, nextTask.id as string);
-            tickLog.push(`→ [paused] ${projId8}: dispatched #${nextTask.task_index} ∥${tasksToDispatch.indexOf(nextTask) + 1}`);
-            processed++;
+            tickLog.push(`→ [paused] ${projId8}: dispatched #${nextTask.task_index} ✅`);
           }
         }
 
-        if (anyBackoff) {
+        if (anySuccess) {
+          processed++;
+        } else if (anyBackoff) {
           await sc.from("orchestrator_projects").update({
-            next_tick_at: new Date(Date.now() + 60_000).toISOString(),
+            next_tick_at: new Date(Date.now() + 30_000).toISOString(),
           }).eq("id", project.id);
           skipped++;
-        } else if (!anySuccess) {
-          await sc.from("orchestrator_projects").update({
-            next_tick_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
-          }).eq("id", project.id);
+        } else {
           skipped++;
         }
       } catch (e) {
         const errMsg = (e as Error).message;
         await addLog(sc, project.id as string,
-          `❌ [tick] EXCEPTION in paused dispatch: ${errMsg}`, "error",
-          { phase: "paused", error: errMsg, stack: (e as Error).stack?.slice(0, 200) });
+          `❌ [tick] EXCEPTION in paused: ${errMsg}`, "error");
         tickLog.push(`→ [paused] ${projId8}: ❌ ${errMsg.slice(0, 60)}`);
-        await sc.from("orchestrator_projects").update({
-          next_tick_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
-        }).eq("id", project.id);
       }
     }
 
     const tickDuration = Date.now() - tickStartMs;
     return json({
-      success: true, processed, skipped, tick_log: tickLog,
-      duration_ms: tickDuration,
-      executing_count: executingProjects?.length || 0,
-      paused_count: pausedProjects?.length || 0,
+      ok: true,
+      tick_duration_ms: tickDuration,
+      processed,
+      skipped,
+      log: tickLog,
     });
   } catch (err) {
-    console.error("[orchestrator-tick] Fatal:", err);
-    return json({ error: "Internal server error", details: (err as Error).message?.slice(0, 100) }, 500);
+    console.error("[tick] Fatal error:", err);
+    return json({ error: "Internal error", details: (err as Error).message }, 500);
   }
 });

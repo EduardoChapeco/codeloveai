@@ -1,11 +1,11 @@
 /**
- * Agentic Orchestrator — Engine v4 (Brainchain-powered)
+ * Agentic Orchestrator — Engine v5 (Brain Chain Pipeline)
  *
- * Key change from v3:
- *  - Uses brainchain_accounts pool instead of single lovable_accounts token
- *  - Each brainchain account has its own brain_project_id (no ghost-create needed)
- *  - Auto-refresh tokens via Firebase SecureToken API
- *  - Round-robin account selection with busy/error tracking
+ * Key changes from v4:
+ *  - 2-phase pipeline: PRD Expansion → Code Generation
+ *  - Each brain receives a PRD fragment and expands it into sub-tasks
+ *  - Dynamic task creation from brain PRD outputs
+ *  - Phase tracking on tasks and projects
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -19,7 +19,6 @@ const corsHeaders = {
 const AQ_PREFIX = `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n`;
 
 // ─── MD Output Protocol ──────────────────────────────────────
-// Same protocol used by Brain — forces all responses into src/update.md for mining
 const MD_OUTPUT_PROTOCOL = `
 
 PROTOCOLO DE SAÍDA OBRIGATÓRIO:
@@ -45,8 +44,35 @@ PROTOCOLO DE SAÍDA OBRIGATÓRIO:
 
 `;
 
+// ─── PRD Expansion Protocol ──────────────────────────────────
+const PRD_EXPANSION_PROTOCOL = `
+
+PROTOCOLO DE EXPANSÃO DE PRD:
+- Você recebeu um fragmento de PRD (Product Requirements Document).
+- Sua tarefa é EXPANDIR este fragmento em um sub-PRD detalhado.
+- Pense mais profundamente sobre cada requisito. Adicione detalhes técnicos.
+- Crie N tasks (3-8), cada uma sendo um prompt COMPLETO pedindo código funcional.
+- Cada task deve ser auto-contida e produzir código real e funcional.
+- Retorne o sub-PRD no arquivo src/update.md no seguinte formato:
+
+\`\`\`json
+{
+  "tasks": [
+    {
+      "title": "Título curto da task",
+      "prompt": "Prompt completo e detalhado pedindo código funcional...",
+      "brain_type": "frontend|backend|database|design|code"
+    }
+  ]
+}
+\`\`\`
+
+- O frontmatter do src/update.md DEVE ter status: done quando concluir.
+- NÃO escreva código nesta fase. Apenas o sub-PRD com tasks.
+
+`;
+
 // ─── Brain Specialization Context ─────────────────────────────
-// Injected as system context prefix per brain_type so each brain stays in its lane
 const BRAIN_CONTEXT: Record<string, string> = {
   frontend: "[FRONTEND SPECIALIST] You are an expert in React, TypeScript, Tailwind CSS, responsive design, and animations. Focus ONLY on UI components, pages, and user experience. ",
   backend: "[BACKEND SPECIALIST] You are an expert in Supabase Edge Functions, API design, authentication, server-side validation, and integrations. Focus ONLY on backend logic. ",
@@ -54,6 +80,7 @@ const BRAIN_CONTEXT: Record<string, string> = {
   design: "[DESIGN SPECIALIST] You are an expert in design systems, CSS architecture, color theory, typography, and visual consistency. Focus ONLY on design tokens, themes, and visual components. ",
   review: "[HOLISTIC REVIEWER] You are a senior integration specialist. Review ALL files across the entire project for consistency: validate imports, exports, component props, database queries, naming conventions, and ensure everything compiles correctly. Fix ALL integration issues. ",
   code: "[FULL-STACK DEVELOPER] You are a senior full-stack developer. Implement features end-to-end with React, TypeScript, Supabase, and Tailwind. ",
+  prd: "[ARCHITECT] You are a senior software architect. Your role is to decompose and expand requirements into detailed, actionable tasks. ",
 };
 
 const FIREBASE_KEY_ENV = "FIREBASE_API_KEY";
@@ -81,8 +108,6 @@ async function getUserId(req: Request, anonSc: SupabaseClient, body?: Record<str
 async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "code"): Promise<{
   id: string; accessToken: string; brainProjectId: string;
 } | null> {
-  // Map specialized brain_types to available pool types
-  // frontend/backend/review → code pool, database → code pool (all can handle it)
   const TYPE_FALLBACK: Record<string, string[]> = {
     frontend: ["design", "code"],
     backend: ["code"],
@@ -94,7 +119,7 @@ async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "code"):
   };
 
   const typesToTry = [brainType, ...(TYPE_FALLBACK[brainType] || []), "general"]
-    .filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+    .filter((v, i, a) => a.indexOf(v) === i);
 
   // Release stuck accounts (busy > 3 min)
   const stuckThreshold = new Date(Date.now() - 3 * 60 * 1000).toISOString();
@@ -103,7 +128,6 @@ async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "code"):
     .eq("is_busy", true)
     .lt("busy_since", stuckThreshold);
 
-  // Try each type in priority order
   for (const type of typesToTry) {
     const { data: accounts } = await sc
       .from("brainchain_accounts")
@@ -120,11 +144,9 @@ async function acquireBrainchainAccount(sc: SupabaseClient, brainType = "code"):
     const account = accounts[0];
     if (!account.brain_project_id) continue;
 
-    // Ensure valid token
     const token = await ensureValidToken(sc, account);
     if (!token) continue;
 
-    // Mark busy
     await sc.from("brainchain_accounts").update({
       is_busy: true,
       busy_since: new Date().toISOString(),
@@ -157,7 +179,7 @@ async function ensureValidToken(sc: SupabaseClient, account: Record<string, any>
   if (!account.refresh_token) return null;
 
   const firebaseKey = Deno.env.get(FIREBASE_KEY_ENV) || "";
-  if (!firebaseKey) return account.access_token || null; // best effort
+  if (!firebaseKey) return account.access_token || null;
 
   try {
     const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${firebaseKey}`, {
@@ -200,14 +222,24 @@ async function addLog(
   });
 }
 
-// ─── PRD Generation ──────────────────────────────────────────
+// ─── PRD Generation (with Brain Chain support) ───────────────
 async function generatePRD(
   clientPrompt: string,
-  brainSkills: string[] = []
-): Promise<{ tasks: Array<{ title: string; intent: string; prompt: string; brain_type?: string; stop_condition?: string; depends_on?: number[] }> } | null> {
+  brainSkills: string[] = [],
+  useBrainChain = false
+): Promise<{ tasks: Array<{ title: string; intent: string; prompt: string; brain_type?: string; stop_condition?: string; depends_on?: number[]; phase?: string }> } | null> {
   const skillContext = brainSkills.length > 0
     ? `\nBrain skills available: ${brainSkills.join(", ")}. Assign brain_skill to each task.`
     : "";
+
+  const brainChainInstructions = useBrainChain ? `
+
+BRAIN CHAIN MODE:
+- The FIRST task should be a PRD Expansion task (brain_type: "prd", phase: "prd_expansion")
+- This task asks the brain to expand the requirements into detailed sub-tasks
+- The remaining tasks are standard code generation tasks that depend on the PRD expansion
+- Set depends_on to [0] for all code tasks so they wait for PRD expansion
+` : "";
 
   const architectPrompt = `You are a senior software architect that decomposes projects into specialized brain tasks.
 
@@ -218,18 +250,19 @@ Available brain_type specializations:
 - "backend": Edge functions, API routes, auth logic, server-side validation
 - "code": General full-stack (use when task spans multiple areas)
 - "review": Holistic code review, cross-file validation, integration check
+- "prd": PRD expansion and detailed task planning
 
-A client wants: "${clientPrompt}"${skillContext}
+A client wants: "${clientPrompt}"${skillContext}${brainChainInstructions}
 
 Break into 3-8 specialized tasks. Return ONLY valid JSON:
-{"tasks":[{"title":"Short title","brain_type":"frontend","intent":"security_fix_v2","prompt":"Detailed prompt for the specialized brain","depends_on":[],"stop_condition":"source_contains:keyword"}]}
+{"tasks":[{"title":"Short title","brain_type":"frontend","intent":"security_fix_v2","prompt":"Detailed prompt for the specialized brain","depends_on":[],"stop_condition":"source_contains:keyword","phase":"code_generation"}]}
 
 Rules:
 - ALWAYS start with "database" if project needs data storage
 - ALWAYS include "design" early for visual system
 - ALWAYS end with "review" for holistic integration check
 - Each brain is SPECIALIZED — prompts must be targeted to that expertise
-- depends_on: array of task indexes this task depends on (for parallel execution)
+- depends_on: array of task indexes this task depends on
 - Prompts must be self-contained, detailed, implementation-ready
 - No questions, no clarifications`;
 
@@ -289,7 +322,7 @@ Rules:
   return null;
 }
 
-function extractJSON(content: string): { tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string }> } | null {
+function extractJSON(content: string): { tasks: Array<{ title: string; intent: string; prompt: string; stop_condition?: string; phase?: string }> } | null {
   if (!content || content.length < 10) return null;
   let s = content.trim();
   const m = s.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -306,11 +339,9 @@ function extractJSON(content: string): { tasks: Array<{ title: string; intent: s
 }
 
 // ─── Execute Task via Brainchain Account ─────────────────────
-// Uses a brainchain account's brain_project_id to send the task.
-// Fire-and-forget: completion detection by orchestrator-tick.
 async function executeTaskViaBrainchain(
   sc: SupabaseClient,
-  task: { id: string; prompt: string; intent: string; task_index: number; brain_type?: string },
+  task: { id: string; prompt: string; intent: string; task_index: number; brain_type?: string; phase?: string },
   projectId: string,
   account: { id: string; accessToken: string; brainProjectId: string },
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
@@ -318,13 +349,13 @@ async function executeTaskViaBrainchain(
     status: "running", started_at: new Date().toISOString(),
   }).eq("id", task.id);
 
-  await addLog(sc, projectId, `▶ Task #${task.task_index} — sending via Brainchain account ${account.id.slice(0, 8)}`, "info", undefined, task.id);
+  await addLog(sc, projectId, `▶ Task #${task.task_index} (${task.phase || "code"}) — sending via account ${account.id.slice(0, 8)}`, "info", undefined, task.id);
 
   try {
     const msgId = "usermsg_" + rb32(26);
     const aiMsgId = "aimsg_" + rb32(26);
 
-    // ★ Snapshot initial latest-message ID BEFORE sending so tick can compare
+    // Snapshot initial latest-message ID BEFORE sending
     let initialMsgId: string | null = null;
     try {
       const snapRes = await fetch(`https://api.lovable.dev/projects/${account.brainProjectId}/chat/latest-message`, {
@@ -338,22 +369,23 @@ async function executeTaskViaBrainchain(
         const snapData = await snapRes.json().catch(() => null);
         initialMsgId = snapData?.id || null;
       }
-    } catch (_) { /* ignore snapshot failure */ }
+    } catch (_) { /* ignore */ }
 
-    // ★ Create a unique output marker so miner targets exact response
     const outputMarker = `cirius-out-${Date.now()}-${task.task_index}`;
 
-    // Inject brain specialization context
+    // Select protocol based on phase
+    const isPrdExpansion = task.phase === "prd_expansion";
     const brainContext = BRAIN_CONTEXT[task.brain_type || "code"] || BRAIN_CONTEXT.code;
+    const protocol = isPrdExpansion ? PRD_EXPANSION_PROTOCOL : MD_OUTPUT_PROTOCOL;
 
     const lvPayload = {
       id: msgId,
-      message: AQ_PREFIX + brainContext + MD_OUTPUT_PROTOCOL + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`,
+      message: AQ_PREFIX + brainContext + protocol + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`,
       chat_only: false,
       ai_message_id: aiMsgId,
       thread_id: "main",
       view: "editor",
-      view_description: "Orchestrator task execution.",
+      view_description: isPrdExpansion ? "PRD Expansion phase." : "Orchestrator task execution.",
       model: null,
       session_replay: "[]",
       client_logs: [],
@@ -384,10 +416,9 @@ async function executeTaskViaBrainchain(
 
     // On 401/403 — force-refresh token and retry once
     if (lvRes.status === 401 || lvRes.status === 403) {
-      await lvRes.text().catch(() => {}); // consume body
-      await addLog(sc, projectId, `🔄 Task #${task.task_index}: HTTP ${lvRes.status} — refreshing token and retrying`, "warn", undefined, task.id);
+      await lvRes.text().catch(() => {});
+      await addLog(sc, projectId, `🔄 Task #${task.task_index}: HTTP ${lvRes.status} — refreshing token`, "warn", undefined, task.id);
 
-      // Force refresh by getting raw account data
       const { data: rawAcc } = await sc.from("brainchain_accounts")
         .select("refresh_token, access_token, access_expires_at")
         .eq("id", account.id).single();
@@ -396,11 +427,10 @@ async function executeTaskViaBrainchain(
         const refreshedToken = await ensureValidToken(sc, {
           ...rawAcc,
           id: account.id,
-          access_expires_at: new Date(0).toISOString(), // Force refresh
+          access_expires_at: new Date(0).toISOString(),
         });
         if (refreshedToken) {
           currentToken = refreshedToken;
-          // Update payload with new token
           lvPayload.integration_metadata.browser.auth_token = currentToken;
           lvPayload.integration_metadata.supabase.auth_token = currentToken;
           lvRes = await sendChat(currentToken);
@@ -437,14 +467,14 @@ async function executeTaskViaBrainchain(
       source_fingerprint: initialMsgId,
     }).eq("id", projectId);
 
-    await addLog(sc, projectId, `Task #${task.task_index} sent to brain ${account.brainProjectId.slice(0, 8)}. Initial msg snapshot: ${initialMsgId?.slice(0, 12) || "none"}`, "info", {
+    await addLog(sc, projectId, `Task #${task.task_index} (${task.phase || "code"}) sent to brain ${account.brainProjectId.slice(0, 8)}`, "info", {
       brainchain_account_id: account.id,
       brain_project_id: account.brainProjectId,
       initial_msg_id: initialMsgId,
       output_marker: outputMarker,
+      phase: task.phase,
     }, task.id);
 
-    // NOTE: We do NOT release the account here — tick will release it when task completes
     return { success: true, messageId: msgId };
   } catch (e) {
     const err = (e as Error).message;
@@ -480,6 +510,7 @@ Deno.serve(async (req: Request) => {
     if (action === "start") {
       const clientPrompt = ((body.client_prompt as string) || "").trim();
       const brainId = (body.brain_id as string) || undefined;
+      const useBrainChain = (body.brain_chain as boolean) || false;
       if (!clientPrompt) return json({ error: "client_prompt required" }, 400);
 
       // Resolve Brain skills
@@ -492,8 +523,6 @@ Deno.serve(async (req: Request) => {
           brainSkills = (brainRow.brain_skills as string[]) || [];
           brainName = (brainRow.name as string) || "";
         }
-        await addLog(sc, "", `🔍 Brain lookup: ${brainId.slice(0, 8)} → ${brainRow ? `found (${brainSkills.length} skills)` : "NOT FOUND"}`, "debug",
-          { brain_id: brainId, skills: brainSkills, brain_name: brainName });
       }
 
       // Create project record
@@ -501,34 +530,33 @@ Deno.serve(async (req: Request) => {
         user_id: userId, client_prompt: clientPrompt,
         brain_id: brainId || null, brain_skill_profile: brainSkills,
         status: "planning",
+        pipeline_phase: useBrainChain ? "prd_expansion" : "standard",
       }).select("id").single();
 
       if (projErr || !project) {
-        console.error("[orch] start: project creation failed:", projErr?.message);
         return json({ error: "Failed to create project", details: projErr?.message }, 500);
       }
       const projectId = project.id as string;
 
-      await addLog(sc, projectId, `🚀 Orchestrator started${brainName ? ` (Brain: ${brainName})` : ""}: "${clientPrompt.slice(0, 80)}…"`, "info",
-        { user_id: userId, brain_id: brainId, prompt_length: clientPrompt.length });
+      await addLog(sc, projectId, `🚀 Orchestrator started (${useBrainChain ? "Brain Chain" : "Standard"})${brainName ? ` (Brain: ${brainName})` : ""}: "${clientPrompt.slice(0, 80)}…"`, "info",
+        { user_id: userId, brain_id: brainId, brain_chain: useBrainChain, prompt_length: clientPrompt.length });
 
-      // Generate PRD INLINE
+      // Generate PRD
       await addLog(sc, projectId, "🧠 Generating PRD…", "info");
       const prdT0 = Date.now();
-      const prd = await generatePRD(clientPrompt, brainSkills);
+      const prd = await generatePRD(clientPrompt, brainSkills, useBrainChain);
       const prdDuration = Date.now() - prdT0;
 
       if (!prd || !prd.tasks?.length) {
-        const fallback = [{ title: "Implementar projeto completo", intent: "chat", prompt: clientPrompt }];
+        const fallback = [{ title: "Implementar projeto completo", intent: "chat", prompt: clientPrompt, phase: "code_generation" }];
         await sc.from("orchestrator_tasks").insert(fallback.map((t, i) => ({
-          project_id: projectId, task_index: i, title: t.title, intent: t.intent, prompt: t.prompt,
+          project_id: projectId, task_index: i, title: t.title, intent: t.intent, prompt: t.prompt, phase: t.phase,
         })));
         await sc.from("orchestrator_projects").update({
           status: "paused", total_tasks: fallback.length,
           prd_json: { tasks: fallback, note: "PRD unavailable — fallback" },
         }).eq("id", projectId);
-        await addLog(sc, projectId, `⚠️ PRD FAILED after ${prdDuration}ms — fallback single task created`, "warn",
-          { prd_duration_ms: prdDuration, fallback: true, reason: prd === null ? "all_engines_failed" : "empty_tasks" });
+        await addLog(sc, projectId, `⚠️ PRD FAILED after ${prdDuration}ms — fallback`, "warn");
       } else {
         await sc.from("orchestrator_projects").update({
           prd_json: prd, total_tasks: prd.tasks.length, status: "paused",
@@ -539,12 +567,13 @@ Deno.serve(async (req: Request) => {
             title: t.title, intent: t.intent || "chat",
             prompt: t.prompt, stop_condition: t.stop_condition || null,
             brain_type: t.brain_type || "code",
+            phase: t.phase || "code_generation",
+            depends_on: t.depends_on || [],
           }))
         );
         const brainTypes = [...new Set(prd.tasks.map(t => t.brain_type || "code"))];
-        await addLog(sc, projectId, `✅ PRD ready: ${prd.tasks.length} tasks in ${prdDuration}ms. Specialized brains: ${brainTypes.join(", ")}`, "info",
-          { prd_duration_ms: prdDuration, task_count: prd.tasks.length, brain_types: brainTypes,
-            task_titles: prd.tasks.map(t => t.title) });
+        await addLog(sc, projectId, `✅ PRD: ${prd.tasks.length} tasks in ${prdDuration}ms. Brains: ${brainTypes.join(", ")}`, "info",
+          { prd_duration_ms: prdDuration, task_count: prd.tasks.length, brain_types: brainTypes });
       }
 
       return json({ success: true, project_id: projectId, status: "paused" });
@@ -561,23 +590,22 @@ Deno.serve(async (req: Request) => {
       const { data: project } = await q.maybeSingle();
 
       if (!project) return json({ error: "Project not found" }, 404);
-      if (project.status === "completed") {
-        await addLog(sc, projectId, `⏭ execute_next called but project already completed`, "debug");
-        return json({ status: "already_completed" });
-      }
-      if (project.status === "failed") {
-        await addLog(sc, projectId, `⏭ execute_next called but project is failed: ${project.last_error}`, "debug");
-        return json({ status: "failed", error: project.last_error });
-      }
-      if (project.status === "executing") {
-        await addLog(sc, projectId, `⏭ execute_next called but project already executing`, "debug");
-        return json({ status: "already_executing" });
+      if (project.status === "completed") return json({ status: "already_completed" });
+      if (project.status === "failed") return json({ status: "failed", error: project.last_error });
+      if (project.status === "executing") return json({ status: "already_executing" });
+
+      // Get next pending task (respecting target if specified)
+      const targetTaskId = body._target_task_id as string | undefined;
+      let taskQuery = sc.from("orchestrator_tasks")
+        .select("*").eq("project_id", projectId).eq("status", "pending")
+        .order("task_index", { ascending: true }).limit(1);
+      
+      if (targetTaskId) {
+        taskQuery = sc.from("orchestrator_tasks")
+          .select("*").eq("id", targetTaskId).eq("status", "pending").limit(1);
       }
 
-      // Get next pending task FIRST (needed for brain_type selection)
-      const { data: task } = await sc.from("orchestrator_tasks")
-        .select("*").eq("project_id", projectId).eq("status", "pending")
-        .order("task_index", { ascending: true }).limit(1).maybeSingle();
+      const { data: task } = await taskQuery.maybeSingle();
 
       if (!task) {
         await sc.from("orchestrator_projects").update({
@@ -589,26 +617,17 @@ Deno.serve(async (req: Request) => {
         return json({ status: "completed" });
       }
 
-      // Acquire a brainchain account from the pool (using task's brain_type)
-      const acqT0 = Date.now();
+      // Acquire brainchain account
       const taskBrainType = (task as any).brain_type || "code";
-      await addLog(sc, projectId, `🧠 Task #${task.task_index} requires brain_type="${taskBrainType}" — acquiring specialized account`, "info");
       const account = await acquireBrainchainAccount(sc, taskBrainType);
-      const acqDuration = Date.now() - acqT0;
 
       if (!account) {
-        await addLog(sc, projectId, `⚠️ No brainchain accounts available — will retry on next tick (acq took ${acqDuration}ms)`, "warn",
-          { acquire_duration_ms: acqDuration, action: "no_accounts_backoff" });
+        await addLog(sc, projectId, `⚠️ No brainchain accounts for brain_type="${taskBrainType}"`, "warn");
         await sc.from("orchestrator_projects").update({
           next_tick_at: new Date(Date.now() + 30_000).toISOString(),
         }).eq("id", projectId);
         return json({ error: "No brainchain accounts available", retry_after: 30 }, 503);
       }
-
-      await addLog(sc, projectId, `🔑 Acquired brainchain account ${account.id.slice(0, 8)} (brain: ${account.brainProjectId.slice(0, 8)}) in ${acqDuration}ms`, "debug",
-        { account_id: account.id, brain_project: account.brainProjectId, acquire_duration_ms: acqDuration });
-
-      // (task null check already handled above)
 
       // Set to executing BEFORE sending
       await sc.from("orchestrator_projects").update({
@@ -616,21 +635,18 @@ Deno.serve(async (req: Request) => {
         next_tick_at: new Date(Date.now() + 30_000).toISOString(),
       }).eq("id", projectId);
 
-      const execT0 = Date.now();
+      const taskPhase = (task as any).phase || "code_generation";
       const result = await executeTaskViaBrainchain(
         sc,
-        { id: task.id as string, prompt: task.prompt as string, intent: task.intent as string, task_index: task.task_index as number, brain_type: taskBrainType },
+        { id: task.id as string, prompt: task.prompt as string, intent: task.intent as string, task_index: task.task_index as number, brain_type: taskBrainType, phase: taskPhase },
         projectId, account,
       );
-      const execDuration = Date.now() - execT0;
 
       if (!result.success) {
         const retries = ((task.retry_count as number) || 0) + 1;
         await addLog(sc, projectId,
-          `❌ Task #${task.task_index} "${task.title}" FAILED (attempt ${retries}/3): ${result.error}`, "error",
-          { task_id: task.id, task_index: task.task_index, retry_count: retries,
-            error: result.error, exec_duration_ms: execDuration,
-            account_id: account.id, brain_project: account.brainProjectId },
+          `❌ Task #${task.task_index} FAILED (attempt ${retries}/3): ${result.error}`, "error",
+          { task_id: task.id, retry_count: retries, error: result.error },
           task.id as string);
 
         if (retries >= 3) {
@@ -644,20 +660,18 @@ Deno.serve(async (req: Request) => {
       }
 
       await addLog(sc, projectId,
-        `📤 Task #${task.task_index} "${task.title}" dispatched successfully via account ${account.id.slice(0, 8)} in ${execDuration}ms`, "info",
-        { task_id: task.id, task_index: task.task_index, message_id: result.messageId,
-          exec_duration_ms: execDuration, account_id: account.id,
-          brain_project: account.brainProjectId },
+        `📤 Task #${task.task_index} "${task.title}" (${taskPhase}) dispatched via account ${account.id.slice(0, 8)}`, "info",
+        { task_id: task.id, message_id: result.messageId, phase: taskPhase },
         task.id as string);
 
       return json({
         status: "executing",
         task_index: task.task_index,
         task_title: task.title,
+        phase: taskPhase,
         message_id: result.messageId,
         brainchain_account: account.id.slice(0, 8),
         brain_project: account.brainProjectId.slice(0, 8),
-        message: "Task dispatched via Brainchain. Tick will detect completion.",
       });
     }
 
