@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useLovableProxy } from "@/hooks/useLovableProxy";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  Plus, Star, Heart, ExternalLink, MoreHorizontal, Filter,
-  Loader2, Globe, RefreshCw, Link2, AlertTriangle,
+  Plus, ExternalLink, MoreHorizontal, Filter,
+  Loader2, Globe, Link2, Edit3, Trash2, Copy, Eye,
 } from "lucide-react";
 
 interface LovableProject {
@@ -17,6 +17,61 @@ interface LovableProject {
   published_url?: string;
 }
 
+function ProjectDropdown({ project, onClose }: { project: LovableProject; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const copyUrl = () => {
+    if (project.published_url) {
+      navigator.clipboard.writeText(project.published_url);
+      toast.success("URL copiada!");
+    } else {
+      toast.info("Projeto não publicado ainda");
+    }
+    onClose();
+  };
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: "absolute", top: 32, right: 0, zIndex: 50,
+        minWidth: 160, padding: 4,
+        background: "var(--bg-2)", border: "1px solid var(--b2)",
+        borderRadius: "var(--r3)", boxShadow: "var(--shadow-md)",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button className="proj-dropdown-item" onClick={() => { navigate(`/projeto/${project.id}/editar`); onClose(); }}>
+        <Edit3 size={12} /> Editar projeto
+      </button>
+      {project.published_url && (
+        <button className="proj-dropdown-item" onClick={() => { window.open(project.published_url, "_blank"); onClose(); }}>
+          <ExternalLink size={12} /> Abrir site
+        </button>
+      )}
+      <button className="proj-dropdown-item" onClick={() => { navigate(`/projeto/${project.id}/editar`); onClose(); }}>
+        <Eye size={12} /> Visualizar
+      </button>
+      <button className="proj-dropdown-item" onClick={copyUrl}>
+        <Copy size={12} /> Copiar URL
+      </button>
+      <div style={{ height: 1, background: "var(--b1)", margin: "4px 0" }} />
+      <button className="proj-dropdown-item" style={{ color: "var(--red-l)" }} onClick={() => { toast.info("Exclusão disponível em breve"); onClose(); }}>
+        <Trash2 size={12} /> Excluir
+      </button>
+    </div>
+  );
+}
+
 export default function StarbleProjectsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -25,6 +80,7 @@ export default function StarbleProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<"active" | "expired" | "none" | null>(null);
   const [selectedWs, setSelectedWs] = useState("");
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -63,8 +119,8 @@ export default function StarbleProjectsPage() {
           </div>
         </div>
         <div style={{ textAlign: "center", padding: "60px 0" }}>
-          <Link2 size={40} style={{ color: "var(--text-tertiary)", margin: "0 auto 16px", display: "block" }} />
-          <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 16 }}>
+          <Link2 size={40} style={{ color: "var(--tq)", margin: "0 auto 16px", display: "block" }} />
+          <p style={{ color: "var(--ts)", fontSize: 13, marginBottom: 16 }}>
             {connectionStatus === "expired" ? "Token expirado. Reconecte." : "Conecte sua conta Lovable."}
           </p>
           <button className="gl orange" onClick={() => navigate("/lovable/connect")}>
@@ -98,13 +154,13 @@ export default function StarbleProjectsPage() {
         {/* New project card */}
         <div className="proj-card new-card" onClick={() => navigate("/cirius/new")}>
           <div className="nc-ico"><Plus size={18} /></div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>Novo projeto</div>
-          <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Descreva sua ideia e a IA constrói</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--tp)" }}>Novo projeto</div>
+          <div style={{ fontSize: 11, color: "var(--tt)" }}>Descreva sua ideia e a IA constrói</div>
         </div>
 
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
-            <Loader2 size={20} style={{ animation: "gl-spin .7s linear infinite", color: "var(--text-tertiary)" }} />
+            <Loader2 size={20} style={{ animation: "gl-spin .7s linear infinite", color: "var(--tt)" }} />
           </div>
         ) : (
           projects.map((project) => (
@@ -119,13 +175,13 @@ export default function StarbleProjectsPage() {
                   {project.latest_screenshot_url ? (
                     <img src={project.latest_screenshot_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
-                    <Globe size={24} style={{ color: "var(--text-quaternary)" }} />
+                    <Globe size={24} style={{ color: "var(--tq)" }} />
                   )}
                 </div>
               </div>
               <div className="proj-info">
                 <div className="proj-name">{project.display_name || project.name}</div>
-                <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Projeto Lovable</div>
+                <div style={{ fontSize: 11, color: "var(--tt)" }}>Projeto Lovable</div>
                 <div className="proj-meta">
                   <div className={`proj-status-dot ${project.published_url ? "ps-live" : "ps-draft"}`} />
                   <span className={`chip sm ${project.published_url ? "ch-green" : "ch-gray"}`}>
@@ -133,15 +189,24 @@ export default function StarbleProjectsPage() {
                   </span>
                 </div>
               </div>
-              <div className="proj-card-actions">
+              <div className="proj-card-actions" style={{ position: "relative" }}>
                 {project.published_url && (
                   <a href={project.published_url} target="_blank" rel="noopener noreferrer" className="gl ico xs ghost" onClick={(e) => e.stopPropagation()}>
                     <ExternalLink size={11} />
                   </a>
                 )}
-                <button className="gl ico xs ghost" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="gl ico xs ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenDropdown(openDropdown === project.id ? null : project.id);
+                  }}
+                >
                   <MoreHorizontal size={11} />
                 </button>
+                {openDropdown === project.id && (
+                  <ProjectDropdown project={project} onClose={() => setOpenDropdown(null)} />
+                )}
               </div>
             </div>
           ))
