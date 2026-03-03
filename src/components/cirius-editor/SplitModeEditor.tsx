@@ -5,6 +5,7 @@ import SplitResizer from "./SplitResizer";
 import SplitPreviewPanel from "./SplitPreviewPanel";
 import EditorToasts from "./EditorToasts";
 import FileExplorer from "./FileExplorer";
+import FileMiningFeed from "./FileMiningFeed";
 import CodeViewer from "./CodeViewer";
 import TerminalPanel, { type TerminalLine } from "./TerminalPanel";
 import type { FrameMode, ActiveMode, EditorToast, ChatMessage, Bubble } from "./types";
@@ -143,7 +144,8 @@ export default function SplitModeEditor({
         {/* File sidebar — between chat and preview */}
         {showFiles && hasFiles && (
           <div className="sp-file-sidebar">
-            <FileExplorer files={files} selectedFile={selectedFile} onSelectFile={(f) => { setSelectedFile(f); setRightPanel("code"); }} />
+            <FileExplorer files={files} selectedFile={selectedFile} onSelectFile={(f) => { setSelectedFile(f); setRightPanel("code"); }} updatedFiles={updatedFiles} />
+            <FileMiningFeed files={files} updatedFiles={updatedFiles || []} />
           </div>
         )}
 
