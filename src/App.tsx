@@ -181,7 +181,7 @@ const App = () => (
                 <Route path="/lovable/projects" element={<LovableProjects />} />
                 <Route path="/lovable/preview" element={<LovablePreview />} />
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
-                <Route path="/brain" element={<Brain />} />
+                <Route path="/brain" element={<Dashboard />} />
                 <Route path="/assistente" element={<Dashboard />} />
                 <Route path="/orquestrador" element={<OrchestratorPage />} />
                 <Route path="/projeto/:id/editar" element={<ProjectEditor />} />
