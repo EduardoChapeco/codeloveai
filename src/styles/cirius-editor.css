@@ -1363,8 +1363,8 @@
   transition: padding 0.4s var(--ease-spring);
 }
 .sp-preview-content.desktop { padding: 0; }
-.sp-preview-content.tablet  { padding: 24px 80px; }
-.sp-preview-content.mobile  { padding: 24px calc(50% - 180px); }
+.sp-preview-content.tablet  { padding: 20px; }
+.sp-preview-content.mobile  { padding: 16px; }
 
 .sp-preview-outer {
   width: 100%; height: 100%; background: #fff;
@@ -1372,11 +1372,17 @@
   position: relative;
 }
 .sp-preview-content.tablet .sp-preview-outer {
+  width: min(100%, 834px);
+  max-height: 100%;
+  margin: 0 auto;
   border-radius: var(--r4);
   box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 20px 60px rgba(0,0,0,0.8);
 }
 .sp-preview-content.mobile .sp-preview-outer {
-  max-width: 390px; border-radius: 32px;
+  width: min(100%, 390px);
+  max-height: 100%;
+  margin: 0 auto;
+  border-radius: 32px;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.07), 0 24px 80px rgba(0,0,0,0.85);
 }
 .sp-preview-iframe { width: 100%; height: 100%; border: none; }

@@ -32,10 +32,11 @@ function buildPreviewFromFiles(files: Record<string, string>): string | null {
   const html = files["index.html"] || files["dist/index.html"];
 
   const cssFiles = Object.entries(files).filter(([k]) => k.endsWith(".css"));
-  const jsFiles = Object.entries(files).filter(([k]) => k.endsWith(".js") || k.endsWith(".tsx") || k.endsWith(".ts"));
+  const plainJs = Object.entries(files).filter(([k]) => k.endsWith(".js"));
 
-  // If we have an index.html, assemble normally
-  if (html) {
+  // If HTML does not depend on Vite module entrypoints, assemble it directly
+  const hasViteModuleEntry = !!html && /<script[^>]+type=["']module["'][^>]+src=["'][^"']*(?:\/src\/main\.(?:tsx|ts|jsx|js)|\/main\.(?:tsx|ts|jsx|js))[^"']*["'][^>]*>/i.test(html);
+  if (html && !hasViteModuleEntry) {
     let assembled = html;
     if (cssFiles.length > 0) {
       const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
@@ -43,7 +44,6 @@ function buildPreviewFromFiles(files: Record<string, string>): string | null {
         ? assembled.replace("</head>", `${cssBlock}\n</head>`)
         : `${cssBlock}\n${assembled}`;
     }
-    const plainJs = jsFiles.filter(([k]) => k.endsWith(".js"));
     if (plainJs.length > 0) {
       const jsBlock = plainJs.map(([, v]) => `<script>${v}</script>`).join("\n");
       assembled = assembled.includes("</body>")
@@ -53,92 +53,80 @@ function buildPreviewFromFiles(files: Record<string, string>): string | null {
     return assembled;
   }
 
-  // No index.html — render TSX/JSX via Babel Standalone + React CDN
-  const tsxFiles = Object.entries(files).filter(([k]) => /\.(tsx|jsx)$/.test(k) && !k.includes(".d.ts"));
-  if (tsxFiles.length === 0) return null;
+  // Vite-style projects: render TS/TSX via Babel Standalone + React CDN
+  const sourceModules = Object.entries(files).filter(([k]) => {
+    if (!k.startsWith("src/")) return false;
+    if (k.includes(".d.ts")) return false;
+    if (/\/main\.(tsx|ts|jsx|js)$/.test(k)) return false;
+    return /\.(tsx|ts|jsx|js)$/.test(k);
+  });
 
-  // Collect all CSS
+  if (sourceModules.length === 0) return html || null;
+
   const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
-
-  // Extract component name from file path
   const getComponentName = (path: string) => {
-    const base = path.split("/").pop()?.replace(/\.(tsx|jsx)$/, "") || "Component";
+    const base = path.split("/").pop()?.replace(/\.(tsx|ts|jsx|js)$/, "") || "Component";
     return base.charAt(0).toUpperCase() + base.slice(1);
   };
 
-  // Build a dependency-ordered list: process non-App files first, App last
-  const appEntry = tsxFiles.find(([k]) => /App\.(tsx|jsx)$/.test(k));
-  const otherFiles = tsxFiles.filter(([k]) => !/App\.(tsx|jsx)$/.test(k));
+  const appEntry = sourceModules.find(([k]) => /App\.(tsx|ts|jsx|js)$/.test(k));
+  const otherFiles = sourceModules.filter(([k]) => !/App\.(tsx|ts|jsx|js)$/.test(k));
   const orderedFiles = [...otherFiles, ...(appEntry ? [appEntry] : [])];
 
-  // Clean code: strip imports, convert exports to global assignments
   const cleanComponent = (code: string, name: string): string => {
-    let cleaned = code
-      // Remove all import lines
+    return code
       .replace(/^import\s+.*$/gm, "")
-      // Convert "export default function X" → "window.X = function X"
       .replace(/^export\s+default\s+function\s+(\w+)/gm, `window.${name} = function $1`)
-      // Convert "export default" → "window.Name ="
       .replace(/^export\s+default\s+/gm, `window.${name} = `)
-      // Convert "export function X" → "window.X = function X"
       .replace(/^export\s+function\s+(\w+)/gm, "window.$1 = function $1")
-      // Convert "export const X" → "window.X = const X" (then fix)
       .replace(/^export\s+const\s+(\w+)/gm, "window.$1 = ")
-      // Remove remaining "export {}" lines
       .replace(/^export\s*\{[^}]*\}\s*;?\s*$/gm, "")
       .trim();
-    return cleaned;
   };
 
-  // Build all component scripts — each in its own Babel script tag so they execute in order
-  const componentScripts = orderedFiles.map(([path, code]) => {
-    const name = getComponentName(path);
-    const cleaned = cleanComponent(code, name);
-    return `<script type="text/babel">
-// --- ${path} ---
-${cleaned}
-</script>`;
-  }).join("\n");
+  const componentScripts = orderedFiles
+    .map(([path, code]) => {
+      const name = getComponentName(path);
+      const cleaned = cleanComponent(code, name);
+      return `<script type="text/babel" data-presets="typescript,react">\n// --- ${path} ---\n${cleaned}\n</script>`;
+    })
+    .join("\n");
 
-  // Determine root component
   const rootName = appEntry ? getComponentName(appEntry[0]) : getComponentName(orderedFiles[orderedFiles.length - 1]?.[0] || "App");
+  const titleMatch = html?.match(/<title>([\s\S]*?)<\/title>/i);
+  const title = titleMatch?.[1]?.trim() || "Preview Cirius";
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${title}</title>
 <script src="https://cdn.tailwindcss.com"><\/script>
 <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Inter', sans-serif; }
+body { font-family: 'Geist', sans-serif; }
 </style>
 ${cssBlock}
 <script>
-// Global component registry — components register themselves via window.X
-// Provide stubs for common libraries so generated code doesn't crash
 window.Button = function(props) { return React.createElement('button', {className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ' + (props.className||''), onClick: props.onClick, disabled: props.disabled, type: props.type||'button'}, props.children); };
 window.Input = function(props) { return React.createElement('input', {className: 'border rounded px-3 py-2 w-full ' + (props.className||''), ...props}); };
 window.Card = function(props) { return React.createElement('div', {className: 'border rounded-lg p-4 shadow-sm ' + (props.className||'')}, props.children); };
-
-// Lucide icon stubs
 var iconStub = function(props) { return React.createElement('span', {style: {display:'inline-flex',width:props.size||16,height:props.size||16,alignItems:'center',justifyContent:'center'}}, '●'); };
 var iconNames = ['Menu','X','ChevronDown','ChevronRight','ChevronLeft','ChevronUp','ArrowRight','ArrowLeft','Check','Star','Heart','Search','Mail','Phone','MapPin','Clock','Calendar','User','Users','Settings','Home','Globe','Send','MessageSquare','ExternalLink','Github','Linkedin','Twitter','Facebook','Instagram','Sparkles','Zap','Shield','Award','Target','TrendingUp','BarChart','PieChart','Activity','Cpu','Database','Server','Code','Terminal','Layers','Layout','Grid','List','Eye','EyeOff','Lock','Unlock','Plus','Minus','Edit','Trash','Download','Upload','Share','Copy','Bookmark','Flag','Bell','Info','AlertCircle','AlertTriangle','HelpCircle','XCircle','CheckCircle','Loader2','RefreshCw','RotateCw','Play','Pause','Square','Circle','Triangle','Hexagon','Rocket','Flame','Sun','Moon','Cloud','CloudRain','Wind','Droplet','Thermometer','Wifi','WifiOff','Bluetooth','Battery','BatteryCharging','Plug','Power','Volume','VolumeX','Mic','MicOff','Camera','Image','Film','Music','Headphones','Radio','Tv','Monitor','Smartphone','Tablet','Laptop','Watch','Printer','Scanner','Mouse','Keyboard','Gamepad','Joystick'];
 iconNames.forEach(function(n) { window[n] = iconStub; });
-
-// Proxy for any missing component references
-var _origGet = window.__lookupGetter__ ? null : null;
 </script>
 </head>
 <body>
 <div id="root"></div>
 ${componentScripts}
-<script type="text/babel">
-// Render root component
+<script type="text/babel" data-presets="typescript,react">
 var RootComp = window.${rootName} || window.App || function() { return React.createElement('div', {className:'p-8 text-center'}, 'Preview carregando...'); };
 var root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(React.createElement(RootComp));
