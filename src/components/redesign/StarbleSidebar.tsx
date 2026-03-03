@@ -123,7 +123,7 @@ export default function StarbleSidebar() {
               Upgrade para Pro
             </div>
             <div className="su-desc">Acesse Star Brain e recursos avançados</div>
-            <button className="gl sm orange" style={{ width: "100%" }}>Ver planos</button>
+            <button className="gl sm primary" style={{ width: "100%" }}>Ver planos</button>
           </div>
         )}
 
