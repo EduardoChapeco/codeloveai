@@ -7,7 +7,7 @@ const pageTitles: Record<string, string> = {
   "/community": "Comunidade",
   "/cirius": "Cirius Editor",
   "/marketplace": "Loja",
-  "/dashboard": "Dashboard",
+  "/dashboard": "Assistente IA",
   "/plans": "Planos & Billing",
   "/admin": "Admin",
   "/admin/tenant": "Admin Tenant",

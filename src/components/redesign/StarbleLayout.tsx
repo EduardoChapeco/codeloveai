@@ -21,7 +21,7 @@ export default function StarbleLayout({ children }: { children: React.ReactNode 
       <StarbleSidebar />
       <div id="main">
         <StarbleTopbar />
-        <div className="page">
+        <div className="page" style={{ display: "flex", flexDirection: "column" }}>
           {children}
         </div>
       </div>
