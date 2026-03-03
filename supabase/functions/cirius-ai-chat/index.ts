@@ -44,17 +44,37 @@ When you create or modify a file, wrap the COMPLETE file content with this XML t
 // full file content here
 </file>
 
-RULES:
-1. Always output the FULL file — never use "..." or "rest of code here".
+CRITICAL RULES:
+1. Always output the FULL file — never use "..." or "rest of code here" or "// existing code".
 2. If you modify an existing file, output the ENTIRE new version inside <file>.
 3. You may create multiple files in one response — use one <file> tag per file.
 4. Explain briefly BEFORE the code blocks what you are doing.
-5. Use Tailwind utility classes for styling. Import from shadcn/ui when appropriate.
+5. Use Tailwind utility classes for ALL styling. Import from shadcn/ui when appropriate.
 6. Use TypeScript with proper types.
 7. Default exports for page components, named exports for utilities.
 8. Keep code clean, modern, and production-ready.
-9. ALWAYS include an index.html file that references your main entry point. The index.html must contain a <div id="root"></div> and a <script type="module" src="/src/main.tsx"></script> tag.
-10. ALWAYS include src/main.tsx with ReactDOM.createRoot rendering.
+
+MANDATORY FILES FOR NEW PROJECTS:
+9. ALWAYS include index.html with:
+   - <meta charset="UTF-8" />
+   - <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+   - <div id="root"></div>
+   - <script type="module" src="/src/main.tsx"></script>
+10. ALWAYS include src/main.tsx with:
+    - import React from 'react'
+    - import ReactDOM from 'react-dom/client'
+    - ReactDOM.createRoot(document.getElementById('root')!).render(<App />)
+11. ALWAYS include src/App.tsx with React Router <Routes> containing ALL page routes.
+12. ALWAYS include src/index.css with @tailwind base; @tailwind components; @tailwind utilities;
+13. ALWAYS include package.json, vite.config.ts, tailwind.config.js, tsconfig.json
+
+PROJECT COMPLETENESS:
+- Generate ALL pages, components, and routes in a single response when building a new feature
+- Every page must be fully styled and functional — no placeholder content
+- Use realistic text and data (not "Lorem ipsum")
+- Include loading states, empty states, and error handling
+- Components must be responsive (mobile-first design)
+- Import icons from lucide-react
 
 TECH STACK:
 - React 18 + TypeScript (JSX)
@@ -72,23 +92,35 @@ function buildPrdPrompt(prompt: string, projectName: string, existingFiles: Reco
     .slice(0, 30)
     .join(", ");
 
-  return `IMPORTANTE: Não faça perguntas. Execute diretamente.
+  return `IMPORTANTE: Não faça perguntas. Execute diretamente. Retorne APENAS JSON válido.
 
 Você é um arquiteto de software sênior. O projeto "${projectName}" precisa de:
 
 ${prompt}
 
-Arquivos existentes no projeto: ${existingFilesList || "(vazio)"}
-Stack: React + Tailwind + shadcn/ui + Supabase
+Arquivos existentes no projeto: ${existingFilesList || "(vazio — projeto novo)"}
+Stack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM + Supabase
 
-Quebre em 2-5 tarefas sequenciais. Retorne APENAS JSON válido:
-{"tasks":[{"title":"Título curto","brain_type":"code","prompt":"Prompt detalhado e auto-contido de implementação completa"}],"summary":"Resumo em 1-2 frases do que será feito"}
+## REGRA CRÍTICA: TUDO DEVE SER GERADO COMPLETO
+
+O projeto DEVE ser gerado COMPLETO e FUNCIONAL. Isso significa:
+- TODAS as páginas devem ser criadas com conteúdo real
+- TODOS os componentes necessários devem existir
+- TODAS as rotas devem estar configuradas
+- O design deve ser completo e profissional
+
+Quebre em 2-4 tarefas sequenciais (prefira menos tarefas com mais conteúdo).
+
+TAREFA 1 OBRIGATÓRIA: Deve gerar a fundação completa (index.html, main.tsx, App.tsx com TODAS as rotas, index.css, configs, layout components como Header/Footer).
+
+Retorne APENAS JSON válido:
+{"tasks":[{"title":"Título","brain_type":"code","prompt":"Prompt DETALHADO (mínimo 200 palavras) descrevendo EXATAMENTE o que gerar, incluindo nomes de arquivos, visual esperado, textos de exemplo, comportamentos interativos"}],"summary":"Resumo do que será construído"}
 
 Regras:
-- brain_type: "code" | "design" | "prd"
-- Prompts auto-contidos, detalhados, prontos para implementação
-- Sem perguntas, sem clarificações
-- Máximo 5 tarefas`;
+- brain_type: "code"
+- Prompts devem ser auto-contidos, detalhados e completos
+- Máximo 4 tarefas (prefira 2-3)
+- Sem perguntas, sem clarificações`;
 }
 
 function buildFixPrompt(prompt: string, files: Record<string, string>): string {
@@ -304,17 +336,24 @@ async function executeSequentialBuild(
       ? `\n\nARQUIVOS JÁ GERADOS (${Object.keys(currentFiles).length} arquivos):\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 25).map(([p, c]) => `--- ${p} ---\n${c.slice(0, 3000)}`).join("\n\n")}`
       : "";
 
+    const isFirstTask = i === 0;
+    const foundationNote = isFirstTask
+      ? `\n\nCRITICAL: This is the FIRST task. You MUST generate ALL foundation files:\n- index.html (with <div id="root"> and <script type="module" src="/src/main.tsx">)\n- src/main.tsx (ReactDOM.createRoot)\n- src/App.tsx (with React Router <Routes> containing ALL page routes)\n- src/index.css (@tailwind base/components/utilities)\n- package.json, vite.config.ts, tailwind.config.js, tsconfig.json\n- Layout components (Header/Navbar, Footer)\nThe project MUST render correctly with just these files.`
+      : `\n\nIMPORTANT: Previous files already exist. Maintain compatibility. If adding routes, include the COMPLETE updated App.tsx.`;
+
     const taskPrompt = `You are building project "${projectName}".
 Stack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM + Supabase
 
 ## Current Task (${i + 1}/${totalTasks}): ${task.title}
 
 ${task.prompt}
+${foundationNote}
 ${fileContext}
 
-Return ALL files using <file path="path/to/file.tsx">complete content</file> tags.
+Return ALL files using <file path="path/to/file.tsx">COMPLETE file content</file> tags.
 Output COMPLETE file content — never use "..." or placeholders.
-If modifying existing files, output their FULL new version.`;
+If modifying existing files, output their FULL new version.
+Use realistic content, proper Tailwind styling, and responsive design.`;
 
     const messages = [
       { role: "system", content: CODE_SYSTEM_PROMPT },
