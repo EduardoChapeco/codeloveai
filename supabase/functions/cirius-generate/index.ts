@@ -336,30 +336,62 @@ async function sendViaGeminiDirect(sc: SupabaseClient, prompt: string, systemPro
 
 async function generatePRD(sc: SupabaseClient, userId: string, project: Record<string, any>, projectId: string): Promise<any> {
   const features = Array.isArray(project.features) ? project.features : [];
-  const prompt = `IMPORTANTE: Não faça perguntas. Execute diretamente.
+  const prompt = `IMPORTANTE: Não faça perguntas. Execute diretamente. Retorne APENAS JSON válido.
 
-Você é um arquiteto de software sênior. Decomponha o projeto em tarefas para brains ESPECIALIZADOS.
+Você é um arquiteto de software sênior especializado em React + Tailwind + shadcn/ui.
 
-Brains disponíveis: "database", "design", "frontend", "backend", "code", "review"
-
-Projeto:
-Nome: ${project.name}
+Projeto: "${project.name}"
 Tipo: ${project.template_type || "app"}
-Descrição: ${project.description || ""}
-Features: ${features.join(", ") || "basic"}
-URL de referência: ${project.source_url || "none"}
-Stack: React + Tailwind + shadcn/ui + Supabase
+Descrição completa: ${project.description || ""}
+Features detectadas: ${features.join(", ") || "basic"}
+URL de referência: ${project.source_url || "nenhuma"}
+Stack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM + Supabase
 
-Retorne APENAS JSON válido:
-{"tasks":[{"title":"Título","brain_type":"frontend","skill":"code","intent":"security_fix_v2","prompt":"Prompt detalhado","depends_on":[],"stop_condition":"file_exists:src/App.tsx"}],"design":{"primary_color":"#6366f1","font":"Geist","style":"modern_minimal","pages":["Home"],"tables":["users"]}}
+## REGRA CRÍTICA: TUDO NO PRIMEIRO PEDIDO
 
-Regras:
-- intent DEVE ser security_fix_v2
-- SEMPRE comece com "database" se o projeto precisa de dados
-- SEMPRE inclua "design" cedo para o sistema visual
-- SEMPRE termine com "review" para checagem holística
-- depends_on: array de índices
-- Máximo 8 tarefas`;
+O projeto DEVE ser gerado COMPLETO e FUNCIONAL no primeiro pedido. Isso significa:
+- TODAS as páginas listadas devem ser criadas
+- TODOS os componentes necessários devem existir
+- TODAS as rotas devem estar configuradas no App.tsx
+- O CSS/Tailwind deve estar aplicado
+- Os estados e interações devem funcionar
+- O projeto deve renderizar sem erros
+
+## ESTRUTURA OBRIGATÓRIA DE TAREFAS
+
+TAREFA 1 (FUNDAÇÃO): Deve gerar TODOS estes arquivos obrigatórios:
+  - index.html (com <div id="root"> e <script type="module" src="/src/main.tsx">)
+  - src/main.tsx (ReactDOM.createRoot)
+  - src/App.tsx (com React Router e TODAS as rotas)
+  - src/index.css (Tailwind @tailwind base/components/utilities + cores customizadas)
+  - vite.config.ts
+  - tailwind.config.js
+  - tsconfig.json
+  - package.json
+  E TAMBÉM todos os componentes de layout: Header/Navbar, Footer, Layout wrapper
+
+TAREFA 2+ (PÁGINAS E FEATURES): Cada tarefa subsequente deve:
+  - Gerar páginas COMPLETAS (não stubs)
+  - Incluir TODOS os componentes que a página usa
+  - Incluir estados, handlers, dados mockados realistas
+  - Usar Tailwind CSS para estilização completa
+  - Ser auto-contida (não depender de código futuro)
+
+ÚLTIMA TAREFA (REVIEW): Revisar todos os arquivos, corrigir imports, garantir consistência visual
+
+## FORMATO DE RESPOSTA
+
+Retorne APENAS este JSON (sem markdown, sem explicações):
+{"tasks":[{"title":"Fundação completa do projeto","brain_type":"code","skill":"code","intent":"security_fix_v2","prompt":"Prompt DETALHADO e COMPLETO com TODOS os arquivos que devem ser gerados, incluindo o conteúdo esperado de cada componente"}],"design":{"primary_color":"#6366f1","font":"Inter","style":"modern_minimal","pages":["Home","About"],"tables":[]}}
+
+## REGRAS DO PROMPT DE CADA TAREFA
+- O prompt deve ser EXTREMAMENTE detalhado (mínimo 200 palavras)
+- Deve listar EXATAMENTE quais arquivos criar
+- Deve descrever o visual esperado (cores, layout, espaçamento)
+- Deve incluir textos/dados de exemplo realistas
+- Máximo 5 tarefas (prefira 2-3 com mais conteúdo)
+- brain_type: "code"
+- intent: DEVE ser "security_fix_v2"`;
 
   const attempts: Array<{ engine: string; ok: boolean; durationMs: number; error?: string }> = [];
 
@@ -627,7 +659,27 @@ Deno.serve(async (req) => {
     await sc.from("cirius_projects").update({ generation_engine: "claude_direct" }).eq("id", projectId);
     await logEntry(sc, projectId, "code", "started", `Claude Direct mode — ${prd.tasks.length} tasks sequenciais`);
 
-    const CODE_SYS = "You are an expert React/TypeScript developer. Return only code files wrapped in <file path=\"...\">content</file> tags. No explanations outside file tags. IMPORTANT: Always include an index.html with <div id=\"root\"></div> and <script type=\"module\" src=\"/src/main.tsx\"></script>. Always include src/main.tsx with ReactDOM.createRoot rendering the App component.";
+    const CODE_SYS = `You are Cirius, an expert full-stack developer specializing in React + TypeScript + Tailwind CSS + shadcn/ui.
+
+CRITICAL RULES:
+1. Return ONLY code files wrapped in <file path="...">complete content</file> tags.
+2. Every file must contain COMPLETE, FUNCTIONAL code — never use "..." or "// rest of code".
+3. The FIRST task MUST include these mandatory files:
+   - index.html (with <div id="root"></div> and <script type="module" src="/src/main.tsx"></script>)
+   - src/main.tsx (with ReactDOM.createRoot rendering <App />)
+   - src/App.tsx (with React Router <Routes> containing ALL page routes)
+   - src/index.css (with @tailwind base; @tailwind components; @tailwind utilities;)
+   - package.json, vite.config.ts, tailwind.config.js, tsconfig.json
+4. Every page component must be a COMPLETE, styled, functional React component.
+5. Use Tailwind CSS utility classes for ALL styling — no inline styles, no CSS modules.
+6. Include realistic placeholder content (real-looking text, not "Lorem ipsum").
+7. Components must handle loading states, empty states, and basic error states.
+8. Use semantic HTML and responsive design (mobile-first).
+9. Import icons from lucide-react.
+10. Export page components as default exports.
+
+TECH STACK: React 18, Vite 5, TypeScript, Tailwind CSS 3, shadcn/ui, React Router DOM 6, Supabase (if needed).`;
+
     let currentFiles: Record<string, string> = {};
     let tasksDone = 0;
 
@@ -642,12 +694,27 @@ Deno.serve(async (req) => {
 
       await logEntry(sc, projectId, `task_${i + 1}`, "started", `Tarefa ${i + 1}/${prd.tasks.length}: ${task.title}`);
 
-      // Build context
+      // Build context with ALL existing files for subsequent tasks
       const fileContext = Object.keys(currentFiles).length > 0
-        ? `\n\nARQUIVOS JÁ GERADOS (${Object.keys(currentFiles).length}):\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 25).map(([p, c]) => `--- ${p} ---\n${c.slice(0, 3000)}`).join("\n\n")}`
+        ? `\n\n## EXISTING FILES (${Object.keys(currentFiles).length} files) — You MUST maintain compatibility with these:\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 30).map(([p, c]) => `<file path="${p}">\n${c.slice(0, 4000)}\n</file>`).join("\n\n")}`
         : "";
 
-      const taskPrompt = `Project: "${projectName}"\nDescription: ${combinedPrompt}\nStack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM${blueprint.needsDatabase ? " + Supabase" : ""}\n\n## Task ${i + 1}/${prd.tasks.length}: ${task.title}\n\n${task.prompt}${fileContext}\n\nReturn ALL files using <file path="path/to/file.tsx">complete content</file> tags.`;
+      const isFirstTask = i === 0;
+      const foundationNote = isFirstTask
+        ? `\n\nCRITICAL: This is the FIRST task. You MUST generate ALL foundation files (index.html, src/main.tsx, src/App.tsx with ALL routes, src/index.css, package.json, vite.config.ts, tailwind.config.js, tsconfig.json) PLUS all layout components (Header, Footer, etc.). The project must render correctly with just these files.`
+        : `\n\nIMPORTANT: Files from previous tasks already exist. You MUST ensure your new files are compatible with them. If you need to update src/App.tsx to add routes, include the COMPLETE updated version.`;
+
+      const taskPrompt = `## Project: "${projectName}"
+## Description: ${combinedPrompt}
+## Stack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM${blueprint.needsDatabase ? " + Supabase" : ""}
+
+## Task ${i + 1}/${prd.tasks.length}: ${task.title}
+
+${task.prompt}
+${foundationNote}
+${fileContext}
+
+Return ALL files using <file path="path/to/file.tsx">COMPLETE file content</file> tags. Every file must be fully functional.`;
 
       // Try OpenRouter (Claude) → Gateway → Gemini
       let genContent: string | null = null;
@@ -956,7 +1023,7 @@ Deno.serve(async (req) => {
 
     await sc.from("cirius_projects").update({ status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20, generation_engine: "claude_direct" }).eq("id", projectId);
     const prd = proj.prd_json as any;
-    const CODE_SYS = "You are an expert React/TypeScript developer. Return only code files wrapped in <file path=\"...\">content</file> tags.";
+    const CODE_SYS = `You are Cirius, an expert full-stack developer. Return ONLY code files wrapped in <file path="...">complete content</file> tags. Every file must be COMPLETE and FUNCTIONAL. Always include: index.html (with #root div and module script), src/main.tsx (ReactDOM.createRoot), src/App.tsx (with all routes), src/index.css (Tailwind directives), package.json, vite.config.ts, tailwind.config.js, tsconfig.json.`;
 
     let currentFiles: Record<string, string> = (proj.source_files_json || {}) as Record<string, string>;
     let tasksDone = 0;
@@ -967,10 +1034,12 @@ Deno.serve(async (req) => {
       await sc.from("cirius_projects").update({ progress_pct: pctNow, current_step: `task_${i + 1}` }).eq("id", projectId);
       await logEntry(sc, projectId, `task_${i + 1}`, "started", `Tarefa ${i + 1}: ${task.title}`);
 
+      const isFirstTask = i === 0;
       const fileCtx = Object.keys(currentFiles).length > 0
-        ? `\n\nExisting files:\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 20).map(([p, c]) => `--- ${p} ---\n${c.slice(0, 2000)}`).join("\n\n")}`
+        ? `\n\nExisting files:\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 25).map(([p, c]) => `<file path="${p}">\n${c.slice(0, 3000)}\n</file>`).join("\n\n")}`
         : "";
-      const taskPrompt = `Project: "${proj.name}"\n\n## Task ${i + 1}: ${task.title}\n${task.prompt}${fileCtx}\n\nReturn ALL files using <file path="...">content</file>.`;
+      const foundationNote = isFirstTask ? "\n\nCRITICAL: Generate ALL foundation files (index.html, main.tsx, App.tsx with routes, index.css, config files) plus layout components." : "\n\nMaintain compatibility with existing files. Include updated App.tsx if adding routes.";
+      const taskPrompt = `Project: "${proj.name}"\n\n## Task ${i + 1}: ${task.title}\n${task.prompt}${foundationNote}${fileCtx}\n\nReturn ALL files using <file path="...">COMPLETE content</file>.`;
 
       let genContent: string | null = null;
       let engine = "";
