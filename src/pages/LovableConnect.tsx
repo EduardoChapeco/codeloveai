@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Check, X, Unlink, ShieldCheck, Zap, RefreshCw, Plug, FolderOpen, Eye, Key, Copy } from "lucide-react";
 
-export default function LovableConnect({ embedded }: { embedded?: boolean } = {}) {
+export default function LovableConnect() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { saveToken, deleteToken, checkConnection } = useLovableProxy();
@@ -311,10 +311,8 @@ export default function LovableConnect({ embedded }: { embedded?: boolean } = {}
   const isConnected = connectionStatus === "active";
   const isExpired = connectionStatus === "expired";
 
-  const Wrapper = embedded ? ({ children }: { children: React.ReactNode }) => <div style={{ overflow: "auto", flex: 1 }}>{children}</div> : AppLayout;
-
   return (
-    <Wrapper>
+    <AppLayout>
       <div className="max-w-xl mx-auto px-6 py-10">
         <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-quaternary)" }}>Gerenciamento</p>
         <h1 className="text-lg font-bold mb-2" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Painel</h1>
@@ -464,6 +462,6 @@ export default function LovableConnect({ embedded }: { embedded?: boolean } = {}
           </div>
         )}
       </div>
-    </Wrapper>
+    </AppLayout>
   );
 }
