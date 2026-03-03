@@ -1,7 +1,8 @@
-﻿import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, lazy, Suspense } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
+import { useTenant } from "@/contexts/TenantContext";
 import { useSEO } from "@/hooks/useSEO";
 import { LogOut, Key, UserCheck, UserX, Ban, XCircle, Users, Coins, Upload, RefreshCw, Bell, MessageSquare, Send, Gift, Copy, Link as LinkIcon, Trash2, DollarSign, FileText, CheckCircle, Search, Unlock, Zap, Loader2, UserPlus, Eye, EyeOff, Puzzle, Download, ChevronRight, Clock } from "lucide-react";
 import { toast } from "sonner";
@@ -140,11 +141,14 @@ interface WorkerResult {
   expires?: number;
 }
 
-type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "worker-tokens" | "support";
+const LazyTenantAdmin = lazy(() => import("./TenantAdmin"));
+
+type Tab = "members" | "affiliates" | "invoices" | "extension" | "notifications" | "messages" | "worker-tokens" | "support" | "tenant";
 
 export default function Admin() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const { isTenantAdmin } = useTenant();
   useSEO({ title: "Admin" });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -213,15 +217,21 @@ export default function Admin() {
       .then(({ data }) => setDbPlans(data || []));
   }, []);
 
+  const hasAdminAccess = isAdmin || isTenantAdmin;
+
   useEffect(() => {
     if (!authLoading && !adminLoading) {
       if (!user) navigate("/login");
-      else if (!isAdmin) navigate("/dashboard");
-      else {
+      else if (!hasAdminAccess) navigate("/dashboard");
+      else if (isAdmin) {
         fetchTickets();
       }
+      // Tenant-only admins default to tenant tab
+      if (!isAdmin && isTenantAdmin && tab !== "tenant") {
+        setSearchParams({ tab: "tenant" });
+      }
     }
-  }, [user, isAdmin, authLoading, adminLoading, navigate]);
+  }, [user, isAdmin, isTenantAdmin, hasAdminAccess, authLoading, adminLoading, navigate]);
 
   const fetchTickets = useCallback(async () => {
     const { data: tks, error } = await (supabase as any)
@@ -820,7 +830,8 @@ export default function Admin() {
                 extension: "Distribuição da Extensão", 
                 notifications: "Notificações do Sistema", 
                 messages: "Atendimento ao Cliente",
-                support: "Gestão de Tickets" 
+                support: "Gestão de Tickets",
+                tenant: "Operação do Tenant",
               }[tab]
             }</span>
           </p>
@@ -1603,6 +1614,13 @@ export default function Admin() {
 
         {/* Free Links Tab removed */}
       </div>
+
+        {/* Tenant Tab — embedded TenantAdmin */}
+        {tab === "tenant" && (
+          <Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "var(--tt)" }}>Carregando painel de operação...</div>}>
+            <LazyTenantAdmin embedded />
+          </Suspense>
+        )}
 
       {/* Create User Sheet */}
       <Sheet open={createUserOpen} onOpenChange={setCreateUserOpen}>

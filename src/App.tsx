@@ -170,7 +170,7 @@ const App = () => (
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/global" element={<AdminGlobal />} />
                 <Route path="/admin/integrations" element={<AdminIntegrations />} />
-                <Route path="/admin/tenant" element={<TenantAdmin />} />
+                <Route path="/admin/tenant" element={<Admin />} />
                 <Route path="/community" element={<Community />} />
                 <Route path="/community/tests" element={<CommunityTestList />} />
                 <Route path="/community/test/:id" element={<CommunityTestSession />} />

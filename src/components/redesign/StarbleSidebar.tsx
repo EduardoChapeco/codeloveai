@@ -5,8 +5,8 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import {
-  MessageCircle, Brain, FolderOpen, Star,
-  ShoppingBag, BarChart3, Settings, CreditCard,
+  Brain, FolderOpen, Star, Heart,
+  ShoppingBag, BarChart3, CreditCard, Users, User,
   LogOut, Sparkles, Shield, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -20,13 +20,14 @@ interface NavEntryProps {
   badgeVariant?: "default" | "new" | "pro";
   active?: boolean;
   collapsed?: boolean;
+  sub?: boolean;
 }
 
-function NavEntry({ to, label, icon: Icon, iconColor, badge, badgeVariant = "default", active, collapsed }: NavEntryProps) {
+function NavEntry({ to, label, icon: Icon, iconColor, badge, badgeVariant = "default", active, collapsed, sub }: NavEntryProps) {
   return (
-    <NavLink to={to} className={`nav-entry ${active ? "active" : ""}`} style={{ textDecoration: "none" }} title={collapsed ? label : undefined}>
-      <div className={`nav-ico-box ${iconColor}`}>
-        <Icon />
+    <NavLink to={to} className={`nav-entry ${active ? "active" : ""}`} style={{ textDecoration: "none", paddingLeft: sub && !collapsed ? 28 : undefined }} title={collapsed ? label : undefined}>
+      <div className={`nav-ico-box ${iconColor}`} style={sub ? { width: 24, height: 24 } : undefined}>
+        <Icon size={sub ? 12 : undefined} />
       </div>
       {!collapsed && <span>{label}</span>}
       {!collapsed && badge && (
@@ -49,6 +50,7 @@ export default function StarbleSidebar() {
   const brandName = tenant?.name || "Starble";
 
   const [collapsed, setCollapsed] = useState(false);
+  const [codeloveOpen, setCodeloveOpen] = useState(true);
 
   if (!user) return null;
 
@@ -83,7 +85,26 @@ export default function StarbleSidebar() {
         <NavEntry to="/dashboard" label="Dashboard" icon={BarChart3} iconColor="ib-orange" active={isActive("/dashboard")} collapsed={collapsed} />
         <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-blue" active={isActive("/lovable/projects") || isActive("/cirius")} collapsed={collapsed} />
         <NavEntry to="/dashboard" label="Star AI" icon={Brain} iconColor="ib-indigo" active={isActive("/brain")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
-        <NavEntry to="/community" label="Comunidade" icon={MessageCircle} iconColor="ib-teal" active={isActive("/community")} badge="HOT" badgeVariant="new" collapsed={collapsed} />
+
+        <div className="divider" />
+
+        {/* Codelove module — Community + Profile */}
+        {!collapsed && (
+          <div
+            className="sb-section"
+            style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+            onClick={() => setCodeloveOpen(!codeloveOpen)}
+          >
+            <Heart size={10} style={{ color: "var(--orange)" }} />
+            Codelove
+          </div>
+        )}
+        {(collapsed || codeloveOpen) && (
+          <>
+            <NavEntry to="/community" label="Comunidade" icon={Users} iconColor="ib-teal" active={isActive("/community")} badge="HOT" badgeVariant="new" collapsed={collapsed} sub={!collapsed} />
+            <NavEntry to={`/profile/${user.id}`} label="Perfil" icon={User} iconColor="ib-gray" active={isActive("/profile")} collapsed={collapsed} sub={!collapsed} />
+          </>
+        )}
 
         <div className="divider" />
 
@@ -94,15 +115,14 @@ export default function StarbleSidebar() {
         <div className="divider" />
 
         {!collapsed && <div className="sb-section">Conta</div>}
-        <NavEntry to={`/profile/${user.id}`} label="Perfil" icon={Settings} iconColor="ib-gray" active={isActive("/profile")} collapsed={collapsed} />
         <NavEntry to="/plans" label="Planos & Billing" icon={CreditCard} iconColor="ib-gray" active={isActive("/plans")} collapsed={collapsed} />
 
+        {/* Admin unificado */}
         {(isAdmin || isTenantAdmin) && (
           <>
             <div className="divider" />
             {!collapsed && <div className="sb-section">Admin</div>}
-            {isTenantAdmin && <NavEntry to="/admin/tenant" label="Meu Tenant" icon={Shield} iconColor="ib-orange" active={isActive("/admin/tenant")} collapsed={collapsed} />}
-            {isAdmin && <NavEntry to="/admin" label="Administração" icon={Shield} iconColor="ib-red" active={isActive("/admin")} collapsed={collapsed} />}
+            <NavEntry to="/admin" label="Painel Admin" icon={Shield} iconColor="ib-red" active={isActive("/admin") || isActive("/admin/tenant")} collapsed={collapsed} />
           </>
         )}
       </div>
