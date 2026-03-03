@@ -1,5 +1,5 @@
 import { useLocation } from "react-router-dom";
-import { Search, Bell, Settings } from "lucide-react";
+import { Search, Bell, Settings, PanelLeftClose } from "lucide-react";
 
 const pageTitles: Record<string, string> = {
   "/lovable/projects": "Projetos",
@@ -29,6 +29,13 @@ export default function StarbleTopbar() {
 
   return (
     <div id="topbar">
+      <button
+        className="gl ico xs ghost"
+        onClick={() => window.dispatchEvent(new Event("sidebar-toggle"))}
+        title="Recolher/expandir menu"
+      >
+        <PanelLeftClose size={14} />
+      </button>
       <span className="tb-title">{title}</span>
       <div className="tb-spacer" />
       <div className="tb-search">

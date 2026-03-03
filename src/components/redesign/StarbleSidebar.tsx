@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
@@ -7,7 +7,7 @@ import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import {
   Brain, FolderOpen, Star,
   ShoppingBag, BarChart3, CreditCard, Users,
-  LogOut, Sparkles, Shield, PanelLeftClose, PanelLeftOpen,
+  LogOut, Sparkles, Shield,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 
@@ -51,6 +51,13 @@ export default function StarbleSidebar() {
 
   const [collapsed, setCollapsed] = useState(false);
 
+  // Listen for toggle events from topbar
+  useEffect(() => {
+    const handler = () => setCollapsed(c => !c);
+    window.addEventListener("sidebar-toggle", handler);
+    return () => window.removeEventListener("sidebar-toggle", handler);
+  }, []);
+
   if (!user) return null;
 
   const isActive = (path: string) =>
@@ -73,13 +80,6 @@ export default function StarbleSidebar() {
           )}
           {!collapsed && <span className="sb-logo-text">{brandName}</span>}
         </div>
-        <button
-          className="gl ico xs ghost"
-          onClick={() => setCollapsed(!collapsed)}
-          title={collapsed ? "Expandir menu" : "Recolher menu"}
-        >
-          {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
-        </button>
       </div>
 
       {/* Body */}
