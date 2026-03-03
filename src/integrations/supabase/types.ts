@@ -1310,6 +1310,48 @@ export type Database = {
         }
         Relationships: []
       }
+      client_accounts: {
+        Row: {
+          access_token: string | null
+          brain_project_id: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          label: string | null
+          last_synced_at: string | null
+          license_key: string
+          refresh_token: string
+          uid: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          brain_project_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          label?: string | null
+          last_synced_at?: string | null
+          license_key: string
+          refresh_token: string
+          uid?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          brain_project_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          label?: string | null
+          last_synced_at?: string | null
+          license_key?: string
+          refresh_token?: string
+          uid?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       code_snapshots: {
         Row: {
           created_at: string
