@@ -4,55 +4,16 @@ import { Link } from "react-router-dom";
 import AppLayout from "@/components/AppLayout";
 import { ChevronDown, Building2, CreditCard, Palette, Users, Eye, HelpCircle, Shield } from "lucide-react";
 
-interface FaqItem {
-  icon: React.ElementType;
-  question: string;
-  answer: string;
-}
+interface FaqItem { icon: React.ElementType; question: string; answer: string; }
 
 const faqs: FaqItem[] = [
-  {
-    icon: Building2,
-    question: "O que é o White Label do Starble?",
-    answer:
-      "Você recebe uma versão da extensão Starble com sua própria marca — logo, cores e nome — para oferecer aos seus clientes. Sua empresa aparece no produto, não a Starble.",
-  },
-  {
-    icon: CreditCard,
-    question: "Quanto custa?",
-    answer:
-      "O custo é de 40% do preço do plano: R$7,96/dia ou R$59,96/mês por usuário ativo. Você define os preços para seus clientes — a margem é sua. Sem taxa de setup.",
-  },
-  {
-    icon: Palette,
-    question: "Como configuro minha extensão?",
-    answer:
-      "Após o pagamento, você acessa o wizard de onboarding onde define: nome do produto, logo, cores principais, tipo de cobrança (por mensagem ou por hora) e quais módulos quer exibir.",
-  },
-  {
-    icon: Eye,
-    question: "Posso ver como ficará antes de pagar?",
-    answer:
-      "Sim. O preview ao vivo mostra exatamente como sua extensão ficará durante a configuração.",
-  },
-  {
-    icon: Users,
-    question: "Como funciono como afiliado White Label?",
-    answer:
-      "Você gera um link único. Quando alguém cria um tenant White Label pelo seu link, você recebe 30% do setup fee e 30% da mensalidade recorrente de cada usuário ativo desse tenant.",
-  },
-  {
-    icon: HelpCircle,
-    question: "Posso ter afiliados no meu White Label?",
-    answer:
-      "Sim. Você pode criar seu próprio programa de afiliados com comissões que você define.",
-  },
-  {
-    icon: Shield,
-    question: "A Starble aparece no meu produto?",
-    answer:
-      "Não. Seu produto tem apenas a sua marca. Os clientes finais não têm como identificar a tecnologia base.",
-  },
+  { icon: Building2, question: "O que é o White Label do Starble?", answer: "Você recebe uma versão da extensão Starble com sua própria marca — logo, cores e nome — para oferecer aos seus clientes. Sua empresa aparece no produto, não a Starble." },
+  { icon: CreditCard, question: "Quanto custa?", answer: "O custo é de 40% do preço do plano: R$7,96/dia ou R$59,96/mês por usuário ativo. Você define os preços para seus clientes — a margem é sua. Sem taxa de setup." },
+  { icon: Palette, question: "Como configuro minha extensão?", answer: "Após o pagamento, você acessa o wizard de onboarding onde define: nome do produto, logo, cores principais, tipo de cobrança (por mensagem ou por hora) e quais módulos quer exibir." },
+  { icon: Eye, question: "Posso ver como ficará antes de pagar?", answer: "Sim. O preview ao vivo mostra exatamente como sua extensão ficará durante a configuração." },
+  { icon: Users, question: "Como funciono como afiliado White Label?", answer: "Você gera um link único. Quando alguém cria um tenant White Label pelo seu link, você recebe 30% do setup fee e 30% da mensalidade recorrente de cada usuário ativo desse tenant." },
+  { icon: HelpCircle, question: "Posso ter afiliados no meu White Label?", answer: "Sim. Você pode criar seu próprio programa de afiliados com comissões que você define." },
+  { icon: Shield, question: "A Starble aparece no meu produto?", answer: "Não. Seu produto tem apenas a sua marca. Os clientes finais não têm como identificar a tecnologia base." },
 ];
 
 export default function WhiteLabelFAQ() {
@@ -61,55 +22,32 @@ export default function WhiteLabelFAQ() {
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto px-4 py-12">
+      <div className="rd-page-content narrow">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-4">
-            <HelpCircle className="w-4 h-4" />
-            FAQ
+        <div className="rd-page-head" style={{ textAlign: "center" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 14px", borderRadius: "var(--r-full)", background: "rgba(245,158,11,0.1)", color: "var(--orange-l)", fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
+            <HelpCircle className="w-4 h-4" /> FAQ
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-3">
-            White Label — Perguntas Frequentes
-          </h1>
-          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Tudo que você precisa saber sobre ter sua própria versão da extensão Starble.
-          </p>
+          <h1 style={{ fontSize: 28 }}>White Label — Perguntas Frequentes</h1>
+          <p style={{ maxWidth: 500, margin: "8px auto 0" }}>Tudo que você precisa saber sobre ter sua própria versão da extensão Starble.</p>
         </div>
 
         {/* Accordion */}
-        <div className="space-y-3">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {faqs.map((faq, i) => {
             const isOpen = openIndex === i;
             const Icon = faq.icon;
             return (
-              <div
-                key={i}
-                className="rounded-2xl border border-border/60 bg-card/50 backdrop-blur-sm overflow-hidden transition-all duration-200 hover:border-primary/30"
-              >
-                <button
-                  onClick={() => setOpenIndex(isOpen ? null : i)}
-                  className="w-full flex items-center gap-3 px-5 py-4 text-left"
-                >
-                  <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Icon className="w-4.5 h-4.5 text-primary" />
+              <div key={i} className="rd-card" style={{ padding: 0, overflow: "hidden" }}>
+                <button onClick={() => setOpenIndex(isOpen ? null : i)} className="w-full flex items-center gap-3 text-left" style={{ padding: "14px 18px" }}>
+                  <div className="rd-ico-box sm" style={{ background: "rgba(245,158,11,0.1)" }}>
+                    <Icon className="w-4 h-4" style={{ color: "var(--orange-l)" }} />
                   </div>
-                  <span className="flex-1 font-semibold text-foreground text-[15px]">
-                    {faq.question}
-                  </span>
-                  <ChevronDown
-                    className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${
-                      isOpen ? "rotate-180" : ""
-                    }`}
-                  />
+                  <span className="flex-1" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{faq.question}</span>
+                  <ChevronDown className="w-5 h-5" style={{ color: "var(--text-tertiary)", transition: "transform .2s", transform: isOpen ? "rotate(180deg)" : "rotate(0)" }} />
                 </button>
-                <div
-                  className={`overflow-hidden transition-all duration-200 ${
-                    isOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
-                  }`}
-                >
-                  <div className="px-5 pb-4 pl-[4.25rem] text-muted-foreground text-sm leading-relaxed">
-                    {faq.answer}
-                  </div>
+                <div style={{ overflow: "hidden", transition: "all .2s", maxHeight: isOpen ? 240 : 0, opacity: isOpen ? 1 : 0 }}>
+                  <div style={{ padding: "0 18px 14px 56px", fontSize: 13, lineHeight: 1.6, color: "var(--text-secondary)" }}>{faq.answer}</div>
                 </div>
               </div>
             );
@@ -117,22 +55,14 @@ export default function WhiteLabelFAQ() {
         </div>
 
         {/* CTA */}
-        <div className="mt-12 lv-liquid-glass p-8 text-center">
-          <h2 className="lv-heading-md mb-3">Pronto para começar?</h2>
-          <p className="lv-body mb-6 max-w-md mx-auto">
-            Crie sua plataforma com preview ao vivo durante o setup.
-          </p>
+        <div className="rd-card" style={{ textAlign: "center", marginTop: 40, padding: 32 }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>Pronto para começar?</p>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 20, maxWidth: 400, margin: "0 auto 20px" }}>Crie sua plataforma com preview ao vivo durante o setup.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link
-              to="/whitelabel/onboarding"
-              className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2"
-            >
-              <Building2 className="w-4 h-4" />
-              Criar meu White Label
+            <Link to="/whitelabel/onboarding" className="gl orange" style={{ textDecoration: "none" }}>
+              <Building2 className="w-4 h-4" /> Criar meu White Label
             </Link>
-            <Link to="/whitelabel" className="lv-btn-secondary lv-btn-lg">
-              Saiba mais
-            </Link>
+            <Link to="/whitelabel" className="gl ghost" style={{ textDecoration: "none" }}>Saiba mais</Link>
           </div>
         </div>
       </div>
