@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
-import { useChatContext } from "@/contexts/ChatContext";
 import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import {
   Brain, FolderOpen, Star,
   ShoppingBag, BarChart3, CreditCard, Users,
-  LogOut, Sparkles, Shield,
+  LogOut, Sparkles, Shield, Settings, Plug,
+  Globe,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 
@@ -85,31 +85,40 @@ export default function StarbleSidebar() {
       {/* Body */}
       <div className="sb-body">
         {!collapsed && <div className="sb-section">Principal</div>}
-        <NavEntry to="/dashboard" label="Dashboard" icon={BarChart3} iconColor="ib-orange" active={isActive("/dashboard")} collapsed={collapsed} />
-        <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-blue" active={isActive("/lovable/projects") || isActive("/cirius")} collapsed={collapsed} />
-        <NavEntry to="/dashboard" label="Star AI" icon={Brain} iconColor="ib-indigo" active={isActive("/brain")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
+        <NavEntry to="/dashboard" label="Dashboard" icon={BarChart3} iconColor="ib-blue" active={isActive("/dashboard")} collapsed={collapsed} />
+        <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-indigo" active={isActive("/lovable/projects") || isActive("/cirius") || isActive("/projeto")} collapsed={collapsed} />
+        <NavEntry to="/lovable/connect" label="Painel & Conexão" icon={Plug} iconColor="ib-teal" active={isActive("/lovable/connect")} collapsed={collapsed} />
+        <NavEntry to="/brain" label="Star AI" icon={Brain} iconColor="ib-purple" active={isActive("/brain")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
 
         <div className="divider" />
 
-        <NavEntry to="/community" label="Comunidade" icon={Users} iconColor="ib-teal" active={isActive("/community")} badge="HOT" badgeVariant="new" collapsed={collapsed} />
-
-        <div className="divider" />
-
-        {!collapsed && <div className="sb-section">Ferramentas</div>}
-        <NavEntry to="/marketplace" label="Loja" icon={ShoppingBag} iconColor="ib-pink" active={isActive("/marketplace")} badge="NOVO" badgeVariant="new" collapsed={collapsed} />
+        {!collapsed && <div className="sb-section">Comunidade & Loja</div>}
+        <NavEntry to="/community" label="Comunidade" icon={Users} iconColor="ib-teal" active={isActive("/community")} collapsed={collapsed} />
+        <NavEntry to="/marketplace" label="Loja" icon={ShoppingBag} iconColor="ib-pink" active={isActive("/marketplace")} collapsed={collapsed} />
         <NavEntry to="/extensoes/venus" label="Venus AI" icon={Sparkles} iconColor="ib-green" active={isActive("/extensoes/venus")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
 
         <div className="divider" />
 
         {!collapsed && <div className="sb-section">Conta</div>}
-        <NavEntry to="/plans" label="Planos & Billing" icon={CreditCard} iconColor="ib-gray" active={isActive("/plans")} collapsed={collapsed} />
+        <NavEntry to="/cirius/integrations" label="Configurações" icon={Settings} iconColor="ib-gray" active={isActive("/cirius/integrations")} collapsed={collapsed} />
+        <NavEntry to="/plans" label="Planos & Billing" icon={CreditCard} iconColor="ib-gray" active={isActive("/plans") || isActive("/checkout")} collapsed={collapsed} />
 
-        {/* Admin unificado */}
+        {/* Admin — Tenant */}
         {(isAdmin || isTenantAdmin) && (
           <>
             <div className="divider" />
             {!collapsed && <div className="sb-section">Admin</div>}
-            <NavEntry to="/admin" label="Painel Admin" icon={Shield} iconColor="ib-red" active={isActive("/admin") || isActive("/admin/tenant")} collapsed={collapsed} />
+            <NavEntry to="/admin" label="Painel Admin" icon={Shield} iconColor="ib-red" active={isActive("/admin") && !isActive("/admin/global") && !isActive("/admin/integrations") && !isActive("/admin/cloud") && !isActive("/admin/brainchain")} collapsed={collapsed} />
+          </>
+        )}
+
+        {/* Admin Global — only for global admins */}
+        {isAdmin && (
+          <>
+            <NavEntry to="/admin/global" label="Admin Global" icon={Globe} iconColor="ib-red" active={isActive("/admin/global")} collapsed={collapsed} sub />
+            <NavEntry to="/admin/integrations" label="Integrações API" icon={Settings} iconColor="ib-gray" active={isActive("/admin/integrations")} collapsed={collapsed} sub />
+            <NavEntry to="/admin/cloud" label="Lovable Cloud" icon={Sparkles} iconColor="ib-blue" active={isActive("/admin/cloud")} collapsed={collapsed} sub />
+            <NavEntry to="/admin/brainchain" label="Brainchain" icon={Brain} iconColor="ib-purple" active={isActive("/admin/brainchain")} collapsed={collapsed} sub />
           </>
         )}
       </div>
