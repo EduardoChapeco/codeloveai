@@ -1,11 +1,12 @@
 /**
- * Cirius AI Chat — 100% Claude/OpenRouter Direct Mode
- * No Brain mining, no Lovable API dependencies.
- * Flow: Prompt → OpenRouter/Claude (streaming SSE) → Extract <file> tags → Update source_files_json
+ * Cirius AI Chat v2 — With specialized templates + smart merge
+ * Flow: Prompt → Classify → Template Selection → OpenRouter/Claude (streaming SSE) → Smart Merge → Update source_files_json
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { extractFilesFromMarkdown } from "../_shared/md-assembly.ts";
+import { smartMergeFiles } from "../_shared/smart-merge.ts";
+import { getCodeSystemPrompt, buildSpecializedPrdPrompt, type ProjectTemplateType } from "../_shared/cirius-templates.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,12 +15,15 @@ const corsHeaders = {
 };
 
 // ─── Command Detection ───────────────────────────────────────
-type CommandType = "build" | "fix" | "improve" | "refine" | "chat";
+type CommandType = "build" | "fix" | "improve" | "refine" | "add_feature" | "chat";
 
 function detectCommand(text: string): { type: CommandType; prompt: string } {
   const lower = text.trim().toLowerCase();
-  if (/^(crie|criar|cria|build|gere|gerar|construa|monte|implemente|adicione|adicionar|faça|faz)\s/i.test(lower)) {
+  if (/^(crie|criar|cria|build|gere|gerar|construa|monte|implemente|faça|faz)\s/i.test(lower)) {
     return { type: "build", prompt: text.trim() };
+  }
+  if (/^(adicione|adicionar|add|insira|inserir|inclua|incluir|coloque|colocar)\s/i.test(lower)) {
+    return { type: "add_feature", prompt: text.trim() };
   }
   if (/^(corrija|corrigir|fix|fixe|arrume|arrumar|conserte|consertar|debug)\s/i.test(lower)) {
     return { type: "fix", prompt: text.trim() };
@@ -33,94 +37,76 @@ function detectCommand(text: string): { type: CommandType; prompt: string } {
   return { type: "chat", prompt: text.trim() };
 }
 
-// ─── System Prompt ───────────────────────────────────────────
+// ─── Intent Classification (lightweight inline) ──────────────
+type ProjectIntent = "landing_page" | "marketing_site" | "crud_system" | "dashboard" | "ecommerce" | "saas_app" | "api_only" | "component" | "custom";
 
-const CODE_SYSTEM_PROMPT = `You are Cirius, an expert AI coding assistant specialised in React 18 + TypeScript + Tailwind CSS + shadcn/ui.
+interface LightBlueprint {
+  intent: ProjectIntent;
+  needsDatabase: boolean;
+  needsAuth: boolean;
+  supabaseTables: string[];
+  features: string[];
+}
 
-RESPONSE FORMAT — MANDATORY:
-When you create or modify a file, wrap the COMPLETE file content with this XML tag:
+const INTENT_KW: Record<ProjectIntent, string[]> = {
+  landing_page: ["landing", "landing page", "lp", "squeeze", "hero", "captura"],
+  marketing_site: ["site", "website", "institucional", "portfolio", "blog"],
+  crud_system: ["sistema", "crud", "gerenciar", "cadastro", "tabela", "listagem", "formulario", "controle", "admin", "gestao"],
+  dashboard: ["dashboard", "painel", "metricas", "relatorio", "analytics", "grafico", "kpi"],
+  ecommerce: ["loja", "ecommerce", "produto", "carrinho", "cart", "checkout", "catalogo", "shop", "store"],
+  saas_app: ["saas", "assinatura", "subscription", "billing", "multi-tenant", "pricing", "freemium"],
+  api_only: ["api", "endpoint", "backend", "edge function", "webhook"],
+  component: ["componente", "component", "widget", "botao", "modal"],
+  custom: [],
+};
 
-<file path="src/components/Example.tsx">
-// full file content here
-</file>
-
-CRITICAL RULES:
-1. Always output the FULL file — never use "..." or "rest of code here" or "// existing code".
-2. If you modify an existing file, output the ENTIRE new version inside <file>.
-3. You may create multiple files in one response — use one <file> tag per file.
-4. Explain briefly BEFORE the code blocks what you are doing.
-5. Use Tailwind utility classes for ALL styling. Import from shadcn/ui when appropriate.
-6. Use TypeScript with proper types.
-7. Default exports for page components, named exports for utilities.
-8. Keep code clean, modern, and production-ready.
-
-MANDATORY FILES FOR NEW PROJECTS:
-9. ALWAYS include index.html with:
-   - <meta charset="UTF-8" />
-   - <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-   - <div id="root"></div>
-   - <script type="module" src="/src/main.tsx"></script>
-10. ALWAYS include src/main.tsx with:
-    - import React from 'react'
-    - import ReactDOM from 'react-dom/client'
-    - ReactDOM.createRoot(document.getElementById('root')!).render(<App />)
-11. ALWAYS include src/App.tsx with React Router <Routes> containing ALL page routes.
-12. ALWAYS include src/index.css with @tailwind base; @tailwind components; @tailwind utilities;
-13. ALWAYS include package.json, vite.config.ts, tailwind.config.js, tsconfig.json
-
-PROJECT COMPLETENESS:
-- Generate ALL pages, components, and routes in a single response when building a new feature
-- Every page must be fully styled and functional — no placeholder content
-- Use realistic text and data (not "Lorem ipsum")
-- Include loading states, empty states, and error handling
-- Components must be responsive (mobile-first design)
-- Import icons from lucide-react
-
-TECH STACK:
-- React 18 + TypeScript (JSX)
-- Tailwind CSS 3
-- Vite as bundler
-- shadcn/ui component library
-- Supabase for backend (PostgreSQL + Auth + Storage)
-- React Router DOM for routing`;
+function classifyLightIntent(prompt: string): LightBlueprint {
+  const n = prompt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s-]/g, " ");
+  let best: ProjectIntent = "custom";
+  let bestScore = 0;
+  for (const [intent, kws] of Object.entries(INTENT_KW) as [ProjectIntent, string[]][]) {
+    let s = 0;
+    for (const kw of kws) { if (n.includes(kw)) s += kw.length; }
+    if (s > bestScore) { bestScore = s; best = intent; }
+  }
+  const needsDb = ["crud_system", "dashboard", "ecommerce", "saas_app"].includes(best);
+  const needsAuth = needsDb;
+  const tables: string[] = [];
+  if (best === "crud_system") {
+    const m = n.match(/(?:cadastro|tabela|gerenciar|crud)\s+(?:de\s+)?(\w+)/);
+    tables.push(m ? m[1].replace(/s$/, "") : "items");
+  } else if (best === "ecommerce") tables.push("products", "orders", "order_items", "customers");
+  else if (best === "saas_app") tables.push("profiles", "plans", "subscriptions");
+  const features: string[] = [];
+  if (needsAuth) features.push("auth", "database");
+  return { intent: best, needsDatabase: needsDb, needsAuth, supabaseTables: tables, features };
+}
 
 // ─── Prompt Builders ─────────────────────────────────────────
 
-function buildPrdPrompt(prompt: string, projectName: string, existingFiles: Record<string, string>): string {
-  const existingFilesList = Object.keys(existingFiles)
-    .filter(f => !f.startsWith(".cirius/"))
-    .slice(0, 30)
-    .join(", ");
+function buildAddFeaturePrompt(prompt: string, files: Record<string, string>, templateType: ProjectTemplateType): string {
+  const systemPrompt = getCodeSystemPrompt(templateType);
+  const fileList = Object.entries(files)
+    .filter(([p]) => !p.startsWith(".cirius/"))
+    .slice(0, 25)
+    .map(([p, c]) => `<file path="${p}">\n${c.slice(0, 4000)}\n</file>`)
+    .join("\n\n");
 
-  return `IMPORTANTE: Não faça perguntas. Execute diretamente. Retorne APENAS JSON válido.
+  return `${systemPrompt}
 
-Você é um arquiteto de software sênior. O projeto "${projectName}" precisa de:
+## IMPORTANT: You are ADDING a feature to an EXISTING project.
+## NEVER remove or break existing functionality.
+## If you need to update src/App.tsx, include ALL existing routes PLUS the new ones.
+## If you need to update package.json, include ALL existing dependencies PLUS new ones.
 
+## REQUEST:
 ${prompt}
 
-Arquivos existentes no projeto: ${existingFilesList || "(vazio — projeto novo)"}
-Stack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM + Supabase
+## EXISTING PROJECT FILES (${Object.keys(files).length} files):
+${fileList.slice(0, 100000)}
 
-## REGRA CRÍTICA: TUDO DEVE SER GERADO COMPLETO
-
-O projeto DEVE ser gerado COMPLETO e FUNCIONAL. Isso significa:
-- TODAS as páginas devem ser criadas com conteúdo real
-- TODOS os componentes necessários devem existir
-- TODAS as rotas devem estar configuradas
-- O design deve ser completo e profissional
-
-Quebre em 2-4 tarefas sequenciais (prefira menos tarefas com mais conteúdo).
-
-TAREFA 1 OBRIGATÓRIA: Deve gerar a fundação completa (index.html, main.tsx, App.tsx com TODAS as rotas, index.css, configs, layout components como Header/Footer).
-
-Retorne APENAS JSON válido:
-{"tasks":[{"title":"Título","brain_type":"code","prompt":"Prompt DETALHADO (mínimo 200 palavras) descrevendo EXATAMENTE o que gerar, incluindo nomes de arquivos, visual esperado, textos de exemplo, comportamentos interativos"}],"summary":"Resumo do que será construído"}
-
-Regras:
-- brain_type: "code"
-- Prompts devem ser auto-contidos, detalhados e completos
-- Máximo 4 tarefas (prefira 2-3)
-- Sem perguntas, sem clarificações`;
+Return ALL new/modified files using <file path="...">COMPLETE content</file> tags.
+Include the FULL content of any file you modify — never use "..." or placeholders.`;
 }
 
 function buildFixPrompt(prompt: string, files: Record<string, string>): string {
@@ -155,8 +141,7 @@ ${prompt}
 ARQUIVOS ATUAIS:
 ${fileList.slice(0, 80000)}
 
-Retorne os arquivos melhorados usando <file path="...">...</file>.
-Explique brevemente o que foi melhorado antes dos blocos de código.`;
+Retorne os arquivos melhorados usando <file path="...">...</file>.`;
 }
 
 function buildRefinePrompt(files: Record<string, string>, prdJson?: any): string {
@@ -177,8 +162,7 @@ ${prdContext}
 2. Corrija imports quebrados
 3. Garanta consistência de tipos TypeScript
 4. Verifique rotas no App.tsx
-5. Corrija handlers de estado
-6. Garanta design responsivo
+5. Garanta design responsivo
 
 ARQUIVOS:
 ${fileList}
@@ -198,7 +182,7 @@ function extractFileBlocks(text: string): Record<string, string> {
     if (path && content.trim().length > 1) files[path] = content;
   }
   if (Object.keys(files).length === 0) {
-    const cbRe = /```(?:\w+)?\s+((?:src|public|index|vite|tailwind|tsconfig|package)[^\n]*)\n([\s\S]*?)```/g;
+    const cbRe = /```(?:\w+)?\s+((?:src|public|index|vite|tailwind|tsconfig|package|supabase)[^\n]*)\n([\s\S]*?)```/g;
     while ((m = cbRe.exec(text)) !== null) {
       const path = m[1].trim();
       const content = m[2].replace(/^\n/, "").replace(/\s+$/, "") + "\n";
@@ -253,9 +237,7 @@ async function sendViaOpenRouter(
     }),
   });
 
-  if (opts.stream) {
-    return res; // Return raw response for SSE streaming
-  }
+  if (opts.stream) return res;
 
   const d = Date.now() - t0;
   if (res.ok) {
@@ -308,10 +290,12 @@ async function executeSequentialBuild(
   projectName: string,
   prd: { tasks: Array<{ title: string; brain_type: string; prompt: string }>; summary?: string },
   existingFiles: Record<string, string>,
+  templateType: ProjectTemplateType,
 ): Promise<{ ok: boolean; files: Record<string, string>; tasksDone: number; error?: string }> {
   let currentFiles = { ...existingFiles };
   let tasksDone = 0;
   const totalTasks = prd.tasks.length;
+  const codeSystemPrompt = getCodeSystemPrompt(templateType);
 
   for (let i = 0; i < totalTasks; i++) {
     const task = prd.tasks[i];
@@ -333,13 +317,13 @@ async function executeSequentialBuild(
 
     // Build context with existing files
     const fileContext = Object.keys(currentFiles).length > 0
-      ? `\n\nARQUIVOS JÁ GERADOS (${Object.keys(currentFiles).length} arquivos):\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 25).map(([p, c]) => `--- ${p} ---\n${c.slice(0, 3000)}`).join("\n\n")}`
+      ? `\n\nARQUIVOS JÁ GERADOS (${Object.keys(currentFiles).length} arquivos):\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 25).map(([p, c]) => `<file path="${p}">\n${c.slice(0, 4000)}\n</file>`).join("\n\n")}`
       : "";
 
     const isFirstTask = i === 0;
     const foundationNote = isFirstTask
-      ? `\n\nCRITICAL: This is the FIRST task. You MUST generate ALL foundation files:\n- index.html (with <div id="root"> and <script type="module" src="/src/main.tsx">)\n- src/main.tsx (ReactDOM.createRoot)\n- src/App.tsx (with React Router <Routes> containing ALL page routes)\n- src/index.css (@tailwind base/components/utilities)\n- package.json, vite.config.ts, tailwind.config.js, tsconfig.json\n- Layout components (Header/Navbar, Footer)\nThe project MUST render correctly with just these files.`
-      : `\n\nIMPORTANT: Previous files already exist. Maintain compatibility. If adding routes, include the COMPLETE updated App.tsx.`;
+      ? `\n\nCRITICAL: This is the FIRST task. You MUST generate ALL foundation files:\n- index.html, src/main.tsx, src/App.tsx (with ALL routes), src/index.css\n- package.json, vite.config.ts, tailwind.config.js, tsconfig.json\n- Layout components (Header/Navbar, Footer)\n${templateType === "crud_system" || templateType === "ecommerce" || templateType === "saas_app" ? "- supabase/schema.sql with CREATE TABLE + RLS\n- src/lib/supabase.ts\n- src/contexts/AuthContext.tsx + Login/Register pages" : ""}`
+      : `\n\nIMPORTANT: Previous files already exist. Maintain compatibility.\nIf adding routes, include the COMPLETE updated App.tsx with ALL existing + new routes.\nNEVER remove existing routes or imports.`;
 
     const taskPrompt = `You are building project "${projectName}".
 Stack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM + Supabase
@@ -351,16 +335,13 @@ ${foundationNote}
 ${fileContext}
 
 Return ALL files using <file path="path/to/file.tsx">COMPLETE file content</file> tags.
-Output COMPLETE file content — never use "..." or placeholders.
-If modifying existing files, output their FULL new version.
-Use realistic content, proper Tailwind styling, and responsive design.`;
+Output COMPLETE file content — never use "..." or placeholders.`;
 
     const messages = [
-      { role: "system", content: CODE_SYSTEM_PROMPT },
+      { role: "system", content: codeSystemPrompt },
       { role: "user", content: taskPrompt },
     ];
 
-    // Try OpenRouter (Claude) first, then Gateway
     let result = await sendViaOpenRouter(messages);
     let content: string | null = null;
     let engine = "openrouter";
@@ -377,46 +358,36 @@ Use realistic content, proper Tailwind styling, and responsive design.`;
 
     if (!content) {
       await supabase.from("cirius_generation_log").insert({
-        project_id: projectId,
-        step: `task_${i + 1}`,
-        status: "failed",
-        message: `Tarefa ${i + 1} falhou: sem resposta da IA`,
-        level: "error",
+        project_id: projectId, step: `task_${i + 1}`, status: "failed",
+        message: `Tarefa ${i + 1} falhou: sem resposta da IA`, level: "error",
       });
-      continue; // Skip failed task, try next
+      continue;
     }
 
-    // Extract files from response
     let newFiles = extractFileBlocks(content);
     if (Object.keys(newFiles).length === 0) {
       newFiles = extractFilesFromMarkdown(content);
     }
 
     if (Object.keys(newFiles).length > 0) {
-      currentFiles = { ...currentFiles, ...newFiles };
+      // ── SMART MERGE instead of simple overwrite ──
+      currentFiles = smartMergeFiles(currentFiles, newFiles);
       tasksDone++;
 
-      // Persist intermediate result
       await supabase.from("cirius_projects").update({
         source_files_json: currentFiles,
         updated_at: new Date().toISOString(),
       }).eq("id", projectId);
 
       await supabase.from("cirius_generation_log").insert({
-        project_id: projectId,
-        step: `task_${i + 1}`,
-        status: "completed",
-        message: `Tarefa ${i + 1} concluída: ${Object.keys(newFiles).length} arquivos via ${engine}`,
-        level: "info",
-        metadata: { file_count: Object.keys(newFiles).length, engine },
+        project_id: projectId, step: `task_${i + 1}`, status: "completed",
+        message: `Tarefa ${i + 1} concluída: ${Object.keys(newFiles).length} arquivos via ${engine} (smart merge)`,
+        level: "info", metadata: { file_count: Object.keys(newFiles).length, engine },
       });
     } else {
       await supabase.from("cirius_generation_log").insert({
-        project_id: projectId,
-        step: `task_${i + 1}`,
-        status: "completed",
-        message: `Tarefa ${i + 1}: resposta sem arquivos (texto/explicação)`,
-        level: "warning",
+        project_id: projectId, step: `task_${i + 1}`, status: "completed",
+        message: `Tarefa ${i + 1}: resposta sem arquivos (texto/explicação)`, level: "warning",
       });
     }
   }
@@ -461,15 +432,16 @@ serve(async (req) => {
       });
     }
 
-    // Load project files
+    // Load project
     let projectFiles: Record<string, string> = {};
     let projectName = "Cirius Project";
     let projectPrd: any = null;
+    let templateType: ProjectTemplateType = "custom";
 
     if (project_id) {
       const { data: proj } = await supabase
         .from("cirius_projects")
-        .select("source_files_json, name, prd_json")
+        .select("source_files_json, name, prd_json, template_type")
         .eq("id", project_id)
         .maybeSingle();
 
@@ -479,19 +451,22 @@ serve(async (req) => {
         }
         projectName = proj.name || projectName;
         projectPrd = proj.prd_json;
+        templateType = (proj.template_type as ProjectTemplateType) || "custom";
       }
     }
 
     const latestMsg = messages[messages.length - 1]?.content || "";
     const command = detectCommand(latestMsg);
-    console.log(`[cirius-ai-chat] Command: ${command.type}, Project: ${project_id?.slice(0, 8)}, Claude Direct mode`);
+    console.log(`[cirius-ai-chat] Command: ${command.type}, Template: ${templateType}, Project: ${project_id?.slice(0, 8)}`);
 
     // ═══════════════════════════════════════════════════════════
     // BUILD COMMAND → PRD via Gemini Flash → Sequential Tasks via Claude
     // ═══════════════════════════════════════════════════════════
     if (command.type === "build" && project_id) {
-      // Step 1: Generate PRD via Gemini Flash (fast/cheap)
-      const prdPrompt = buildPrdPrompt(command.prompt, projectName, projectFiles);
+      const blueprint = classifyLightIntent(command.prompt);
+      if (templateType === "custom") templateType = blueprint.intent;
+
+      const prdPrompt = buildSpecializedPrdPrompt(command.prompt, projectName, templateType, projectFiles, blueprint);
       const prdMessages = [
         { role: "system", content: "Return only valid JSON, no markdown fences." },
         { role: "user", content: prdPrompt },
@@ -501,7 +476,6 @@ serve(async (req) => {
       let prd: any = null;
       if (gwResult.content) prd = extractPrdJSON(gwResult.content);
 
-      // Fallback: try OpenRouter for PRD
       if (!prd) {
         const orResult = await sendViaOpenRouter(prdMessages);
         if ("content" in orResult && orResult.content) prd = extractPrdJSON(orResult.content);
@@ -514,30 +488,25 @@ serve(async (req) => {
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Save PRD
       await supabase.from("cirius_projects").update({
-        prd_json: prd,
-        status: "generating_code",
-        progress_pct: 20,
+        prd_json: prd, status: "generating_code", progress_pct: 20,
         generation_started_at: new Date().toISOString(),
-        generation_engine: "claude_direct",
+        generation_engine: "claude_direct", template_type: templateType,
       }).eq("id", project_id);
 
-      // Step 2: Execute tasks sequentially via Claude
       const result = await executeSequentialBuild(
-        supabase, userId, project_id, projectName, prd, projectFiles,
+        supabase, userId, project_id, projectName, prd, projectFiles, templateType,
       );
 
       if (result.ok) {
-        // Step 3: Refine holistically
+        // Refine
         await supabase.from("cirius_projects").update({
-          status: "refining",
-          progress_pct: 85,
-          current_step: "refining",
+          status: "refining", progress_pct: 85, current_step: "refining",
         }).eq("id", project_id);
 
+        const codeSystemPrompt = getCodeSystemPrompt(templateType);
         const refineMessages = [
-          { role: "system", content: CODE_SYSTEM_PROMPT },
+          { role: "system", content: codeSystemPrompt },
           { role: "user", content: buildRefinePrompt(result.files, prd) },
         ];
 
@@ -546,23 +515,18 @@ serve(async (req) => {
         if ("content" in refResult && refResult.content) {
           const refFiles = extractFileBlocks(refResult.content);
           if (Object.keys(refFiles).length > 0) {
-            refinedFiles = { ...refinedFiles, ...refFiles };
+            refinedFiles = smartMergeFiles(refinedFiles, refFiles);
           }
         }
 
         await supabase.from("cirius_projects").update({
-          source_files_json: refinedFiles,
-          status: "live",
-          progress_pct: 100,
-          generation_ended_at: new Date().toISOString(),
-          current_step: "completed",
+          source_files_json: refinedFiles, status: "live", progress_pct: 100,
+          generation_ended_at: new Date().toISOString(), current_step: "completed",
         }).eq("id", project_id);
 
         await supabase.from("cirius_generation_log").insert({
-          project_id: project_id,
-          step: "complete",
-          status: "completed",
-          message: `Pipeline completo: ${Object.keys(refinedFiles).length} arquivos, ${result.tasksDone}/${prd.tasks.length} tarefas`,
+          project_id: project_id, step: "complete", status: "completed",
+          message: `Pipeline completo: ${Object.keys(refinedFiles).length} arquivos, ${result.tasksDone}/${prd.tasks.length} tarefas (template: ${templateType})`,
           level: "info",
         });
 
@@ -570,16 +534,14 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           ok: true,
           content: `🚀 **Projeto construído com sucesso!**\n\n${prd.summary || ""}\n\n**${result.tasksDone}/${prd.tasks.length} tarefas completadas:**\n${taskList}\n\n✅ ${Object.keys(refinedFiles).length} arquivos gerados.`,
-          command_type: "build",
-          provider: "claude_direct",
+          command_type: "build", provider: "claude_direct",
           files_updated: Object.keys(refinedFiles).length,
           updated_paths: Object.keys(refinedFiles),
-          pipeline: { status: "completed", task_count: result.tasksDone },
+          pipeline: { status: "completed", task_count: result.tasksDone, template: templateType },
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       } else {
         await supabase.from("cirius_projects").update({
-          status: "failed",
-          error_message: "Nenhuma tarefa completou com sucesso",
+          status: "failed", error_message: "Nenhuma tarefa completou com sucesso",
         }).eq("id", project_id);
 
         return new Response(JSON.stringify({
@@ -590,10 +552,75 @@ serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // ADD FEATURE COMMAND → Smart merge into existing project
+    // ═══════════════════════════════════════════════════════════
+    if (command.type === "add_feature" && project_id) {
+      const featurePrompt = buildAddFeaturePrompt(command.prompt, projectFiles, templateType);
+      const aiMessages = [
+        { role: "system", content: getCodeSystemPrompt(templateType) },
+        { role: "user", content: featurePrompt },
+      ];
+
+      let assistantContent = "";
+      let provider = "gateway";
+
+      const orResult = await sendViaOpenRouter(aiMessages);
+      if ("content" in orResult && orResult.content && orResult.content.length > 10) {
+        assistantContent = orResult.content;
+        provider = "openrouter_claude";
+      }
+      if (!assistantContent || assistantContent.length < 10) {
+        const gwResult = await sendViaGateway(aiMessages);
+        if (gwResult.content && gwResult.content.length > 10) {
+          assistantContent = gwResult.content;
+          provider = "gateway_gemini";
+        }
+      }
+
+      if (!assistantContent) {
+        return new Response(JSON.stringify({
+          ok: false, content: "⚠️ Não consegui gerar a feature. Tente novamente.",
+          command_type: "add_feature", files_updated: 0, updated_paths: [],
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      let newFiles = extractFileBlocks(assistantContent);
+      if (Object.keys(newFiles).length === 0) newFiles = extractFilesFromMarkdown(assistantContent);
+
+      const filesUpdated = Object.keys(newFiles).length;
+      const updatedPaths = Object.keys(newFiles);
+
+      if (filesUpdated > 0) {
+        // ── SMART MERGE ──
+        const merged = smartMergeFiles(projectFiles, newFiles);
+        await supabase.from("cirius_projects").update({
+          source_files_json: merged, updated_at: new Date().toISOString(),
+        }).eq("id", project_id);
+      }
+
+      const summary = filesUpdated > 0
+        ? `✅ Feature adicionada! ${filesUpdated} arquivo(s) atualizado(s):\n${updatedPaths.slice(0, 10).map(f => `• \`${f}\``).join("\n")}`
+        : assistantContent.split(/<file\s/)[0]?.trim().slice(0, 400) || assistantContent.slice(0, 400);
+
+      if (project_id) {
+        await supabase.from("cirius_chat_messages").insert({
+          project_id, user_id: userId, role: "assistant", content: summary,
+          metadata: { command_type: "add_feature", provider, files_updated: filesUpdated },
+        });
+      }
+
+      return new Response(JSON.stringify({
+        ok: true, content: summary, raw_content: assistantContent,
+        command_type: "add_feature", provider,
+        files_updated: filesUpdated, updated_paths: updatedPaths,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // STREAMING SSE MODE (for chat/fix/improve/refine)
     // ═══════════════════════════════════════════════════════════
 
-    // Build the prompt based on command type
+    const codeSystemPrompt = getCodeSystemPrompt(templateType);
     let userPrompt: string;
     if (command.type === "fix") {
       userPrompt = buildFixPrompt(command.prompt, projectFiles);
@@ -602,21 +629,18 @@ serve(async (req) => {
     } else if (command.type === "refine") {
       userPrompt = buildRefinePrompt(projectFiles, projectPrd);
     } else {
-      // Chat — include conversation history + project context
       const filesContext = Object.keys(projectFiles).length > 0
         ? `\nPROJECT FILES (${Object.keys(projectFiles).length}):\n${Object.keys(projectFiles).filter(f => !f.startsWith(".cirius/")).slice(0, 30).join(", ")}` : "";
-
       userPrompt = messages.slice(-20)
         .map((m: any) => `${m.role.toUpperCase()}:\n${String(m.content || "").slice(0, 6000)}`)
         .join("\n\n") + filesContext;
     }
 
     const aiMessages = [
-      { role: "system", content: CODE_SYSTEM_PROMPT },
+      { role: "system", content: codeSystemPrompt },
       { role: "user", content: userPrompt },
     ];
 
-    // ─── Try streaming via OpenRouter ───
     if (wantStream) {
       try {
         const streamRes = await sendViaOpenRouter(aiMessages, { stream: true });
@@ -626,11 +650,10 @@ serve(async (req) => {
           });
         }
       } catch (e) {
-        console.warn("[cirius-ai-chat] Streaming failed, falling back to sync:", e);
+        console.warn("[cirius-ai-chat] Streaming failed, falling back:", e);
       }
     }
 
-    // ─── Sync mode: OpenRouter → Gateway fallback ───
     let assistantContent = "";
     let provider = "gateway";
 
@@ -639,7 +662,6 @@ serve(async (req) => {
       assistantContent = orResult.content;
       provider = "openrouter_claude";
     }
-
     if (!assistantContent || assistantContent.length < 10) {
       const gwResult = await sendViaGateway(aiMessages);
       if (gwResult.content && gwResult.content.length > 10) {
@@ -650,26 +672,22 @@ serve(async (req) => {
 
     if (!assistantContent || assistantContent.trim().length < 2) {
       return new Response(JSON.stringify({
-        ok: false,
-        error: "Empty AI response",
+        ok: false, error: "Empty AI response",
         content: "⚠️ Não consegui gerar resposta. Tente novamente.",
-        command_type: command.type, provider,
-        files_updated: 0, updated_paths: [],
+        command_type: command.type, provider, files_updated: 0, updated_paths: [],
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ─── Extract files from response ───
+    // Extract and SMART MERGE files
     let filesUpdated = 0;
     let updatedPaths: string[] = [];
     if (project_id) {
       let newFiles = extractFileBlocks(assistantContent);
-      if (Object.keys(newFiles).length === 0) {
-        newFiles = extractFilesFromMarkdown(assistantContent);
-      }
+      if (Object.keys(newFiles).length === 0) newFiles = extractFilesFromMarkdown(assistantContent);
       filesUpdated = Object.keys(newFiles).length;
       updatedPaths = Object.keys(newFiles);
       if (filesUpdated > 0) {
-        const merged = { ...projectFiles, ...newFiles };
+        const merged = smartMergeFiles(projectFiles, newFiles);
         await supabase.from("cirius_projects").update({
           source_files_json: merged, updated_at: new Date().toISOString(),
         }).eq("id", project_id);
@@ -695,8 +713,7 @@ serve(async (req) => {
   } catch (e) {
     console.error("cirius-ai-chat error:", e);
     return new Response(JSON.stringify({
-      ok: false,
-      error: e instanceof Error ? e.message : "Unknown error",
+      ok: false, error: e instanceof Error ? e.message : "Unknown error",
       content: "⚠️ O Cirius teve uma falha temporária. Tente novamente.",
       files_updated: 0, updated_paths: [],
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
