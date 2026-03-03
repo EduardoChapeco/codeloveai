@@ -44,6 +44,7 @@ interface Props {
   onClearTerminal?: () => void;
   taskItems?: TaskItem[];
   onRetryTask?: (taskId: string) => void;
+  onDownload?: () => void;
 }
 
 export default function SplitModeEditor({
@@ -56,6 +57,7 @@ export default function SplitModeEditor({
   bubbles, onRemoveBubble, streamingText, updatedFiles,
   terminalLines = [], onClearTerminal,
   taskItems, onRetryTask,
+  onDownload,
 }: Props) {
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
@@ -121,6 +123,7 @@ export default function SplitModeEditor({
         onPublish={() => {}}
         onHistoryClick={() => {}}
         onShareClick={() => {}}
+        onDownload={onDownload}
         rightPanel={rightPanel}
         onRightPanelChange={setRightPanel}
         showFiles={showFiles}

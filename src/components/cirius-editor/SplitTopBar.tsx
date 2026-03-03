@@ -1,6 +1,6 @@
 import {
   Folder, FolderOpen, ChevronDown, Globe, Monitor, Tablet, Smartphone,
-  Clock, Share2, Layers, Maximize2, Columns2, Code, Eye
+  Clock, Share2, Layers, Maximize2, Columns2, Code, Eye, Download
 } from "lucide-react";
 import type { FrameMode } from "./types";
 
@@ -16,6 +16,7 @@ interface Props {
   onPublish: () => void;
   onHistoryClick: () => void;
   onShareClick: () => void;
+  onDownload?: () => void;
   rightPanel?: "preview" | "code";
   onRightPanelChange?: (p: "preview" | "code") => void;
   showFiles?: boolean;
@@ -25,7 +26,7 @@ interface Props {
 
 export default function SplitTopBar({
   projectName, frameMode, onFrameChange, editorMode, onEditorModeChange,
-  isLive, onPublish, onHistoryClick, onShareClick,
+  isLive, onPublish, onHistoryClick, onShareClick, onDownload,
   rightPanel = "preview", onRightPanelChange,
   showFiles, onToggleFiles, fileCount = 0,
 }: Props) {
@@ -118,6 +119,7 @@ export default function SplitTopBar({
         <div className="sp-tb-sep" />
         <button className="gl ico sm" onClick={onHistoryClick}><Clock size={13} /></button>
         <button className="gl ico sm" onClick={onShareClick}><Share2 size={13} /></button>
+        {onDownload && <button className="gl ico sm" onClick={onDownload} title="Download ZIP"><Download size={13} /></button>}
         <div className="sp-tb-sep" />
         <button className="gl sm primary" onClick={onPublish}>
           <Layers size={12} /> Publicar

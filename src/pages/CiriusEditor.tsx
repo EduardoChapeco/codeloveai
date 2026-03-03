@@ -23,6 +23,7 @@ import type { BuildStage } from "@/components/cirius-editor/BuildProgressCard";
 import type { TerminalLine } from "@/components/cirius-editor/TerminalPanel";
 import { REACT_VITE_TEMPLATE } from "@/lib/project-template";
 import { buildPreviewFromFiles } from "@/lib/cirius/preview-engine";
+import { downloadProjectAsZip } from "@/lib/cirius/download-zip";
 import "@/styles/cirius-editor.css";
 
 import type { FrameMode, ActiveMode, CmdMode, Bubble, EditorToast, ChatMessage } from "@/components/cirius-editor/types";
@@ -441,6 +442,20 @@ export default function CiriusEditor() {
     setBubbles(prev => prev.filter(b => b.id !== bubbleId));
   }, []);
 
+  const handleDownload = useCallback(async () => {
+    const files = sourceFilesRef.current;
+    if (!files || Object.keys(files).length === 0) {
+      addToast("Nenhum arquivo para download", "info");
+      return;
+    }
+    try {
+      await downloadProjectAsZip(files, project?.name || "projeto");
+      addToast("Download iniciado!", "success");
+    } catch (e) {
+      addToast("Erro ao gerar ZIP", "info");
+    }
+  }, [project, addToast]);
+
   const sendChatMsg = useCallback(async (msg: string) => {
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: msg, timestamp: Date.now() };
     setChatMessages(prev => [...prev, userMsg]);
@@ -501,6 +516,7 @@ export default function CiriusEditor() {
         updatedFiles={updatedFiles}
         terminalLines={terminalLines}
         onClearTerminal={clearTerminal}
+        onDownload={handleDownload}
       />
     );
   }
