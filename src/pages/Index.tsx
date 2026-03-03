@@ -128,6 +128,11 @@ export default function Index() {
 
   const scrollToDemo = () => demoRef.current?.scrollIntoView({ behavior: "smooth" });
 
+  // Authenticated users go straight to chat dashboard
+  if (!authLoading && user && !isPreview) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   const guestNav = ((!authLoading && !user) || isPreview) ? (
     <nav className="sticky top-0 z-20 px-6 py-3 flex items-center justify-between">
       <div className="rd-card flex items-center justify-between w-full" style={{ padding: "0.625rem 1.25rem", borderRadius: 16 }}>
@@ -353,13 +358,6 @@ export default function Index() {
     </div>
   );
 
-  if (!authLoading && user && !isPreview) {
-    return (
-      <AppLayout>
-        {content}
-      </AppLayout>
-    );
-  }
-
   return content;
+
 }
