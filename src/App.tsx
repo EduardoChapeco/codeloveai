@@ -172,6 +172,11 @@ const App = () => (
                 <Route path="/admin/global" element={<AdminGlobal />} />
                 <Route path="/admin/integrations" element={<AdminIntegrations />} />
                 <Route path="/admin/tenant" element={<Admin />} />
+                <Route path="/admin/extensions" element={<Admin />} />
+                <Route path="/admin/modules" element={<AdminGlobal />} />
+                <Route path="/admin/cloud" element={<LovableCloudAdmin />} />
+                <Route path="/admin/brainchain" element={<BrainchainAdmin />} />
+                <Route path="/tenant/admin" element={<TenantAdmin />} />
                 <Route path="/community" element={<Community />} />
                 <Route path="/community/tests" element={<CommunityTestList />} />
                 <Route path="/community/test/:id" element={<CommunityTestSession />} />
@@ -197,7 +202,6 @@ const App = () => (
                 <Route path="/wl/afiliados" element={<WlAffiliateDashboard />} />
                 <Route path="/wl/ref/:code" element={<WhiteLabelRefPage />} />
                 <Route path="/parceiros" element={<PartnersLanding />} />
-                <Route path="/admin/cloud" element={<LovableCloudAdmin />} />
                 <Route path="/whitelabel/onboarding" element={<WhiteLabelOnboarding />} />
                 <Route path="/wl/setup" element={<WhiteLabelOnboarding />} />
                 <Route path="/faq/whitelabel" element={<WhiteLabelFAQ />} />
@@ -230,7 +234,6 @@ const App = () => (
                 <Route path="/marketplace/:slug" element={<MarketplaceDetail />} />
                 <Route path="/marketplace/onboarding/:purchaseId" element={<MarketplaceOnboarding />} />
                 <Route path="/setup/evolution" element={<EvolutionSetupGuide />} />
-                <Route path="/admin/brainchain" element={<BrainchainAdmin />} />
                 {/* Cirius — dashboard redirects to unified projects */}
                 <Route path="/cirius" element={<LovableProjects />} />
                 <Route path="/cirius/new" element={<CiriusNew />} />
