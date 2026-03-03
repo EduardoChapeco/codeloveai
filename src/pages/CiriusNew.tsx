@@ -30,7 +30,7 @@ const INTENT_LABELS: Record<string, string> = {
   custom: "Projeto Customizado",
 };
 
-const TEMPLATES = [
+const FALLBACK_TEMPLATES = [
   { icon: Rocket, label: "Landing Page", prompt: "Crie uma landing page moderna e responsiva com hero section, features, depoimentos e CTA. Design clean e profissional.", color: "orange" },
   { icon: BarChart3, label: "Dashboard", prompt: "Crie um dashboard de analytics com gráficos de vendas, métricas de usuários, tabelas de dados recentes e filtros por período.", color: "blue" },
   { icon: ShoppingCart, label: "E-commerce", prompt: "Crie uma loja online com catálogo de produtos, carrinho de compras, checkout e painel de gerenciamento de pedidos.", color: "green" },
@@ -57,6 +57,19 @@ export default function CiriusNew() {
   const [noBrains, setNoBrains] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [dbTemplates, setDbTemplates] = useState<Array<{ id: string; name: string; description: string | null; prompt_template: string; category: string | null }>>([]);
+
+  // Fetch templates from DB
+  useEffect(() => {
+    supabase.from("cirius_templates" as any)
+      .select("id, name, description, prompt_template, category")
+      .eq("is_premium", false)
+      .order("usage_count", { ascending: false })
+      .limit(12)
+      .then(({ data }) => {
+        if (data && data.length > 0) setDbTemplates(data as any);
+      });
+  }, []);
 
   const [blueprint, setBlueprint] = useState<ProjectBlueprint | null>(null);
   const [prdTasks, setPrdTasks] = useState<PRDTask[]>([]);
@@ -216,11 +229,42 @@ export default function CiriusNew() {
                 </div>
               )}
 
-              {/* Templates */}
+              {/* Templates — DB-sourced or fallback */}
               <div>
                 <div className="sec-label" style={{ marginBottom: 10 }}>Templates Rápidos</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  {TEMPLATES.map((t) => (
+                  {dbTemplates.length > 0 ? dbTemplates.map((t) => {
+                    const CATEGORY_ICONS: Record<string, typeof Rocket> = {
+                      landing_page: Rocket, dashboard: BarChart3, ecommerce: ShoppingCart,
+                      crud_system: Settings, saas_app: Briefcase, marketing_site: Globe, custom: Puzzle,
+                    };
+                    const CATEGORY_COLORS: Record<string, string> = {
+                      landing_page: "orange", dashboard: "blue", ecommerce: "green",
+                      crud_system: "purple", saas_app: "indigo", marketing_site: "teal", custom: "orange",
+                    };
+                    const Icon = CATEGORY_ICONS[t.category || "custom"] || Puzzle;
+                    const color = CATEGORY_COLORS[t.category || "custom"] || "orange";
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => setPrompt(t.prompt_template)}
+                        className="rd-card"
+                        style={{
+                          padding: "12px 14px", textAlign: "left", cursor: "pointer",
+                          display: "flex", alignItems: "center", gap: 10,
+                          transition: "all .15s var(--ease)",
+                        }}
+                      >
+                        <div className={`nav-ico-box ${COLOR_MAP[color]}`} style={{ width: 30, height: 30, borderRadius: "var(--r2)" }}>
+                          <Icon size={14} />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ts)" }}>{t.name}</span>
+                          {t.description && <span style={{ fontSize: 10, color: "var(--tt)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</span>}
+                        </div>
+                      </button>
+                    );
+                  }) : FALLBACK_TEMPLATES.map((t) => (
                     <button
                       key={t.label}
                       onClick={() => setPrompt(t.prompt)}
