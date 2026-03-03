@@ -627,7 +627,7 @@ Deno.serve(async (req) => {
     await sc.from("cirius_projects").update({ generation_engine: "claude_direct" }).eq("id", projectId);
     await logEntry(sc, projectId, "code", "started", `Claude Direct mode — ${prd.tasks.length} tasks sequenciais`);
 
-    const CODE_SYS = "You are an expert React/TypeScript developer. Return only code files wrapped in <file path=\"...\">content</file> tags. No explanations outside file tags.";
+    const CODE_SYS = "You are an expert React/TypeScript developer. Return only code files wrapped in <file path=\"...\">content</file> tags. No explanations outside file tags. IMPORTANT: Always include an index.html with <div id=\"root\"></div> and <script type=\"module\" src=\"/src/main.tsx\"></script>. Always include src/main.tsx with ReactDOM.createRoot rendering the App component.";
     let currentFiles: Record<string, string> = {};
     let tasksDone = 0;
 
@@ -704,6 +704,19 @@ Deno.serve(async (req) => {
     await logEntry(sc, projectId, "complete", "completed", `Claude Direct: ${Object.keys(finalFiles).length} arquivos, ${tasksDone}/${prd.tasks.length} tarefas`, {
       metadata: { file_count: Object.keys(finalFiles).length, tasks_done: tasksDone, refined: refResult.ok },
     });
+
+    // ── AUTO-DEPLOY: Trigger GitHub + Netlify if integrations exist ──
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      // Fire-and-forget deploy (don't block response)
+      fetch(`${supabaseUrl}/functions/v1/cirius-deploy`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deploy_all", project_id: projectId, service_key: true }),
+      }).catch(() => {});
+      await logEntry(sc, projectId, "auto_deploy", "started", "Auto-deploy disparado");
+    } catch { /* non-critical */ }
 
     return json({
       success: true,
