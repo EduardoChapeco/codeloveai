@@ -99,7 +99,7 @@ export default function FreePlan() {
             <p className="body-text" style={{ marginBottom: 32 }}>
               Seu plano de 10 mensagens/dia foi ativado com sucesso. Acesse seu dashboard para começar.
             </p>
-            <Link to="/dashboard" className="gl primary lg" style={{ width: '100%', textDecoration: 'none' }}>
+            <Link to="/home" className="gl primary lg" style={{ width: '100%', textDecoration: 'none' }}>
               Ir para dashboard
             </Link>
           </div>
@@ -113,7 +113,7 @@ export default function FreePlan() {
             <div className="sec-label" style={{ marginBottom: 8 }}>Erro</div>
             <h2 className="title-xl" style={{ marginBottom: 12 }}>Não foi possível ativar</h2>
             <p className="body-text" style={{ marginBottom: 32 }}>{errorMsg}</p>
-            <Link to="/dashboard" className="gl lg" style={{ width: '100%', textDecoration: 'none' }}>
+            <Link to="/home" className="gl lg" style={{ width: '100%', textDecoration: 'none' }}>
               Ir para dashboard
             </Link>
           </div>

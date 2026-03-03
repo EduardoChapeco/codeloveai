@@ -73,7 +73,7 @@ export default function StarbleSidebar() {
     <div id="sidebar" className={collapsed ? "sb-collapsed" : ""}>
       {/* Header */}
       <div className="sb-header">
-        <div className="sb-logo" onClick={() => navigate("/dashboard")}>
+        <div className="sb-logo" onClick={() => navigate("/home")}>
           {tenant?.logo_url ? (
             <img src={tenant.logo_url} alt={brandName} className="sb-logo-img" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "contain" }} />
           ) : (
@@ -90,7 +90,7 @@ export default function StarbleSidebar() {
         {inAdminContext && (isAdmin || isTenantAdmin) ? (
           /* ── CONTEXTUAL ADMIN SIDEBAR ── */
           <>
-            <NavEntry to="/dashboard" label="← Voltar" icon={ArrowLeft} iconColor="ib-gray" collapsed={collapsed} />
+            <NavEntry to="/home" label="← Voltar" icon={ArrowLeft} iconColor="ib-gray" collapsed={collapsed} />
             <div className="divider" />
             {!collapsed && <div className="sb-section">Administração</div>}
             <NavEntry to="/admin" label="Painel Admin" icon={Shield} iconColor="ib-red" active={location.pathname === "/admin"} collapsed={collapsed} />
@@ -117,10 +117,10 @@ export default function StarbleSidebar() {
           /* ── MAIN SIDEBAR ── */
           <>
             {!collapsed && <div className="sb-section">Principal</div>}
-            <NavEntry to="/dashboard" label="Dashboard" icon={BarChart3} iconColor="ib-blue" active={isActive("/dashboard")} collapsed={collapsed} />
+            <NavEntry to="/home" label="Home" icon={BarChart3} iconColor="ib-blue" active={isActive("/home")} collapsed={collapsed} />
             <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-indigo" active={isActive("/lovable/projects") || isActive("/cirius") || isActive("/projeto")} collapsed={collapsed} />
             <NavEntry to="/lovable/connect" label="Painel & Conexão" icon={Plug} iconColor="ib-teal" active={isActive("/lovable/connect")} collapsed={collapsed} />
-            <NavEntry to="/brain" label="Star AI" icon={Brain} iconColor="ib-purple" active={isActive("/brain")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
+            <NavEntry to="/ai" label="Star AI" icon={Brain} iconColor="ib-purple" active={isActive("/ai")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
 
             <div className="divider" />
 

@@ -76,7 +76,7 @@ export default function AffiliatesPage() {
           <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
           <div className="flex items-center gap-3">
             {!authLoading && user ? (
-              <Link to="/dashboard" className="lv-btn-secondary h-9 px-4 text-xs">Dashboard</Link>
+              <Link to="/home" className="lv-btn-secondary h-9 px-4 text-xs">Dashboard</Link>
             ) : (
               <>
                 <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>

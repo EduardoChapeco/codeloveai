@@ -63,7 +63,7 @@ export default function LovableCloudAdmin() {
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
-    if (!adminLoading && !isAdmin) navigate("/dashboard");
+    if (!adminLoading && !isAdmin) navigate("/home");
   }, [user, authLoading, isAdmin, adminLoading, navigate]);
 
   const fetchAll = async () => {

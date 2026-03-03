@@ -222,7 +222,7 @@ export default function Admin() {
   useEffect(() => {
     if (!authLoading && !adminLoading) {
       if (!user) navigate("/login");
-      else if (!hasAdminAccess) navigate("/dashboard");
+      else if (!hasAdminAccess) navigate("/home");
       else if (isAdmin) {
         fetchTickets();
       }

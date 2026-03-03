@@ -230,7 +230,7 @@ export default function AffiliateDashboard() {
   useEffect(() => {
     if (!authLoading && !affLoading) {
       if (!user) navigate("/login");
-      else if (!isAffiliate) navigate("/dashboard");
+      else if (!isAffiliate) navigate("/home");
     }
   }, [user, isAffiliate, authLoading, affLoading, navigate]);
 

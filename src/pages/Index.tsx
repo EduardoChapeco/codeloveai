@@ -130,7 +130,7 @@ export default function Index() {
 
   // Authenticated users go straight to chat dashboard
   if (!authLoading && user && !isPreview) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/home" replace />;
   }
 
   const guestNav = ((!authLoading && !user) || isPreview) ? (

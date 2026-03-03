@@ -640,9 +640,9 @@ export default function OrchestratorProjectPanel() {
           {/* Header */}
           <div className="h-12 border-b border-border/60 px-3 flex items-center gap-2 shrink-0">
             <Link
-              to="/brain"
+              to="/ai"
               className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors shrink-0"
-              title="Voltar ao Brain"
+              title="Voltar ao AI"
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>

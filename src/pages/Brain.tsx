@@ -8,7 +8,7 @@ import StarbleStarAIPage from "@/pages/redesign/StarbleStarAIPage";
 export default function Brain() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  useSEO({ title: "Star AI" });
+  useSEO({ title: "AI" });
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");

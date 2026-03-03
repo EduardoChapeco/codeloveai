@@ -20,7 +20,7 @@ export default function Login() {
 
   const getSafeReturnTo = () => {
     const returnTo = searchParams.get("returnTo");
-    if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//")) return "/dashboard";
+    if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//")) return "/home";
     return returnTo;
   };
 

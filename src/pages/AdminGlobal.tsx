@@ -199,7 +199,7 @@ export default function AdminGlobal() {
   useEffect(() => {
     if (!authLoading && !adminLoading) {
       if (!user) navigate("/login");
-      else if (!isAdmin) navigate("/dashboard");
+      else if (!isAdmin) navigate("/home");
     }
   }, [user, isAdmin, authLoading, adminLoading, navigate]);
 

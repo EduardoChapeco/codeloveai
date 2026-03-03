@@ -24,7 +24,7 @@ export default function AppNav() {
     location.pathname === path || location.pathname.startsWith(path + "/");
 
   const navItems = [
-    { to: "/dashboard",         label: "Painel",      icon: LayoutDashboard, show: true },
+    { to: "/home",         label: "Home",      icon: LayoutDashboard, show: true },
     { to: "/cirius",            label: "Cirius",      icon: Bot,             show: true },
     { to: "/community",         label: "Comunidade",  icon: MessageCircle,   show: true },
     { to: "/afiliado/dashboard", label: "Afiliado",    icon: Users,           show: isAffiliate },

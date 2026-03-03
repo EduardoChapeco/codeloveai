@@ -145,7 +145,7 @@ export default function LovableHireMe() {
                 </a>
               </Button>
               <Button size="lg" variant="outline" className="rounded-xl text-base px-8" asChild>
-                <Link to="/dashboard">
+                <Link to="/home">
                   Ver a Plataforma
                 </Link>
               </Button>
