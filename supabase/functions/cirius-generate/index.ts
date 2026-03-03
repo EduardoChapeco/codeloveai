@@ -756,6 +756,20 @@ Return ALL files using <file path="path/to/file.tsx">COMPLETE file content</file
       return json({ success: false, project_id: projectId, status: "failed", message: "No tasks completed" });
     }
 
+    // ── POST-GENERATION VALIDATION: Ensure critical entry files exist ──
+    if (!currentFiles["index.html"]) {
+      currentFiles["index.html"] = `<!DOCTYPE html>\n<html lang="pt-BR" class="dark">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>${projectName}</title>\n  <meta name="description" content="${combinedPrompt.slice(0, 150)}" />\n  <link rel="preconnect" href="https://fonts.googleapis.com" />\n  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />\n  <script src="https://cdn.tailwindcss.com"><\/script>\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="/src/main.tsx"><\/script>\n</body>\n</html>`;
+      await logEntry(sc, projectId, "validation", "warning", "index.html ausente — injetado automaticamente");
+    }
+    if (!currentFiles["src/main.tsx"]) {
+      currentFiles["src/main.tsx"] = `import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport App from './App'\nimport './index.css'\n\nReactDOM.createRoot(document.getElementById('root')!).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>,\n)`;
+      await logEntry(sc, projectId, "validation", "warning", "src/main.tsx ausente — injetado automaticamente");
+    }
+    if (!currentFiles["src/index.css"]) {
+      currentFiles["src/index.css"] = `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n:root {\n  --background: 0 0% 100%;\n  --foreground: 0 0% 3.9%;\n  --primary: 262.1 83.3% 57.8%;\n  --primary-foreground: 210 20% 98%;\n}\n.dark {\n  --background: 0 0% 3.9%;\n  --foreground: 0 0% 98%;\n  --primary: 263.4 70% 50.4%;\n  --primary-foreground: 210 20% 98%;\n}`;
+      await logEntry(sc, projectId, "validation", "warning", "src/index.css ausente — injetado automaticamente");
+    }
+
     // Refine
     const refResult = await refineSourceFiles(sc, projectId, currentFiles, projectName, combinedPrompt, prd);
     const finalFiles = refResult.ok ? refResult.files : currentFiles;
