@@ -17,7 +17,7 @@ export default function StarbleLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <>
+    <div id="app-shell">
       <StarbleSidebar />
       <div id="main">
         <StarbleTopbar />
@@ -25,6 +25,6 @@ export default function StarbleLayout({ children }: { children: React.ReactNode 
           {children}
         </div>
       </div>
-    </>
+    </div>
   );
 }
