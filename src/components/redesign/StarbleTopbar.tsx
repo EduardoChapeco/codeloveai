@@ -1,0 +1,44 @@
+import { useLocation } from "react-router-dom";
+import { Search, Bell, Settings } from "lucide-react";
+
+const pageTitles: Record<string, string> = {
+  "/assistente": "Assistente IA",
+  "/lovable/projects": "Projetos",
+  "/brain": "Star AI",
+  "/community": "Comunidade",
+  "/cirius": "Cirius Editor",
+  "/marketplace": "Loja",
+  "/dashboard": "Dashboard",
+  "/plans": "Planos & Billing",
+  "/admin": "Admin",
+  "/admin/tenant": "Admin Tenant",
+  "/admin/global": "Admin Global",
+  "/extensoes/venus": "Venus AI",
+  "/notes": "Notas",
+};
+
+export default function StarbleTopbar() {
+  const location = useLocation();
+
+  const title = Object.entries(pageTitles).find(
+    ([path]) => location.pathname === path || location.pathname.startsWith(path + "/")
+  )?.[1] || "Starble";
+
+  return (
+    <div id="topbar">
+      <span className="tb-title">{title}</span>
+      <div className="tb-spacer" />
+      <div className="tb-search">
+        <Search size={12} />
+        <span>Pesquisar...</span>
+        <kbd>⌘K</kbd>
+      </div>
+      <button className="gl sm ghost">
+        <Bell size={14} />
+      </button>
+      <button className="gl sm ghost">
+        <Settings size={14} />
+      </button>
+    </div>
+  );
+}
