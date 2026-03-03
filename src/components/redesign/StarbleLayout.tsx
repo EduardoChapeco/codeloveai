@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import StarbleSidebar from "./StarbleSidebar";
 import StarbleTopbar from "./StarbleTopbar";
@@ -5,13 +6,18 @@ import StarbleTopbar from "./StarbleTopbar";
 export default function StarbleLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
+  // Ensure dark class is always on <html> (already set in index.html but keep in sync)
+  useEffect(() => {
+    document.documentElement.classList.add("dark");
+  }, []);
+
   // No layout for unauthenticated routes
   if (loading || !user) {
     return <>{children}</>;
   }
 
   return (
-    <div className="dark">
+    <>
       <StarbleSidebar />
       <div id="main">
         <StarbleTopbar />
@@ -19,6 +25,6 @@ export default function StarbleLayout({ children }: { children: React.ReactNode 
           {children}
         </div>
       </div>
-    </div>
+    </>
   );
 }
