@@ -1,18 +1,17 @@
 import { useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import {
-  Sparkles, FolderOpen, Brain, MessageCircle,
-  ShoppingBag, Layout, Settings, CreditCard, User,
+  FolderOpen, Brain, MessageCircle,
+  ShoppingBag, Layout, CreditCard, User,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 const items = [
-  { to: "/assistente", icon: Sparkles },
+  { to: "/dashboard", icon: Layout },
   { to: "/lovable/projects", icon: FolderOpen },
   { to: "/brain", icon: Brain },
   { to: "/community", icon: MessageCircle },
   { to: "/marketplace", icon: ShoppingBag },
-  { to: "/cirius", icon: Layout },
   { to: "/plans", icon: CreditCard },
 ];
 
