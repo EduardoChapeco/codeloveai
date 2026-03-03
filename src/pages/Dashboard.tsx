@@ -280,14 +280,14 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="min-h-full">
+      <div className="min-h-full" style={{ background: 'var(--bg-0)' }}>
         <div className="max-w-5xl mx-auto px-6 py-8 space-y-5">
           {/* Header */}
-          <div className="flex items-center justify-between animate-fade-in">
+          <div className="flex items-center justify-between" style={{ animation: 'fadeUp 0.2s ease' }}>
             <div>
-              <p className="lv-overline mb-1.5">Área do membro</p>
-              <h1 className="lv-heading-lg">Dashboard</h1>
-              <p className="lv-body-lg mt-1.5">
+              <p className="sb-section" style={{ padding: 0, marginBottom: 6 }}>Área do membro</p>
+              <h1 className="ph-title">Dashboard</h1>
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
                 {license?.plan_type === 'custom' ? "Plano Profissional Ativo" : "Plataforma — Ferramentas de IA"}
               </p>
             </div>
