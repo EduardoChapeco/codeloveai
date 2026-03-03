@@ -7,8 +7,8 @@ import { useTenant } from "@/contexts/TenantContext";
 import { toast } from "sonner";
 import {
   StickyNote, FolderOpen, Plus, Search, Pin, PinOff, Trash2,
-  Palette, FolderPlus, ChevronRight, CheckCircle, Loader2, X,
-  Edit3, MoreHorizontal,
+  Palette, FolderPlus, CheckCircle, Loader2, X,
+  Edit3,
 } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 
@@ -112,7 +112,6 @@ export default function Notes() {
     if (!error && data) {
       setFolders(data);
     }
-    // Ensure "Geral" folder exists
     if (!error && data && !data.some((f: NoteFolder) => f.name === "Geral")) {
       await supabase.from("note_folders").insert({ user_id: user.id, name: "Geral" });
       loadFolders();
@@ -132,10 +131,8 @@ export default function Notes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // ── Selected note ──
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
 
-  // ── Filtered notes ──
   const filteredNotes = notes.filter((n) => {
     if (activeFolder && n.folder !== activeFolder) return false;
     if (searchQuery) {
@@ -183,7 +180,6 @@ export default function Notes() {
     }, 1200);
   }, [saveNote]);
 
-  // ── Update note field locally + schedule save ──
   const updateNoteField = (noteId: string, field: keyof Note, value: string | boolean | number) => {
     setNotes((prev) =>
       prev.map((n) => {
@@ -195,7 +191,6 @@ export default function Notes() {
     );
   };
 
-  // ── Create note ──
   const createNote = async () => {
     if (!user) return;
     const newNote: Note = {
@@ -223,11 +218,9 @@ export default function Notes() {
       updated: newNote.updated,
     });
     if (error) toast.error("Erro ao criar nota.");
-    // Focus editor
     setTimeout(() => editorRef.current?.focus(), 100);
   };
 
-  // ── Delete note ──
   const deleteNote = async (noteId: string) => {
     if (!confirm("Excluir esta nota?")) return;
     const { error } = await supabase.from("notes").delete().eq("id", noteId);
@@ -239,15 +232,12 @@ export default function Notes() {
     }
   };
 
-  // ── Toggle pin ──
   const togglePin = async (noteId: string) => {
     const note = notes.find((n) => n.id === noteId);
     if (!note) return;
-    const newPinned = !note.pinned;
-    updateNoteField(noteId, "pinned", newPinned);
+    updateNoteField(noteId, "pinned", !note.pinned);
   };
 
-  // ── Folder management ──
   const createFolder = async () => {
     if (!newFolderName.trim() || !user) return;
     const { error } = await supabase.from("note_folders").insert({ user_id: user.id, name: newFolderName.trim() });
@@ -264,14 +254,12 @@ export default function Notes() {
 
   const renameFolder = async (oldName: string) => {
     if (!renameFolderName.trim() || !user) return;
-    // Update folder record
     const { error: folderError } = await supabase
       .from("note_folders")
       .update({ name: renameFolderName.trim() })
       .eq("user_id", user.id)
       .eq("name", oldName);
     if (folderError) return toast.error("Erro ao renomear pasta.");
-    // Update notes that reference this folder
     await supabase
       .from("notes")
       .update({ folder: renameFolderName.trim() })
@@ -287,9 +275,7 @@ export default function Notes() {
   const deleteFolder = async (folderName: string) => {
     if (folderName === "Geral") return toast.error("A pasta Geral não pode ser excluída.");
     if (!confirm(`Excluir a pasta "${folderName}"? As notas serão movidas para Geral.`)) return;
-    // Move notes to Geral
     await supabase.from("notes").update({ folder: "Geral" }).eq("user_id", user!.id).eq("folder", folderName);
-    // Delete folder
     await supabase.from("note_folders").delete().eq("user_id", user!.id).eq("name", folderName);
     if (activeFolder === folderName) setActiveFolder(null);
     loadFolders();
@@ -297,135 +283,131 @@ export default function Notes() {
     toast.success("Pasta excluída.");
   };
 
-  // ── Loading ──
   if (authLoading) {
-    return <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg-0)" }}>
-      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Carregando...</p>
+    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-0)" }}>
+      <Loader2 className="h-5 w-5 animate-spin" style={{ color: "var(--text-tertiary)" }} />
     </div>;
   }
 
   return (
     <AppLayout>
-      <div className="min-h-full flex flex-col">
+      <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
         {/* Header */}
-        <div className="px-6 py-5" style={{ borderBottom: "1px solid var(--b1)" }}>
-          <div className="flex items-center justify-between max-w-7xl mx-auto">
+        <div className="page-header">
+          <div className="ph-top">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-quaternary)" }}>Produtividade</p>
-              <h1 className="text-lg font-bold" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Notas</h1>
+              <div className="ph-title">Notas</div>
+              <div className="ph-sub">Organize suas ideias e anotações</div>
             </div>
-            <div className="flex items-center gap-2">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {syncStatus === "saving" && (
-                <span className="chip orange flex items-center gap-1">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Salvando...
+                <span className="chip ch-orange" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <Loader2 size={10} className="animate-spin" /> Salvando...
                 </span>
               )}
               {syncStatus === "saved" && (
-                <span className="chip green flex items-center gap-1">
-                  <CheckCircle className="h-3 w-3" /> Salvo
+                <span className="chip ch-green" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <CheckCircle size={10} /> Salvo
                 </span>
               )}
-              <button onClick={createNote} className="gl sm primary">
-                <Plus className="h-3.5 w-3.5" /> Nova nota
+              <button onClick={createNote} className="gl sm orange">
+                <Plus size={13} /> Nova nota
               </button>
             </div>
           </div>
         </div>
 
-        {/* Main content — split view */}
-        <div className="flex flex-1 min-h-0 max-w-7xl mx-auto w-full">
+        {/* Split view */}
+        <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
 
-          {/* ── Left panel: Folders + Note list ── */}
-          <div className="w-80 flex flex-col shrink-0" style={{ borderRight: "1px solid var(--b1)" }}>
+          {/* Left panel: Folders + Note list */}
+          <div style={{ width: 280, flexShrink: 0, borderRight: "1px solid var(--b1)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {/* Search */}
-            <div className="p-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <div style={{ padding: 12 }}>
+              <div style={{ position: "relative" }}>
+                <Search size={13} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-quaternary)" }} />
                 <input
                   type="text"
                   placeholder="Buscar notas..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="lv-input h-9 pl-9 text-xs"
+                  className="rd-input"
+                  style={{ height: 32, paddingLeft: 30, fontSize: 12 }}
                 />
               </div>
             </div>
 
             {/* Folders */}
-            <div className="px-3 pb-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="lv-caption font-medium uppercase tracking-wider">Pastas</p>
-                <button
-                  onClick={() => setShowNewFolder(!showNewFolder)}
-                  className="lv-btn-icon h-6 w-6 text-muted-foreground"
-                >
-                  <FolderPlus className="h-3 w-3" />
+            <div style={{ padding: "0 12px 8px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <span className="sb-section" style={{ padding: 0 }}>Pastas</span>
+                <button onClick={() => setShowNewFolder(!showNewFolder)} className="gl ico xs ghost">
+                  <FolderPlus size={11} />
                 </button>
               </div>
 
               {showNewFolder && (
-                <div className="flex items-center gap-1.5 mb-2">
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
                   <input
                     type="text"
                     placeholder="Nome da pasta"
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && createFolder()}
-                    className="lv-input h-7 text-xs flex-1"
+                    className="rd-input"
+                    style={{ height: 28, fontSize: 11, flex: 1 }}
                     autoFocus
                   />
-                  <button onClick={createFolder} className="lv-btn-primary h-7 px-2 text-[10px]">OK</button>
-                  <button onClick={() => { setShowNewFolder(false); setNewFolderName(""); }} className="lv-btn-icon h-7 w-7">
-                    <X className="h-3 w-3" />
+                  <button onClick={createFolder} className="gl xs orange">OK</button>
+                  <button onClick={() => { setShowNewFolder(false); setNewFolderName(""); }} className="gl ico xs ghost">
+                    <X size={11} />
                   </button>
                 </div>
               )}
 
-              <div className="space-y-0.5">
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <button
                   onClick={() => setActiveFolder(null)}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    activeFolder === null ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50"
-                  }`}
+                  className={`group-btn ${activeFolder === null ? "active" : ""}`}
                 >
-                  <FolderOpen className="h-3 w-3 inline mr-1.5" />
+                  <FolderOpen size={13} />
                   Todas ({notes.length})
                 </button>
                 {folders.map((folder) => (
-                  <div key={folder.id} className="group flex items-center">
+                  <div key={folder.id} className="group" style={{ display: "flex", alignItems: "center" }}>
                     {renamingFolder === folder.name ? (
-                      <div className="flex items-center gap-1 flex-1 px-1">
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, padding: "0 4px" }}>
                         <input
                           value={renameFolderName}
                           onChange={(e) => setRenameFolderName(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && renameFolder(folder.name)}
-                          className="lv-input h-6 text-[10px] flex-1"
+                          className="rd-input"
+                          style={{ height: 24, fontSize: 10, flex: 1 }}
                           autoFocus
                         />
-                        <button onClick={() => renameFolder(folder.name)} className="text-primary"><CheckCircle className="h-3 w-3" /></button>
-                        <button onClick={() => setRenamingFolder(null)} className="text-muted-foreground"><X className="h-3 w-3" /></button>
+                        <button onClick={() => renameFolder(folder.name)} style={{ color: "var(--green-l)" }}><CheckCircle size={12} /></button>
+                        <button onClick={() => setRenamingFolder(null)} style={{ color: "var(--text-tertiary)" }}><X size={12} /></button>
                       </div>
                     ) : (
                       <>
                         <button
                           onClick={() => setActiveFolder(folder.name)}
-                          className={`flex-1 text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            activeFolder === folder.name ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50"
-                          }`}
+                          className={`group-btn ${activeFolder === folder.name ? "active" : ""}`}
+                          style={{ flex: 1 }}
                         >
-                          <FolderOpen className="h-3 w-3 inline mr-1.5" />
+                          <FolderOpen size={13} />
                           {folder.name} ({notes.filter((n) => n.folder === folder.name).length})
                         </button>
-                        <div className="hidden group-hover:flex items-center gap-0.5 pr-1">
+                        <div className="hidden group-hover:flex" style={{ alignItems: "center", gap: 2, paddingRight: 4 }}>
                           <button
                             onClick={() => { setRenamingFolder(folder.name); setRenameFolderName(folder.name); }}
-                            className="text-muted-foreground hover:text-foreground"
-                          ><Edit3 className="h-2.5 w-2.5" /></button>
+                            style={{ color: "var(--text-tertiary)" }}
+                          ><Edit3 size={10} /></button>
                           {folder.name !== "Geral" && (
                             <button
                               onClick={() => deleteFolder(folder.name)}
-                              className="text-muted-foreground hover:text-destructive"
-                            ><Trash2 className="h-2.5 w-2.5" /></button>
+                              style={{ color: "var(--red-l)" }}
+                            ><Trash2 size={10} /></button>
                           )}
                         </div>
                       </>
@@ -436,16 +418,16 @@ export default function Notes() {
             </div>
 
             {/* Note list */}
-            <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
-              <p className="lv-caption font-medium uppercase tracking-wider mb-1.5 pt-2">
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 12px", scrollbarWidth: "thin", scrollbarColor: "var(--bg-5) transparent" }}>
+              <div className="sb-section" style={{ paddingTop: 8 }}>
                 Notas ({filteredNotes.length})
-              </p>
+              </div>
               {filteredNotes.length === 0 ? (
-                <div className="text-center py-10">
-                  <StickyNote className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
-                  <p className="lv-caption">Nenhuma nota encontrada.</p>
-                  <button onClick={createNote} className="lv-btn-primary h-8 px-3 text-[10px] mt-3">
-                    <Plus className="h-3 w-3" /> Criar nota
+                <div style={{ textAlign: "center", padding: "40px 12px" }}>
+                  <StickyNote size={28} style={{ color: "var(--text-quaternary)", margin: "0 auto 8px", opacity: 0.3 }} />
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Nenhuma nota encontrada.</p>
+                  <button onClick={createNote} className="gl sm orange" style={{ marginTop: 12 }}>
+                    <Plus size={12} /> Criar nota
                   </button>
                 </div>
               ) : (
@@ -453,24 +435,18 @@ export default function Notes() {
                   <button
                     key={note.id}
                     onClick={() => setSelectedNoteId(note.id)}
-                    className={`w-full text-left rounded-xl p-3 transition-all duration-200 group relative ${
-                      selectedNoteId === note.id
-                        ? "lv-card-active bg-primary/5 border border-primary/20"
-                        : "hover:bg-muted/40"
-                    }`}
-                    style={{ borderLeft: `3px solid ${note.color === "#ffffff" ? "transparent" : note.color}` }}
+                    className={`brain-item ${selectedNoteId === note.id ? "active" : ""}`}
+                    style={{ borderLeft: `3px solid ${note.color === "#ffffff" ? "transparent" : note.color}`, textAlign: "left", width: "100%" }}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="lv-body-strong text-xs truncate">
-                          {note.pinned && <Pin className="h-2.5 w-2.5 inline mr-1 text-primary" />}
-                          {note.title || "Sem título"}
-                        </p>
-                        <p className="lv-caption truncate mt-0.5">{note.text.substring(0, 60) || "Nota vazia"}</p>
-                        <p className="lv-caption text-[9px] mt-1 text-muted-foreground/60">
-                          {new Date(note.updated).toLocaleDateString("pt-BR")}
-                        </p>
-                      </div>
+                    <div className="bi-name" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                      {note.pinned && <Pin size={10} style={{ color: "var(--orange)" }} />}
+                      {note.title || "Sem título"}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {note.text.substring(0, 60) || "Nota vazia"}
+                    </div>
+                    <div className="bi-date">
+                      {new Date(note.updated).toLocaleDateString("pt-BR")}
                     </div>
                   </button>
                 ))
@@ -478,32 +454,33 @@ export default function Notes() {
             </div>
           </div>
 
-          {/* ── Right panel: Editor ── */}
-          <div className="flex-1 flex flex-col min-w-0">
+          {/* Right panel: Editor */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
             {selectedNote ? (
               <>
                 {/* Editor toolbar */}
-                <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--b1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     {/* Color picker */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowColorPicker(!showColorPicker)}
-                        className="lv-btn-icon h-8 w-8"
-                        title="Cor da nota"
-                      >
-                        <Palette className="h-4 w-4" />
+                    <div style={{ position: "relative" }}>
+                      <button onClick={() => setShowColorPicker(!showColorPicker)} className="gl ico xs ghost" title="Cor da nota">
+                        <Palette size={13} />
                       </button>
                       {showColorPicker && (
-                        <div className="absolute top-full left-0 mt-1 lv-card-sm flex gap-1.5 z-10 p-2">
+                        <div style={{
+                          position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 10,
+                          background: "var(--bg-2)", border: "1px solid var(--b2)", borderRadius: "var(--r3)",
+                          padding: 8, display: "flex", gap: 6,
+                        }}>
                           {NOTE_COLORS.map((c) => (
                             <button
                               key={c.hex}
                               onClick={() => { updateNoteField(selectedNote.id, "color", c.hex); setShowColorPicker(false); }}
-                              className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
-                                selectedNote.color === c.hex ? "border-primary" : "border-border/30"
-                              }`}
-                              style={{ backgroundColor: c.hex }}
+                              style={{
+                                width: 22, height: 22, borderRadius: "50%", backgroundColor: c.hex,
+                                border: selectedNote.color === c.hex ? "2px solid var(--orange)" : "2px solid var(--b1)",
+                                cursor: "pointer", transition: "transform .12s",
+                              }}
                               title={c.name}
                             />
                           ))}
@@ -514,17 +491,19 @@ export default function Notes() {
                     {/* Pin toggle */}
                     <button
                       onClick={() => togglePin(selectedNote.id)}
-                      className={`lv-btn-icon h-8 w-8 ${selectedNote.pinned ? "text-primary" : ""}`}
+                      className="gl ico xs ghost"
+                      style={{ color: selectedNote.pinned ? "var(--orange-l)" : undefined }}
                       title={selectedNote.pinned ? "Desafixar" : "Fixar"}
                     >
-                      {selectedNote.pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                      {selectedNote.pinned ? <PinOff size={13} /> : <Pin size={13} />}
                     </button>
 
                     {/* Folder selector */}
                     <select
                       value={selectedNote.folder}
                       onChange={(e) => updateNoteField(selectedNote.id, "folder", e.target.value)}
-                      className="lv-input h-8 text-xs w-32"
+                      className="rd-input"
+                      style={{ height: 28, fontSize: 11, width: 120 }}
                     >
                       {folders.map((f) => (
                         <option key={f.id} value={f.name}>{f.name}</option>
@@ -534,46 +513,51 @@ export default function Notes() {
 
                   <button
                     onClick={() => deleteNote(selectedNote.id)}
-                    className="lv-btn-icon h-8 w-8 text-muted-foreground hover:text-destructive"
+                    className="gl ico xs ghost"
+                    style={{ color: "var(--red-l)" }}
                     title="Excluir nota"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 size={13} />
                   </button>
                 </div>
 
                 {/* Editor body */}
-                <div className="flex-1 flex flex-col p-5 overflow-y-auto" style={{ backgroundColor: selectedNote.color === "#ffffff" ? "transparent" : selectedNote.color + "20" }}>
-                  {/* Title input */}
+                <div style={{
+                  flex: 1, display: "flex", flexDirection: "column", padding: 20, overflowY: "auto",
+                  backgroundColor: selectedNote.color === "#ffffff" ? "transparent" : selectedNote.color + "12",
+                }}>
                   <input
                     type="text"
                     value={selectedNote.title}
                     onChange={(e) => updateNoteField(selectedNote.id, "title", e.target.value)}
                     placeholder="Título da nota"
-                    className="w-full bg-transparent border-none outline-none text-xl font-semibold text-foreground placeholder:text-muted-foreground/40 mb-4"
-                    style={{ letterSpacing: "-0.02em" }}
+                    style={{
+                      width: "100%", background: "transparent", border: "none", outline: "none",
+                      fontSize: 20, fontWeight: 800, letterSpacing: "-0.03em",
+                      color: "var(--text-primary)", marginBottom: 16,
+                    }}
                   />
-
-                  {/* Text editor */}
                   <textarea
                     ref={editorRef}
                     value={selectedNote.text}
                     onChange={(e) => updateNoteField(selectedNote.id, "text", e.target.value)}
                     placeholder="Comece a escrever..."
-                    className="flex-1 w-full bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground/40 resize-none leading-relaxed"
-                    style={{ minHeight: "300px" }}
+                    style={{
+                      flex: 1, width: "100%", background: "transparent", border: "none", outline: "none",
+                      fontSize: 13, color: "var(--text-secondary)", resize: "none",
+                      lineHeight: 1.7, minHeight: 300, fontFamily: "var(--font)",
+                    }}
                   />
                 </div>
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="lv-empty-icon mx-auto mb-4">
-                    <StickyNote className="h-7 w-7" />
-                  </div>
-                  <p className="lv-heading-sm mb-2">Selecione uma nota</p>
-                  <p className="lv-body mb-5">Escolha uma nota na lista à esquerda ou crie uma nova.</p>
-                  <button onClick={createNote} className="lv-btn-primary h-10 px-5 text-sm">
-                    <Plus className="h-4 w-4" /> Nova nota
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ textAlign: "center" }}>
+                  <StickyNote size={36} style={{ color: "var(--text-quaternary)", margin: "0 auto 12px", opacity: 0.3 }} />
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Selecione uma nota</p>
+                  <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 16 }}>Escolha uma nota na lista à esquerda ou crie uma nova.</p>
+                  <button onClick={createNote} className="gl sm orange">
+                    <Plus size={13} /> Nova nota
                   </button>
                 </div>
               </div>

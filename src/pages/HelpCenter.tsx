@@ -47,46 +47,47 @@ export default function HelpCenter() {
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto px-6 py-12">
+      <div className="rd-page-content" style={{ maxWidth: 1100, paddingTop: 48, paddingBottom: 48 }}>
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="rd-ico-box blue" style={{ width: 64, height: 64, borderRadius: 16, margin: "0 auto 24px" }}>
+        <div style={{ textAlign: "center", marginBottom: 48 }}>
+          <div className="rd-ico-box" style={{ width: 64, height: 64, borderRadius: 16, margin: "0 auto 24px", background: "rgba(59,130,246,0.12)", color: "var(--blue-l)" }}>
             <BookOpen style={{ width: 32, height: 32 }} />
           </div>
-          <h1 className="text-2xl font-bold mb-3" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Central de Ajuda</h1>
-          <p className="text-sm max-w-md mx-auto" style={{ color: "var(--text-secondary)" }}>Artigos, guias e respostas para tudo sobre o Starble.</p>
+          <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", color: "var(--text-primary)", marginBottom: 6 }}>Central de Ajuda</h1>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 400, margin: "0 auto" }}>Artigos, guias e respostas para tudo sobre o Starble.</p>
         </div>
 
         {/* Search */}
-        <div className="relative max-w-lg mx-auto mb-12">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--text-quaternary)" }} />
+        <div style={{ position: "relative", maxWidth: 480, margin: "0 auto 40px" }}>
+          <Search size={14} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-quaternary)" }} />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar artigos..."
-            className="tb-search"
-            style={{ width: "100%", height: 44, paddingLeft: 40, fontSize: 14 }}
+            className="rd-input"
+            style={{ height: 44, paddingLeft: 38, fontSize: 14 }}
           />
         </div>
 
         {/* Category Cards Grid */}
         {!search && !activeCategory && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+          <div className="rd-grid-4" style={{ marginBottom: 48 }}>
             {categories.map(c => {
               const count = getCategoryArticles(c.id).length;
               return (
                 <button
                   key={c.id}
                   onClick={() => setActiveCategory(c.id)}
-                  className="rd-card text-left hover:border-[var(--indigo)]/30 transition-all duration-200 group"
+                  className="rd-card"
+                  style={{ textAlign: "left", cursor: "pointer", transition: "all .14s" }}
                 >
-                  <div className="rd-ico-box blue" style={{ marginBottom: 12 }}>
+                  <div className="rd-ico-box" style={{ marginBottom: 12, background: "rgba(59,130,246,0.12)", color: "var(--blue-l)" }}>
                     {c.icon}
                   </div>
-                  <p className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{c.label}</p>
-                  <p className="text-xs mb-3 line-clamp-2" style={{ color: "var(--text-tertiary)" }}>{c.desc}</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-quaternary)" }}>{count} {count === 1 ? "artigo" : "artigos"}</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{c.label}</p>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10, lineHeight: 1.5 }}>{c.desc}</p>
+                  <p style={{ fontSize: 10, color: "var(--text-quaternary)" }}>{count} {count === 1 ? "artigo" : "artigos"}</p>
                 </button>
               );
             })}
@@ -95,15 +96,12 @@ export default function HelpCenter() {
 
         {/* Active Category Filter */}
         {activeCategory && (
-          <div className="flex items-center gap-3 mb-8">
-            <button
-              onClick={() => setActiveCategory(null)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
+            <button onClick={() => setActiveCategory(null)} style={{ fontSize: 12, color: "var(--text-tertiary)", cursor: "pointer", background: "none", border: "none" }}>
               ← Todas as categorias
             </button>
-            <span className="text-xs text-muted-foreground">/</span>
-            <span className="text-xs font-semibold text-foreground">
+            <span style={{ fontSize: 12, color: "var(--text-quaternary)" }}>/</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>
               {categories.find(c => c.id === activeCategory)?.label}
             </span>
           </div>
@@ -111,10 +109,10 @@ export default function HelpCenter() {
 
         {/* Search filter chips */}
         {search && (
-          <div className="flex flex-wrap gap-2 mb-6">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
             <button
               onClick={() => setActiveCategory(null)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${!activeCategory ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+              className={!activeCategory ? "gl xs orange" : "gl xs ghost"}
             >
               Todos ({articles.filter(a => !search || a.title.toLowerCase().includes(search.toLowerCase()) || a.summary.toLowerCase().includes(search.toLowerCase())).length})
             </button>
@@ -125,7 +123,7 @@ export default function HelpCenter() {
                 <button
                   key={c.id}
                   onClick={() => setActiveCategory(activeCategory === c.id ? null : c.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${activeCategory === c.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                  className={activeCategory === c.id ? "gl xs orange" : "gl xs ghost"}
                 >
                   {c.label} ({count})
                 </button>
@@ -136,10 +134,10 @@ export default function HelpCenter() {
 
         {/* Articles Grid */}
         {(search || activeCategory) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rd-grid-2">
             {filtered.length === 0 ? (
-              <div className="col-span-full text-center py-16 text-sm text-muted-foreground">
-                Nenhum artigo encontrado. <Link to="/suporte" className="text-primary hover:underline">Abrir um ticket de suporte</Link>
+              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "60px 0", color: "var(--text-tertiary)", fontSize: 13 }}>
+                Nenhum artigo encontrado. <Link to="/suporte" style={{ color: "var(--blue-l)" }}>Abrir um ticket de suporte</Link>
               </div>
             ) : (
               filtered.map(a => {
@@ -148,19 +146,18 @@ export default function HelpCenter() {
                   <Link
                     key={a.slug}
                     to={`/ajuda/${a.slug}`}
-                    className="clf-liquid-glass p-5 hover:border-primary/30 hover:shadow-md transition-all duration-200 flex items-start gap-4 group"
+                    className="rd-card"
+                    style={{ display: "flex", alignItems: "flex-start", gap: 14, textDecoration: "none", color: "inherit" }}
                   >
-                    <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 mt-0.5 group-hover:bg-primary/15 transition-colors">
-                      {cat?.icon || <BookOpen className="h-4 w-4" />}
+                    <div className="rd-ico-box sm" style={{ background: "rgba(59,130,246,0.1)", color: "var(--blue-l)", flexShrink: 0, marginTop: 2 }}>
+                      {cat?.icon || <BookOpen size={14} />}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="lv-body-strong group-hover:text-primary transition-colors">{a.title}</h3>
-                      </div>
-                      <p className="lv-caption line-clamp-2">{a.summary}</p>
-                      <p className="text-[10px] text-muted-foreground/50 mt-2">{cat?.label}</p>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{a.title}</p>
+                      <p style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{a.summary}</p>
+                      <p style={{ fontSize: 10, color: "var(--text-quaternary)", marginTop: 6 }}>{cat?.label}</p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary shrink-0 mt-1 transition-colors" />
+                    <ChevronRight size={14} style={{ color: "var(--text-quaternary)", flexShrink: 0, marginTop: 4 }} />
                   </Link>
                 );
               })
@@ -169,15 +166,13 @@ export default function HelpCenter() {
         )}
 
         {/* Support CTA */}
-        <div className="mt-16 rd-card text-center" style={{ padding: 32 }}>
-          <h2 className="text-lg font-bold mb-2" style={{ color: "var(--text-primary)" }}>Não encontrou o que procurava?</h2>
-          <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>Nossa equipe de suporte está pronta para ajudar você.</p>
-          <div className="flex gap-3 justify-center flex-wrap">
-            <Link to="/suporte" className="gl primary">
-              Abrir Ticket de Suporte
-            </Link>
-            <Link to="/termos" className="gl ghost flex items-center gap-2">
-              <ExternalLink className="h-4 w-4" /> Termos de Uso
+        <div className="rd-card" style={{ textAlign: "center", padding: 32, marginTop: 48 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 800, color: "var(--text-primary)", marginBottom: 6 }}>Não encontrou o que procurava?</h2>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 20 }}>Nossa equipe de suporte está pronta para ajudar você.</p>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <Link to="/suporte" className="gl primary">Abrir Ticket de Suporte</Link>
+            <Link to="/termos" className="gl ghost" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <ExternalLink size={13} /> Termos de Uso
             </Link>
           </div>
         </div>
