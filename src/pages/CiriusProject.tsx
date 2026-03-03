@@ -8,7 +8,8 @@ import {
   ArrowLeft, Play, Pause, X, Github, Globe, Database,
   RefreshCw, Rocket, CheckCircle2, Clock, Loader2,
   Circle, ChevronDown, ChevronRight, FileCode, Wrench, Shield,
-  Eye, EyeOff, Search, ExternalLink,
+  Eye, EyeOff, Search, ExternalLink, Plug, Link2, Unlink,
+  AlertTriangle,
 } from "lucide-react";
 
 const statusLabels: Record<string, string> = {
@@ -41,6 +42,9 @@ export default function CiriusProject() {
   const [thinkingTime, setThinkingTime] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [loadingIntegrations, setLoadingIntegrations] = useState(false);
 
   const loadProject = useCallback(async () => {
     if (!id) return;
@@ -341,6 +345,121 @@ export default function CiriusProject() {
             )}
           </div>
         )}
+
+        {/* Integrations Button */}
+        <div style={{ marginBottom: 16 }}>
+          <button className="gl" style={{ width: "100%", justifyContent: "center", gap: 8 }} onClick={() => {
+            setIntegrationsOpen(o => !o);
+            if (!integrationsOpen && integrations.length === 0) {
+              setLoadingIntegrations(true);
+              supabase.from("cirius_integrations").select("*").eq("user_id", user!.id).then(({ data }) => {
+                setIntegrations(data || []);
+                setLoadingIntegrations(false);
+              });
+            }
+          }}>
+            <Plug size={14} /> Integrações / Conectores
+            <ChevronDown size={12} style={{ transition: "transform .2s", transform: integrationsOpen ? "rotate(180deg)" : "none", marginLeft: "auto" }} />
+          </button>
+
+          {integrationsOpen && (
+            <div className="rd-card" style={{ marginTop: 8, padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--b1)" }}>
+                <span className="label-lg">Conectores do Projeto</span>
+                <p className="caption-sm" style={{ marginTop: 4 }}>Ative suas próprias contas OAuth ou use as contas da plataforma (acesso restrito aos seus projetos).</p>
+              </div>
+
+              {loadingIntegrations ? (
+                <div style={{ padding: 24, textAlign: "center" }}><Loader2 size={16} className="animate-spin" style={{ color: "var(--text-tertiary)" }} /></div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {[
+                    { provider: "github", icon: Github, label: "GitHub", desc: "Repositórios e deploy automático", color: "var(--tp)" },
+                    { provider: "netlify", icon: Rocket, label: "Netlify", desc: "Hosting e CDN global", color: "var(--green-l)" },
+                    { provider: "vercel", icon: Globe, label: "Vercel", desc: "Hosting serverless", color: "var(--blue-l)" },
+                    { provider: "supabase", icon: Database, label: "Supabase", desc: "Banco de dados e auth", color: "var(--purple-l)" },
+                  ].map(conn => {
+                    const userInt = integrations.find(i => i.provider === conn.provider);
+                    const isConnected = !!userInt?.is_active;
+                    const isOwnAccount = !!userInt?.account_login;
+
+                    return (
+                      <div key={conn.provider} style={{
+                        display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+                        borderBottom: "1px solid var(--b1)",
+                      }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: "var(--r2)",
+                          background: "var(--bg-3)", display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                          <conn.icon size={16} style={{ color: conn.color }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tp)" }}>{conn.label}</div>
+                          <div className="caption-sm">{conn.desc}</div>
+                          {isConnected && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                              {isOwnAccount ? (
+                                <span className="chip sm ch-green" style={{ fontSize: 9 }}>
+                                  <CheckCircle2 size={8} /> Sua conta: {userInt.account_login}
+                                </span>
+                              ) : (
+                                <span className="chip sm ch-orange" style={{ fontSize: 9 }}>
+                                  <AlertTriangle size={8} /> Conta da plataforma
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {isConnected ? (
+                            <>
+                              <button className="gl ico xs ghost" title="Reconectar" onClick={async () => {
+                                toast.info(`Reconectando ${conn.label}...`);
+                                const { data } = await supabase.functions.invoke("cirius-oauth-callback", {
+                                  body: { action: "start_oauth", provider: conn.provider, project_id: id },
+                                });
+                                if (data?.url) window.open(data.url, "_blank", "width=600,height=700");
+                                else toast.error("Não foi possível iniciar OAuth");
+                              }}>
+                                <RefreshCw size={11} />
+                              </button>
+                              <button className="gl ico xs ghost" title="Desconectar" style={{ color: "var(--red-l)" }} onClick={async () => {
+                                await supabase.from("cirius_integrations").update({ is_active: false }).eq("id", userInt.id);
+                                setIntegrations(prev => prev.map(i => i.id === userInt.id ? { ...i, is_active: false } : i));
+                                toast.success(`${conn.label} desconectado`);
+                              }}>
+                                <Unlink size={11} />
+                              </button>
+                            </>
+                          ) : (
+                            <button className="gl sm" onClick={async () => {
+                              toast.info(`Conectando ${conn.label}...`);
+                              const { data } = await supabase.functions.invoke("cirius-oauth-callback", {
+                                body: { action: "start_oauth", provider: conn.provider, project_id: id },
+                              });
+                              if (data?.url) window.open(data.url, "_blank", "width=600,height=700");
+                              else toast.info(`${conn.label} usará a conta da plataforma`);
+                            }}>
+                              <Link2 size={11} /> Conectar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ padding: "10px 16px", background: "var(--bg-1)", borderTop: "1px solid var(--b1)" }}>
+                <p style={{ fontSize: 10, color: "var(--text-quaternary)", lineHeight: 1.5 }}>
+                  <Shield size={9} style={{ display: "inline", marginRight: 4 }} />
+                  Sem integração própria, seus projetos usam as contas da plataforma com permissões limitadas ao seu escopo.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Error */}
         {project.error_message && (
