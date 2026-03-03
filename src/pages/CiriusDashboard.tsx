@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import AppLayout from "@/components/AppLayout";
 import {
   Plus, Rocket, Globe, Github, Clock, AlertCircle, CheckCircle2,
   Loader2, Search, MoreVertical, ExternalLink, Trash2, Eye, Layers,
@@ -147,8 +148,8 @@ export default function CiriusDashboard() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: "#08080a" }}>
-      <div className="max-w-6xl mx-auto px-4 py-8 lg:py-12">
+    <AppLayout>
+    <div className="rd-page-content">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -318,6 +319,6 @@ export default function CiriusDashboard() {
           </div>
         )}
       </div>
-    </div>
+    </AppLayout>
   );
 }

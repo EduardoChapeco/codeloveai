@@ -13,6 +13,7 @@ import {
   HardDrive, Clock, ArrowRight, Layers, Code2, Cpu, Globe,
 } from "lucide-react";
 import { classifyIntent, generatePRDTasks, type ProjectBlueprint, type PRDTask } from "@/lib/cirius/intentClassifier";
+import AppLayout from "@/components/AppLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -146,8 +147,8 @@ export default function CiriusNew() {
   }, [prompt, projectName, sourceUrl, deployGithub, deployVercel, createSupabase, noBrains, user, navigate]);
 
   return (
-    <div className="min-h-screen" style={{ background: "#08080a" }}>
-      <div className="max-w-7xl mx-auto px-4 py-8 lg:py-12">
+    <AppLayout>
+    <div className="rd-page-content">
         {/* Header */}
         <div className="mb-8 flex items-center gap-3">
           <div className="h-9 w-9 rounded-lg bg-blue-600/20 flex items-center justify-center">
@@ -388,6 +389,6 @@ export default function CiriusNew() {
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }

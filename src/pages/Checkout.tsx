@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
 import { toast } from "sonner";
+import AppLayout from "@/components/AppLayout";
 
 interface Plan {
   id: string;
@@ -220,9 +221,11 @@ export default function Checkout() {
 
   if (authLoading || loadingDiscount || loadingPlans) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <AppLayout>
+        <div className="flex items-center justify-center h-full min-h-[60vh]">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
     );
   }
 
@@ -231,7 +234,8 @@ export default function Checkout() {
   const selectedPlanData = plans.find((p) => p.id === selectedPlan);
 
   return (
-    <div className="min-h-screen relative">
+    <AppLayout>
+    <div className="rd-page-content">
       {/* Nav — glass */}
       <nav className="sticky top-0 z-20 px-6 py-3">
         <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
@@ -504,5 +508,6 @@ export default function Checkout() {
         )}
       </div>
     </div>
+    </AppLayout>
   );
 }
