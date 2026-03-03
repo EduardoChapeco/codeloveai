@@ -147,8 +147,30 @@ async function syncLatestMarkdownFiles(
   });
 
   if (!latestRes.ok) {
-    await addLog(sc, orchProjectId, `📦 [capture] latest-message failed: HTTP ${latestRes.status}`, "warn", undefined, taskId);
-    return { ok: false, reason: `latest_message_http_${latestRes.status}`, fileCount: 0 };
+    await addLog(sc, orchProjectId, `📦 [capture] latest-message failed: HTTP ${latestRes.status} — trying source-code fallback`, "warn", undefined, taskId);
+    // ★ FIX: Instead of returning immediately, fall through to trySourceCodeFallback
+    const fallbackFiles = await trySourceCodeFallback(brainProjectId, token, outputMarker);
+    if (Object.keys(fallbackFiles).length > 0) {
+      const existing = (ciriusProject.source_files_json || {}) as Record<string, string>;
+      const merged = mergeFileMaps(existing, fallbackFiles);
+      const fingerprint = buildFilesFingerprint(merged);
+      const updatePayload: Record<string, unknown> = {
+        source_files_json: merged,
+        files_fingerprint: fingerprint,
+      };
+      if (finalize) {
+        updatePayload.status = "live";
+        updatePayload.progress_pct = 100;
+        updatePayload.generation_ended_at = new Date().toISOString();
+        updatePayload.error_message = null;
+      }
+      await sc.from("cirius_projects").update(updatePayload).eq("id", ciriusProject.id);
+      await addLog(sc, orchProjectId,
+        `📦 [capture] ✅ source-code fallback after chat 404: +${Object.keys(fallbackFiles).length} arquivo(s)${finalize ? " (finalize)" : ""}`,
+        "info", { fallback: true, file_count: Object.keys(fallbackFiles).length, trigger: "chat_404" }, taskId);
+      return { ok: true, reason: "source_code_fallback_after_404", fileCount: Object.keys(merged).length };
+    }
+    return { ok: false, reason: `latest_message_http_${latestRes.status}_no_fallback`, fileCount: 0 };
   }
 
   const rawLatest = await latestRes.text();
@@ -438,16 +460,28 @@ Deno.serve(async (req: Request) => {
 
           // Timeout check
           if (elapsed > EXECUTING_TIMEOUT_MS) {
+            // ★ FIX: Try to mine code BEFORE force-completing the timed-out task
+            try {
+              const timeoutSync = await syncLatestMarkdownFiles(
+                sc, project.id as string, lovableProjectId, token,
+                `task_${taskIdx}`, false, runningTask.id as string
+              );
+              await addLog(sc, project.id as string,
+                `⏰ [tick] Task #${taskIdx} TIMEOUT after ${Math.round(elapsed / 1000)}s — pre-complete sync: ${timeoutSync.ok ? `✅ ${timeoutSync.fileCount} files` : `⚠ ${timeoutSync.reason}`}`, "warn",
+                { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
+                  elapsed_ms: elapsed, timeout_ms: EXECUTING_TIMEOUT_MS,
+                  brain_project: lovableProjectId,
+                  sync_result: timeoutSync,
+                  action: "force_complete_timeout_with_sync" }, runningTask.id as string);
+            } catch (syncErr) {
+              await addLog(sc, project.id as string,
+                `⏰ [tick] Task #${taskIdx} TIMEOUT sync failed: ${syncErr}`, "warn",
+                { phase: "executing", task_id: runningTask.id, action: "timeout_sync_error" }, runningTask.id as string);
+            }
             await sc.from("orchestrator_tasks").update({
               status: "completed", completed_at: new Date().toISOString(),
             }).eq("id", runningTask.id);
-            await addLog(sc, project.id as string,
-              `⏰ [tick] Task #${taskIdx} TIMEOUT after ${Math.round(elapsed / 1000)}s — force-completed`, "warn",
-              { phase: "executing", task_id: runningTask.id, task_index: taskIdx,
-                elapsed_ms: elapsed, timeout_ms: EXECUTING_TIMEOUT_MS,
-                brain_project: lovableProjectId,
-                action: "force_complete_timeout" }, runningTask.id as string);
-            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} timeout (${Math.round(elapsed / 1000)}s)`);
+            tickLog.push(`→ [exec] ${projId8}: task #${taskIdx} timeout (${Math.round(elapsed / 1000)}s) — synced before complete`);
             anyCompleted = true;
             continue;
           }
