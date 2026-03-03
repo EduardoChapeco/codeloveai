@@ -50,22 +50,23 @@ export default function HelpCenter() {
       <div className="max-w-6xl mx-auto px-6 py-12">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
-            <BookOpen className="h-8 w-8 text-primary" />
+          <div className="rd-ico-box blue" style={{ width: 64, height: 64, borderRadius: 16, margin: "0 auto 24px" }}>
+            <BookOpen style={{ width: 32, height: 32 }} />
           </div>
-          <h1 className="lv-heading-xl mb-3">Central de Ajuda</h1>
-          <p className="lv-body-lg max-w-md mx-auto">Artigos, guias e respostas para tudo sobre o Starble.</p>
+          <h1 className="text-2xl font-bold mb-3" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Central de Ajuda</h1>
+          <p className="text-sm max-w-md mx-auto" style={{ color: "var(--text-secondary)" }}>Artigos, guias e respostas para tudo sobre o Starble.</p>
         </div>
 
         {/* Search */}
         <div className="relative max-w-lg mx-auto mb-12">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--text-quaternary)" }} />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar artigos..."
-            className="lv-input h-11 pl-11"
+            className="tb-search"
+            style={{ width: "100%", height: 44, paddingLeft: 40, fontSize: 14 }}
           />
         </div>
 
@@ -78,14 +79,14 @@ export default function HelpCenter() {
                 <button
                   key={c.id}
                   onClick={() => setActiveCategory(c.id)}
-                  className="clf-liquid-glass p-5 text-left hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 group"
+                  className="rd-card text-left hover:border-[var(--indigo)]/30 transition-all duration-200 group"
                 >
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-3 group-hover:bg-primary/15 transition-colors">
+                  <div className="rd-ico-box blue" style={{ marginBottom: 12 }}>
                     {c.icon}
                   </div>
-                  <p className="lv-body-strong mb-1">{c.label}</p>
-                  <p className="lv-caption mb-3 line-clamp-2">{c.desc}</p>
-                  <p className="text-[10px] text-muted-foreground/60">{count} {count === 1 ? "artigo" : "artigos"}</p>
+                  <p className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{c.label}</p>
+                  <p className="text-xs mb-3 line-clamp-2" style={{ color: "var(--text-tertiary)" }}>{c.desc}</p>
+                  <p className="text-[10px]" style={{ color: "var(--text-quaternary)" }}>{count} {count === 1 ? "artigo" : "artigos"}</p>
                 </button>
               );
             })}
@@ -168,14 +169,14 @@ export default function HelpCenter() {
         )}
 
         {/* Support CTA */}
-        <div className="mt-16 clf-liquid-glass p-8 text-center">
-          <h2 className="lv-heading-md mb-2">Não encontrou o que procurava?</h2>
-          <p className="lv-body mb-6">Nossa equipe de suporte está pronta para ajudar você.</p>
+        <div className="mt-16 rd-card text-center" style={{ padding: 32 }}>
+          <h2 className="text-lg font-bold mb-2" style={{ color: "var(--text-primary)" }}>Não encontrou o que procurava?</h2>
+          <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>Nossa equipe de suporte está pronta para ajudar você.</p>
           <div className="flex gap-3 justify-center flex-wrap">
-            <Link to="/suporte" className="lv-btn-primary h-10 px-6 text-sm inline-flex items-center gap-2">
+            <Link to="/suporte" className="gl primary">
               Abrir Ticket de Suporte
             </Link>
-            <Link to="/termos" className="lv-btn-secondary h-10 px-6 text-sm inline-flex items-center gap-2">
+            <Link to="/termos" className="gl ghost flex items-center gap-2">
               <ExternalLink className="h-4 w-4" /> Termos de Uso
             </Link>
           </div>
