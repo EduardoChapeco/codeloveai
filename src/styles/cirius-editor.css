@@ -1498,6 +1498,61 @@
 .fe-icon-file { color: var(--indigo-l); opacity: 0.6; flex-shrink: 0; }
 .fe-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fe-empty { padding: 16px; text-align: center; font-size: 11px; color: var(--text-quaternary); }
+.fe-mined-count {
+  font-size: 9px; padding: 1px 6px; border-radius: 99px; margin-left: auto;
+  background: rgba(34,197,94,0.12); color: var(--green-l); font-weight: 600;
+}
+.fe-check {
+  color: var(--green-l); flex-shrink: 0; margin-left: auto;
+  animation: feCheckIn 0.4s ease-out both;
+}
+@keyframes feCheckIn {
+  0% { opacity: 0; transform: scale(0.3); }
+  60% { transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.fe-mined { animation: feMinedFlash 1.2s ease-out; }
+@keyframes feMinedFlash {
+  0% { background: rgba(34,197,94,0.18); }
+  100% { background: transparent; }
+}
+.fm-panel { border-top: 1px solid var(--border-subtle); background: var(--bg-1); }
+.fm-header {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+  font-size: 11px; font-weight: 600; color: var(--text-secondary);
+  width: 100%; border: none; background: none; cursor: pointer; text-align: left;
+}
+.fm-header:hover { background: var(--bg-3); }
+.fm-badge {
+  font-size: 9px; padding: 0 5px; border-radius: 99px;
+  background: rgba(34,197,94,0.15); color: var(--green-l); font-weight: 700;
+}
+.fm-list {
+  max-height: 200px; overflow-y: auto; padding: 0 6px 6px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.fm-card {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 8px; border-radius: 6px;
+  background: var(--bg-2); border: 1px solid var(--border-subtle);
+  animation: fmSlideIn 0.35s ease-out both;
+}
+@keyframes fmSlideIn {
+  0% { opacity: 0; transform: translateX(-8px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.fm-card-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fm-card-info { display: flex; flex-direction: column; min-width: 0; }
+.fm-card-path {
+  font-size: 10px; font-family: var(--mono); color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fm-card-meta {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 9px; color: var(--text-quaternary);
+}
+.fm-ext { font-weight: 600; }
+.fm-sep { opacity: 0.4; }
 
 /* ── Markdown in chat bubbles ── */
 .sp-msg-md { font-size: 12px; line-height: 1.6; }
