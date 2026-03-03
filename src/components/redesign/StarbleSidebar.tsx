@@ -69,7 +69,7 @@ export default function StarbleSidebar() {
       {/* Body */}
       <div className="sb-body">
         <div className="sb-section">Principal</div>
-        <NavEntry to="/assistente" label="Assistente IA" icon={Sparkles} iconColor="ib-orange" active={isActive("/assistente")} />
+        <NavEntry to="/dashboard" label="Dashboard" icon={BarChart3} iconColor="ib-orange" active={isActive("/dashboard")} />
         <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-blue" active={isActive("/lovable/projects")} badge="2" />
         <NavEntry to="/brain" label="Star AI" icon={Brain} iconColor="ib-indigo" active={isActive("/brain")} badge="PRO" badgeVariant="pro" />
         <NavEntry to="/community" label="Comunidade" icon={MessageCircle} iconColor="ib-teal" active={isActive("/community")} badge="HOT" badgeVariant="new" />

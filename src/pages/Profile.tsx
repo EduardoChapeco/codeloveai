@@ -296,16 +296,16 @@ export default function Profile() {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    return <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg-0)" }}>
+      <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--text-tertiary)" }} />
     </div>;
   }
 
   if (!profile) {
-    return <div className="min-h-screen flex items-center justify-center">
+    return <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg-0)" }}>
       <div className="text-center">
-        <p className="lv-heading-lg mb-4">Perfil não encontrado</p>
-        <Link to="/community" className="lv-btn-primary">Voltar</Link>
+        <p className="text-lg font-bold mb-4" style={{ color: "var(--text-primary)" }}>Perfil não encontrado</p>
+        <Link to="/community" className="gl primary">Voltar</Link>
       </div>
     </div>;
   }
@@ -316,9 +316,9 @@ export default function Profile() {
 
   const guestNav = !user ? (
     <nav className="sticky top-0 z-20 px-6 py-3">
-      <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
-        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
-        <Link to="/login" className="lv-btn-primary h-9 px-4 text-xs">Entrar</Link>
+      <div className="rd-card flex items-center justify-between" style={{ padding: "10px 20px" }}>
+        <Link to="/" className="text-base font-semibold tracking-tight" style={{ color: "var(--text-primary)" }}>{brandName}</Link>
+        <Link to="/login" className="gl sm primary">Entrar</Link>
       </div>
     </nav>
   ) : null;
@@ -335,7 +335,7 @@ export default function Profile() {
           <div className="w-full h-full bg-gradient-to-br from-primary/20 via-primary/10 to-accent/10" />
         )}
         {isOwner && (
-          <label className="absolute bottom-4 right-4 lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1 cursor-pointer">
+          <label className="absolute bottom-4 right-4 gl sm ghost cursor-pointer flex items-center gap-1">
             <Camera className="h-3 w-3" /> Capa
             <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload("cover", e.target.files[0])} />
           </label>
@@ -361,23 +361,23 @@ export default function Profile() {
             )}
           </div>
           <div className="flex-1 pb-2">
-            <h1 className="lv-heading-lg">{profile.display_name}</h1>
-            {profile.username && <p className="lv-caption font-medium">@{profile.username}</p>}
+            <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{profile.display_name}</h1>
+            {profile.username && <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>@{profile.username}</p>}
           </div>
           <div className="pb-2 flex gap-2">
             {isOwner ? (
-              <button onClick={() => setEditing(!editing)} className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-1.5">
+              <button onClick={() => setEditing(!editing)} className="gl sm ghost flex items-center gap-1.5">
                 <Edit className="h-3 w-3" /> Editar
               </button>
             ) : (
               <>
                 <button onClick={handleFollow}
-                  className={`h-9 px-5 text-xs ${isFollowing ? "lv-btn-secondary" : "lv-btn-primary"}`}>
+                  className={`gl sm ${isFollowing ? "ghost" : "primary"}`}>
                   {isFollowing ? "Seguindo" : "Seguir"}
                 </button>
                 {user && (
                   <button onClick={() => setChatOpen(!chatOpen)}
-                    className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-1.5">
+                    className="gl sm ghost flex items-center gap-1.5">
                     <MessageSquare className="h-3 w-3" /> Mensagem
                   </button>
                 )}
@@ -389,49 +389,49 @@ export default function Profile() {
         {/* Stats */}
         <div className="flex gap-6 mb-6">
           <div className="text-center">
-            <p className="lv-stat text-lg">{posts.length}</p>
-            <p className="lv-caption">Posts</p>
+            <p className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{posts.length}</p>
+            <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>Posts</p>
           </div>
           <button onClick={loadFollowers} className="text-center hover:opacity-80 transition-opacity">
-            <p className="lv-stat text-lg">{profile.followers_count}</p>
-            <p className="lv-caption">Seguidores</p>
+            <p className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{profile.followers_count}</p>
+            <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>Seguidores</p>
           </button>
           <button onClick={loadFollowing} className="text-center hover:opacity-80 transition-opacity">
-            <p className="lv-stat text-lg">{profile.following_count}</p>
-            <p className="lv-caption">Seguindo</p>
+            <p className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{profile.following_count}</p>
+            <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>Seguindo</p>
           </button>
         </div>
 
         {/* Followers/Following Modal */}
         {showListModal && (
-          <div className="lv-card mb-6">
+          <div className="rd-card mb-6">
             <div className="flex items-center justify-between mb-3">
-              <p className="lv-overline">{followListTitle} ({followListData.length})</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>{followListTitle} ({followListData.length})</p>
               <button onClick={() => { setShowFollowers(false); setShowFollowing(false); }}
-                className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                className="gl ico xs ghost">
                 <X className="h-4 w-4" />
               </button>
             </div>
             {loadingList ? (
-              <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+              <Loader2 className="h-5 w-5 animate-spin mx-auto" style={{ color: "var(--text-tertiary)" }} />
             ) : followListData.length === 0 ? (
-              <p className="lv-caption text-center py-4">Nenhum resultado.</p>
+              <p className="text-xs text-center py-4" style={{ color: "var(--text-tertiary)" }}>Nenhum resultado.</p>
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {followListData.map(u => (
                   <Link key={u.user_id} to={`/profile/${u.user_id}`}
                     onClick={() => { setShowFollowers(false); setShowFollowing(false); }}
-                    className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-muted transition-colors">
+                    className="flex items-center gap-3 px-3 py-2 rounded-xl transition-colors" style={{ ["--hover-bg" as string]: "var(--bg-3)" }}>
                     {u.avatar_url ? (
                       <img src={u.avatar_url} className="h-8 w-8 rounded-full object-cover" />
                     ) : (
-                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                      <div className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "var(--bg-3)", color: "var(--text-tertiary)" }}>
                         {(u.display_name || "U")[0].toUpperCase()}
                       </div>
                     )}
                     <div>
-                      <p className="lv-body-strong">{u.display_name}</p>
-                      {u.username && <p className="lv-caption">@{u.username}</p>}
+                      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
+                      {u.username && <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>@{u.username}</p>}
                     </div>
                   </Link>
                 ))}
@@ -471,63 +471,64 @@ export default function Profile() {
 
         {/* Edit form */}
         {editing && isOwner && (
-          <div className="lv-card mb-8 space-y-4">
-            <p className="lv-overline mb-2">Editar perfil</p>
+          <div className="rd-card mb-8 space-y-4">
+            <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--text-tertiary)" }}>Editar perfil</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="lv-caption font-medium block mb-1.5">Nome</label>
-                <input value={editName} onChange={e => setEditName(e.target.value)} className="lv-input" />
+                <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>Nome</label>
+                <input value={editName} onChange={e => setEditName(e.target.value)} className="tb-search" style={{ width: "100%" }} />
               </div>
               <div>
-                <label className="lv-caption font-medium block mb-1.5">Username</label>
-                <input value={editUsername} onChange={e => setEditUsername(e.target.value)} className="lv-input" />
+                <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>Username</label>
+                <input value={editUsername} onChange={e => setEditUsername(e.target.value)} className="tb-search" style={{ width: "100%" }} />
               </div>
             </div>
             <div>
-              <label className="lv-caption font-medium block mb-1.5">Bio</label>
-              <textarea value={editBio} onChange={e => setEditBio(e.target.value)} rows={3} className="lv-textarea" />
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>Bio</label>
+              <textarea value={editBio} onChange={e => setEditBio(e.target.value)} rows={3}
+                style={{ width: "100%", background: "var(--bg-3)", border: "1px solid var(--b1)", borderRadius: "var(--r2)", padding: "8px 12px", fontSize: "13px", color: "var(--text-primary)", resize: "vertical" }} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="lv-caption font-medium block mb-1.5">Website</label>
-                <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)} className="lv-input" />
+                <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>Website</label>
+                <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)} className="tb-search" style={{ width: "100%" }} />
               </div>
               <div>
-                <label className="lv-caption font-medium block mb-1.5">GitHub</label>
-                <input value={editGithub} onChange={e => setEditGithub(e.target.value)} className="lv-input" />
+                <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>GitHub</label>
+                <input value={editGithub} onChange={e => setEditGithub(e.target.value)} className="tb-search" style={{ width: "100%" }} />
               </div>
               <div>
-                <label className="lv-caption font-medium block mb-1.5">Twitter</label>
-                <input value={editTwitter} onChange={e => setEditTwitter(e.target.value)} className="lv-input" />
+                <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>Twitter</label>
+                <input value={editTwitter} onChange={e => setEditTwitter(e.target.value)} className="tb-search" style={{ width: "100%" }} />
               </div>
               <div>
-                <label className="lv-caption font-medium block mb-1.5">LinkedIn</label>
-                <input value={editLinkedin} onChange={e => setEditLinkedin(e.target.value)} className="lv-input" />
+                <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>LinkedIn</label>
+                <input value={editLinkedin} onChange={e => setEditLinkedin(e.target.value)} className="tb-search" style={{ width: "100%" }} />
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={handleSaveProfile} className="lv-btn-primary h-10 px-5 text-sm">Salvar</button>
-              <button onClick={() => setEditing(false)} className="lv-btn-secondary h-10 px-5 text-sm">Cancelar</button>
+              <button onClick={handleSaveProfile} className="gl primary">Salvar</button>
+              <button onClick={() => setEditing(false)} className="gl ghost">Cancelar</button>
             </div>
           </div>
         )}
 
         {/* User's posts */}
         <div className="space-y-4 pb-16">
-          <p className="lv-overline">Publicações ({posts.length})</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Publicações ({posts.length})</p>
           {posts.length === 0 ? (
-            <p className="lv-body">Nenhuma publicação ainda.</p>
+            <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>Nenhuma publicação ainda.</p>
           ) : posts.map(post => (
             <Link key={post.id} to={`/community?post=${post.id}`} className="block">
-              <div className="lv-card hover:border-white/60 transition-colors">
+              <div className="rd-card" style={{ transition: "border-color 0.15s" }}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="lv-badge lv-badge-muted">{post.post_type.toUpperCase()}</span>
-                  <span className="lv-caption">
+                  <span className="chip">{post.post_type.toUpperCase()}</span>
+                  <span className="text-xs" style={{ color: "var(--text-quaternary)" }}>
                     {format(new Date(post.created_at), "dd MMM yyyy", { locale: ptBR })}
                   </span>
                 </div>
-                {post.title && <h3 className="lv-body-strong mb-1">{post.title}</h3>}
-                <p className="lv-body whitespace-pre-wrap mb-3 line-clamp-3">{post.content}</p>
+                {post.title && <h3 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{post.title}</h3>}
+                <p className="text-sm whitespace-pre-wrap mb-3 line-clamp-3" style={{ color: "var(--text-secondary)" }}>{post.content}</p>
 
                 {post.media_urls && post.media_urls.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mb-3">
@@ -537,7 +538,7 @@ export default function Profile() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-4 lv-caption font-medium">
+                <div className="flex items-center gap-4 text-xs font-medium" style={{ color: "var(--text-tertiary)" }}>
                   <span className="flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {post.likes_count}</span>
                   <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {post.comments_count}</span>
                 </div>

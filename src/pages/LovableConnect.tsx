@@ -314,9 +314,9 @@ export default function LovableConnect() {
   return (
     <AppLayout>
       <div className="max-w-xl mx-auto px-6 py-10">
-        <p className="lv-overline mb-1">Integração</p>
-        <h1 className="lv-heading-lg mb-2">Lovable Connect</h1>
-        <p className="lv-caption mb-8">
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-quaternary)" }}>Integração</p>
+        <h1 className="text-lg font-bold mb-2" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Lovable Connect</h1>
+        <p className="text-xs mb-8" style={{ color: "var(--text-tertiary)" }}>
           Gerencie projetos, deploys e previews conectando automaticamente via extensão.
         </p>
 
@@ -327,19 +327,19 @@ export default function LovableConnect() {
         ) : (
           <div className="space-y-6">
             {/* 1. Status de conexão */}
-            <div className="lv-card flex items-center gap-4">
-              <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${isConnected ? 'bg-green-500/10' : 'bg-destructive/10'}`}>
-                {isConnected ? <Check className="h-5 w-5 text-green-500" /> : <X className="h-5 w-5 text-destructive" />}
+            <div className="rd-card flex items-center gap-4">
+              <div className={`rd-ico-box ${isConnected ? 'green' : 'red'}`}>
+                {isConnected ? <Check className="h-5 w-5" /> : <X className="h-5 w-5" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="lv-body-strong">{isConnected ? "Conectado com sucesso" : "Não conectado"}</p>
-                <p className="lv-caption">
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{isConnected ? "Conectado com sucesso" : "Não conectado"}</p>
+                <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
                   {isConnected && lastVerified
                     ? `Verificado em ${new Date(lastVerified).toLocaleString("pt-BR")}`
                     : isConnected ? "Token ativo" : "Acesse lovable.dev para conectar"}
                 </p>
               </div>
-              {isConnected && <span className="lv-badge lv-badge-success">Ativo</span>}
+              {isConnected && <span className="chip green">Ativo</span>}
             </div>
 
             {/* SSO Bridge Status */}
@@ -373,10 +373,10 @@ export default function LovableConnect() {
             )}
 
             {/* 2. Token CLF1 da Extensão */}
-            <div className="lv-card space-y-4">
+            <div className="rd-card space-y-4">
               <div className="flex items-center gap-3">
-                <Key className="h-5 w-5 text-primary" />
-                <p className="lv-body-strong">Token CLF1 da Extensão</p>
+                <Key className="h-5 w-5" style={{ color: "var(--indigo-l)" }} />
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Token CLF1 da Extensão</p>
               </div>
               
               {clfToken ? (

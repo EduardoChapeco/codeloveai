@@ -299,8 +299,8 @@ export default function Notes() {
 
   // ── Loading ──
   if (authLoading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center">
-      <p className="lv-overline">Carregando...</p>
+    return <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg-0)" }}>
+      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>Carregando...</p>
     </div>;
   }
 
@@ -308,25 +308,24 @@ export default function Notes() {
     <AppLayout>
       <div className="min-h-full flex flex-col">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-white/[0.06]">
+        <div className="px-6 py-5" style={{ borderBottom: "1px solid var(--b1)" }}>
           <div className="flex items-center justify-between max-w-7xl mx-auto">
             <div>
-              <p className="lv-overline mb-1">Produtividade</p>
-              <h1 className="lv-heading-lg">Notas</h1>
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-quaternary)" }}>Produtividade</p>
+              <h1 className="text-lg font-bold" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Notas</h1>
             </div>
             <div className="flex items-center gap-2">
-              {/* Sync status */}
               {syncStatus === "saving" && (
-                <span className="lv-badge lv-badge-warning flex items-center gap-1">
+                <span className="chip orange flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" /> Salvando...
                 </span>
               )}
               {syncStatus === "saved" && (
-                <span className="lv-badge lv-badge-success flex items-center gap-1">
+                <span className="chip green flex items-center gap-1">
                   <CheckCircle className="h-3 w-3" /> Salvo
                 </span>
               )}
-              <button onClick={createNote} className="lv-btn-primary h-9 px-4 text-xs">
+              <button onClick={createNote} className="gl sm primary">
                 <Plus className="h-3.5 w-3.5" /> Nova nota
               </button>
             </div>
@@ -337,7 +336,7 @@ export default function Notes() {
         <div className="flex flex-1 min-h-0 max-w-7xl mx-auto w-full">
 
           {/* ── Left panel: Folders + Note list ── */}
-          <div className="w-80 border-r border-white/[0.06] flex flex-col shrink-0">
+          <div className="w-80 flex flex-col shrink-0" style={{ borderRight: "1px solid var(--b1)" }}>
             {/* Search */}
             <div className="p-3">
               <div className="relative">

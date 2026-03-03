@@ -2,7 +2,6 @@ import { useLocation } from "react-router-dom";
 import { Search, Bell, Settings } from "lucide-react";
 
 const pageTitles: Record<string, string> = {
-  "/assistente": "Assistente IA",
   "/lovable/projects": "Projetos",
   "/brain": "Star AI",
   "/community": "Comunidade",
@@ -15,6 +14,10 @@ const pageTitles: Record<string, string> = {
   "/admin/global": "Admin Global",
   "/extensoes/venus": "Venus AI",
   "/notes": "Notas",
+  "/ajuda": "Central de Ajuda",
+  "/lovable/connect": "Lovable Connect",
+  "/automation": "Automação",
+  "/suporte": "Suporte",
 };
 
 export default function StarbleTopbar() {
