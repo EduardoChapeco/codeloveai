@@ -141,45 +141,46 @@
     --specular-top-hover: inset 0 0.5px 0 rgba(255, 255, 255, 0.95);
   }
 
-  /* ━━━ DARK MODE — Ereemby Design System v2 ━━━ */
+  /* ━━━ DARK MODE — Liquid Glass Monochrome + Color Accents ━━━ */
   .dark {
-    /* ── Ereemby depth levels: bg-0 → bg-5 ── */
-    --background: 240 11% 4%;        /* #08080a — deepest */
-    --foreground: 240 14% 94%;       /* #eeeef2 */
-    --card: 240 9% 9%;               /* #141418 — card base */
-    --card-foreground: 240 14% 94%;
-    --popover: 240 9% 9%;
-    --popover-foreground: 240 14% 94%;
-    --primary: 211 100% 60%;         /* #3b82f6 blue */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 10% 6%;         /* #0e0e11 — surface base */
-    --secondary-foreground: 240 9% 66%;
-    --muted: 240 10% 12%;            /* #1c1c22 — elevated */
-    --muted-foreground: 240 8% 41%;  /* #606070 */
-    --accent: 240 6% 15%;            /* #242429 — active/pressed */
-    --accent-foreground: 240 9% 66%;
+    /* ── Pure black/white foundation ── */
+    --background: 0 0% 3%;              /* #080808 — true dark */
+    --foreground: 0 0% 95%;             /* #f2f2f2 — crisp white */
+    --card: 0 0% 6%;                    /* #0f0f0f — card base */
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 0 0% 95%;                /* white as primary — buttons, links */
+    --primary-foreground: 0 0% 4%;      /* black text on primary */
+    --secondary: 0 0% 8%;              /* #141414 */
+    --secondary-foreground: 0 0% 60%;
+    --muted: 0 0% 11%;                 /* #1c1c1c */
+    --muted-foreground: 0 0% 45%;      /* #737373 */
+    --accent: 0 0% 14%;               /* #242424 */
+    --accent-foreground: 0 0% 60%;
     --destructive: 3 86% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 100% / 0.07;      /* rgba(255,255,255,0.07) */
-    --input: 0 0% 100% / 0.07;
-    --ring: 211 100% 60%;
-    --sidebar-background: 240 11% 4%;
-    --sidebar-foreground: 240 9% 66%;
-    --sidebar-primary: 211 100% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 10% 12%;
-    --sidebar-accent-foreground: 240 9% 66%;
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.08;
+    --ring: 0 0% 95%;
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 55%;
+    --sidebar-primary: 0 0% 95%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 11%;
+    --sidebar-accent-foreground: 0 0% 55%;
     --sidebar-border: 0 0% 100% / 0.07;
-    --sidebar-ring: 211 100% 60%;
+    --sidebar-ring: 0 0% 95%;
 
-    /* ── Ereemby Design Tokens (unprefixed) — DARK ── */
-    --bg-0: #08080a;  --bg-1: #0e0e11;  --bg-2: #141418;
-    --bg-3: #1c1c22;  --bg-4: #242429;  --bg-5: #2e2e35;
+    /* ── Depth levels — pure grayscale ── */
+    --bg-0: #060606;  --bg-1: #0c0c0c;  --bg-2: #111111;
+    --bg-3: #191919;  --bg-4: #222222;  --bg-5: #2c2c2c;
     --b0: rgba(255,255,255,0.04);  --b1: rgba(255,255,255,0.07);
     --b2: rgba(255,255,255,0.11);  --b3: rgba(255,255,255,0.16);
-    --text-primary: #eeeef2;  --text-secondary: #a0a0b0;
-    --text-tertiary: #606070;  --text-quaternary: #3a3a48;
+    --text-primary: #f2f2f2;  --text-secondary: #999999;
+    --text-tertiary: #5c5c5c;  --text-quaternary: #3d3d3d;
 
+    /* ── Color accents — vibrant pops for highlights ── */
     --orange: #f59e0b;  --orange-l: #fbbf24;  --orange-d: rgba(245,158,11,0.12);
     --blue: #3b82f6;    --blue-l: #60a5fa;    --blue-d: rgba(59,130,246,0.12);
     --purple: #a855f7;  --purple-l: #c084fc;  --purple-d: rgba(168,85,247,0.12);
@@ -193,28 +194,28 @@
     --r5: 20px; --r6: 24px; --r-full: 9999px;
     --s1:4px; --s2:8px; --s3:12px; --s4:16px;
     --s5:20px; --s6:24px; --s8:32px; --s10:40px;
-    --shadow-sm: 0 2px 8px rgba(0,0,0,0.5);
-    --shadow-md: 0 4px 20px rgba(0,0,0,0.55);
-    --shadow-lg: 0 8px 40px rgba(0,0,0,0.6);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.55);
+    --shadow-md: 0 4px 20px rgba(0,0,0,0.6);
+    --shadow-lg: 0 8px 40px rgba(0,0,0,0.65);
     --font: 'Geist', system-ui, sans-serif;
     --mono: 'Geist Mono', monospace;
     --ease-spring: cubic-bezier(.22, 1, .36, 1);
     --ease-out: cubic-bezier(0, 0, .2, 1);
 
-    /* ── Ereemby semantic palette ── */
-    --clf-bg: #08080a;
-    --clf-bg-solid: #141418;
-    --clf-bg-glass: rgba(8, 8, 10, 0.95);
-    --clf-fg: #eeeef2;
-    --clf-fg2: #a0a0b0;
-    --clf-muted: rgba(28, 28, 34, 0.9);
-    --clf-muted2: #2e2e35;
-    --clf-muted-fg: #606070;
+    /* ── Semantic palette — monochrome base ── */
+    --clf-bg: #060606;
+    --clf-bg-solid: #111111;
+    --clf-bg-glass: rgba(6, 6, 6, 0.96);
+    --clf-fg: #f2f2f2;
+    --clf-fg2: #999999;
+    --clf-muted: rgba(25, 25, 25, 0.9);
+    --clf-muted2: #2c2c2c;
+    --clf-muted-fg: #5c5c5c;
     --clf-border: rgba(255, 255, 255, 0.07);
-    --clf-border-dark: rgba(255, 255, 255, 0.11);
-    --clf-accent: #3b82f6;
-    --clf-accent-hover: #60a5fa;
-    --clf-accent-bg: rgba(59, 130, 246, 0.12);
+    --clf-border-dark: rgba(255, 255, 255, 0.12);
+    --clf-accent: #f2f2f2;
+    --clf-accent-hover: #ffffff;
+    --clf-accent-bg: rgba(255, 255, 255, 0.06);
     --clf-ok: #22c55e;
     --clf-ok-bg: rgba(34, 197, 94, 0.11);
     --clf-warn: #f59e0b;
@@ -224,39 +225,39 @@
     --clf-plan: #a855f7;
     --clf-plan-bg: rgba(168, 85, 247, 0.12);
 
-    /* ── Ereemby shadows ── */
-    --clf-shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.4);
-    --clf-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
-    --clf-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.55);
-    --clf-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.6);
-    --clf-shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.5), 0 0.5px 0 rgba(255, 255, 255, 0.05) inset;
+    /* ── Shadows ── */
+    --clf-shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.45);
+    --clf-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.55);
+    --clf-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.6);
+    --clf-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.65);
+    --clf-shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.55), 0 0.5px 0 rgba(255, 255, 255, 0.04) inset;
 
-    --glass-bg: 240 11% 4% / 0.92;
+    --glass-bg: 0 0% 3% / 0.94;
     --glass-border: 0 0% 100% / 0.07;
-    --mesh-1: 211 80% 14%;
-    --mesh-2: 199 70% 11%;
-    --mesh-3: 263 50% 13%;
-    --liquid-glass-bg: rgba(14, 14, 17, 0.65);
+    --mesh-1: 0 0% 12%;
+    --mesh-2: 0 0% 9%;
+    --mesh-3: 0 0% 11%;
+    --liquid-glass-bg: rgba(12, 12, 12, 0.7);
     --liquid-glass-border: rgba(255, 255, 255, 0.07);
-    --light-specular: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.06);
+    --light-specular: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.05);
 
-    /* ── Ereemby depth surface vars (prefixed compat) ── */
-    --er-bg-0: #08080a;
-    --er-bg-1: #0e0e11;
-    --er-bg-2: #141418;
-    --er-bg-3: #1c1c22;
-    --er-bg-4: #242429;
-    --er-bg-5: #2e2e35;
+    /* ── Depth surface vars (prefixed compat) ── */
+    --er-bg-0: #060606;
+    --er-bg-1: #0c0c0c;
+    --er-bg-2: #111111;
+    --er-bg-3: #191919;
+    --er-bg-4: #222222;
+    --er-bg-5: #2c2c2c;
     --er-b0: rgba(255,255,255,0.04);
     --er-b1: rgba(255,255,255,0.07);
     --er-b2: rgba(255,255,255,0.11);
     --er-b3: rgba(255,255,255,0.16);
-    --er-text-primary: #eeeef2;
-    --er-text-secondary: #a0a0b0;
-    --er-text-tertiary: #606070;
-    --er-text-quaternary: #3a3a48;
+    --er-text-primary: #f2f2f2;
+    --er-text-secondary: #999999;
+    --er-text-tertiary: #5c5c5c;
+    --er-text-quaternary: #3d3d3d;
 
-    /* ── Ereemby accent colors (prefixed compat) ── */
+    /* ── Accent colors (prefixed compat) ── */
     --er-orange: #f59e0b;  --er-orange-l: #fbbf24;  --er-orange-d: rgba(245,158,11,0.12);
     --er-blue: #3b82f6;    --er-blue-l: #60a5fa;    --er-blue-d: rgba(59,130,246,0.12);
     --er-purple: #a855f7;  --er-purple-l: #c084fc;  --er-purple-d: rgba(168,85,247,0.12);
