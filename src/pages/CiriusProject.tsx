@@ -3,9 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   ArrowLeft, Play, Pause, X, Github, Globe, Database,
@@ -19,14 +16,9 @@ const statusLabels: Record<string, string> = {
   deploying: "Deploy", live: "Online", failed: "Falhou", paused: "Pausado",
 };
 
-const statusColors: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground",
-  generating_prd: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-  generating_code: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-  deploying: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
-  live: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-  failed: "bg-destructive/10 text-destructive border border-destructive/20",
-  paused: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+const statusChip: Record<string, string> = {
+  draft: "ch-gray", generating_prd: "ch-orange", generating_code: "ch-blue",
+  deploying: "ch-purple", live: "ch-green", failed: "ch-red", paused: "ch-orange",
 };
 
 interface TaskItem {
@@ -52,28 +44,19 @@ export default function CiriusProject() {
 
   const loadProject = useCallback(async () => {
     if (!id) return;
-    const { data } = await supabase.functions.invoke("cirius-status", {
-      body: { action: "get", project_id: id },
-    });
-    if (data?.project) {
-      setProject(data.project);
-      setLogs(data.logs || []);
-    }
+    const { data } = await supabase.functions.invoke("cirius-status", { body: { action: "get", project_id: id } });
+    if (data?.project) { setProject(data.project); setLogs(data.logs || []); }
     setLoading(false);
   }, [id]);
 
   useEffect(() => { loadProject(); }, [loadProject]);
 
-  // Auto-redirect to editor for active projects
   useEffect(() => {
     if (!project || !id) return;
     const activeStates = ["generating_prd", "generating_code", "deploying", "live", "awaiting_approval"];
-    if (activeStates.includes(project.status)) {
-      navigate(`/cirius/editor/${id}`, { replace: true });
-    }
+    if (activeStates.includes(project.status)) navigate(`/cirius/editor/${id}`, { replace: true });
   }, [project?.status, id, navigate]);
 
-  // Realtime
   useEffect(() => {
     if (!id) return;
     const channel = supabase
@@ -86,7 +69,6 @@ export default function CiriusProject() {
     return () => { supabase.removeChannel(channel); };
   }, [id]);
 
-  // Thinking timer
   useEffect(() => {
     if (!project) return;
     const isThinking = ["generating_prd", "generating_code", "deploying"].includes(project.status);
@@ -98,9 +80,7 @@ export default function CiriusProject() {
   async function doAction(action: string) {
     setActing(true);
     try {
-      const { data } = await supabase.functions.invoke("cirius-generate", {
-        body: { action, project_id: id },
-      });
+      const { data } = await supabase.functions.invoke("cirius-generate", { body: { action, project_id: id } });
       if (data?.error) toast.error(data.error);
       else toast.success(`${action} executado`);
       await loadProject();
@@ -111,9 +91,7 @@ export default function CiriusProject() {
   async function doDeploy(target: string) {
     setActing(true);
     try {
-      const { data } = await supabase.functions.invoke("cirius-deploy", {
-        body: { action: target, project_id: id },
-      });
+      const { data } = await supabase.functions.invoke("cirius-deploy", { body: { action: target, project_id: id } });
       if (data?.error) toast.error(data.error);
       else toast.success(`Deploy ${target} iniciado`);
       await loadProject();
@@ -125,25 +103,16 @@ export default function CiriusProject() {
     if (!id) return;
     setVerifying(true);
     try {
-      const { data, error } = await supabase.functions.invoke("cirius-generate", {
-        body: { action: "debug_log", project_id: id },
-      });
-      if (error) {
-        toast.error("Verificação falhou: " + error.message);
-      } else {
-        const summary = data?.summary || JSON.stringify(data).substring(0, 300);
-        toast.success("Diagnóstico concluído", { description: summary, duration: 8000 });
-      }
-    } catch {
-      toast.error("Erro na verificação");
-    } finally {
-      setVerifying(false);
-    }
+      const { data, error } = await supabase.functions.invoke("cirius-generate", { body: { action: "debug_log", project_id: id } });
+      if (error) toast.error("Verificação falhou: " + error.message);
+      else { const summary = data?.summary || JSON.stringify(data).substring(0, 300); toast.success("Diagnóstico concluído", { description: summary, duration: 8000 }); }
+    } catch { toast.error("Erro na verificação"); }
+    finally { setVerifying(false); }
   };
 
   if (!user) { navigate("/login"); return null; }
-  if (loading) return <AppLayout><div className="min-h-screen bg-background" /></AppLayout>;
-  if (!project) return <AppLayout><div className="p-6 text-muted-foreground">Projeto não encontrado</div></AppLayout>;
+  if (loading) return <AppLayout><div style={{ minHeight: "100vh", background: "var(--bg-0)" }} /></AppLayout>;
+  if (!project) return <AppLayout><div className="rd-page-content body-text">Projeto não encontrado</div></AppLayout>;
 
   const isActive = ["generating_prd", "generating_code", "deploying"].includes(project.status);
   const prd = project.prd_json as { tasks?: TaskItem[]; design?: any } | null;
@@ -157,358 +126,216 @@ export default function CiriusProject() {
     return { ...t, status, duration_ms: logForTask?.duration_ms, engine: logForTask?.message };
   }) || [];
 
-  // Calculate done/total
   const doneCount = tasks.filter(t => t.status === "done").length;
   const runningCount = tasks.filter(t => t.status === "running").length;
   const toolsUsed = logs.length;
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
+      <div className="rd-page-content" style={{ maxWidth: 780 }}>
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/cirius")} className="shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-foreground truncate">{project.name}</h1>
-             <div className="flex items-center gap-2 mt-1">
-              <Badge className={statusColors[project.status] || "bg-muted"}>
-                {statusLabels[project.status] || project.status}
-              </Badge>
-              {project.generation_engine && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <Wrench className="h-3 w-3" /> {project.generation_engine}
-                </Badge>
-              )}
-              {(project.vercel_url || project.netlify_url || project.github_url) ? (
-                <Badge variant="outline" className="text-[10px] gap-1 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
-                  <CheckCircle2 className="h-3 w-3" /> Deployed
-                </Badge>
-              ) : project.has_files ? (
-                <Badge variant="outline" className="text-[10px] gap-1 border-blue-500/30 text-blue-400 bg-blue-500/10">
-                  <CheckCircle2 className="h-3 w-3" /> Código gerado
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-[10px] gap-1 border-muted-foreground/30 text-muted-foreground">
-                  Aguardando geração
-                </Badge>
-              )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button className="gl ico sm ghost" onClick={() => navigate("/cirius")}><ArrowLeft size={14} /></button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: 18, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{project.name}</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+              <span className={`chip sm ${statusChip[project.status] || "ch-gray"}`}>{statusLabels[project.status] || project.status}</span>
+              {project.generation_engine && <span className="chip sm"><Wrench size={10} /> {project.generation_engine}</span>}
+              {(project.vercel_url || project.netlify_url || project.github_url)
+                ? <span className="chip sm ch-green"><CheckCircle2 size={10} /> Deployed</span>
+                : project.has_files
+                  ? <span className="chip sm ch-blue"><CheckCircle2 size={10} /> Código gerado</span>
+                  : <span className="chip sm ch-gray">Aguardando geração</span>
+              }
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div style={{ display: "flex", gap: 6 }}>
             {(project.vercel_url || project.netlify_url || (project.preview_url && !String(project.preview_url).includes("lovable.app"))) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPreview(p => !p)}
-                className={`gap-1.5 text-xs ${showPreview ? "ring-2 ring-primary" : ""}`}
-              >
-                {showPreview ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                Preview
-              </Button>
+              <button className={`gl sm ${showPreview ? "primary" : "ghost"}`} onClick={() => setShowPreview(p => !p)}>
+                {showPreview ? <EyeOff size={12} /> : <Eye size={12} />} Preview
+              </button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={verifyProject}
-              disabled={verifying}
-              className="gap-1.5 text-xs"
-            >
-              {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-              Verificar
-            </Button>
+            <button className="gl sm ghost" onClick={verifyProject} disabled={verifying}>
+              {verifying ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />} Verificar
+            </button>
           </div>
         </div>
 
-        {/* Live Preview — only show for actual deployed URLs, never the Brain project */}
+        {/* Live Preview */}
         {showPreview && (() => {
           const deployedUrl = project.vercel_url || project.netlify_url || project.custom_domain;
           const previewUrl = deployedUrl
             ? (deployedUrl.startsWith("http") ? deployedUrl : `https://${deployedUrl}`)
             : (project.preview_url && !String(project.preview_url).includes("lovable.app") ? project.preview_url : null);
           return previewUrl ? (
-            <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2 border-b border-border/30">
-                <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Preview
-                </span>
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Abrir <ExternalLink className="h-3 w-3" />
+            <div className="rd-card" style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px", borderBottom: "1px solid var(--b1)" }}>
+                <span className="chip sm ch-green"><span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green-l)" }} /> Live Preview</span>
+                <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="caption-sm" style={{ color: "var(--text-tertiary)" }}>
+                  Abrir <ExternalLink size={10} />
                 </a>
               </div>
-              <iframe
-                src={previewUrl}
-                className="w-full h-[420px] border-0"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                title="Live Preview"
-              />
+              <iframe src={previewUrl} style={{ width: "100%", height: 420, border: 0 }} sandbox="allow-scripts allow-same-origin allow-popups allow-forms" title="Live Preview" />
             </div>
           ) : (
-            <div className="rounded-xl border border-border/50 bg-card p-6 text-center text-sm text-muted-foreground">
-              Preview disponível após deploy (GitHub → Vercel/Netlify)
-            </div>
+            <div className="rd-card body-text" style={{ textAlign: "center", marginBottom: 16 }}>Preview disponível após deploy</div>
           );
         })()}
-        {/* Thinking indicator */}
+
+        {/* Thinking */}
         {isActive && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 border border-border/50">
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
+          <div className="rd-alert info" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--blue-l)", animation: "bounce 1s infinite" }} />
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--blue-l)", animation: "bounce 1s infinite 0.15s" }} />
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--blue-l)", animation: "bounce 1s infinite 0.3s" }} />
             </div>
-            <span className="text-sm text-muted-foreground">
+            <span className="body-text">
               {project.status === "generating_prd" ? "Pensando" : "Processando"}
-              {thinkingTime > 0 && <span className="ml-1 text-xs opacity-60">({thinkingTime}s)</span>}
+              {thinkingTime > 0 && <span style={{ marginLeft: 4, opacity: 0.6, fontSize: 10 }}>({thinkingTime}s)</span>}
             </span>
           </div>
         )}
 
-        {/* Progress Card */}
+        {/* Progress */}
         {project.progress_pct > 0 && project.status !== "live" && (
-          <div className="rounded-xl border border-border/50 bg-card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold">{project.status === "generating_prd" ? "Gerando PRD" : "Build em progresso"}</span>
-                {toolsUsed > 0 && (
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    {toolsUsed} tools used
-                  </span>
-                )}
-              </div>
-              <span className="text-sm font-mono font-bold text-primary">{project.progress_pct}%</span>
+          <div className="rd-card" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span className="label-lg">{project.status === "generating_prd" ? "Gerando PRD" : "Build em progresso"}</span>
+              <span style={{ fontFamily: "var(--mono)", fontWeight: 700, color: "var(--blue-l)" }}>{project.progress_pct}%</span>
             </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-primary to-purple-500 transition-all duration-1000"
-                style={{ width: `${project.progress_pct}%` }}
-              />
+            <div className="rd-progress">
+              <div className="rd-progress-bar blue" style={{ width: `${project.progress_pct}%` }} />
             </div>
           </div>
         )}
 
-        {/* Tasks Card (Lovable-style) */}
+        {/* Tasks */}
         {tasks.length > 0 && (
-          <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-            {/* Tasks Header */}
-            <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between">
-              <span className="text-sm font-semibold">Tarefas ({doneCount}/{tasks.length})</span>
-              <div className="flex gap-1.5">
-                {doneCount > 0 && (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    {doneCount} done
-                  </span>
-                )}
-                {runningCount > 0 && (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
-                    {runningCount} running
-                  </span>
-                )}
+          <div className="rd-card" style={{ padding: 0, marginBottom: 16, overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--b1)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span className="label-lg">Tarefas ({doneCount}/{tasks.length})</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {doneCount > 0 && <span className="chip sm ch-green">{doneCount} done</span>}
+                {runningCount > 0 && <span className="chip sm ch-blue">{runningCount} running</span>}
               </div>
             </div>
-
-            {/* Tasks List */}
-            <div className="divide-y divide-border/20">
-              {tasks.map((task, i) => (
-                <div key={i} className="group">
-                  <button
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-                    onClick={() => setExpandedTask(expandedTask === i ? null : i)}
-                  >
-                    {/* Status Icon */}
-                    {task.status === "done" && <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400 shrink-0" />}
-                    {task.status === "running" && (
-                      <div className="relative shrink-0">
-                        <Loader2 className="h-4.5 w-4.5 text-blue-400 animate-spin" />
-                      </div>
-                    )}
-                    {task.status === "pending" && <Circle className="h-4.5 w-4.5 text-muted-foreground/40 shrink-0" />}
-                    {task.status === "failed" && <X className="h-4.5 w-4.5 text-destructive shrink-0" />}
-
-                    {/* Title */}
-                    <span className={`flex-1 text-sm ${task.status === "pending" ? "text-muted-foreground/60" : "text-foreground"}`}>
-                      {task.title}
-                    </span>
-
-                    {/* Duration */}
-                    {task.duration_ms && (
-                      <span className="text-[11px] text-muted-foreground font-mono">{(task.duration_ms / 1000).toFixed(1)}s</span>
-                    )}
-
-                    {/* Expand */}
-                    {expandedTask === i ? (
-                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    )}
-                  </button>
-
-                  {/* Expanded Detail */}
-                  {expandedTask === i && task.prompt && (
-                    <div className="px-4 pb-3 pl-11">
-                      <div className="rounded-lg bg-muted/40 border border-border/30 p-3 text-xs text-muted-foreground font-mono leading-relaxed max-h-40 overflow-y-auto">
-                        {task.prompt.slice(0, 500)}{task.prompt.length > 500 ? "..." : ""}
-                      </div>
-                      {task.engine && (
-                        <p className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1">
-                          <Wrench className="h-3 w-3" /> {task.engine}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Action Bar */}
-            <div className="px-4 py-3 border-t border-border/30 flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 text-xs gap-1.5"
-                onClick={() => navigate(`/cirius/editor/${id}`)}
-              >
-                <FileCode className="h-3.5 w-3.5" /> Abrir Editor
-              </Button>
-              {(project.vercel_url || project.netlify_url) ? (
-                <Button
-                  size="sm"
-                  className="flex-1 text-xs gap-1.5"
-                  variant={showPreview ? "secondary" : "default"}
-                  onClick={() => setShowPreview(p => !p)}
+            {tasks.map((task, i) => (
+              <div key={i}>
+                <button
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", background: "none", border: "none", borderBottom: "1px solid var(--b1)", cursor: "pointer", textAlign: "left" }}
+                  onClick={() => setExpandedTask(expandedTask === i ? null : i)}
                 >
-                  {showPreview ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  {showPreview ? "Fechar Preview" : "Preview"}
-                </Button>
+                  {task.status === "done" && <CheckCircle2 size={16} style={{ color: "var(--green-l)", flexShrink: 0 }} />}
+                  {task.status === "running" && <Loader2 size={16} className="animate-spin" style={{ color: "var(--blue-l)", flexShrink: 0 }} />}
+                  {task.status === "pending" && <Circle size={16} style={{ color: "var(--text-quaternary)", flexShrink: 0 }} />}
+                  {task.status === "failed" && <X size={16} style={{ color: "var(--red-l)", flexShrink: 0 }} />}
+                  <span className="body-text" style={{ flex: 1, color: task.status === "pending" ? "var(--text-quaternary)" : "var(--text-primary)" }}>{task.title}</span>
+                  {task.duration_ms && <span className="caption-sm" style={{ fontFamily: "var(--mono)" }}>{(task.duration_ms / 1000).toFixed(1)}s</span>}
+                  {expandedTask === i ? <ChevronDown size={12} style={{ color: "var(--text-quaternary)" }} /> : <ChevronRight size={12} style={{ color: "var(--text-quaternary)" }} />}
+                </button>
+                {expandedTask === i && task.prompt && (
+                  <div style={{ padding: "8px 16px 12px 44px" }}>
+                    <pre style={{ background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: 8, padding: 12, fontSize: 11, fontFamily: "var(--mono)", color: "var(--text-secondary)", whiteSpace: "pre-wrap", maxHeight: 160, overflow: "auto" }}>
+                      {task.prompt.slice(0, 500)}{task.prompt.length > 500 ? "..." : ""}
+                    </pre>
+                    {task.engine && <p className="caption-sm" style={{ marginTop: 8 }}><Wrench size={10} /> {task.engine}</p>}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div style={{ padding: "12px 16px", borderTop: "1px solid var(--b1)", display: "flex", gap: 8 }}>
+              <button className="gl sm" style={{ flex: 1 }} onClick={() => navigate(`/cirius/editor/${id}`)}>
+                <FileCode size={12} /> Abrir Editor
+              </button>
+              {(project.vercel_url || project.netlify_url) ? (
+                <button className={`gl sm ${showPreview ? "ghost" : "primary"}`} style={{ flex: 1 }} onClick={() => setShowPreview(p => !p)}>
+                  {showPreview ? <EyeOff size={12} /> : <Eye size={12} />} {showPreview ? "Fechar Preview" : "Preview"}
+                </button>
               ) : (
-                <Button size="sm" className="flex-1 text-xs" disabled>
-                  Preview
-                </Button>
+                <button className="gl sm" style={{ flex: 1 }} disabled>Preview</button>
               )}
             </div>
           </div>
         )}
 
-        {/* Design Summary (from PRD) */}
+        {/* Design Summary */}
         {prd?.design && (
-          <div className="rounded-xl border border-border/50 bg-card p-4 space-y-3">
-            <span className="text-sm font-semibold">Design</span>
-            <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="rd-card" style={{ marginBottom: 16 }}>
+            <span className="label-lg" style={{ marginBottom: 12, display: "block" }}>Design</span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {prd.design.primary_color && (
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-md border border-border/50" style={{ background: prd.design.primary_color }} />
-                  <span className="text-muted-foreground">{prd.design.primary_color}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 6, border: "1px solid var(--b1)", background: prd.design.primary_color }} />
+                  <span className="caption-sm">{prd.design.primary_color}</span>
                 </div>
               )}
-              {prd.design.font && (
-                <div className="text-muted-foreground">Fonte: <span className="text-foreground">{prd.design.font}</span></div>
-              )}
-              {prd.design.style && (
-                <div className="text-muted-foreground">Estilo: <span className="text-foreground">{prd.design.style}</span></div>
-              )}
+              {prd.design.font && <div className="caption-sm">Fonte: <span style={{ color: "var(--text-primary)" }}>{prd.design.font}</span></div>}
+              {prd.design.style && <div className="caption-sm">Estilo: <span style={{ color: "var(--text-primary)" }}>{prd.design.style}</span></div>}
             </div>
             {prd.design.pages && (
-              <div className="flex flex-wrap gap-1.5">
-                {(prd.design.pages as string[]).map((p: string) => (
-                  <Badge key={p} variant="outline" className="text-[10px]">{p}</Badge>
-                ))}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {(prd.design.pages as string[]).map((p: string) => <span key={p} className="chip sm">{p}</span>)}
               </div>
             )}
             {prd.design.tables && (
-              <div className="flex flex-wrap gap-1.5">
-                {(prd.design.tables as string[]).map((t: string) => (
-                  <Badge key={t} variant="secondary" className="text-[10px] gap-1">
-                    <Database className="h-2.5 w-2.5" /> {t}
-                  </Badge>
-                ))}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {(prd.design.tables as string[]).map((t: string) => <span key={t} className="chip sm ch-blue"><Database size={10} /> {t}</span>)}
               </div>
             )}
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex flex-wrap gap-2">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           {project.status === "draft" && (project.prd_json || project.has_prd) && (
-            <Button onClick={() => doAction("generate_code")} disabled={acting} className="gap-2">
-              <Play className="h-4 w-4" /> Gerar Código
-            </Button>
+            <button className="gl primary" onClick={() => doAction("generate_code")} disabled={acting}><Play size={14} /> Gerar Código</button>
           )}
           {project.status === "draft" && !project.prd_json && !project.has_prd && (
-            <Button onClick={() => doAction("generate_prd")} disabled={acting} className="gap-2">
-              <SparklesIcon className="h-4 w-4" /> Gerar PRD
-            </Button>
+            <button className="gl primary" onClick={() => doAction("generate_prd")} disabled={acting}><SparklesIcon size={14} /> Gerar PRD</button>
           )}
           {["generating_code", "generating_prd"].includes(project.status) && (
-            <Button variant="outline" onClick={() => doAction("pause")} disabled={acting} className="gap-2">
-              <Pause className="h-4 w-4" /> Pausar
-            </Button>
+            <button className="gl ghost" onClick={() => doAction("pause")} disabled={acting}><Pause size={14} /> Pausar</button>
           )}
           {project.status === "paused" && (
-            <Button onClick={() => doAction("resume")} disabled={acting} className="gap-2">
-              <Play className="h-4 w-4" /> Retomar
-            </Button>
+            <button className="gl primary" onClick={() => doAction("resume")} disabled={acting}><Play size={14} /> Retomar</button>
           )}
           {project.status === "failed" && (
-            <Button onClick={() => doAction("generate_code")} disabled={acting} variant="outline" className="gap-2">
-              <RefreshCw className="h-4 w-4" /> Tentar Novamente
-            </Button>
+            <button className="gl ghost" onClick={() => doAction("generate_code")} disabled={acting}><RefreshCw size={14} /> Tentar Novamente</button>
           )}
           {!["draft", "live"].includes(project.status) && (
-            <Button variant="destructive" onClick={() => doAction("cancel")} disabled={acting} size="sm" className="gap-2">
-              <X className="h-4 w-4" /> Cancelar
-            </Button>
+            <button className="gl sm" style={{ color: "var(--red-l)" }} onClick={() => doAction("cancel")} disabled={acting}><X size={14} /> Cancelar</button>
           )}
         </div>
 
         {/* Deploy Panel */}
         {(project.status === "live" || project.has_files) && (
-          <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-border/30 flex items-center gap-2">
-              <Rocket className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold">Deploy</span>
+          <div className="rd-card" style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--b1)", display: "flex", alignItems: "center", gap: 8 }}>
+              <Rocket size={14} style={{ color: "var(--blue-l)" }} />
+              <span className="label-lg">Deploy</span>
             </div>
-            <div className="p-4 grid grid-cols-2 gap-3">
-              <Button variant="outline" onClick={() => doDeploy("github")} disabled={acting} className="gap-2 justify-start h-auto py-3">
-                <Github className="h-4 w-4 shrink-0" />
-                <div className="text-left">
-                  <p className="text-xs font-medium">{project.github_url ? "Conectado" : "GitHub"}</p>
-                  {project.github_repo && <p className="text-[10px] text-muted-foreground truncate">{project.github_repo}</p>}
-                </div>
-                {project.github_url && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 ml-auto" />}
-              </Button>
-              <Button variant="outline" onClick={() => doDeploy("vercel")} disabled={acting || !project.github_repo} className="gap-2 justify-start h-auto py-3">
-                <Globe className="h-4 w-4 shrink-0" />
-                <div className="text-left">
-                  <p className="text-xs font-medium">{project.vercel_url ? "Online" : "Vercel"}</p>
-                </div>
-                {project.vercel_url && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 ml-auto" />}
-              </Button>
-              <Button variant="outline" onClick={() => doDeploy("netlify")} disabled={acting} className="gap-2 justify-start h-auto py-3">
-                <Globe className="h-4 w-4 shrink-0" />
-                <div className="text-left">
-                  <p className="text-xs font-medium">{project.netlify_url ? "Online" : "Netlify"}</p>
-                </div>
-                {project.netlify_url && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 ml-auto" />}
-              </Button>
-              <Button variant="outline" onClick={() => doDeploy("supabase")} disabled={acting} className="gap-2 justify-start h-auto py-3">
-                <Database className="h-4 w-4 shrink-0" />
-                <div className="text-left">
-                  <p className="text-xs font-medium">{project.supabase_url ? "Connected" : "Migrations"}</p>
-                </div>
-                {project.supabase_url && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 ml-auto" />}
-              </Button>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 16 }}>
+              {[
+                { target: "github", icon: Github, label: project.github_url ? "Conectado" : "GitHub", sub: project.github_repo, done: !!project.github_url },
+                { target: "vercel", icon: Globe, label: project.vercel_url ? "Online" : "Vercel", done: !!project.vercel_url, disabled: !project.github_repo },
+                { target: "netlify", icon: Globe, label: project.netlify_url ? "Online" : "Netlify", done: !!project.netlify_url },
+                { target: "supabase", icon: Database, label: project.supabase_url ? "Connected" : "Migrations", done: !!project.supabase_url },
+              ].map(d => (
+                <button key={d.target} className="gl" style={{ justifyContent: "flex-start", height: "auto", padding: "10px 12px", gap: 8 }} onClick={() => doDeploy(d.target)} disabled={acting || d.disabled}>
+                  <d.icon size={16} />
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600 }}>{d.label}</div>
+                    {d.sub && <div className="caption-sm" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.sub}</div>}
+                  </div>
+                  {d.done && <CheckCircle2 size={12} style={{ color: "var(--green-l)", marginLeft: "auto" }} />}
+                </button>
+              ))}
             </div>
             {(project.github_url || project.vercel_url || project.netlify_url) && (
-              <div className="px-4 pb-3 flex flex-wrap gap-2 text-xs">
-                {project.github_url && <a href={project.github_url} target="_blank" rel="noopener noreferrer" className="text-primary underline truncate max-w-[200px]">{project.github_url}</a>}
-                {project.vercel_url && <a href={project.vercel_url} target="_blank" rel="noopener noreferrer" className="text-primary underline truncate max-w-[200px]">{project.vercel_url}</a>}
+              <div style={{ padding: "0 16px 12px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {project.github_url && <a href={project.github_url} target="_blank" rel="noopener noreferrer" className="caption-sm" style={{ color: "var(--blue-l)", textDecoration: "underline", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.github_url}</a>}
+                {project.vercel_url && <a href={project.vercel_url} target="_blank" rel="noopener noreferrer" className="caption-sm" style={{ color: "var(--blue-l)", textDecoration: "underline", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.vercel_url}</a>}
               </div>
             )}
           </div>
@@ -516,33 +343,31 @@ export default function CiriusProject() {
 
         {/* Error */}
         {project.error_message && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-            {project.error_message}
-          </div>
+          <div className="rd-alert warning" style={{ marginBottom: 16, color: "var(--red-l)" }}>{project.error_message}</div>
         )}
 
         {/* Logs Timeline */}
         {logs.length > 0 && (
-          <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-border/30 flex items-center gap-2">
-              <FileCode className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">Timeline</span>
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full ml-auto">{logs.length}</span>
+          <div className="rd-card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--b1)", display: "flex", alignItems: "center", gap: 8 }}>
+              <FileCode size={14} style={{ color: "var(--text-tertiary)" }} />
+              <span className="label-lg">Timeline</span>
+              <span className="chip sm" style={{ marginLeft: "auto" }}>{logs.length}</span>
             </div>
-            <div className="max-h-60 overflow-y-auto">
+            <div style={{ maxHeight: 240, overflow: "auto" }}>
               {logs.map((l: any, i: number) => (
-                <div key={l.id || i} className="flex items-start gap-3 px-4 py-2.5 border-b border-border/10 last:border-0 text-xs">
-                  <div className="mt-0.5">
-                    {l.level === "error" && <X className="h-3.5 w-3.5 text-destructive" />}
-                    {l.level === "warning" && <Clock className="h-3.5 w-3.5 text-amber-400" />}
-                    {l.level === "info" && l.status === "completed" && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
-                    {l.level === "info" && l.status !== "completed" && <Circle className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                <div key={l.id || i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "8px 16px", borderBottom: "1px solid var(--b1)" }}>
+                  <div style={{ marginTop: 2 }}>
+                    {l.level === "error" && <X size={12} style={{ color: "var(--red-l)" }} />}
+                    {l.level === "warning" && <Clock size={12} style={{ color: "var(--orange-l)" }} />}
+                    {l.level === "info" && l.status === "completed" && <CheckCircle2 size={12} style={{ color: "var(--green-l)" }} />}
+                    {l.level === "info" && l.status !== "completed" && <Circle size={12} style={{ color: "var(--text-quaternary)" }} />}
                   </div>
-                  <span className="text-muted-foreground font-mono min-w-[48px]">
+                  <span className="caption-sm" style={{ fontFamily: "var(--mono)", minWidth: 48 }}>
                     {new Date(l.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </span>
-                  <span className="flex-1 text-foreground/80">{l.message}</span>
-                  {l.duration_ms && <span className="text-muted-foreground font-mono">{l.duration_ms}ms</span>}
+                  <span className="body-text" style={{ flex: 1 }}>{l.message}</span>
+                  {l.duration_ms && <span className="caption-sm" style={{ fontFamily: "var(--mono)" }}>{l.duration_ms}ms</span>}
                 </div>
               ))}
             </div>

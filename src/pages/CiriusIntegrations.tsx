@@ -3,10 +3,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ArrowLeft, Github, Globe, Database, Check, ExternalLink } from "lucide-react";
 
@@ -24,11 +20,8 @@ export default function CiriusIntegrations() {
   const [integrations, setIntegrations] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
-  // GitHub manual fields
   const [githubToken, setGithubToken] = useState("");
   const [savingGithub, setSavingGithub] = useState(false);
-
-  // Vercel manual fields
   const [vercelToken, setVercelToken] = useState("");
   const [savingVercel, setSavingVercel] = useState(false);
 
@@ -43,12 +36,10 @@ export default function CiriusIntegrations() {
   }, [user]);
 
   async function loadIntegrations() {
-    // Only select non-sensitive fields — tokens never reach the frontend
     const { data } = await supabase
       .from("cirius_integrations" as any)
       .select("provider, account_login, is_active, updated_at")
       .eq("user_id", user!.id);
-
     const map: Record<string, any> = {};
     (data || []).forEach((i: any) => { map[i.provider] = i; });
     setIntegrations(map);
@@ -56,16 +47,13 @@ export default function CiriusIntegrations() {
   }
 
   async function startOAuth(provider: string) {
-    // Generate signed state server-side via edge function
     const { data, error } = await supabase.functions.invoke("cirius-generate", {
       body: { action: "oauth_state", provider },
     });
-
     if (error || !data?.auth_url) {
       toast.error("Falha ao iniciar OAuth. Verifique se o provider está configurado.");
       return;
     }
-
     window.open(data.auth_url, "_blank", "width=600,height=700");
   }
 
@@ -75,13 +63,8 @@ export default function CiriusIntegrations() {
     const { data, error } = await supabase.functions.invoke("cirius-generate", {
       body: { action: "save_github_integration", github_token: githubToken.trim() },
     });
-    if (error || data?.error) {
-      toast.error(data?.error || "Falha ao salvar integração GitHub");
-    } else {
-      toast.success("GitHub conectado!");
-      setGithubToken("");
-      await loadIntegrations();
-    }
+    if (error || data?.error) toast.error(data?.error || "Falha ao salvar integração GitHub");
+    else { toast.success("GitHub conectado!"); setGithubToken(""); await loadIntegrations(); }
     setSavingGithub(false);
   }
 
@@ -91,13 +74,8 @@ export default function CiriusIntegrations() {
     const { data, error } = await supabase.functions.invoke("cirius-generate", {
       body: { action: "save_vercel_integration", vercel_token: vercelToken.trim() },
     });
-    if (error || data?.error) {
-      toast.error(data?.error || "Falha ao salvar integração Vercel");
-    } else {
-      toast.success("Vercel conectado!");
-      setVercelToken("");
-      await loadIntegrations();
-    }
+    if (error || data?.error) toast.error(data?.error || "Falha ao salvar integração Vercel");
+    else { toast.success("Vercel conectado!"); setVercelToken(""); await loadIntegrations(); }
     setSavingVercel(false);
   }
 
@@ -105,70 +83,63 @@ export default function CiriusIntegrations() {
 
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/cirius")}><ArrowLeft className="h-4 w-4" /></Button>
-          <h1 className="text-2xl font-bold text-foreground">Integrações Cirius</h1>
+      <div className="rd-page-content" style={{ maxWidth: 720 }}>
+        <div className="rd-page-head" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <button className="gl ico sm ghost" onClick={() => navigate("/cirius")}><ArrowLeft size={14} /></button>
+          <h1>Integrações Cirius</h1>
         </div>
 
-        <p className="text-muted-foreground">Conecte suas contas para deploy automático dos projetos gerados.</p>
+        <p className="body-text" style={{ marginBottom: 24 }}>Conecte suas contas para deploy automático dos projetos gerados.</p>
 
-        <div className="space-y-4">
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {PROVIDERS.map(p => {
             const connected = integrations[p.id];
             return (
-              <Card key={p.id}>
-                <CardContent className="flex items-center gap-4 py-4">
-                  <p.icon className="h-8 w-8 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">{p.name}</h3>
-                      {(p as any).primary && <Badge variant="secondary" className="gap-1 bg-teal-500/20 text-teal-400 text-[10px]">Principal</Badge>}
-                      {connected?.is_active && <Badge variant="default" className="gap-1"><Check className="h-3 w-3" /> Conectado</Badge>}
+              <div key={p.id} className="rd-card" style={{ padding: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <p.icon size={28} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="label-lg">{p.name}</span>
+                      {(p as any).primary && <span className="chip sm ch-teal">Principal</span>}
+                      {connected?.is_active && <span className="chip sm ch-green"><Check size={10} /> Conectado</span>}
                     </div>
-                    <p className="text-sm text-muted-foreground">{p.desc}</p>
+                    <div className="caption-sm">{p.desc}</div>
                     {connected?.account_login && (
-                      <p className="text-xs text-muted-foreground mt-1">@{connected.account_login}</p>
+                      <div className="caption-sm" style={{ marginTop: 4 }}>@{connected.account_login}</div>
                     )}
                   </div>
-                  {p.isOAuth ? (
-                    <Button
-                      variant={connected ? "outline" : "default"}
-                      size="sm"
-                      onClick={() => startOAuth(p.id)}
-                      className="gap-2"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      {connected ? "Reconectar" : "Conectar"}
-                    </Button>
-                  ) : null}
-                </CardContent>
+                  {p.isOAuth && (
+                    <button className={`gl sm ${connected ? "ghost" : "primary"}`} onClick={() => startOAuth(p.id)}>
+                      <ExternalLink size={12} /> {connected ? "Reconectar" : "Conectar"}
+                    </button>
+                  )}
+                </div>
 
                 {/* GitHub manual form */}
                 {p.id === "github" && !connected && (
-                  <CardContent className="pt-0 space-y-3 border-t mt-2">
-                    <Input placeholder="ghp_xxxxxxxxxxxx" type="password" value={githubToken} onChange={e => setGithubToken(e.target.value)} />
-                    <p className="text-xs text-muted-foreground">
-                      Gere em <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="underline text-primary">github.com/settings/tokens</a> → Fine-grained ou Classic com scopes <code className="bg-muted px-1 rounded text-xs">repo</code> e <code className="bg-muted px-1 rounded text-xs">read:user</code>
-                    </p>
-                    <Button onClick={saveGithub} disabled={savingGithub} size="sm">
+                  <div style={{ borderTop: "1px solid var(--b1)", marginTop: 12, paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <input className="rd-input" placeholder="ghp_xxxxxxxxxxxx" type="password" value={githubToken} onChange={e => setGithubToken(e.target.value)} />
+                    <div className="caption-sm">
+                      Gere em <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue-l)", textDecoration: "underline" }}>github.com/settings/tokens</a> → Fine-grained ou Classic com scopes <code style={{ background: "var(--bg-3)", padding: "1px 4px", borderRadius: 4, fontSize: 10 }}>repo</code> e <code style={{ background: "var(--bg-3)", padding: "1px 4px", borderRadius: 4, fontSize: 10 }}>read:user</code>
+                    </div>
+                    <button className="gl sm primary" onClick={saveGithub} disabled={savingGithub}>
                       {savingGithub ? "Validando..." : "Salvar GitHub"}
-                    </Button>
-                  </CardContent>
+                    </button>
+                  </div>
                 )}
 
                 {/* Vercel manual form */}
                 {p.id === "vercel" && !connected && (
-                  <CardContent className="pt-0 space-y-3 border-t mt-2">
-                    <Input placeholder="Vercel API Token" type="password" value={vercelToken} onChange={e => setVercelToken(e.target.value)} />
-                    <p className="text-xs text-muted-foreground">Gere em vercel.com → Settings → Tokens</p>
-                    <Button onClick={saveVercel} disabled={savingVercel} size="sm">
+                  <div style={{ borderTop: "1px solid var(--b1)", marginTop: 12, paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <input className="rd-input" placeholder="Vercel API Token" type="password" value={vercelToken} onChange={e => setVercelToken(e.target.value)} />
+                    <div className="caption-sm">Gere em vercel.com → Settings → Tokens</div>
+                    <button className="gl sm primary" onClick={saveVercel} disabled={savingVercel}>
                       {savingVercel ? "Salvando..." : "Salvar Vercel"}
-                    </Button>
-                  </CardContent>
+                    </button>
+                  </div>
                 )}
-
-              </Card>
+              </div>
             );
           })}
         </div>
