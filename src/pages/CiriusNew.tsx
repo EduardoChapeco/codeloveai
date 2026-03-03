@@ -1,12 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Rocket, BarChart3, ShoppingCart, Settings, Briefcase, Puzzle,
   Link as LinkIcon, ChevronDown, Zap, Database, Shield, CreditCard,
@@ -38,37 +31,18 @@ const INTENT_LABELS: Record<string, string> = {
 };
 
 const TEMPLATES = [
-  {
-    icon: Rocket,
-    label: "Landing Page",
-    prompt: "Crie uma landing page moderna e responsiva com hero section, features, depoimentos e CTA. Design clean e profissional.",
-  },
-  {
-    icon: BarChart3,
-    label: "Dashboard",
-    prompt: "Crie um dashboard de analytics com gráficos de vendas, métricas de usuários, tabelas de dados recentes e filtros por período.",
-  },
-  {
-    icon: ShoppingCart,
-    label: "E-commerce",
-    prompt: "Crie uma loja online com catálogo de produtos, carrinho de compras, checkout e painel de gerenciamento de pedidos.",
-  },
-  {
-    icon: Settings,
-    label: "Sistema CRUD",
-    prompt: "Crie um sistema de gerenciamento com cadastro, listagem, edição e exclusão. Inclua autenticação e filtros de busca.",
-  },
-  {
-    icon: Briefcase,
-    label: "SaaS App",
-    prompt: "Crie um aplicativo SaaS com autenticação, planos de assinatura, dashboard do usuário, billing e painel administrativo.",
-  },
-  {
-    icon: Puzzle,
-    label: "Componente UI",
-    prompt: "Crie um componente de UI reutilizável com variações, estados interativos, animações e documentação de uso.",
-  },
+  { icon: Rocket, label: "Landing Page", prompt: "Crie uma landing page moderna e responsiva com hero section, features, depoimentos e CTA. Design clean e profissional.", color: "orange" },
+  { icon: BarChart3, label: "Dashboard", prompt: "Crie um dashboard de analytics com gráficos de vendas, métricas de usuários, tabelas de dados recentes e filtros por período.", color: "blue" },
+  { icon: ShoppingCart, label: "E-commerce", prompt: "Crie uma loja online com catálogo de produtos, carrinho de compras, checkout e painel de gerenciamento de pedidos.", color: "green" },
+  { icon: Settings, label: "Sistema CRUD", prompt: "Crie um sistema de gerenciamento com cadastro, listagem, edição e exclusão. Inclua autenticação e filtros de busca.", color: "purple" },
+  { icon: Briefcase, label: "SaaS App", prompt: "Crie um aplicativo SaaS com autenticação, planos de assinatura, dashboard do usuário, billing e painel administrativo.", color: "indigo" },
+  { icon: Puzzle, label: "Componente UI", prompt: "Crie um componente de UI reutilizável com variações, estados interativos, animações e documentação de uso.", color: "teal" },
 ];
+
+const COLOR_MAP: Record<string, string> = {
+  orange: "ib-orange", blue: "ib-blue", green: "ib-green",
+  purple: "ib-purple", indigo: "ib-indigo", teal: "ib-teal",
+};
 
 export default function CiriusNew() {
   const navigate = useNavigate();
@@ -87,7 +61,6 @@ export default function CiriusNew() {
   const [blueprint, setBlueprint] = useState<ProjectBlueprint | null>(null);
   const [prdTasks, setPrdTasks] = useState<PRDTask[]>([]);
 
-  // Debounced classification
   useEffect(() => {
     if (!prompt.trim() || prompt.trim().length < 5) {
       setBlueprint(null);
@@ -116,7 +89,6 @@ export default function CiriusNew() {
     setLoading(true);
     try {
       const name = projectName.trim() || `Projeto ${new Date().toLocaleDateString("pt-BR")}`;
-
       const { data, error } = await supabase.functions.invoke("cirius-generate", {
         body: {
           action: "start",
@@ -131,10 +103,8 @@ export default function CiriusNew() {
           },
         },
       });
-
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro ao iniciar geração");
-
       toast.success("Projeto iniciado!");
       const pid = data.project_id;
       if (pid) navigate(`/cirius/editor/${pid}`);
@@ -148,244 +118,259 @@ export default function CiriusNew() {
 
   return (
     <AppLayout>
-    <div className="rd-page-content">
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
         {/* Header */}
-        <div className="mb-8 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-blue-600/20 flex items-center justify-center">
-            <Zap className="h-5 w-5 text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-white tracking-tight" style={{ fontFamily: "Geist, sans-serif" }}>
-              Cirius — Gerador de Projetos
-            </h1>
-            <p className="text-xs text-neutral-500">Descreva sua ideia e gere código funcional em minutos</p>
+        <div className="page-header">
+          <div className="ph-top">
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="nav-ico-box ib-orange"><Zap size={16} /></div>
+              <div>
+                <div className="ph-title">Novo Projeto</div>
+                <div className="ph-sub">Descreva sua ideia e gere código funcional em minutos</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* ── LEFT COLUMN ── */}
-          <div className="lg:col-span-3 space-y-5">
-            {/* Main prompt */}
-            <Card className="border-neutral-800/60 bg-neutral-900/50 p-5 backdrop-blur">
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder={`Descreva o que você quer criar...\n\nEx: "Uma landing page moderna para minha startup de IA"\nEx: "Sistema de gerenciamento de clientes com CRUD completo"\nEx: "Dashboard de vendas com gráficos e relatórios"`}
-                className="min-h-[140px] bg-neutral-950/60 border-neutral-800/50 text-sm text-neutral-200 placeholder:text-neutral-600 resize-none focus-visible:ring-blue-500/40"
-              />
-            </Card>
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px 32px", scrollbarWidth: "thin", scrollbarColor: "var(--bg-5) transparent" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, maxWidth: 960, alignItems: "start" }}>
 
-            {/* Source URL */}
-            <div className="relative">
-              <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-600" />
-              <Input
-                value={sourceUrl}
-                onChange={(e) => setSourceUrl(e.target.value)}
-                placeholder="https://site-que-quero-replicar.com (opcional)"
-                className="pl-9 bg-neutral-900/50 border-neutral-800/60 text-sm text-neutral-300 placeholder:text-neutral-600 focus-visible:ring-blue-500/40"
-              />
-            </div>
-
-            {/* Config */}
-            <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-300 transition-colors w-full">
-                  <Settings className="h-3.5 w-3.5" />
-                  <span>Configurações</span>
-                  <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${configOpen ? "rotate-180" : ""}`} />
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-3 space-y-3">
-                <Input
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="Nome do projeto (opcional)"
-                  className="bg-neutral-900/50 border-neutral-800/60 text-sm text-neutral-300 placeholder:text-neutral-600 focus-visible:ring-blue-500/40"
+            {/* LEFT — Main Input */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Prompt */}
+              <div className="rd-card" style={{ padding: 16 }}>
+                <div className="sec-label" style={{ marginBottom: 8 }}>Descreva seu projeto</div>
+                <textarea
+                  className="rd-input"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={"Descreva o que você quer criar...\n\nEx: \"Uma landing page moderna para minha startup de IA\"\nEx: \"Sistema de gerenciamento de clientes com CRUD completo\""}
+                  style={{ minHeight: 140, resize: "none", lineHeight: 1.55, fontFamily: "var(--font)" }}
                 />
-                <div className="flex flex-col gap-2.5">
-                  <label className="flex items-center justify-between text-xs text-neutral-400">
-                    <span className="flex items-center gap-2"><Globe className="h-3.5 w-3.5" /> Deploy no GitHub</span>
-                    <Switch checked={deployGithub} onCheckedChange={setDeployGithub} />
-                  </label>
-                  <label className="flex items-center justify-between text-xs text-neutral-400">
-                    <span className="flex items-center gap-2"><Layers className="h-3.5 w-3.5" /> Deploy no Vercel</span>
-                    <Switch checked={deployVercel} onCheckedChange={setDeployVercel} />
-                  </label>
-                  <label className="flex items-center justify-between text-xs text-neutral-400">
-                    <span className="flex items-center gap-2"><Database className="h-3.5 w-3.5" /> Criar banco Supabase</span>
-                    <Switch checked={createSupabase} onCheckedChange={setCreateSupabase} />
-                  </label>
-                  <label className="flex items-center justify-between text-xs text-neutral-400">
-                    <span className="flex items-center gap-2"><Cpu className="h-3.5 w-3.5" /> No Brains (Claude direto)</span>
-                    <Switch checked={noBrains} onCheckedChange={setNoBrains} />
-                  </label>
+              </div>
+
+              {/* Source URL */}
+              <div style={{ position: "relative" }}>
+                <LinkIcon size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--tq)" }} />
+                <input
+                  className="rd-input"
+                  value={sourceUrl}
+                  onChange={(e) => setSourceUrl(e.target.value)}
+                  placeholder="https://site-que-quero-replicar.com (opcional)"
+                  style={{ paddingLeft: 36 }}
+                />
+              </div>
+
+              {/* Config toggle */}
+              <button
+                className="gl sm ghost"
+                onClick={() => setConfigOpen(!configOpen)}
+                style={{ alignSelf: "flex-start" }}
+              >
+                <Settings size={12} />
+                Configurações
+                <ChevronDown size={12} style={{ transition: "transform .2s", transform: configOpen ? "rotate(180deg)" : "none" }} />
+              </button>
+
+              {configOpen && (
+                <div className="rd-card" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                  <input
+                    className="rd-input"
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="Nome do projeto (opcional)"
+                  />
+                  {[
+                    { label: "Deploy no GitHub", icon: Globe, checked: deployGithub, set: setDeployGithub },
+                    { label: "Deploy no Vercel", icon: Layers, checked: deployVercel, set: setDeployVercel },
+                    { label: "Criar banco Supabase", icon: Database, checked: createSupabase, set: setCreateSupabase },
+                    { label: "No Brains (Claude direto)", icon: Cpu, checked: noBrains, set: setNoBrains },
+                  ].map((opt) => (
+                    <label key={opt.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, color: "var(--ts)", cursor: "pointer" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <opt.icon size={13} style={{ color: "var(--tt)" }} />
+                        {opt.label}
+                      </span>
+                      <span
+                        onClick={(e) => { e.preventDefault(); opt.set(!opt.checked); }}
+                        style={{
+                          width: 32, height: 18, borderRadius: "var(--rF)",
+                          background: opt.checked ? "var(--orange)" : "var(--bg-5)",
+                          position: "relative", transition: "background .15s", cursor: "pointer",
+                        }}
+                      >
+                        <span style={{
+                          position: "absolute", top: 2, left: opt.checked ? 16 : 2,
+                          width: 14, height: 14, borderRadius: "50%",
+                          background: "#fff", transition: "left .15s",
+                        }} />
+                      </span>
+                    </label>
+                  ))}
                   {noBrains && (
-                    <p className="text-[10px] text-amber-400/70 pl-6">
+                    <p style={{ fontSize: 10, color: "var(--orange-l)", paddingLeft: 22, opacity: 0.8 }}>
                       Gera o projeto inteiro via Claude/OpenRouter em uma única chamada — sem orquestrador nem Brain.
                     </p>
                   )}
                 </div>
-              </CollapsibleContent>
-            </Collapsible>
+              )}
 
-            {/* Templates */}
-            <div>
-              <p className="text-xs text-neutral-500 mb-3">Templates Rápidos</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.label}
-                    onClick={() => setPrompt(t.prompt)}
-                    className="group flex items-center gap-2.5 rounded-lg border border-neutral-800/50 bg-neutral-900/40 px-3 py-2.5 text-left transition hover:border-blue-600/40 hover:bg-blue-600/5"
-                  >
-                    <t.icon className="h-4 w-4 text-neutral-500 group-hover:text-blue-400 shrink-0 transition-colors" />
-                    <span className="text-xs text-neutral-400 group-hover:text-neutral-200 transition-colors">{t.label}</span>
-                  </button>
-                ))}
+              {/* Templates */}
+              <div>
+                <div className="sec-label" style={{ marginBottom: 10 }}>Templates Rápidos</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                  {TEMPLATES.map((t) => (
+                    <button
+                      key={t.label}
+                      onClick={() => setPrompt(t.prompt)}
+                      className="rd-card"
+                      style={{
+                        padding: "12px 14px", textAlign: "left", cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 10,
+                        transition: "all .15s var(--ease)",
+                      }}
+                    >
+                      <div className={`nav-ico-box ${COLOR_MAP[t.color]}`} style={{ width: 30, height: 30, borderRadius: "var(--r2)" }}>
+                        <t.icon size={14} />
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ts)" }}>{t.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {/* Generate button */}
+              <button
+                className={`gl lg orange ${loading ? "loading" : ""}`}
+                onClick={handleGenerate}
+                disabled={loading || !prompt.trim()}
+                style={{ width: "100%", justifyContent: "center", marginTop: 4 }}
+              >
+                {loading ? "Gerando..." : (
+                  <>Gerar Projeto <ArrowRight size={14} /></>
+                )}
+              </button>
             </div>
 
-            {/* Generate button */}
-            <Button
-              onClick={handleGenerate}
-              disabled={loading || !prompt.trim()}
-              className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm gap-2 transition-colors disabled:opacity-40"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Gerando...
-                </span>
+            {/* RIGHT — Blueprint Panel */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 0 }}>
+              {!blueprint ? (
+                <div className="rd-card" style={{
+                  padding: 40, display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center", textAlign: "center",
+                  minHeight: 240,
+                }}>
+                  <Cpu size={32} style={{ color: "var(--tq)", marginBottom: 12 }} />
+                  <p style={{ fontSize: 12, color: "var(--tt)", lineHeight: 1.6 }}>
+                    Comece a digitar para ver o blueprint em tempo real
+                  </p>
+                </div>
               ) : (
                 <>
-                  Gerar Projeto
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </Button>
-          </div>
+                  {/* Blueprint Card */}
+                  <div className="rd-card" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div className="sec-label">Blueprint Detectado</div>
+                      {estimatedTime && (
+                        <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--tt)" }}>
+                          <Clock size={11} /> {estimatedTime}
+                        </span>
+                      )}
+                    </div>
 
-          {/* ── RIGHT COLUMN — Live Preview ── */}
-          <div className="lg:col-span-2 space-y-4">
-            {!blueprint ? (
-              <Card className="border-neutral-800/40 bg-neutral-900/30 p-6 flex flex-col items-center justify-center min-h-[260px] text-center backdrop-blur">
-                <Cpu className="h-8 w-8 text-neutral-700 mb-3" />
-                <p className="text-sm text-neutral-500">
-                  Comece a digitar para ver o blueprint em tempo real
-                </p>
-              </Card>
-            ) : (
-              <>
-                {/* Blueprint Card */}
-                <Card className="border-neutral-800/50 bg-neutral-900/40 p-4 backdrop-blur space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Blueprint Detectado</h3>
-                    {estimatedTime && (
-                      <span className="flex items-center gap-1 text-[11px] text-neutral-500">
-                        <Clock className="h-3 w-3" /> {estimatedTime}
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <span className="chip sm ch-blue">
+                        {INTENT_LABELS[blueprint.intent] || blueprint.intent}
                       </span>
+                      <span className={`chip sm ${noBrains ? "ch-orange" : "ch-gray"}`}>
+                        {noBrains ? ENGINE_LABELS.claude_direct.label : ENGINE_LABELS[blueprint.suggestedEngine]?.label}
+                      </span>
+                    </div>
+
+                    <p style={{ fontSize: 11, color: "var(--tt)" }}>
+                      {noBrains ? ENGINE_LABELS.claude_direct.desc : ENGINE_LABELS[blueprint.suggestedEngine]?.desc}
+                    </p>
+
+                    {/* Capabilities */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {blueprint.needsDatabase && <span className="chip sm ch-green"><Database size={10} /> Database</span>}
+                      {blueprint.needsAuth && <span className="chip sm ch-orange"><Shield size={10} /> Auth</span>}
+                      {blueprint.needsPayments && <span className="chip sm ch-purple"><CreditCard size={10} /> Payments</span>}
+                      {blueprint.needsStorage && <span className="chip sm ch-teal"><HardDrive size={10} /> Storage</span>}
+                    </div>
+
+                    {/* Tables */}
+                    {blueprint.supabaseTables.length > 0 && (
+                      <div>
+                        <p style={{ fontSize: 10, color: "var(--tt)", marginBottom: 4 }}>Tabelas</p>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {blueprint.supabaseTables.map((t) => (
+                            <code key={t} style={{
+                              fontSize: 10, fontFamily: "var(--mono)",
+                              background: "var(--bg-4)", color: "var(--ts)",
+                              padding: "1px 6px", borderRadius: "var(--r1)",
+                            }}>{t}</code>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Features */}
+                    {blueprint.features.length > 0 && (
+                      <div>
+                        <p style={{ fontSize: 10, color: "var(--tt)", marginBottom: 4 }}>Features</p>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {blueprint.features.map((f) => (
+                            <span key={f} className="chip sm ch-gray">{f}</span>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="bg-blue-600/15 text-blue-400 border-blue-600/20 text-xs">
-                      {INTENT_LABELS[blueprint.intent] || blueprint.intent}
-                    </Badge>
-                    <Badge variant="outline" className={`text-[11px] border-neutral-700/50 ${noBrains ? "text-amber-400 border-amber-500/30" : "text-neutral-500"}`}>
-                      {noBrains ? ENGINE_LABELS.claude_direct.label : ENGINE_LABELS[blueprint.suggestedEngine]?.label}
-                    </Badge>
-                  </div>
-
-                  <p className="text-[11px] text-neutral-600">
-                    {noBrains ? ENGINE_LABELS.claude_direct.desc : ENGINE_LABELS[blueprint.suggestedEngine]?.desc}
-                  </p>
-
-                  {/* Capabilities */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {blueprint.needsDatabase && (
-                      <span className="flex items-center gap-1 text-[11px] text-emerald-400/80 bg-emerald-600/10 rounded px-1.5 py-0.5">
-                        <Database className="h-3 w-3" /> Database
-                      </span>
-                    )}
-                    {blueprint.needsAuth && (
-                      <span className="flex items-center gap-1 text-[11px] text-amber-400/80 bg-amber-600/10 rounded px-1.5 py-0.5">
-                        <Shield className="h-3 w-3" /> Auth
-                      </span>
-                    )}
-                    {blueprint.needsPayments && (
-                      <span className="flex items-center gap-1 text-[11px] text-purple-400/80 bg-purple-600/10 rounded px-1.5 py-0.5">
-                        <CreditCard className="h-3 w-3" /> Payments
-                      </span>
-                    )}
-                    {blueprint.needsStorage && (
-                      <span className="flex items-center gap-1 text-[11px] text-cyan-400/80 bg-cyan-600/10 rounded px-1.5 py-0.5">
-                        <HardDrive className="h-3 w-3" /> Storage
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Tables */}
-                  {blueprint.supabaseTables.length > 0 && (
-                    <div>
-                      <p className="text-[11px] text-neutral-500 mb-1">Tabelas</p>
-                      <div className="flex flex-wrap gap-1">
-                        {blueprint.supabaseTables.map((t) => (
-                          <code key={t} className="text-[10px] bg-neutral-800/60 text-neutral-400 rounded px-1.5 py-0.5">{t}</code>
+                  {/* PRD Tasks */}
+                  {prdTasks.length > 0 && (
+                    <div className="rd-card" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div className="sec-label">O que será gerado</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {prdTasks.map((task, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12 }}>
+                            <span style={{
+                              width: 20, height: 20, borderRadius: "var(--r1)",
+                              background: "var(--bg-4)", display: "flex",
+                              alignItems: "center", justifyContent: "center",
+                              fontSize: 10, fontFamily: "var(--mono)", color: "var(--tt)",
+                              flexShrink: 0, marginTop: 1,
+                            }}>{i + 1}</span>
+                            <span style={{ color: "var(--ts)", lineHeight: 1.5 }}>{task.title}</span>
+                          </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Features */}
-                  {blueprint.features.length > 0 && (
-                    <div>
-                      <p className="text-[11px] text-neutral-500 mb-1">Features</p>
-                      <div className="flex flex-wrap gap-1">
-                        {blueprint.features.map((f) => (
-                          <Badge key={f} variant="outline" className="text-[10px] text-neutral-500 border-neutral-700/40">{f}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </Card>
-
-                {/* PRD Tasks */}
-                {prdTasks.length > 0 && (
-                  <Card className="border-neutral-800/50 bg-neutral-900/40 p-4 backdrop-blur space-y-2.5">
-                    <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">O que será gerado</h3>
-                    <div className="space-y-1.5">
-                      {prdTasks.map((task, i) => (
-                        <div key={i} className="flex items-start gap-2.5 text-xs">
-                          <span className="mt-0.5 h-5 w-5 rounded bg-neutral-800/60 flex items-center justify-center text-[10px] text-neutral-500 font-mono shrink-0">
-                            {i + 1}
-                          </span>
-                          <span className="text-neutral-400 leading-relaxed">{task.title}</span>
+                  {/* Tech Stack */}
+                  <div className="rd-card" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div className="sec-label">Stack Técnica</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {[
+                        { icon: Code2, label: "React + Vite + TypeScript" },
+                        { icon: Layers, label: "Tailwind CSS + shadcn/ui" },
+                        ...(blueprint.needsDatabase ? [{ icon: Database, label: "Supabase (Postgres + Auth)" }] : []),
+                        ...(deployGithub ? [{ icon: Globe, label: "GitHub Repository" }] : []),
+                        ...(deployVercel ? [{ icon: Layers, label: "Vercel Hosting" }] : []),
+                      ].map((s, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--ts)" }}>
+                          <s.icon size={13} style={{ color: "var(--tt)" }} />
+                          <span>{s.label}</span>
                         </div>
                       ))}
                     </div>
-                  </Card>
-                )}
-
-                {/* Tech Stack */}
-                <Card className="border-neutral-800/50 bg-neutral-900/40 p-4 backdrop-blur space-y-2.5">
-                  <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Stack Técnica</h3>
-                  <div className="space-y-1.5">
-                    {[
-                      { icon: Code2, label: "React + Vite + TypeScript" },
-                      { icon: Layers, label: "Tailwind CSS + shadcn/ui" },
-                      ...(blueprint.needsDatabase ? [{ icon: Database, label: "Supabase (Postgres + Auth)" }] : []),
-                      ...(deployGithub ? [{ icon: Globe, label: "GitHub Repository" }] : []),
-                      ...(deployVercel ? [{ icon: Layers, label: "Vercel Hosting" }] : []),
-                    ].map((s, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs text-neutral-400">
-                        <s.icon className="h-3.5 w-3.5 text-neutral-600" />
-                        <span>{s.label}</span>
-                      </div>
-                    ))}
                   </div>
-                </Card>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

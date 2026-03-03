@@ -542,6 +542,16 @@
 }
 .proj-card:hover .proj-card-actions { opacity: 1; }
 
+/* Dropdown menu items */
+.proj-dropdown-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 10px; border-radius: var(--r2);
+  font-size: 12px; font-weight: 500; font-family: var(--font);
+  color: var(--ts); background: transparent; border: none;
+  cursor: pointer; transition: background .12s, color .12s; text-align: left;
+}
+.proj-dropdown-item:hover { background: var(--bg-4); color: var(--tp); }
+
 .proj-card.new-card {
   border-style: dashed; border-color: var(--b2);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
