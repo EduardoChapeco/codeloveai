@@ -540,12 +540,44 @@ Deno.serve(async (req: Request) => {
             .eq("project_id", project.id)
             .eq("status", "completed");
 
-          await sc.from("orchestrator_projects").update({
-            status: "paused",
-            current_task_index: completedCount || 0,
-            next_tick_at: new Date(Date.now() + (allDone ? 5_000 : INTER_TASK_DELAY_MS)).toISOString(),
-          }).eq("id", project.id);
-          processed++;
+          const { count: pendingCount } = await sc
+            .from("orchestrator_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", project.id)
+            .eq("status", "pending");
+
+          const { count: stillRunning } = await sc
+            .from("orchestrator_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", project.id)
+            .eq("status", "running");
+
+          // ★ If ALL tasks are done (no pending, no running), finalize immediately
+          if ((pendingCount || 0) === 0 && (stillRunning || 0) === 0) {
+            await sc.from("orchestrator_projects").update({
+              status: "completed",
+              current_task_index: completedCount || 0,
+              quality_score: 100,
+              next_tick_at: null,
+            }).eq("id", project.id);
+
+            await addLog(sc, project.id as string,
+              `🎉 [tick] All ${completedCount} tasks completed — finalizing immediately!`, "info",
+              { phase: "executing", action: "project_completed_inline",
+                total_tasks: project.total_tasks, completed: completedCount });
+            tickLog.push(`→ [exec] ${projId8}: ✅ all ${completedCount} tasks done — finalized!`);
+
+            // ★ Auto-capture and finalize cirius project
+            await autoCapture(sc, project.id as string, lovableProjectId, project.user_id as string);
+            processed++;
+          } else {
+            await sc.from("orchestrator_projects").update({
+              status: "paused",
+              current_task_index: completedCount || 0,
+              next_tick_at: new Date(Date.now() + (allDone ? 5_000 : INTER_TASK_DELAY_MS)).toISOString(),
+            }).eq("id", project.id);
+            processed++;
+          }
         } else {
           skipped++;
         }
