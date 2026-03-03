@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { RefreshCw, ExternalLink, Search, Sparkles, Layers } from "lucide-react";
+import { useState, useEffect } from "react";
+import { RefreshCw, ExternalLink, Search, Sparkles, Layers, AlertTriangle } from "lucide-react";
 import type { FrameMode } from "./types";
 
 interface Props {
@@ -13,8 +13,22 @@ interface Props {
 export default function SplitPreviewPanel({ frameMode, previewHtml, livePreviewUrl, isLoading, loadingPct = 0 }: Props) {
   const [iframeKey, setIframeKey] = useState(0);
   const [inspectMode, setInspectMode] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
-  const reload = () => setIframeKey(k => k + 1);
+  const reload = () => { setIframeKey(k => k + 1); setPreviewError(null); };
+
+  // Listen for preview errors from iframe
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "cirius-preview-error") {
+        setPreviewError(`${e.data.error} (${e.data.source || "unknown"}:${e.data.line || "?"})`);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  useEffect(() => { setPreviewError(null); }, [previewHtml, livePreviewUrl]);
   const hasLiveUrl = !!livePreviewUrl;
   const hasContent = hasLiveUrl || !!previewHtml;
   const previewUrlText = livePreviewUrl
@@ -77,6 +91,18 @@ export default function SplitPreviewPanel({ frameMode, previewHtml, livePreviewU
                 <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Nenhum preview ainda</div>
                 <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 6 }}>Envie uma mensagem para começar</div>
               </div>
+            </div>
+          )}
+
+          {/* Error overlay */}
+          {previewError && (
+            <div className="absolute bottom-0 left-0 right-0 z-20 bg-red-950/90 border-t-2 border-red-500 text-red-200 px-4 py-3 font-mono text-xs max-h-[30vh] overflow-auto backdrop-blur-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle size={14} className="text-red-400 flex-shrink-0" />
+                <span className="font-semibold text-red-300">Preview Error</span>
+                <button onClick={reload} className="ml-auto text-red-400 hover:text-red-200 text-[10px] px-2 py-0.5 rounded border border-red-700 hover:border-red-500">Reload</button>
+              </div>
+              <div className="text-red-100/80">{previewError}</div>
             </div>
           )}
 

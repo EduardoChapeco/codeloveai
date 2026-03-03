@@ -29,6 +29,15 @@ CRITICAL RULES:
 6. Include realistic content (no "Lorem ipsum"). Components must be responsive (mobile-first).
 7. Import icons from lucide-react. Handle loading/empty/error states.
 
+PREVIEW COMPATIBILITY (CRITICAL — code runs in browser Babel runtime):
+- Use "export default function ComponentName()" syntax for all page/component files.
+- Do NOT use "export const ComponentName: React.FC<Props> = ..." pattern — it breaks the preview transpiler.
+- Do NOT use "export const ComponentName: React.FC = ..." — use "export default function" instead.
+- Prefer function declarations over arrow functions for exports.
+- Keep imports at the top, exports simple and consistent.
+- Avoid barrel exports (index.ts re-exports) — import directly from component files.
+- For typed props, use: interface Props { ... } then export default function Component(props: Props) or ({ prop1, prop2 }: Props).
+
 MANDATORY FOUNDATION FILES (Task 1):
 - index.html (with <div id="root"> and <script type="module" src="/src/main.tsx">)
 - src/main.tsx (ReactDOM.createRoot)
