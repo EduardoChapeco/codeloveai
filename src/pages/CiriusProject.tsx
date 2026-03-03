@@ -318,11 +318,11 @@ export default function CiriusProject() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 16 }}>
               {[
                 { target: "github", icon: Github, label: project.github_url ? "Conectado" : "GitHub", sub: project.github_repo, done: !!project.github_url },
+                { target: "netlify", icon: Rocket, label: project.netlify_url ? "Online" : "Netlify", sub: project.netlify_url ? new URL(project.netlify_url.startsWith("http") ? project.netlify_url : `https://${project.netlify_url}`).hostname : undefined, done: !!project.netlify_url, primary: true },
                 { target: "vercel", icon: Globe, label: project.vercel_url ? "Online" : "Vercel", done: !!project.vercel_url, disabled: !project.github_repo },
-                { target: "netlify", icon: Globe, label: project.netlify_url ? "Online" : "Netlify", done: !!project.netlify_url },
                 { target: "supabase", icon: Database, label: project.supabase_url ? "Connected" : "Migrations", done: !!project.supabase_url },
               ].map(d => (
-                <button key={d.target} className="gl" style={{ justifyContent: "flex-start", height: "auto", padding: "10px 12px", gap: 8 }} onClick={() => doDeploy(d.target)} disabled={acting || d.disabled}>
+                <button key={d.target} className={`gl ${d.primary && !d.done ? "primary" : ""}`} style={{ justifyContent: "flex-start", height: "auto", padding: "10px 12px", gap: 8 }} onClick={() => doDeploy(d.target)} disabled={acting || d.disabled}>
                   <d.icon size={16} />
                   <div style={{ textAlign: "left" }}>
                     <div style={{ fontSize: 11, fontWeight: 600 }}>{d.label}</div>
@@ -335,6 +335,7 @@ export default function CiriusProject() {
             {(project.github_url || project.vercel_url || project.netlify_url) && (
               <div style={{ padding: "0 16px 12px", display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {project.github_url && <a href={project.github_url} target="_blank" rel="noopener noreferrer" className="caption-sm" style={{ color: "var(--blue-l)", textDecoration: "underline", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.github_url}</a>}
+                {project.netlify_url && <a href={project.netlify_url.startsWith("http") ? project.netlify_url : `https://${project.netlify_url}`} target="_blank" rel="noopener noreferrer" className="caption-sm" style={{ color: "var(--green-l)", textDecoration: "underline", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.netlify_url}</a>}
                 {project.vercel_url && <a href={project.vercel_url} target="_blank" rel="noopener noreferrer" className="caption-sm" style={{ color: "var(--blue-l)", textDecoration: "underline", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.vercel_url}</a>}
               </div>
             )}
