@@ -98,7 +98,7 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   tenant_member: { label: "Membro", color: "text-muted-foreground" },
 };
 
-export default function TenantAdmin() {
+export default function TenantAdmin({ embedded }: { embedded?: boolean } = {}) {
   const { user, loading: authLoading } = useAuth();
   const { tenant, isTenantAdmin, isGlobalAdmin, tenantLoading } = useTenant();
   useSEO({ title: `Admin - ${tenant?.name || "Tenant"}` });
@@ -372,9 +372,11 @@ export default function TenantAdmin() {
     setPreviewKey(k => k + 1);
   };
 
+  const Wrapper = embedded ? ({ children }: { children: React.ReactNode }) => <>{children}</> : AppLayout;
+
   if (authLoading || tenantLoading || loading) {
     return (
-      <AppLayout>
+      <Wrapper>
         <div className="min-h-full flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -383,7 +385,7 @@ export default function TenantAdmin() {
             <p className="text-xs text-muted-foreground">Carregando painel...</p>
           </div>
         </div>
-      </AppLayout>
+      </Wrapper>
     );
   }
 
@@ -431,7 +433,7 @@ export default function TenantAdmin() {
   ];
 
   return (
-    <AppLayout>
+    <Wrapper>
       <div className="min-h-full">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
@@ -1039,6 +1041,6 @@ export default function TenantAdmin() {
           )}
         </div>
       </div>
-    </AppLayout>
+    </Wrapper>
   );
 }
