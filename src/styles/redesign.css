@@ -870,11 +870,95 @@ body:has(#sidebar) {
    14. RESPONSIVE
    ══════════════════════════════════════════════════════════════════════ */
 
+/* ── Tablet ── */
+@media (max-width: 1024px) {
+  body:has(#sidebar) { grid-template-columns: 64px 1fr; }
+  #sidebar { width: 64px; }
+  .sb-logo-text, .sb-section, #sidebar .nav-entry span,
+  .ne-badge, .sb-upgrade, .sb-user-name, .sb-user-plan,
+  .su-label, .su-desc, .sb-footer .gl { display: none; }
+  .sb-header { justify-content: center; padding: 14px 8px 12px; }
+  #sidebar .nav-entry { justify-content: center; padding: 10px; }
+  #sidebar .nav-entry.active::before { left: -8px; }
+  .sb-user { justify-content: center; padding: 8px; }
+  .sb-body { padding: 10px 4px; }
+  .sb-footer { padding: 10px 4px 12px; }
+  .proj-grid { padding: 20px; }
+  .rd-card-full { padding: 20px; }
+  .rd-stat-value { font-size: 22px; }
+}
+
+/* ── Mobile ── */
 @media (max-width: 768px) {
   body:has(#sidebar) { grid-template-columns: 1fr; }
   #sidebar { display: none; }
   .chat-mode-row { flex-direction: column; }
   .comm-sidebar { display: none; }
   .stai-left { display: none; }
-  .rd-page-content { padding: 16px; }
+  .rd-page-content { padding: 16px; padding-bottom: 72px; }
+  .rd-page-head h1 { font-size: 18px; }
+  .rd-page-head p { font-size: 12px; }
+  .rd-stat-value { font-size: 20px; }
+  .rd-card { padding: 16px; }
+  .rd-card-full { padding: 16px; }
+  .rd-stat-card { padding: 16px; }
+  .page-header { padding: 16px 16px 0; }
+  .ph-title { font-size: 17px; }
+  .proj-grid { padding: 16px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .proj-thumb { height: 90px; }
+  .brain-topbar { padding: 0 12px; }
+  .brain-input-area { padding: 8px 12px 12px; }
+  .brain-mode-tabs { gap: 2px; }
+  .bmt { height: 26px; font-size: 10.5px; padding: 0 8px; }
+  .comm-main { padding: 16px; }
+  .post-card { padding: 12px; }
+  .chat-hero { padding: 24px 16px 0; }
+  .chat-hero-title { font-size: 22px; }
+  .chat-hero-sub { font-size: 12px; }
+  .chat-input-box { border-radius: var(--r4); }
+  .cib-ta { padding: 8px 12px; }
+  #rd-toasts { bottom: 72px; right: 12px; }
 }
+
+/* ── Small mobile ── */
+@media (max-width: 400px) {
+  .rd-page-content { padding: 12px; padding-bottom: 72px; }
+  .rd-grid-2, .rd-grid-3, .rd-grid-4 { gap: 10px; }
+  .rd-card { padding: 14px; border-radius: var(--r3); }
+  .rd-ico-box { width: 34px; height: 34px; }
+  .gl { padding: 6px 12px; font-size: 12px; }
+  .gl.sm { padding: 4px 9px; font-size: 11px; }
+  .chip { font-size: 10px; padding: 1px 6px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   15. LEGACY COMPAT (lv-glass for standalone pages)
+   ══════════════════════════════════════════════════════════════════════ */
+
+.lv-glass {
+  background: var(--liquid-glass-bg);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 0.5px solid var(--liquid-glass-border);
+  box-shadow: var(--shadow-md);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   16. rd-input (redesign input field)
+   ══════════════════════════════════════════════════════════════════════ */
+
+.rd-input {
+  height: 40px; width: 100%; border-radius: var(--r3);
+  padding: 0 14px; font-size: 13px; font-family: var(--font);
+  color: var(--text-primary); background: var(--bg-3);
+  border: 1px solid var(--b1); outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.rd-input:focus {
+  border-color: rgba(59,130,246,0.35);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.07);
+}
+.rd-input::placeholder { color: var(--text-quaternary); }
+
+select.rd-input { cursor: pointer; }
+select.rd-input option { background: var(--bg-2); color: var(--text-primary); }

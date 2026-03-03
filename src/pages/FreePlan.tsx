@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,21 +26,12 @@ export default function FreePlan() {
   }, [user, authLoading, navigate, code]);
 
   const activateFreePlan = async () => {
-    if (!code) {
-      toast.error("Código inválido.");
-      return;
-    }
+    if (!code) { toast.error("Código inválido."); return; }
     setStatus("loading");
     try {
-      const { data, error } = await supabase.functions.invoke("activate-free-plan", {
-        body: { code },
-      });
+      const { data, error } = await supabase.functions.invoke("activate-free-plan", { body: { code } });
       if (error) throw error;
-      if (data?.error) {
-        setErrorMsg(data.error);
-        setStatus("error");
-        return;
-      }
+      if (data?.error) { setErrorMsg(data.error); setStatus("error"); return; }
       setStatus("success");
       toast.success("Plano Grátis ativado — 10 mensagens/dia!");
     } catch (err: any) {
@@ -52,8 +43,8 @@ export default function FreePlan() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-0)' }}>
+        <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
       </div>
     );
   }
@@ -61,69 +52,68 @@ export default function FreePlan() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen relative">
+    <div className="dark min-h-screen relative" style={{ background: 'var(--bg-0)' }}>
       <MeshBackground />
       <nav className="sticky top-0 z-20 px-6 py-3">
-        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
-          <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
-          <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+        <div className="lv-glass" style={{ borderRadius: 'var(--r4)', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Link to="/" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', textDecoration: 'none' }}>{brandName}</Link>
+          <Link to="/login" className="gl sm">Entrar</Link>
         </div>
       </nav>
 
-      <div className="max-w-md mx-auto px-6 py-20 text-center">
+      <div style={{ maxWidth: 420, margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
         {status === "idle" && (
-          <div className="clf-liquid-glass p-10">
-            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
-              <Gift className="h-7 w-7 text-primary" />
+          <div className="rd-card" style={{ padding: 40 }}>
+            <div className="rd-ico-box ib-blue" style={{ width: 64, height: 64, borderRadius: 'var(--r4)', margin: '0 auto 24px' }}>
+              <Gift style={{ width: 28, height: 28 }} />
             </div>
-            <p className="lv-overline mb-2">Plano gratuito</p>
-            <h1 className="lv-heading-lg mb-3">10 mensagens/dia</h1>
-            <p className="lv-body mb-8">
-              Ative seu plano gratuito de 10 mensagens diárias para usar a extensão.
-              Sem custos, sem compromisso.
+            <div className="sec-label" style={{ marginBottom: 8 }}>Plano gratuito</div>
+            <h1 className="title-xl" style={{ marginBottom: 12 }}>10 mensagens/dia</h1>
+            <p className="body-text" style={{ marginBottom: 32 }}>
+              Ative seu plano gratuito de 10 mensagens diárias para usar a extensão. Sem custos, sem compromisso.
             </p>
             {code ? (
-              <button onClick={activateFreePlan} className="lv-btn-primary lv-btn-lg w-full">
+              <button onClick={activateFreePlan} className="gl primary lg" style={{ width: '100%' }}>
                 Ativar testdrive gratuito
               </button>
             ) : (
-              <p className="text-sm text-destructive">Link inválido. Solicite um novo link ao administrador.</p>
+              <p style={{ fontSize: 12, color: 'var(--red-l)' }}>Link inválido. Solicite um novo link ao administrador.</p>
             )}
           </div>
         )}
 
         {status === "loading" && (
-          <div className="clf-liquid-glass p-10">
-            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-6" />
-            <p className="lv-overline">Ativando...</p>
+          <div className="rd-card" style={{ padding: 40 }}>
+            <Loader2 className="h-10 w-10 animate-spin" style={{ color: 'var(--blue)', margin: '0 auto 24px', display: 'block' }} />
+            <div className="sec-label">Ativando...</div>
           </div>
         )}
 
         {status === "success" && (
-          <div className="clf-liquid-glass p-10">
-            <div className="h-16 w-16 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="h-7 w-7 text-green-500" />
+          <div className="rd-card" style={{ padding: 40 }}>
+            <div className="rd-ico-box ib-green" style={{ width: 64, height: 64, borderRadius: 'var(--r4)', margin: '0 auto 24px' }}>
+              <CheckCircle style={{ width: 28, height: 28 }} />
             </div>
-            <p className="lv-overline mb-2">Ativado!</p>
-            <h2 className="lv-heading-lg mb-3">Plano Grátis ativo</h2>
-            <p className="lv-body mb-8">
+            <div className="sec-label" style={{ marginBottom: 8 }}>Ativado!</div>
+            <h2 className="title-xl" style={{ marginBottom: 12 }}>Plano Grátis ativo</h2>
+            <p className="body-text" style={{ marginBottom: 32 }}>
               Seu plano de 10 mensagens/dia foi ativado com sucesso. Acesse seu dashboard para começar.
             </p>
-            <Link to="/dashboard" className="lv-btn-primary lv-btn-lg w-full">
+            <Link to="/dashboard" className="gl primary lg" style={{ width: '100%', textDecoration: 'none' }}>
               Ir para dashboard
             </Link>
           </div>
         )}
 
         {status === "error" && (
-          <div className="clf-liquid-glass p-10">
-            <div className="h-16 w-16 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-              <XCircle className="h-7 w-7 text-destructive" />
+          <div className="rd-card" style={{ padding: 40 }}>
+            <div className="rd-ico-box ib-red" style={{ width: 64, height: 64, borderRadius: 'var(--r4)', margin: '0 auto 24px' }}>
+              <XCircle style={{ width: 28, height: 28 }} />
             </div>
-            <p className="lv-overline mb-2">Erro</p>
-            <h2 className="lv-heading-lg mb-3">Não foi possível ativar</h2>
-            <p className="lv-body mb-8">{errorMsg}</p>
-            <Link to="/dashboard" className="lv-btn-secondary lv-btn-lg w-full">
+            <div className="sec-label" style={{ marginBottom: 8 }}>Erro</div>
+            <h2 className="title-xl" style={{ marginBottom: 12 }}>Não foi possível ativar</h2>
+            <p className="body-text" style={{ marginBottom: 32 }}>{errorMsg}</p>
+            <Link to="/dashboard" className="gl lg" style={{ width: '100%', textDecoration: 'none' }}>
               Ir para dashboard
             </Link>
           </div>
