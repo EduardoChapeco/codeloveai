@@ -205,6 +205,9 @@ const ERROR_BRIDGE_SCRIPT = `
 window.__ciriusModules = window.__ciriusModules || {};
 window.__ciriusExports = window.__ciriusExports || {};
 window.onerror = function(msg, src, line, col, err) {
+  var msgStr = String(msg || '');
+  // Skip generic cross-origin errors — not actionable
+  if (msgStr === 'Script error.' || msgStr === 'Script error' || !msgStr.trim()) return true;
   var errDiv = document.getElementById('__cirius-error');
   if (!errDiv) {
     errDiv = document.createElement('div');
@@ -213,8 +216,8 @@ window.onerror = function(msg, src, line, col, err) {
     document.body.appendChild(errDiv);
   }
   var srcFile = (src || '').replace(/^.*\\//, '') || 'unknown';
-  errDiv.innerHTML += '<div style="margin-bottom:6px"><strong style="color:#f43f5e">⚠ Runtime Error</strong> <span style="color:#94a3b8">(' + srcFile + ':' + (line||'?') + ')</span><br/><span style="color:#e2e8f0">' + (msg||'Unknown error') + '</span></div>';
-  try { window.parent.postMessage({ type: 'cirius-preview-error', error: String(msg), source: srcFile, line: line }, '*'); } catch(e) {}
+  errDiv.innerHTML += '<div style="margin-bottom:6px"><strong style="color:#f43f5e">⚠ Runtime Error</strong> <span style="color:#94a3b8">(' + srcFile + ':' + (line||'?') + ')</span><br/><span style="color:#e2e8f0">' + msgStr + '</span></div>';
+  try { window.parent.postMessage({ type: 'cirius-preview-error', error: msgStr, source: srcFile, line: line }, '*'); } catch(e) {}
   return false;
 };
 window.addEventListener('unhandledrejection', function(e) {

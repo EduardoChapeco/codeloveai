@@ -18,7 +18,10 @@ export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === "cirius-preview-error") {
-        setPreviewError(`${e.data.error} (${e.data.source || "unknown"}:${e.data.line || "?"})`);
+        const errMsg = String(e.data.error || "");
+        // Skip generic cross-origin "Script error." — not actionable
+        if (errMsg === "Script error." || errMsg === "Script error" || !errMsg.trim()) return;
+        setPreviewError(`${errMsg} (${e.data.source || "unknown"}:${e.data.line || "?"})`);
       }
     };
     window.addEventListener("message", handler);
@@ -88,7 +91,7 @@ export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: 
             key={iframeKey}
             className="ce-preview-iframe"
             srcDoc={previewHtml}
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-same-origin"
             title="Static Preview"
           />
         ) : (
