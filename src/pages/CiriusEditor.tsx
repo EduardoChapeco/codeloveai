@@ -22,118 +22,11 @@ import { extractFileBlocks, mergeFileMaps, stripFileBlocks } from "@/lib/ai-file
 import type { BuildStage } from "@/components/cirius-editor/BuildProgressCard";
 import type { TerminalLine } from "@/components/cirius-editor/TerminalPanel";
 import { REACT_VITE_TEMPLATE } from "@/lib/project-template";
+import { buildPreviewFromFiles } from "@/lib/cirius/preview-engine";
 import "@/styles/cirius-editor.css";
 
 import type { FrameMode, ActiveMode, CmdMode, Bubble, EditorToast, ChatMessage } from "@/components/cirius-editor/types";
 import type { EditorMode } from "@/components/cirius-editor/SplitTopBar";
-
-/** Build a self-contained HTML preview from source_files_json */
-function buildPreviewFromFiles(files: Record<string, string>): string | null {
-  const html = files["index.html"] || files["dist/index.html"];
-
-  const cssFiles = Object.entries(files).filter(([k]) => k.endsWith(".css"));
-  const plainJs = Object.entries(files).filter(([k]) => k.endsWith(".js"));
-
-  // If HTML does not depend on Vite module entrypoints, assemble it directly
-  const hasViteModuleEntry = !!html && /<script[^>]+type=["']module["'][^>]+src=["'][^"']*(?:\/src\/main\.(?:tsx|ts|jsx|js)|\/main\.(?:tsx|ts|jsx|js))[^"']*["'][^>]*>/i.test(html);
-  if (html && !hasViteModuleEntry) {
-    let assembled = html;
-    if (cssFiles.length > 0) {
-      const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
-      assembled = assembled.includes("</head>")
-        ? assembled.replace("</head>", `${cssBlock}\n</head>`)
-        : `${cssBlock}\n${assembled}`;
-    }
-    if (plainJs.length > 0) {
-      const jsBlock = plainJs.map(([, v]) => `<script>${v}</script>`).join("\n");
-      assembled = assembled.includes("</body>")
-        ? assembled.replace("</body>", `${jsBlock}\n</body>`)
-        : `${assembled}\n${jsBlock}`;
-    }
-    return assembled;
-  }
-
-  // Vite-style projects: render TS/TSX via Babel Standalone + React CDN
-  const sourceModules = Object.entries(files).filter(([k]) => {
-    if (!k.startsWith("src/")) return false;
-    if (k.includes(".d.ts")) return false;
-    if (/\/main\.(tsx|ts|jsx|js)$/.test(k)) return false;
-    return /\.(tsx|ts|jsx|js)$/.test(k);
-  });
-
-  if (sourceModules.length === 0) return html || null;
-
-  const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
-  const getComponentName = (path: string) => {
-    const base = path.split("/").pop()?.replace(/\.(tsx|ts|jsx|js)$/, "") || "Component";
-    return base.charAt(0).toUpperCase() + base.slice(1);
-  };
-
-  const appEntry = sourceModules.find(([k]) => /App\.(tsx|ts|jsx|js)$/.test(k));
-  const otherFiles = sourceModules.filter(([k]) => !/App\.(tsx|ts|jsx|js)$/.test(k));
-  const orderedFiles = [...otherFiles, ...(appEntry ? [appEntry] : [])];
-
-  const cleanComponent = (code: string, name: string): string => {
-    return code
-      .replace(/^import\s+.*$/gm, "")
-      .replace(/^export\s+default\s+function\s+(\w+)/gm, `window.${name} = function $1`)
-      .replace(/^export\s+default\s+/gm, `window.${name} = `)
-      .replace(/^export\s+function\s+(\w+)/gm, "window.$1 = function $1")
-      .replace(/^export\s+const\s+(\w+)/gm, "window.$1 = ")
-      .replace(/^export\s*\{[^}]*\}\s*;?\s*$/gm, "")
-      .trim();
-  };
-
-  const componentScripts = orderedFiles
-    .map(([path, code]) => {
-      const name = getComponentName(path);
-      const cleaned = cleanComponent(code, name);
-      return `<script type="text/babel" data-presets="typescript,react">\n// --- ${path} ---\n${cleaned}\n</script>`;
-    })
-    .join("\n");
-
-  const rootName = appEntry ? getComponentName(appEntry[0]) : getComponentName(orderedFiles[orderedFiles.length - 1]?.[0] || "App");
-  const titleMatch = html?.match(/<title>([\s\S]*?)<\/title>/i);
-  const title = titleMatch?.[1]?.trim() || "Preview Cirius";
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>${title}</title>
-<script src="https://cdn.tailwindcss.com"><\/script>
-<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Geist', sans-serif; }
-</style>
-${cssBlock}
-<script>
-window.Button = function(props) { return React.createElement('button', {className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ' + (props.className||''), onClick: props.onClick, disabled: props.disabled, type: props.type||'button'}, props.children); };
-window.Input = function(props) { return React.createElement('input', {className: 'border rounded px-3 py-2 w-full ' + (props.className||''), ...props}); };
-window.Card = function(props) { return React.createElement('div', {className: 'border rounded-lg p-4 shadow-sm ' + (props.className||'')}, props.children); };
-var iconStub = function(props) { return React.createElement('span', {style: {display:'inline-flex',width:props.size||16,height:props.size||16,alignItems:'center',justifyContent:'center'}}, '●'); };
-var iconNames = ['Menu','X','ChevronDown','ChevronRight','ChevronLeft','ChevronUp','ArrowRight','ArrowLeft','Check','Star','Heart','Search','Mail','Phone','MapPin','Clock','Calendar','User','Users','Settings','Home','Globe','Send','MessageSquare','ExternalLink','Github','Linkedin','Twitter','Facebook','Instagram','Sparkles','Zap','Shield','Award','Target','TrendingUp','BarChart','PieChart','Activity','Cpu','Database','Server','Code','Terminal','Layers','Layout','Grid','List','Eye','EyeOff','Lock','Unlock','Plus','Minus','Edit','Trash','Download','Upload','Share','Copy','Bookmark','Flag','Bell','Info','AlertCircle','AlertTriangle','HelpCircle','XCircle','CheckCircle','Loader2','RefreshCw','RotateCw','Play','Pause','Square','Circle','Triangle','Hexagon','Rocket','Flame','Sun','Moon','Cloud','CloudRain','Wind','Droplet','Thermometer','Wifi','WifiOff','Bluetooth','Battery','BatteryCharging','Plug','Power','Volume','VolumeX','Mic','MicOff','Camera','Image','Film','Music','Headphones','Radio','Tv','Monitor','Smartphone','Tablet','Laptop','Watch','Printer','Scanner','Mouse','Keyboard','Gamepad','Joystick'];
-iconNames.forEach(function(n) { window[n] = iconStub; });
-</script>
-</head>
-<body>
-<div id="root"></div>
-${componentScripts}
-<script type="text/babel" data-presets="typescript,react">
-var RootComp = window.${rootName} || window.App || function() { return React.createElement('div', {className:'p-8 text-center'}, 'Preview carregando...'); };
-var root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(React.createElement(RootComp));
-</script>
-</body>
-</html>`;
-}
 
 export default function CiriusEditor() {
   const { id } = useParams<{ id: string }>();

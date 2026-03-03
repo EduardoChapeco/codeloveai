@@ -1,37 +1,35 @@
-import { useState } from "react";
-import { Sparkles, RefreshCw, ExternalLink } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Sparkles, RefreshCw, ExternalLink, AlertTriangle } from "lucide-react";
 import type { FrameMode } from "@/components/cirius-editor/types";
 
 interface Props {
   frameMode: FrameMode;
   previewHtml: string | null;
-  /** Live preview URL from Lovable project (real-time, pre-deploy) */
   livePreviewUrl?: string | null;
-}
-
-/** Inject Tailwind CDN into HTML if it uses @tailwind directives or Tailwind classes */
-function injectTailwindCdn(html: string): string {
-  if (!html) return html;
-  // Already has Tailwind CDN
-  if (html.includes("cdn.tailwindcss.com")) return html;
-  // Check if project uses Tailwind
-  const usesTailwind = html.includes("@tailwind") || /class="[^"]*(?:flex|grid|bg-|text-|p-|m-|rounded|shadow)/.test(html);
-  if (!usesTailwind) return html;
-  const cdnTag = '<script src="https://cdn.tailwindcss.com"><\/script>';
-  if (html.includes("</head>")) {
-    return html.replace("</head>", `${cdnTag}\n</head>`);
-  }
-  return `${cdnTag}\n${html}`;
 }
 
 export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: Props) {
   const [iframeKey, setIframeKey] = useState(0);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
-  const reload = () => setIframeKey(k => k + 1);
+  const reload = () => { setIframeKey(k => k + 1); setPreviewError(null); };
+
+  // Listen for preview errors from iframe
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "cirius-preview-error") {
+        setPreviewError(`${e.data.error} (${e.data.source || "unknown"}:${e.data.line || "?"})`);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // Clear errors on new preview
+  useEffect(() => { setPreviewError(null); }, [previewHtml, livePreviewUrl]);
 
   const hasLiveUrl = !!livePreviewUrl;
-  const processedHtml = previewHtml ? injectTailwindCdn(previewHtml) : null;
-  const hasContent = hasLiveUrl || !!processedHtml;
+  const hasContent = hasLiveUrl || !!previewHtml;
 
   return (
     <div className={`ce-preview-wrap ${frameMode}`}>
@@ -65,6 +63,18 @@ export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: 
           </div>
         )}
 
+        {/* Error overlay */}
+        {previewError && (
+          <div className="absolute bottom-0 left-0 right-0 z-20 bg-red-950/90 border-t-2 border-red-500 text-red-200 px-4 py-3 font-mono text-xs max-h-[30vh] overflow-auto backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle size={14} className="text-red-400 flex-shrink-0" />
+              <span className="font-semibold text-red-300">Preview Error</span>
+              <button onClick={reload} className="ml-auto text-red-400 hover:text-red-200 text-[10px] px-2 py-0.5 rounded border border-red-700 hover:border-red-500">Reload</button>
+            </div>
+            <div className="text-red-100/80">{previewError}</div>
+          </div>
+        )}
+
         {hasLiveUrl ? (
           <iframe
             key={iframeKey}
@@ -73,11 +83,11 @@ export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: 
             sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
             title="Live Preview"
           />
-        ) : processedHtml ? (
+        ) : previewHtml ? (
           <iframe
             key={iframeKey}
             className="ce-preview-iframe"
-            srcDoc={processedHtml}
+            srcDoc={previewHtml}
             sandbox="allow-scripts"
             title="Static Preview"
           />

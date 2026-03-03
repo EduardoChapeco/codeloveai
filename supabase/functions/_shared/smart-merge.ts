@@ -36,14 +36,37 @@ export function mergeAppRoutes(existing: string, incoming: string): string {
 
   if (missingRoutes.length === 0) return incoming;
 
+  // Preserve missing import statements from existing
+  const existingImports = new Set<string>();
+  const importRe = /^import\s+.*from\s+['"][^'"]+['"]\s*;?\s*$/gm;
+  let im: RegExpExecArray | null;
+  while ((im = importRe.exec(existing)) !== null) {
+    existingImports.add(im[0].trim());
+  }
+  const incomingImportSet = new Set<string>();
+  while ((im = importRe.exec(incoming)) !== null) {
+    incomingImportSet.add(im[0].trim());
+  }
+  const missingImports = [...existingImports].filter(i => !incomingImportSet.has(i));
+
   // Insert missing routes before </Routes>
   const closeTag = incoming.lastIndexOf("</Routes>");
   if (closeTag === -1) return incoming;
 
   const routeBlock = missingRoutes.map(r => `          ${r}`).join("\n");
-  return incoming.slice(0, closeTag) +
+  let result = incoming.slice(0, closeTag) +
     `\n          {/* Auto-preserved routes */}\n${routeBlock}\n        ` +
     incoming.slice(closeTag);
+
+  // Add missing imports at the top
+  if (missingImports.length > 0) {
+    const firstImport = result.indexOf("import ");
+    if (firstImport >= 0) {
+      result = result.slice(0, firstImport) + missingImports.join("\n") + "\n" + result.slice(firstImport);
+    }
+  }
+
+  return result;
 }
 
 /**
