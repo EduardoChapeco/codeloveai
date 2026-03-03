@@ -6064,6 +6064,45 @@ export type Database = {
         }
         Relationships: []
       }
+      venus_client_accounts: {
+        Row: {
+          access_token: string | null
+          brain_project_id: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          label: string | null
+          license_key: string
+          refresh_token: string
+          uid: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          brain_project_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          label?: string | null
+          license_key: string
+          refresh_token: string
+          uid?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          brain_project_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          label?: string | null
+          license_key?: string
+          refresh_token?: string
+          uid?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       venus_github_tokens: {
         Row: {
           created_at: string | null
