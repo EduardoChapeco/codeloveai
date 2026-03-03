@@ -53,43 +53,55 @@ function buildPreviewFromFiles(files: Record<string, string>): string | null {
     return assembled;
   }
 
-  // No index.html — try to render TSX/JSX files via Babel Standalone + React CDN
+  // No index.html — render TSX/JSX via Babel Standalone + React CDN
   const tsxFiles = Object.entries(files).filter(([k]) => /\.(tsx|jsx)$/.test(k) && !k.includes(".d.ts"));
   if (tsxFiles.length === 0) return null;
-
-  // Find the main App component
-  const appEntry = tsxFiles.find(([k]) => /App\.(tsx|jsx)$/.test(k));
-  const mainFile = appEntry || tsxFiles[0];
-  const [mainPath, mainCode] = mainFile;
 
   // Collect all CSS
   const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
 
-  // Build component registry from all tsx files
-  const componentScripts = tsxFiles
-    .filter(([k]) => k !== mainPath)
-    .map(([path, code]) => {
-      const name = path.split("/").pop()?.replace(/\.(tsx|jsx)$/, "") || "Component";
-      // Strip import/export lines for inline rendering
-      const cleaned = code
-        .replace(/^import\s+.*$/gm, "")
-        .replace(/^export\s+default\s+/gm, "const " + name + " = ")
-        .replace(/^export\s+/gm, "");
-      return `<script type="text/babel" data-type="module">\n// ${path}\n${cleaned}\n</script>`;
-    })
-    .join("\n");
+  // Extract component name from file path
+  const getComponentName = (path: string) => {
+    const base = path.split("/").pop()?.replace(/\.(tsx|jsx)$/, "") || "Component";
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  };
 
-  // Clean main file
-  const cleanedMain = mainCode
-    .replace(/^import\s+.*$/gm, "")
-    .replace(/^export\s+default\s+function\s+(\w+)/gm, "function $1")
-    .replace(/^export\s+default\s+/gm, "const App = ")
-    .replace(/^export\s+/gm, "");
+  // Build a dependency-ordered list: process non-App files first, App last
+  const appEntry = tsxFiles.find(([k]) => /App\.(tsx|jsx)$/.test(k));
+  const otherFiles = tsxFiles.filter(([k]) => !/App\.(tsx|jsx)$/.test(k));
+  const orderedFiles = [...otherFiles, ...(appEntry ? [appEntry] : [])];
 
-  // Detect the default export name
-  const fnMatch = cleanedMain.match(/^function\s+(\w+)/m);
-  const constMatch = cleanedMain.match(/^const\s+(\w+)\s*=/m);
-  const rootComponent = fnMatch?.[1] || constMatch?.[1] || "App";
+  // Clean code: strip imports, convert exports to global assignments
+  const cleanComponent = (code: string, name: string): string => {
+    let cleaned = code
+      // Remove all import lines
+      .replace(/^import\s+.*$/gm, "")
+      // Convert "export default function X" → "window.X = function X"
+      .replace(/^export\s+default\s+function\s+(\w+)/gm, `window.${name} = function $1`)
+      // Convert "export default" → "window.Name ="
+      .replace(/^export\s+default\s+/gm, `window.${name} = `)
+      // Convert "export function X" → "window.X = function X"
+      .replace(/^export\s+function\s+(\w+)/gm, "window.$1 = function $1")
+      // Convert "export const X" → "window.X = const X" (then fix)
+      .replace(/^export\s+const\s+(\w+)/gm, "window.$1 = ")
+      // Remove remaining "export {}" lines
+      .replace(/^export\s*\{[^}]*\}\s*;?\s*$/gm, "")
+      .trim();
+    return cleaned;
+  };
+
+  // Build all component scripts — each in its own Babel script tag so they execute in order
+  const componentScripts = orderedFiles.map(([path, code]) => {
+    const name = getComponentName(path);
+    const cleaned = cleanComponent(code, name);
+    return `<script type="text/babel">
+// --- ${path} ---
+${cleaned}
+</script>`;
+  }).join("\n");
+
+  // Determine root component
+  const rootName = appEntry ? getComponentName(appEntry[0]) : getComponentName(orderedFiles[orderedFiles.length - 1]?.[0] || "App");
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -106,20 +118,31 @@ function buildPreviewFromFiles(files: Record<string, string>): string | null {
 body { font-family: 'Inter', sans-serif; }
 </style>
 ${cssBlock}
+<script>
+// Global component registry — components register themselves via window.X
+// Provide stubs for common libraries so generated code doesn't crash
+window.Button = function(props) { return React.createElement('button', {className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ' + (props.className||''), onClick: props.onClick, disabled: props.disabled, type: props.type||'button'}, props.children); };
+window.Input = function(props) { return React.createElement('input', {className: 'border rounded px-3 py-2 w-full ' + (props.className||''), ...props}); };
+window.Card = function(props) { return React.createElement('div', {className: 'border rounded-lg p-4 shadow-sm ' + (props.className||'')}, props.children); };
+
+// Lucide icon stubs
+var iconStub = function(props) { return React.createElement('span', {style: {display:'inline-flex',width:props.size||16,height:props.size||16,alignItems:'center',justifyContent:'center'}}, '●'); };
+var iconNames = ['Menu','X','ChevronDown','ChevronRight','ChevronLeft','ChevronUp','ArrowRight','ArrowLeft','Check','Star','Heart','Search','Mail','Phone','MapPin','Clock','Calendar','User','Users','Settings','Home','Globe','Send','MessageSquare','ExternalLink','Github','Linkedin','Twitter','Facebook','Instagram','Sparkles','Zap','Shield','Award','Target','TrendingUp','BarChart','PieChart','Activity','Cpu','Database','Server','Code','Terminal','Layers','Layout','Grid','List','Eye','EyeOff','Lock','Unlock','Plus','Minus','Edit','Trash','Download','Upload','Share','Copy','Bookmark','Flag','Bell','Info','AlertCircle','AlertTriangle','HelpCircle','XCircle','CheckCircle','Loader2','RefreshCw','RotateCw','Play','Pause','Square','Circle','Triangle','Hexagon','Rocket','Flame','Sun','Moon','Cloud','CloudRain','Wind','Droplet','Thermometer','Wifi','WifiOff','Bluetooth','Battery','BatteryCharging','Plug','Power','Volume','VolumeX','Mic','MicOff','Camera','Image','Film','Music','Headphones','Radio','Tv','Monitor','Smartphone','Tablet','Laptop','Watch','Printer','Scanner','Mouse','Keyboard','Gamepad','Joystick'];
+iconNames.forEach(function(n) { window[n] = iconStub; });
+
+// Proxy for any missing component references
+var _origGet = window.__lookupGetter__ ? null : null;
+</script>
 </head>
 <body>
 <div id="root"></div>
 ${componentScripts}
-<script type="text/babel" data-type="module">
-// Provide lucide stubs so generated code doesn't crash
-const LucideStub = (props) => React.createElement('span', { style: { display: 'inline-flex', width: props.size || 16, height: props.size || 16 } }, '●');
-const lucideReact = new Proxy({}, { get: () => LucideStub });
-
-${cleanedMain}
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(React.createElement(${rootComponent}));
-<\/script>
+<script type="text/babel">
+// Render root component
+var RootComp = window.${rootName} || window.App || function() { return React.createElement('div', {className:'p-8 text-center'}, 'Preview carregando...'); };
+var root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(RootComp));
+</script>
 </body>
 </html>`;
 }

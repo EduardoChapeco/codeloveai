@@ -53,6 +53,8 @@ RULES:
 6. Use TypeScript with proper types.
 7. Default exports for page components, named exports for utilities.
 8. Keep code clean, modern, and production-ready.
+9. ALWAYS include an index.html file that references your main entry point. The index.html must contain a <div id="root"></div> and a <script type="module" src="/src/main.tsx"></script> tag.
+10. ALWAYS include src/main.tsx with ReactDOM.createRoot rendering.
 
 TECH STACK:
 - React 18 + TypeScript (JSX)
