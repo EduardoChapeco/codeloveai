@@ -331,6 +331,26 @@ export default function StarbleProjectsPage() {
 
             return (
               <div key={`${project.source}-${project.id}`} className="proj-card" onClick={() => navigate(getEditUrl(project))}>
+                {/* Actions — top-right overlay */}
+                <div className="proj-card-actions">
+                  {getLiveUrl(project) && (
+                    <a href={getLiveUrl(project)} target="_blank" rel="noopener noreferrer" className="gl ico xs ghost" onClick={(e) => e.stopPropagation()}>
+                      <ExternalLink size={11} />
+                    </a>
+                  )}
+                  {project.github_url && (
+                    <a href={project.github_url} target="_blank" rel="noopener noreferrer" className="gl ico xs ghost" onClick={(e) => e.stopPropagation()}>
+                      <Github size={11} />
+                    </a>
+                  )}
+                  <button className="gl ico xs ghost" onClick={(e) => { e.stopPropagation(); setOpenDropdown(openDropdown === `${project.source}-${project.id}` ? null : `${project.source}-${project.id}`); }}>
+                    <MoreHorizontal size={11} />
+                  </button>
+                  {openDropdown === `${project.source}-${project.id}` && (
+                    <ProjectDropdown project={project} onClose={() => setOpenDropdown(null)} />
+                  )}
+                </div>
+
                 <div className="proj-thumb">
                   <div className="proj-thumb-grid" />
                   <div className="proj-thumb-inner">
@@ -375,25 +395,6 @@ export default function StarbleProjectsPage() {
                       {STATUS_LABEL[statusKey] || (getLiveUrl(project) ? "Live" : "Rascunho")}
                     </span>
                   </div>
-                </div>
-
-                <div className="proj-card-actions" style={{ position: "relative" }}>
-                  {getLiveUrl(project) && (
-                    <a href={getLiveUrl(project)} target="_blank" rel="noopener noreferrer" className="gl ico xs ghost" onClick={(e) => e.stopPropagation()}>
-                      <ExternalLink size={11} />
-                    </a>
-                  )}
-                  {project.github_url && (
-                    <a href={project.github_url} target="_blank" rel="noopener noreferrer" className="gl ico xs ghost" onClick={(e) => e.stopPropagation()}>
-                      <Github size={11} />
-                    </a>
-                  )}
-                  <button className="gl ico xs ghost" onClick={(e) => { e.stopPropagation(); setOpenDropdown(openDropdown === `${project.source}-${project.id}` ? null : `${project.source}-${project.id}`); }}>
-                    <MoreHorizontal size={11} />
-                  </button>
-                  {openDropdown === `${project.source}-${project.id}` && (
-                    <ProjectDropdown project={project} onClose={() => setOpenDropdown(null)} />
-                  )}
                 </div>
               </div>
             );

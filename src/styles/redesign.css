@@ -541,9 +541,11 @@
 .ps-draft { background: var(--text-tertiary); }
 .proj-date { font-size: 10.5px; color: var(--text-quaternary); }
 .proj-card-actions {
-  position: absolute; top: 8px; right: 8px;
+  position: absolute; top: 8px; right: 8px; z-index: 10;
   display: flex; gap: 4px; opacity: 0; transition: opacity .15s;
 }
+.proj-card-actions .gl { background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); }
+.proj-card-actions .gl:hover { background: rgba(0,0,0,0.8); }
 .proj-card:hover .proj-card-actions { opacity: 1; }
 
 /* Dropdown menu items */
