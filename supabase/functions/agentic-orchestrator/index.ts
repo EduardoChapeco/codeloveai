@@ -654,8 +654,14 @@ Deno.serve(async (req: Request) => {
           await sc.from("orchestrator_projects").update({ status: "failed", last_error: result.error }).eq("id", projectId);
           return json({ status: "task_failed", error: result.error }, 500);
         }
-        await sc.from("orchestrator_tasks").update({ retry_count: retries }).eq("id", task.id);
-        await sc.from("orchestrator_projects").update({ status: "paused" }).eq("id", projectId);
+        // ★ FIX: Reset task status back to "pending" so it can be retried by the next tick
+        await sc.from("orchestrator_tasks").update({
+          status: "pending", retry_count: retries, started_at: null, lovable_message_id: null,
+        }).eq("id", task.id);
+        await sc.from("orchestrator_projects").update({
+          status: "paused",
+          next_tick_at: new Date(Date.now() + 30_000).toISOString(),
+        }).eq("id", projectId);
         return json({ status: "task_retry", retry_count: retries, error: result.error });
       }
 
