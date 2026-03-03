@@ -1108,3 +1108,177 @@ select.rd-input option { background: var(--bg-2); color: var(--text-primary); }
 @media (max-width: 768px) {
   .wa-conv-list { width: 100%; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   VENUS PAGE
+   ══════════════════════════════════════════════════════════════════════ */
+
+.venus-page {
+  min-height: 100%; position: relative;
+}
+.venus-guest-nav {
+  position: sticky; top: 0; z-index: 20; padding: 12px 24px;
+}
+.venus-container {
+  max-width: 960px; margin: 0 auto; padding: 0 24px;
+}
+.venus-breadcrumb { padding-top: 20px; padding-bottom: 0; }
+
+/* Hero */
+.venus-hero {
+  padding: 48px 24px 56px; max-width: 680px; margin: 0 auto; text-align: center;
+  display: flex; flex-direction: column; align-items: center;
+}
+.venus-hero-icon {
+  width: 64px; height: 64px; border-radius: var(--r4);
+  background: linear-gradient(135deg, #fff, #d4d4d4);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 28px;
+  box-shadow: 0 16px 48px -8px rgba(255,255,255,0.12);
+}
+.venus-hero-icon svg { color: #000 !important; }
+.venus-hero-title {
+  font-size: 40px; font-weight: 900; letter-spacing: -0.05em;
+  color: var(--text-primary); margin-bottom: 16px; line-height: 1;
+}
+.venus-hero-title span {
+  background: linear-gradient(135deg, #fff, #888);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.venus-hero-sub {
+  font-size: 14px; color: var(--text-secondary); max-width: 500px;
+  line-height: 1.7; margin-bottom: 32px;
+}
+.venus-hero-sub strong { color: var(--text-primary); }
+.venus-cta-row {
+  display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px;
+}
+.venus-chrome-note {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-quaternary);
+}
+
+/* Sections */
+.venus-section { padding: 48px 0; }
+.venus-section-head {
+  text-align: center; margin-bottom: 40px;
+}
+.venus-section-head .sec-label { margin-bottom: 8px; display: block; }
+.venus-section-head h2 {
+  font-size: 22px; font-weight: 900; letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+/* Features grid */
+.venus-feat-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+}
+@media (min-width: 768px) {
+  .venus-feat-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.venus-feat-card {
+  background: var(--bg-2); border: 1px solid var(--b1); border-radius: var(--r3);
+  padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  transition: border-color .14s;
+}
+.venus-feat-card:hover { border-color: var(--b2); }
+.venus-feat-ico {
+  width: 32px; height: 32px; border-radius: var(--r2);
+  background: var(--bg-4); color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.venus-feat-title {
+  font-size: 12.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;
+}
+.venus-feat-desc {
+  font-size: 11.5px; color: var(--text-tertiary); line-height: 1.55;
+}
+
+/* Warning */
+.venus-warning {
+  max-width: 520px; margin: 0 auto; display: flex; align-items: flex-start; gap: 10px;
+  background: var(--bg-2); border: 1px solid var(--b1); border-radius: var(--r3);
+  padding: 14px 16px; border-left: 3px solid var(--red);
+}
+.venus-warning svg { color: var(--red-l); flex-shrink: 0; margin-top: 1px; }
+.venus-warning p { font-size: 11.5px; color: var(--text-tertiary); line-height: 1.6; }
+.venus-warning strong { color: var(--text-primary); }
+
+/* Plans */
+.venus-plans-grid {
+  display: grid; grid-template-columns: repeat(1, 1fr); gap: 14px;
+  max-width: 600px; margin: 0 auto;
+}
+@media (min-width: 640px) {
+  .venus-plans-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.venus-plan-card {
+  background: var(--bg-2); border: 1px solid var(--b1); border-radius: var(--r4);
+  padding: 24px; display: flex; flex-direction: column; position: relative;
+  transition: border-color .14s;
+}
+.venus-plan-card:hover { border-color: var(--b2); }
+.venus-plan-card.highlight { border-color: rgba(255,255,255,0.2); }
+.venus-plan-badge {
+  position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; font-weight: 700; padding: 2px 10px; border-radius: 9999px;
+  background: var(--bg-4); color: var(--text-primary); border: 1px solid var(--b2);
+  white-space: nowrap;
+}
+.venus-plan-head { margin-bottom: 20px; }
+.venus-plan-name { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+.venus-plan-price { display: flex; align-items: baseline; gap: 4px; }
+.venus-price-value { font-size: 28px; font-weight: 900; letter-spacing: -0.03em; color: var(--text-primary); }
+.venus-price-cycle { font-size: 11px; color: var(--text-tertiary); }
+.venus-plan-features { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; flex: 1; }
+.venus-plan-feat-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--text-secondary);
+}
+.venus-plan-feat-item svg { color: var(--green); flex-shrink: 0; }
+.venus-wl-note {
+  text-align: center; margin-top: 32px; font-size: 11px; color: var(--text-tertiary);
+}
+.venus-wl-note strong { color: var(--text-primary); }
+
+/* FAQ */
+.venus-faq-container { max-width: 600px; }
+.venus-faq-list { display: flex; flex-direction: column; gap: 8px; }
+.venus-faq-item {
+  background: var(--bg-2); border: 1px solid var(--b1); border-radius: var(--r3);
+  padding: 14px 16px; cursor: pointer; transition: border-color .14s;
+}
+.venus-faq-item:hover { border-color: var(--b2); }
+.venus-faq-q {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.venus-faq-q span { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.venus-faq-q svg { color: var(--text-tertiary); flex-shrink: 0; }
+.venus-faq-a {
+  font-size: 12.5px; color: var(--text-secondary); line-height: 1.65; margin-top: 12px;
+}
+
+/* Footer */
+.venus-footer {
+  border-top: 1px solid var(--b1); padding: 28px 0;
+}
+.venus-footer-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px;
+}
+.venus-footer-inner > p { font-size: 11px; color: var(--text-tertiary); }
+.venus-footer-links { display: flex; align-items: center; gap: 16px; }
+.venus-footer-links a {
+  font-size: 11px; color: var(--text-tertiary); text-decoration: none;
+  transition: color .14s;
+}
+.venus-footer-links a:hover { color: var(--text-primary); }
+
+@media (max-width: 640px) {
+  .venus-hero { padding: 32px 20px 40px; }
+  .venus-hero-title { font-size: 28px; }
+  .venus-hero-sub { font-size: 13px; }
+  .venus-container { padding: 0 16px; }
+  .venus-feat-grid { grid-template-columns: 1fr; }
+  .venus-section { padding: 32px 0; }
+}
