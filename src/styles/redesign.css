@@ -6,11 +6,12 @@
    1. GRID LAYOUT
    ══════════════════════════════════════════════════════════════════════ */
 
-body:has(#sidebar) {
+#app-shell {
   display: grid;
   grid-template-columns: 220px 1fr;
   grid-template-rows: 100vh;
   overflow: hidden;
+  width: 100%;
 }
 
 #sidebar {
@@ -872,7 +873,7 @@ body:has(#sidebar) {
 
 /* ── Tablet ── */
 @media (max-width: 1024px) {
-  body:has(#sidebar) { grid-template-columns: 64px 1fr; }
+  #app-shell { grid-template-columns: 64px 1fr; }
   #sidebar { width: 64px; }
   .sb-logo-text, .sb-section, #sidebar .nav-entry span,
   .ne-badge, .sb-upgrade, .sb-user-name, .sb-user-plan,
@@ -890,7 +891,7 @@ body:has(#sidebar) {
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
-  body:has(#sidebar) { grid-template-columns: 1fr; }
+  #app-shell { grid-template-columns: 1fr; }
   #sidebar { display: none; }
   .chat-mode-row { flex-direction: column; }
   .comm-sidebar { display: none; }
