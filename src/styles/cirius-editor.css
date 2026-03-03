@@ -486,7 +486,7 @@
   box-shadow: 0 0 60px rgba(0,0,0,0.5);
 }
 
-.ce-preview-iframe { width: 100%; height: 100%; border: none; background: #0c0c10; }
+.ce-preview-iframe { width: 100%; height: 100%; min-width: 0; min-height: 0; display: block; border: none; background: #0c0c10; }
 
 /* ── Empty state ── */
 .ce-empty {
@@ -1385,7 +1385,7 @@
   border-radius: 32px;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.07), 0 24px 80px rgba(0,0,0,0.85);
 }
-.sp-preview-iframe { width: 100%; height: 100%; border: none; }
+.sp-preview-iframe { width: 100%; height: 100%; min-width: 0; min-height: 0; display: block; border: none; }
 
 /* Empty state */
 .sp-preview-empty {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import SplitTopBar from "./SplitTopBar";
 import SplitChatPanel from "./SplitChatPanel";
 import SplitResizer from "./SplitResizer";
@@ -64,10 +64,15 @@ export default function SplitModeEditor({
   const [showFiles, setShowFiles] = useState(true);
   const [rightPanel, setRightPanel] = useState<"preview" | "code">("preview");
   const [showTerminal, setShowTerminal] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1440,
+  );
 
   const projectName = project?.name || "Novo Projeto";
   const files = sourceFiles || project?.source_files_json || {};
   const hasFiles = Object.keys(files).length > 0;
+  const isCompact = viewportWidth < 1280;
+  const canShowFileSidebar = showFiles && hasFiles && !isCompact;
 
   // Auto-select first file if none selected
   useEffect(() => {
@@ -76,6 +81,18 @@ export default function SplitModeEditor({
       if (firstFile) setSelectedFile(firstFile);
     }
   }, [files, selectedFile, hasFiles]);
+
+  // Keep layout responsive to prevent preview from being visually cut
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    const maxChatWidth = Math.max(320, Math.floor(viewportWidth * (canShowFileSidebar ? 0.42 : 0.48)));
+    if (chatWidth > maxChatWidth) setChatWidth(maxChatWidth);
+  }, [viewportWidth, chatWidth, canShowFileSidebar]);
 
   // Auto-show terminal on errors
   useEffect(() => {
@@ -113,7 +130,7 @@ export default function SplitModeEditor({
 
       <div className="sp-body">
         {/* Chat panel */}
-        <div style={{ width: chatWidth, flexShrink: 0 }}>
+        <div style={{ width: chatWidth, flexShrink: 0, minWidth: 320 }}>
           <SplitChatPanel
             messages={chatMessages}
             onSend={handleSend}
@@ -142,7 +159,7 @@ export default function SplitModeEditor({
         </div>
 
         {/* File sidebar — between chat and preview */}
-        {showFiles && hasFiles && (
+        {canShowFileSidebar && (
           <div className="sp-file-sidebar">
             <FileExplorer files={files} selectedFile={selectedFile} onSelectFile={(f) => { setSelectedFile(f); setRightPanel("code"); }} updatedFiles={updatedFiles} />
             <FileMiningFeed files={files} updatedFiles={updatedFiles || []} />
@@ -154,7 +171,7 @@ export default function SplitModeEditor({
         {/* Right side: preview/code + terminal */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           {/* Main content */}
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
             {rightPanel === "preview" ? (
               <SplitPreviewPanel frameMode={frameMode} previewHtml={previewHtml} livePreviewUrl={livePreviewUrl} />
             ) : (
@@ -217,3 +234,4 @@ export default function SplitModeEditor({
     </div>
   );
 }
+
