@@ -110,134 +110,137 @@ export default function VenusPage() {
   const billingLabel: Record<string, string> = { daily: "/dia", monthly: "/mês" };
 
   const content = (
-    <div className="min-h-screen relative">
+    <div style={{ minHeight: "100vh", position: "relative" }}>
       {!user && <MeshBackground />}
 
       {/* Guest Nav */}
       {!user && (
-        <nav className="sticky top-0 z-20 px-6 py-3">
-          <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
-            <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
-            <div className="flex items-center gap-2">
-              <Link to="/community" className="lv-btn-ghost h-9 px-3 text-xs">Comunidade</Link>
-              <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
-              <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Começar Grátis</Link>
+        <nav style={{ position: "sticky", top: 0, zIndex: 20, padding: "12px 24px" }}>
+          <div className="rd-card" style={{ padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Link to="/" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", textDecoration: "none" }}>{brandName}</Link>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Link to="/community" className="gl sm ghost" style={{ textDecoration: "none" }}>Comunidade</Link>
+              <Link to="/login" className="gl sm ghost" style={{ textDecoration: "none" }}>Entrar</Link>
+              <Link to="/register" className="gl sm primary" style={{ textDecoration: "none" }}>Começar Grátis</Link>
             </div>
           </div>
         </nav>
       )}
 
       {/* Breadcrumb */}
-      <div className="max-w-5xl mx-auto px-6 pt-6">
-        <Link to="/" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="h-3.5 w-3.5" /> Voltar ao início
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 24px 0" }}>
+        <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-tertiary)", textDecoration: "none" }}>
+          <ArrowLeft size={14} /> Voltar ao início
         </Link>
       </div>
 
-      {/* ━━━ HERO ━━━ */}
-      <section className="px-6 pt-10 pb-20 max-w-4xl mx-auto text-center animate-fade-in">
-        <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
-          <Crown className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-primary">God Mode — poder máximo</span>
+      {/* HERO */}
+      <section style={{ padding: "40px 24px 80px", maxWidth: 800, margin: "0 auto", textAlign: "center" }}>
+        <div className="chip ch-orange" style={{ marginBottom: 24 }}>
+          <Crown size={14} /> God Mode — poder máximo
         </div>
 
-        <div className="flex justify-center mb-8">
-          <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl" style={{ boxShadow: "0 20px 60px -12px hsl(var(--primary) / 0.4)" }}>
-            <Sparkles className="h-12 w-12 text-primary-foreground" />
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
+          <div className="rd-ico-box" style={{ width: 80, height: 80, borderRadius: "var(--r5)", background: "linear-gradient(135deg, var(--orange), #f97316)", boxShadow: "0 20px 60px -12px rgba(245,158,11,0.4)" }}>
+            <Sparkles size={36} color="#000" />
           </div>
         </div>
 
-        <h1 className="lv-heading-xl mb-5">
-          Starble <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Venus</span>
+        <h1 style={{ fontSize: 36, fontWeight: 900, letterSpacing: "-0.04em", color: "var(--text-primary)", marginBottom: 20 }}>
+          Starble <span style={{ background: "linear-gradient(135deg, var(--orange-l), var(--orange))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Venus</span>
         </h1>
-        <p className="lv-body-lg text-base max-w-2xl mx-auto mb-10 leading-relaxed">
-          A extensão nativa mais poderosa do ecossistema. Funciona <strong className="text-foreground">dentro do Lovable</strong> com acesso total:
+        <p className="body-text" style={{ fontSize: 14, maxWidth: 560, margin: "0 auto 40px", lineHeight: 1.7 }}>
+          A extensão nativa mais poderosa do ecossistema. Funciona <strong style={{ color: "var(--text-primary)" }}>dentro do Lovable</strong> com acesso total:
           modo orquestrado, tasks automatizadas, Brain integrado e build automation.
         </p>
 
         {/* CTA */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
-          {userHasAccess ? (
-            <button onClick={handleDownload} className="lv-btn-primary lv-btn-lg flex items-center gap-2" style={{ boxShadow: "0 8px 30px -4px hsl(var(--primary) / 0.35)" }}>
-              <Download className="h-5 w-5" /> Baixar Venus
-            </button>
-          ) : (
-            <Link to="/checkout" className="lv-btn-accent lv-btn-lg flex items-center gap-2">
-              <Lock className="h-5 w-5" /> Ativar God Mode
-            </Link>
-          )}
-          <div className="flex items-center gap-1.5 lv-caption">
-            <Chrome className="h-4 w-4" /> Extensão nativa para Chrome
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginBottom: 24 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+            {userHasAccess ? (
+              <button onClick={handleDownload} className="gl lg orange">
+                <Download size={18} /> Baixar Venus
+              </button>
+            ) : (
+              <Link to="/checkout" className="gl lg primary" style={{ textDecoration: "none" }}>
+                <Lock size={18} /> Ativar God Mode
+              </Link>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-tertiary)" }}>
+            <Chrome size={14} /> Extensão nativa para Chrome
           </div>
         </div>
 
         {/* Warning */}
-        <div className="max-w-lg mx-auto mt-6 lv-card-sm flex items-start gap-3 text-left" style={{ borderColor: "hsl(var(--destructive) / 0.15)", background: "hsl(var(--destructive) / 0.04)" }}>
-          <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-          <p className="lv-caption">
-            <span className="font-bold text-destructive">Proteção ativa:</span> Tentativas de burlar a validação do token Venus
-            resultarão em <strong className="text-foreground">bloqueio permanente</strong> e notificação ao administrador.
+        <div className="rd-card" style={{ maxWidth: 480, margin: "0 auto", borderLeft: "3px solid var(--red)", display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left" }}>
+          <AlertTriangle size={16} style={{ color: "var(--red-l)", flexShrink: 0, marginTop: 2 }} />
+          <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+            <span style={{ fontWeight: 700, color: "var(--red-l)" }}>Proteção ativa:</span> Tentativas de burlar a validação do token Venus
+            resultarão em <strong style={{ color: "var(--text-primary)" }}>bloqueio permanente</strong> e notificação ao administrador.
           </p>
         </div>
       </section>
 
-      {/* ━━━ FEATURES GRID ━━━ */}
-      <section className="px-6 pb-24 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-3">Funcionalidades</p>
-        <h2 className="lv-heading-lg text-center mb-12">Tudo que você precisa</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* FEATURES GRID */}
+      <section style={{ padding: "0 24px 96px", maxWidth: 1000, margin: "0 auto" }}>
+        <div className="sec-label" style={{ textAlign: "center", marginBottom: 12 }}>Funcionalidades</div>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: "var(--text-primary)", textAlign: "center", marginBottom: 48 }}>Tudo que você precisa</h2>
+        <div className="rd-grid-4">
           {features.map((feat, i) => (
-            <div key={i} className="lv-card flex flex-col items-start gap-4 clf-fade-up" style={{ animationDelay: `${i * 60}ms` }}>
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                <feat.icon className="h-5 w-5 text-primary" />
+            <div key={i} className="rd-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="rd-ico-box ib-orange">
+                <feat.icon size={18} />
               </div>
               <div>
-                <h3 className="lv-heading-sm mb-1.5">{feat.title}</h3>
-                <p className="lv-body">{feat.desc}</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{feat.title}</p>
+                <p className="body-text">{feat.desc}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ━━━ PLANS ━━━ */}
+      {/* PLANS */}
       {plans.length > 0 && (
-        <section className="px-6 pb-24 max-w-5xl mx-auto">
-          <p className="lv-overline text-center mb-3">Planos</p>
-          <h2 className="lv-heading-lg text-center mb-12">God Mode</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            {plans.map((plan, idx) => {
+        <section style={{ padding: "0 24px 96px", maxWidth: 1000, margin: "0 auto" }}>
+          <div className="sec-label" style={{ textAlign: "center", marginBottom: 12 }}>Planos</div>
+          <h2 style={{ fontSize: 22, fontWeight: 900, color: "var(--text-primary)", textAlign: "center", marginBottom: 48 }}>God Mode</h2>
+          <div className="rd-grid-2" style={{ maxWidth: 700, margin: "0 auto" }}>
+            {plans.map((plan) => {
               const isHighlight = !!plan.highlight_label;
               return (
-                <div key={plan.id} className={`lv-card flex flex-col ${isHighlight ? 'ring-2 ring-primary/30' : ''}`}>
+                <div key={plan.id} className="rd-card" style={{
+                  display: "flex", flexDirection: "column",
+                  border: isHighlight ? "1.5px solid rgba(245,158,11,0.35)" : undefined,
+                  position: "relative",
+                }}>
                   {isHighlight && (
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                      <span className="bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-full">
-                        {plan.highlight_label}
-                      </span>
-                    </div>
+                    <span className="chip ch-orange" style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)" }}>
+                      {plan.highlight_label}
+                    </span>
                   )}
-                  <div className="mb-6">
-                    <h3 className="lv-heading-sm mb-2">{plan.display_name || plan.name}</h3>
-                    <div className="flex items-baseline gap-1">
-                      <span className="lv-stat text-3xl">
+                  <div style={{ marginBottom: 24 }}>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>{plan.display_name || plan.name}</p>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                      <span className="rd-stat-value" style={{ fontSize: 28 }}>
                         R${(plan.price / 100).toFixed(2).replace(".", ",")}
                       </span>
-                      <span className="lv-caption">{billingLabel[plan.billing_cycle] || ""}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{billingLabel[plan.billing_cycle] || ""}</span>
                     </div>
                   </div>
                   {plan.features.length > 0 && (
-                    <ul className="space-y-3 mb-8 flex-1">
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32, flex: 1 }}>
                       {plan.features.map((f, i) => (
-                        <li key={i} className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-primary shrink-0" />
-                          <span className="lv-body">{f}</span>
-                        </li>
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <Check size={14} style={{ color: "var(--green)", flexShrink: 0 }} />
+                          <span className="body-text">{f}</span>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
                   {!userHasAccess && (
-                    <Link to="/checkout" className={`${isHighlight ? 'lv-btn-primary' : 'lv-btn-secondary'} w-full text-center`}>
+                    <Link to="/checkout" className={isHighlight ? "gl orange" : "gl"} style={{ width: "100%", justifyContent: "center", textDecoration: "none" }}>
                       Assinar Agora
                     </Link>
                   )}
@@ -246,48 +249,47 @@ export default function VenusPage() {
             })}
           </div>
 
-          {/* WL Note */}
-          <div className="max-w-lg mx-auto mt-10 text-center">
-            <p className="lv-caption">
-              <strong className="text-foreground">White Labels:</strong> a partir de R$7,96/dia ou R$59,96/mês por pessoa.{" "}
-              <Link to="/whitelabel" className="text-primary hover:underline">Saiba mais →</Link>
+          <div style={{ maxWidth: 480, margin: "40px auto 0", textAlign: "center" }}>
+            <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+              <strong style={{ color: "var(--text-primary)" }}>White Labels:</strong> a partir de R$7,96/dia ou R$59,96/mês por pessoa.{" "}
+              <Link to="/whitelabel" style={{ color: "var(--blue-l)" }}>Saiba mais →</Link>
             </p>
           </div>
         </section>
       )}
 
       {loading && (
-        <div className="flex justify-center pb-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div style={{ display: "flex", justifyContent: "center", paddingBottom: 64 }}>
+          <Loader2 size={24} className="animate-spin" style={{ color: "var(--text-tertiary)" }} />
         </div>
       )}
 
-      {/* ━━━ FAQ ━━━ */}
-      <section className="px-6 pb-24 max-w-2xl mx-auto">
-        <p className="lv-overline text-center mb-3">Dúvidas frequentes</p>
-        <h2 className="lv-heading-lg text-center mb-10">FAQ</h2>
-        <div className="space-y-2">
+      {/* FAQ */}
+      <section style={{ padding: "0 24px 96px", maxWidth: 600, margin: "0 auto" }}>
+        <div className="sec-label" style={{ textAlign: "center", marginBottom: 12 }}>Dúvidas frequentes</div>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: "var(--text-primary)", textAlign: "center", marginBottom: 40 }}>FAQ</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {faqs.map((faq, i) => (
-            <div key={i} className="lv-card-sm cursor-pointer" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
-              <div className="flex items-center justify-between">
-                <span className="lv-body-strong">{faq.q}</span>
-                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${openFaq === i ? "rotate-180" : ""}`} />
+            <div key={i} className="rd-card" style={{ cursor: "pointer" }} onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{faq.q}</span>
+                <ChevronDown size={14} style={{ color: "var(--text-tertiary)", transition: "transform .2s", transform: openFaq === i ? "rotate(180deg)" : "none" }} />
               </div>
-              {openFaq === i && <p className="mt-3 lv-body animate-fade-in">{faq.a}</p>}
+              {openFaq === i && <p className="body-text" style={{ marginTop: 12 }}>{faq.a}</p>}
             </div>
           ))}
         </div>
       </section>
 
-      {/* ━━━ FOOTER ━━━ */}
-      <footer className="border-t border-border/50 px-6 py-8">
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="lv-caption">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
-          <div className="flex items-center gap-4">
-            <Link to="/" className="lv-caption hover:text-foreground transition-colors">Início</Link>
-            <Link to="/community" className="lv-caption hover:text-foreground transition-colors">Comunidade</Link>
-            <Link to="/termos" className="lv-caption hover:text-foreground transition-colors">Termos</Link>
-            <Link to="/suporte" className="lv-caption hover:text-foreground transition-colors">Suporte</Link>
+      {/* FOOTER */}
+      <footer style={{ borderTop: "1px solid var(--b1)", padding: "32px 24px" }}>
+        <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+          <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <Link to="/" style={{ fontSize: 11, color: "var(--text-tertiary)", textDecoration: "none" }}>Início</Link>
+            <Link to="/community" style={{ fontSize: 11, color: "var(--text-tertiary)", textDecoration: "none" }}>Comunidade</Link>
+            <Link to="/termos" style={{ fontSize: 11, color: "var(--text-tertiary)", textDecoration: "none" }}>Termos</Link>
+            <Link to="/suporte" style={{ fontSize: 11, color: "var(--text-tertiary)", textDecoration: "none" }}>Suporte</Link>
           </div>
         </div>
       </footer>
