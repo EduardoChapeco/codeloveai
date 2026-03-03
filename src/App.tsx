@@ -228,8 +228,8 @@ const App = () => (
                 <Route path="/marketplace/onboarding/:purchaseId" element={<MarketplaceOnboarding />} />
                 <Route path="/setup/evolution" element={<EvolutionSetupGuide />} />
                 <Route path="/admin/brainchain" element={<BrainchainAdmin />} />
-                {/* Cirius */}
-                <Route path="/cirius" element={<CiriusDashboard />} />
+                {/* Cirius — dashboard redirects to unified projects */}
+                <Route path="/cirius" element={<LovableProjects />} />
                 <Route path="/cirius/new" element={<CiriusNew />} />
                 <Route path="/cirius/create" element={<CiriusNew />} />
                 <Route path="/cirius/project/:id" element={<CiriusProject />} />

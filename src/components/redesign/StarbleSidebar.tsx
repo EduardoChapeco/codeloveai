@@ -6,7 +6,7 @@ import { useChatContext } from "@/contexts/ChatContext";
 import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import {
   MessageCircle, Brain, FolderOpen, Star,
-  ShoppingBag, BarChart3, Layout, Settings, CreditCard,
+  ShoppingBag, BarChart3, Settings, CreditCard,
   LogOut, Sparkles, Shield, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -81,7 +81,7 @@ export default function StarbleSidebar() {
       <div className="sb-body">
         {!collapsed && <div className="sb-section">Principal</div>}
         <NavEntry to="/dashboard" label="Dashboard" icon={BarChart3} iconColor="ib-orange" active={isActive("/dashboard")} collapsed={collapsed} />
-        <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-blue" active={isActive("/lovable/projects")} badge="2" collapsed={collapsed} />
+        <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-blue" active={isActive("/lovable/projects") || isActive("/cirius")} collapsed={collapsed} />
         <NavEntry to="/dashboard" label="Star AI" icon={Brain} iconColor="ib-indigo" active={isActive("/brain")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
         <NavEntry to="/community" label="Comunidade" icon={MessageCircle} iconColor="ib-teal" active={isActive("/community")} badge="HOT" badgeVariant="new" collapsed={collapsed} />
 
@@ -89,7 +89,6 @@ export default function StarbleSidebar() {
 
         {!collapsed && <div className="sb-section">Ferramentas</div>}
         <NavEntry to="/marketplace" label="Loja" icon={ShoppingBag} iconColor="ib-pink" active={isActive("/marketplace")} badge="NOVO" badgeVariant="new" collapsed={collapsed} />
-        <NavEntry to="/cirius" label="Cirius Editor" icon={Layout} iconColor="ib-purple" active={isActive("/cirius")} collapsed={collapsed} />
         <NavEntry to="/extensoes/venus" label="Venus AI" icon={Sparkles} iconColor="ib-green" active={isActive("/extensoes/venus")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
 
         <div className="divider" />
