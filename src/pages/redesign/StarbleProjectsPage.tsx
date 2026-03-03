@@ -280,7 +280,7 @@ export default function StarbleProjectsPage() {
                 <Link2 size={12} /> Conectar Lovable
               </button>
             )}
-            <button className="gl sm orange" onClick={() => navigate("/cirius/new")}>
+            <button className="gl sm orange" onClick={() => navigate("/home")}>
               <Plus size={12} /> Novo Projeto
             </button>
           </div>
@@ -305,7 +305,7 @@ export default function StarbleProjectsPage() {
       {/* Grid */}
       <div className="proj-grid" style={{ padding: "0 28px 28px" }}>
         {/* New project card */}
-        <div className="proj-card new-card" onClick={() => navigate("/cirius/new")}>
+        <div className="proj-card new-card" onClick={() => navigate("/home")}>
           <div className="nc-ico"><Plus size={18} /></div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--tp)" }}>Novo projeto</div>
           <div style={{ fontSize: 11, color: "var(--tt)" }}>Descreva sua ideia e a IA constrói</div>
