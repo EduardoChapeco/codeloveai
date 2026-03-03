@@ -508,9 +508,42 @@ export default function StarbleChatPage() {
           />
           <div className="cib-toolbar">
             <div className="cib-tl">
-              <button className="cib-tbtn ico"><Paperclip size={12} /></button>
-              <button className="cib-tbtn"><Clock size={11} /> Histórico</button>
-              <button className="cib-tbtn">Prompt</button>
+              <button className="cib-tbtn ico" onClick={() => { toast.info("Upload de mídia em breve!"); }}>
+                <Paperclip size={12} />
+              </button>
+              <button className="cib-tbtn" onClick={() => {
+                try {
+                  setHeroVisible(false);
+                  setMessages((prev) => [
+                    ...prev,
+                    { id: `sys-${Date.now()}`, role: "ai", text: "📋 <strong>Histórico</strong>: suas últimas conversas aparecerão aqui em breve. Por enquanto, o histórico é mantido na sessão atual.", time: "agora" },
+                  ]);
+                  scrollToBottom();
+                } catch (err) {
+                  console.error("Error loading history:", err);
+                  toast.error("Erro ao carregar histórico");
+                }
+              }}>
+                <Clock size={11} /> Histórico
+              </button>
+              <button className="cib-tbtn" onClick={() => {
+                try {
+                  const prompts = [
+                    "Crie uma landing page moderna com hero, features e CTA",
+                    "Gere um dashboard admin com gráficos e tabelas",
+                    "Crie um formulário de cadastro com validação",
+                    "Monte uma página de preços com 3 planos",
+                  ];
+                  const random = prompts[Math.floor(Math.random() * prompts.length)];
+                  setInputValue(random);
+                  textareaRef.current?.focus();
+                } catch (err) {
+                  console.error("Error setting prompt:", err);
+                  toast.error("Erro ao carregar prompt");
+                }
+              }}>
+                Prompt
+              </button>
             </div>
             <div className="cib-tr">
               <span style={{ fontSize: 10, color: "var(--tq)", fontFamily: "var(--mono)" }}>⌘↵</span>
