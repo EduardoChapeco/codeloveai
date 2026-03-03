@@ -83,7 +83,6 @@ export default function ExtensionDetail() {
         requirements: Array.isArray(raw.requirements) ? (raw.requirements as string[]) : [],
       });
 
-      // Fetch linked plans
       const { data: peData } = await supabase
         .from("plan_extensions")
         .select("plan_id")
@@ -109,24 +108,17 @@ export default function ExtensionDetail() {
   const userHasAccess = !accessLoading && slug ? hasAccessTo(slug) : false;
 
   const handleDownload = async () => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
+    if (!user) { navigate("/login"); return; }
     if (!ext) return;
-
-    // Labs is restricted to White Label owners only
     if (ext.tier === "white_label_only") {
       toast.error("Starble Labs é exclusivo para proprietários de White Label.");
       return;
     }
-
     if (!userHasAccess) {
       toast.error("Faça upgrade do seu plano para acessar esta extensão.");
       navigate("/checkout");
       return;
     }
-    // Get latest extension file FOR THIS SPECIFIC EXTENSION
     const { data: extFile } = await supabase
       .from("extension_files")
       .select("file_url, version, instructions")
@@ -150,12 +142,12 @@ export default function ExtensionDetail() {
   const billingLabel: Record<string, string> = { daily: "/dia", monthly: "/mês", weekly: "/semana" };
 
   const guestNav = !user ? (
-    <nav className="sticky top-0 z-20 px-6 py-3">
-      <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
-        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
-        <div className="flex items-center gap-3">
-          <Link to="/extensoes" className="text-xs text-muted-foreground hover:text-foreground">Extensões</Link>
-          <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
+    <nav style={{ position: "sticky", top: 0, zIndex: 20, padding: "12px 24px" }}>
+      <div className="rd-card" style={{ padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Link to="/" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", textDecoration: "none" }}>{brandName}</Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Link to="/extensoes" style={{ fontSize: 12, color: "var(--text-tertiary)", textDecoration: "none" }}>Extensões</Link>
+          <Link to="/login" className="gl sm ghost" style={{ textDecoration: "none" }}>Entrar</Link>
         </div>
       </div>
     </nav>
@@ -164,22 +156,22 @@ export default function ExtensionDetail() {
   if (loading) {
     return user ? (
       <AppLayout>
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Loader2 size={24} className="animate-spin" style={{ color: "var(--text-tertiary)" }} />
         </div>
       </AppLayout>
     ) : (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-0)" }}>
+        <Loader2 size={24} className="animate-spin" style={{ color: "var(--text-tertiary)" }} />
       </div>
     );
   }
 
   if (!ext) {
     const notFoundContent = (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6">
-        <h1 className="text-2xl font-bold mb-4">Extensão não encontrada</h1>
-        <Link to="/extensoes" className="lv-btn-primary h-10 px-6 text-sm">Ver todas as extensões</Link>
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", marginBottom: 16 }}>Extensão não encontrada</h1>
+        <Link to="/extensoes" className="gl primary" style={{ textDecoration: "none" }}>Ver todas as extensões</Link>
       </div>
     );
     return user ? <AppLayout>{notFoundContent}</AppLayout> : notFoundContent;
@@ -188,80 +180,79 @@ export default function ExtensionDetail() {
   const Icon = iconMap[ext.icon] || Puzzle;
 
   const pageContent = (
-    <div className="min-h-screen relative">
+    <div style={{ minHeight: "100vh", position: "relative" }}>
       {!user && <MeshBackground />}
       {guestNav}
 
       {/* Breadcrumb */}
-      <div className="max-w-4xl mx-auto px-6 pt-6">
-        <Link to="/extensoes" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="h-3.5 w-3.5" /> Voltar para Extensões
+      <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 24px 0" }}>
+        <Link to="/extensoes" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-tertiary)", textDecoration: "none" }}>
+          <ArrowLeft size={14} /> Voltar para Extensões
         </Link>
       </div>
 
       {/* Hero */}
-      <section className="max-w-4xl mx-auto px-6 pt-8 pb-12">
-        <div className="flex flex-col md:flex-row gap-8 items-start">
-          {/* Icon + Info */}
-          <div className="flex-1">
-            <div className="flex items-center gap-4 mb-4">
-              <div
-                className="h-16 w-16 rounded-2xl flex items-center justify-center shadow-lg shrink-0"
-                style={{ backgroundColor: ext.hero_color }}
-              >
-                <Icon className="h-8 w-8 text-white" />
+      <section style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px 48px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+          <div style={{ display: "flex", gap: 32, alignItems: "flex-start", flexWrap: "wrap" }}>
+            {/* Icon + Info */}
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+                <div className="rd-ico-box" style={{ width: 56, height: 56, borderRadius: "var(--r4)", backgroundColor: ext.hero_color }}>
+                  <Icon size={28} color="#fff" />
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)" }}>{ext.name}</h1>
+                    <span className="chip ch-blue sm">v{ext.version}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{ext.tagline}</p>
+                </div>
+              </div>
+
+              <p className="body-text" style={{ marginBottom: 16 }}>{ext.description}</p>
+
+              {/* Beta Warning */}
+              <div className="rd-card" style={{ borderLeft: "3px solid var(--orange)", display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 24, padding: "10px 14px" }}>
+                <AlertTriangle size={14} style={{ color: "var(--orange-l)", flexShrink: 0, marginTop: 2 }} />
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                  <span style={{ fontWeight: 700, color: "var(--orange-l)" }}>Beta:</span> Esta extensão está em fase beta. Algumas mensagens podem gerar cobrança de créditos no Lovable.
+                </p>
+              </div>
+
+              {/* CTA Buttons */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {userHasAccess ? (
+                  <button onClick={handleDownload} className="gl lg orange">
+                    <Download size={16} /> Baixar Extensão
+                  </button>
+                ) : (
+                  <Link to="/checkout" className="gl lg primary" style={{ textDecoration: "none" }}>
+                    <Lock size={16} /> Fazer Upgrade
+                  </Link>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-tertiary)" }}>
+                  <Chrome size={14} /> Chrome Extension
+                </div>
+              </div>
+            </div>
+
+            {/* Status card */}
+            <div className="rd-card" style={{ width: 240, flexShrink: 0 }}>
+              <div style={{ marginBottom: 16 }}>
+                <div className="sec-label" style={{ marginBottom: 4 }}>Tier</div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{tierLabels[ext.tier] || ext.tier}</p>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div className="sec-label" style={{ marginBottom: 4 }}>Versão</div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{ext.version}</p>
               </div>
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h1 className="text-2xl font-bold text-foreground">{ext.name}</h1>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                    v{ext.version}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground">{ext.tagline}</p>
+                <div className="sec-label" style={{ marginBottom: 4 }}>Status</div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: userHasAccess ? "var(--green-l)" : "var(--text-primary)" }}>
+                  {userHasAccess ? "Incluído no seu plano" : "Upgrade necessário"}
+                </p>
               </div>
-            </div>
-
-            <p className="text-sm text-muted-foreground leading-relaxed mb-4">{ext.description}</p>
-
-            {/* Beta Warning */}
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 flex items-start gap-2.5 mb-6">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-[11px] text-muted-foreground">
-                <span className="font-semibold text-amber-600">Beta:</span> Esta extensão está em fase beta. Algumas mensagens podem gerar cobrança de créditos no Lovable.
-              </p>
-            </div>
-
-            {/* CTA Buttons */}
-            <div className="flex items-center gap-3">
-              {userHasAccess ? (
-                <button onClick={handleDownload} className="lv-btn-primary h-11 px-6 text-sm flex items-center gap-2">
-                  <Download className="h-4 w-4" /> Baixar Extensão
-                </button>
-              ) : (
-                <Link to="/checkout" className="lv-btn-primary h-11 px-6 text-sm flex items-center gap-2">
-                  <Lock className="h-4 w-4" /> Fazer Upgrade
-                </Link>
-              )}
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Chrome className="h-4 w-4" /> Chrome Extension
-              </div>
-            </div>
-          </div>
-
-          {/* Status card */}
-          <div className="w-full md:w-64 shrink-0 rounded-2xl border border-border bg-card p-5 space-y-4">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Tier</p>
-              <p className="text-sm font-bold text-foreground">{tierLabels[ext.tier] || ext.tier}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Versão</p>
-              <p className="text-sm font-bold text-foreground">{ext.version}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Status</p>
-              <p className="text-sm font-bold text-foreground">{userHasAccess ? "✓ Incluído no seu plano" : "Upgrade necessário"}</p>
             </div>
           </div>
         </div>
@@ -269,19 +260,17 @@ export default function ExtensionDetail() {
 
       {/* Features */}
       {ext.features.length > 0 && (
-        <section className="max-w-4xl mx-auto px-6 pb-12">
-          <h2 className="text-lg font-bold text-foreground mb-6">Recursos</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <section style={{ maxWidth: 800, margin: "0 auto", padding: "0 24px 48px" }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)", marginBottom: 24 }}>Recursos</h2>
+          <div className="rd-grid-2">
             {ext.features.map((feat, i) => (
-              <div key={i} className="rounded-2xl border border-border bg-card p-5">
-                <div className="flex items-start gap-3">
-                  <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: ext.hero_color + "20" }}>
-                    <Check className="h-4 w-4" style={{ color: ext.hero_color }} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground mb-1">{feat.title}</p>
-                    <p className="text-xs text-muted-foreground">{feat.description}</p>
-                  </div>
+              <div key={i} className="rd-card" style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <div className="rd-ico-box sm" style={{ backgroundColor: ext.hero_color + "20" }}>
+                  <Check size={14} style={{ color: ext.hero_color }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{feat.title}</p>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{feat.description}</p>
                 </div>
               </div>
             ))}
@@ -291,19 +280,19 @@ export default function ExtensionDetail() {
 
       {/* Plans */}
       {plans.length > 0 && (
-        <section className="max-w-4xl mx-auto px-6 pb-16">
-          <h2 className="text-lg font-bold text-foreground mb-6">Disponível nos planos</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <section style={{ maxWidth: 800, margin: "0 auto", padding: "0 24px 64px" }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)", marginBottom: 24 }}>Disponível nos planos</h2>
+          <div className="rd-grid-3">
             {plans.map(plan => (
-              <div key={plan.id} className="rounded-2xl border border-border bg-card p-5 text-center">
-                <p className="text-sm font-bold text-foreground mb-2">{plan.name}</p>
-                <p className="text-2xl font-black text-foreground">
+              <div key={plan.id} className="rd-card" style={{ textAlign: "center" }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>{plan.name}</p>
+                <p className="rd-stat-value" style={{ fontSize: 22 }}>
                   R${(plan.price / 100).toFixed(2).replace(".", ",")}
-                  <span className="text-xs font-normal text-muted-foreground">{billingLabel[plan.billing_cycle] || ""}</span>
+                  <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-tertiary)" }}>{billingLabel[plan.billing_cycle] || ""}</span>
                 </p>
                 {!userHasAccess && (
-                  <Link to="/checkout" className="lv-btn-primary h-9 px-4 text-xs mt-4 inline-flex items-center gap-1">
-                    <ArrowRight className="h-3.5 w-3.5" /> Assinar
+                  <Link to="/checkout" className="gl sm orange" style={{ marginTop: 16, display: "inline-flex", textDecoration: "none" }}>
+                    <ArrowRight size={12} /> Assinar
                   </Link>
                 )}
               </div>

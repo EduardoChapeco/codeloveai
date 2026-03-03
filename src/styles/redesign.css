@@ -868,7 +868,28 @@
 .rd-link-card:hover .rd-lc-arrow { opacity: 1; }
 
 /* ══════════════════════════════════════════════════════════════════════
-   14. RESPONSIVE
+   14. SIDEBAR COLLAPSE (manual toggle)
+   ══════════════════════════════════════════════════════════════════════ */
+
+#sidebar.sb-collapsed {
+  width: 64px;
+  transition: width .2s var(--ease-spring);
+}
+#sidebar:not(.sb-collapsed) {
+  transition: width .2s var(--ease-spring);
+}
+.sb-collapsed + #main { /* grid auto-adapts */ }
+
+#app-shell:has(.sb-collapsed) { grid-template-columns: 64px 1fr; }
+
+.sb-collapsed .sb-header { justify-content: center; padding: 14px 8px 12px; gap: 0; flex-wrap: wrap; }
+.sb-collapsed .sb-body { padding: 10px 4px; }
+.sb-collapsed .sb-footer { padding: 10px 4px 12px; }
+.sb-collapsed .sb-user { justify-content: center; padding: 8px; }
+.sb-collapsed .nav-entry { justify-content: center; padding: 10px; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   15. RESPONSIVE
    ══════════════════════════════════════════════════════════════════════ */
 
 /* ── Tablet ── */

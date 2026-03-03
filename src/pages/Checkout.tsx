@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, AlertTriangle, ArrowLeft, Loader2, Timer, Percent, Copy, QrCode, CreditCard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +21,6 @@ interface Plan {
   discountedPrice?: number;
 }
 
-// No hardcoded fallback — all plans are fetched from DB
 const fallbackPlans: Plan[] = [];
 
 const defaultTerms = [
@@ -37,7 +36,6 @@ const defaultTerms = [
   "Ao ativar a extensão, o cliente reconhece que o serviço foi entregue e declara ciência de todos os riscos envolvidos.",
 ];
 
-// Promotional deadline — update or remove when promotion ends
 const UNLIMITED_DEADLINE = new Date("2026-04-15T23:59:59-03:00").getTime();
 
 function useCountdown(deadline: number) {
@@ -67,7 +65,6 @@ function formatBRL(value: number | undefined) {
   return `R$${(value ?? 0).toFixed(2).replace(".", ",")}`;
 }
 
-// Billing cycle label map
 const billingCycleLabels: Record<string, string> = {
   daily: "por dia", weekly: "por semana", monthly: "por mês",
 };
@@ -94,7 +91,6 @@ export default function Checkout() {
   const [dbPlans, setDbPlans] = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
 
-  // Fetch plans from DB
   useEffect(() => {
     const fetchPlans = async () => {
       try {
@@ -106,7 +102,6 @@ export default function Checkout() {
           .neq("type", "trial")
           .order("display_order", { ascending: true });
         if (data && data.length > 0) {
-          // Filter out White Label plan — not purchasable via checkout
           const filtered = data.filter((p: any) => (p.price as number) < 20000);
           setDbPlans(filtered.map((p: Record<string, unknown>) => ({
             id: p.id as string,
@@ -141,7 +136,6 @@ export default function Checkout() {
     checkAffiliate();
   }, [user]);
 
-  // Use DB plans if available, otherwise fallback
   const basePlans = dbPlans.length > 0 ? dbPlans : fallbackPlans;
   const plans = basePlans.map(p => ({
     ...p,
@@ -222,8 +216,8 @@ export default function Checkout() {
   if (authLoading || loadingDiscount || loadingPlans) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center h-full min-h-[60vh]">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="flex items-center justify-center" style={{ minHeight: '60vh' }}>
+          <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
         </div>
       </AppLayout>
     );
@@ -236,47 +230,46 @@ export default function Checkout() {
   return (
     <AppLayout>
     <div className="rd-page-content">
-      {/* Nav — glass */}
-      <nav className="sticky top-0 z-20 px-6 py-3">
-        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
-        <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
-        <button
-          onClick={() => {
-            if (step === "terms") { setStep("plan"); setAgreedTerms(false); }
-            else navigate("/");
-          }}
-          className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-2"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Voltar
-        </button>
+      {/* Nav */}
+      <nav style={{ position: "sticky", top: 0, zIndex: 20, padding: "12px 24px" }}>
+        <div className="rd-card" style={{ padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Link to="/" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", textDecoration: "none" }}>{brandName}</Link>
+          <button
+            onClick={() => {
+              if (step === "terms") { setStep("plan"); setAgreedTerms(false); }
+              else navigate("/");
+            }}
+            className="gl sm ghost"
+          >
+            <ArrowLeft size={14} /> Voltar
+          </button>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px" }}>
         {/* Step indicator */}
-        <div className="flex items-center justify-center gap-3 mb-10">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 40 }}>
           {[
             { key: "plan", label: "1. Plano" },
             { key: "terms", label: "2. Termos" },
             { key: "processing", label: "3. Pagamento" },
           ].map((s, i) => (
-            <div key={s.key} className="flex items-center gap-2">
-              <span className={`lv-badge ${step === s.key || (step === "pix" && s.key === "processing") ? "lv-badge-primary" : "lv-badge-muted"}`}>
+            <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className={`chip sm ${step === s.key || (step === "pix" && s.key === "processing") ? "ch-orange" : "ch-gray"}`}>
                 {s.label}
               </span>
-              {i < 2 && <ChevronDown className="h-3 w-3 text-muted-foreground -rotate-90" />}
+              {i < 2 && <ChevronDown size={12} style={{ color: "var(--text-quaternary)", transform: "rotate(-90deg)" }} />}
             </div>
           ))}
         </div>
 
         {/* Affiliate discount banner */}
         {affiliateDiscount > 0 && step === "plan" && (
-          <div className="lv-card-sm border-green-500/30 bg-green-500/5 flex items-center gap-3 mb-8">
-            <Percent className="h-5 w-5 text-green-500 shrink-0" />
+          <div className="rd-card" style={{ borderLeft: "3px solid var(--green)", marginBottom: 24, display: "flex", alignItems: "center", gap: 12 }}>
+            <Percent size={18} style={{ color: "var(--green-l)", flexShrink: 0 }} />
             <div>
-              <p className="lv-body-strong">Desconto de afiliado — {affiliateDiscount}% OFF</p>
-              <p className="lv-caption mt-0.5">
+              <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>Desconto de afiliado — {affiliateDiscount}% OFF</p>
+              <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>
                 Como afiliado, seu desconto de {affiliateDiscount}% é aplicado automaticamente em todos os planos.
               </p>
             </div>
@@ -286,76 +279,79 @@ export default function Checkout() {
         {/* Step 1: Plan selection */}
         {step === "plan" && (
           <div>
-            <p className="lv-overline text-center mb-2">Escolha seu plano</p>
-            <h1 className="lv-heading-lg text-center mb-4">Planos e Preços</h1>
+            <div className="sec-label" style={{ textAlign: "center", marginBottom: 8 }}>Escolha seu plano</div>
+            <h1 style={{ fontSize: 24, fontWeight: 900, letterSpacing: "-0.04em", color: "var(--text-primary)", textAlign: "center", marginBottom: 16 }}>Planos e Preços</h1>
             
-            <div className="lv-card-sm text-center mb-10">
-              <p className="lv-body-strong">⏰ Preços por tempo limitado</p>
-              <p className="lv-caption mt-0.5">Aproveite os preços promocionais de lançamento.</p>
+            <div className="rd-card" style={{ textAlign: "center", marginBottom: 32 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>Preços por tempo limitado</p>
+              <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>Aproveite os preços promocionais de lançamento.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="rd-grid-2">
               {plans.filter(p => !(p.highlight && countdown.expired)).map((plan) => (
                 <div
                   key={plan.id}
-                  className={`lv-card-interactive flex flex-col justify-between ${
-                    plan.popular ? "lv-card-active" : ""
-                  } ${selectedPlan === plan.id ? "ring-2 ring-primary" : ""}`}
+                  className="rd-card"
+                  style={{
+                    display: "flex", flexDirection: "column", justifyContent: "space-between", cursor: "pointer",
+                    border: plan.popular ? "1.5px solid rgba(245,158,11,0.35)" : selectedPlan === plan.id ? "1.5px solid rgba(59,130,246,0.35)" : undefined,
+                  }}
                   onClick={() => handleSelectPlan(plan.id)}
                 >
-                  <div className="flex flex-col h-full">
-                    <div className="min-h-[28px] mb-3 flex gap-2">
-                      {plan.popular && <span className="lv-badge lv-badge-primary">Popular</span>}
-                      {plan.highlight && !countdown.expired && <span className="lv-badge lv-badge-primary">Melhor custo</span>}
-                      {affiliateDiscount > 0 && <span className="lv-badge lv-badge-success">-{affiliateDiscount}%</span>}
+                  <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    <div style={{ minHeight: 28, marginBottom: 12, display: "flex", gap: 8 }}>
+                      {plan.popular && <span className="chip ch-orange">Popular</span>}
+                      {plan.highlight && !countdown.expired && <span className="chip ch-orange">Melhor custo</span>}
+                      {affiliateDiscount > 0 && <span className="chip ch-green">-{affiliateDiscount}%</span>}
                     </div>
 
                     {plan.highlight && !countdown.expired && (
-                      <div className="bg-accent rounded-xl p-3 mb-4">
-                        <div className="flex items-center gap-1.5 justify-center mb-2">
-                          <Timer className="h-3.5 w-3.5 text-primary" />
-                          <span className="text-xs font-medium text-primary">Oferta encerra em</span>
+                      <div style={{ background: "rgba(245,158,11,0.06)", borderRadius: "var(--r3)", padding: 12, marginBottom: 16 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center", marginBottom: 8 }}>
+                          <Timer size={14} style={{ color: "var(--orange-l)" }} />
+                          <span style={{ fontSize: 11, fontWeight: 500, color: "var(--orange-l)" }}>Oferta encerra em</span>
                         </div>
-                        <div className="flex items-center justify-center gap-2">
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                           {[
                             { value: countdown.days, label: "D" },
                             { value: countdown.hours, label: "H" },
                             { value: countdown.minutes, label: "M" },
                             { value: countdown.seconds, label: "S" },
                           ].map((t, i) => (
-                            <div key={i} className="flex items-baseline gap-0.5">
-                              <span className="text-lg font-semibold text-foreground tabular-nums">{String(t.value).padStart(2, "0")}</span>
-                              <span className="text-[10px] font-medium text-muted-foreground">{t.label}</span>
+                            <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 2 }}>
+                              <span style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{String(t.value).padStart(2, "0")}</span>
+                              <span style={{ fontSize: 10, fontWeight: 500, color: "var(--text-tertiary)" }}>{t.label}</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    <p className="lv-overline mb-2">{plan.name}</p>
-                    <p className="text-sm text-muted-foreground line-through">{plan.originalPrice}</p>
+                    <div className="sec-label" style={{ marginBottom: 8 }}>{plan.name}</div>
+                    {plan.originalPrice && <p style={{ fontSize: 12, color: "var(--text-tertiary)", textDecoration: "line-through" }}>{plan.originalPrice}</p>}
                     {affiliateDiscount > 0 ? (
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-sm text-muted-foreground line-through">{formatBRL(plan.price)}</p>
-                        <p className="lv-stat text-2xl text-green-600">{formatBRL(plan.discountedPrice)}</p>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                        <p style={{ fontSize: 12, color: "var(--text-tertiary)", textDecoration: "line-through" }}>{formatBRL(plan.price)}</p>
+                        <p className="rd-stat-value" style={{ color: "var(--green-l)" }}>{formatBRL(plan.discountedPrice)}</p>
                       </div>
                     ) : (
-                      <p className="lv-stat text-2xl mb-1">{formatBRL(plan.price)}</p>
+                      <p className="rd-stat-value" style={{ marginBottom: 4 }}>{formatBRL(plan.price)}</p>
                     )}
-                    <p className="lv-caption mb-4">{plan.period}</p>
-                    <p className="lv-body mb-5">{plan.description}</p>
+                    <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 16 }}>{plan.period}</p>
+                    <p className="body-text" style={{ marginBottom: 20 }}>{plan.description}</p>
 
-                    <ul className="space-y-2 flex-1">
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
                       {plan.features.map((f) => (
-                        <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
-                          <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                          <span>{f}</span>
-                        </li>
+                        <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                          <Check size={14} style={{ color: "var(--green)", flexShrink: 0, marginTop: 2 }} />
+                          <span className="body-text">{f}</span>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                   <button
-                    className={`w-full mt-5 ${plan.popular || plan.highlight ? "lv-btn-primary" : "lv-btn-secondary"} h-10 text-sm`}
+                    className={plan.popular || plan.highlight ? "gl orange" : "gl"}
+                    style={{ width: "100%", justifyContent: "center", marginTop: 20 }}
                     onClick={(e) => { e.stopPropagation(); handleSelectPlan(plan.id); }}
                   >
                     Selecionar
@@ -364,8 +360,8 @@ export default function Checkout() {
               ))}
             </div>
 
-            <div className="mt-5 text-center">
-              <p className="lv-caption italic">
+            <div style={{ marginTop: 20, textAlign: "center" }}>
+              <p className="caption-sm" style={{ fontStyle: "italic", opacity: 0.5 }}>
                 *Vitalício: acesso enquanto a extensão estiver funcional. Serviço considerado concluído após ativação do token. Não há reembolso.
               </p>
             </div>
@@ -375,75 +371,79 @@ export default function Checkout() {
         {/* Step 2: Terms */}
         {step === "terms" && selectedPlanData && (
           <div>
-            <p className="lv-overline text-center mb-2">Aceite os termos</p>
-            <h1 className="lv-heading-lg text-center mb-8">Termos de Uso</h1>
+            <div className="sec-label" style={{ textAlign: "center", marginBottom: 8 }}>Aceite os termos</div>
+            <h1 style={{ fontSize: 24, fontWeight: 900, letterSpacing: "-0.04em", color: "var(--text-primary)", textAlign: "center", marginBottom: 32 }}>Termos de Uso</h1>
 
-            <div className="lv-card-sm flex items-center justify-between mb-8">
+            <div className="rd-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
               <div>
-                <p className="lv-body-strong">Plano selecionado: {selectedPlanData.name}</p>
-                <p className="lv-caption">{selectedPlanData.description}</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>Plano selecionado: {selectedPlanData.name}</p>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{selectedPlanData.description}</p>
               </div>
-              <div className="text-right">
+              <div style={{ textAlign: "right" }}>
                 {affiliateDiscount > 0 ? (
                   <div>
-                    <p className="text-xs text-muted-foreground line-through">{formatBRL(selectedPlanData.price)}</p>
-                    <p className="lv-stat text-xl text-green-600">{formatBRL(selectedPlanData.discountedPrice)}</p>
-                    <p className="text-[10px] font-medium text-green-600">-{affiliateDiscount}% afiliado</p>
+                    <p style={{ fontSize: 11, color: "var(--text-tertiary)", textDecoration: "line-through" }}>{formatBRL(selectedPlanData.price)}</p>
+                    <p className="rd-stat-value" style={{ color: "var(--green-l)" }}>{formatBRL(selectedPlanData.discountedPrice)}</p>
+                    <p style={{ fontSize: 10, fontWeight: 500, color: "var(--green-l)" }}>-{affiliateDiscount}% afiliado</p>
                   </div>
                 ) : (
-                  <p className="lv-stat text-xl">{formatBRL(selectedPlanData.price)}</p>
+                  <p className="rd-stat-value">{formatBRL(selectedPlanData.price)}</p>
                 )}
               </div>
             </div>
 
-            <div className="lv-card space-y-4">
+            <div className="rd-card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {(tenant?.terms_template ? tenant.terms_template.split("\n").filter(Boolean) : defaultTerms).map((term, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="lv-caption font-medium mt-0.5 shrink-0">{String(i + 1).padStart(2, "0")}.</span>
-                  <p className="lv-body">{term}</p>
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500, marginTop: 2, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}.</span>
+                  <p className="body-text">{term}</p>
                 </div>
               ))}
 
-              <div className="pt-6 border-t border-border/60">
-                <label className="flex items-start gap-3 cursor-pointer">
+              <div style={{ paddingTop: 24, borderTop: "1px solid var(--b1)" }}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
                   <input
                     type="checkbox"
                     checked={agreedTerms}
                     onChange={(e) => setAgreedTerms(e.target.checked)}
-                    className="mt-1 h-4 w-4 rounded border border-border accent-primary"
+                    style={{ marginTop: 3 }}
                   />
-                  <span className="lv-body">
+                  <span className="body-text">
                     Li e concordo com todos os termos acima. Entendo que não há garantia de funcionamento contínuo e que não há reembolso.
                   </span>
                 </label>
               </div>
 
               {/* Payment method selection */}
-              <div className="pt-4">
-                <p className="lv-overline mb-3">Método de pagamento</p>
-                <div className="grid grid-cols-2 gap-3">
+              <div style={{ paddingTop: 16 }}>
+                <div className="sec-label" style={{ marginBottom: 12 }}>Método de pagamento</div>
+                <div className="rd-grid-2">
                   <button
                     onClick={() => setPaymentMethod("pix")}
-                    className={`lv-card-sm flex items-center gap-3 cursor-pointer transition-all ${
-                      paymentMethod === "pix" ? "lv-card-active" : ""
-                    }`}
+                    className="rd-card"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
+                      border: paymentMethod === "pix" ? "1.5px solid rgba(245,158,11,0.35)" : undefined,
+                    }}
                   >
-                    <QrCode className="h-5 w-5 text-foreground" />
-                    <div className="text-left">
-                      <p className="lv-body-strong text-xs">PIX</p>
-                      <p className="lv-caption">Pagamento instantâneo</p>
+                    <QrCode size={18} style={{ color: "var(--text-primary)" }} />
+                    <div style={{ textAlign: "left" }}>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>PIX</p>
+                      <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Pagamento instantâneo</p>
                     </div>
                   </button>
                   <button
                     onClick={() => setPaymentMethod("redirect")}
-                    className={`lv-card-sm flex items-center gap-3 cursor-pointer transition-all ${
-                      paymentMethod === "redirect" ? "lv-card-active" : ""
-                    }`}
+                    className="rd-card"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
+                      border: paymentMethod === "redirect" ? "1.5px solid rgba(245,158,11,0.35)" : undefined,
+                    }}
                   >
-                    <CreditCard className="h-5 w-5 text-foreground" />
-                    <div className="text-left">
-                      <p className="lv-body-strong text-xs">Cartão / Outros</p>
-                      <p className="lv-caption">Via Mercado Pago</p>
+                    <CreditCard size={18} style={{ color: "var(--text-primary)" }} />
+                    <div style={{ textAlign: "left" }}>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>Cartão / Outros</p>
+                      <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Via Mercado Pago</p>
                     </div>
                   </button>
                 </div>
@@ -452,7 +452,8 @@ export default function Checkout() {
               <button
                 onClick={handleConfirmAndPay}
                 disabled={!agreedTerms || loadingCheckout}
-                className="lv-btn-primary w-full h-12 text-sm mt-4"
+                className="gl primary"
+                style={{ width: "100%", justifyContent: "center", marginTop: 16, height: 44 }}
               >
                 {loadingCheckout ? "Processando..." : `Pagar ${affiliateDiscount > 0 ? formatBRL(selectedPlanData.discountedPrice) : formatBRL(selectedPlanData.price)}`}
               </button>
@@ -462,45 +463,45 @@ export default function Checkout() {
 
         {/* Step 3: Processing */}
         {step === "processing" && (
-          <div className="text-center py-20">
-            <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary mb-4" />
-            <p className="lv-heading-md mb-2">Processando...</p>
-            <p className="lv-body">Aguarde enquanto preparamos seu pagamento.</p>
+          <div style={{ textAlign: "center", padding: "80px 0" }}>
+            <Loader2 size={40} className="animate-spin" style={{ margin: "0 auto 16px", color: "var(--orange)" }} />
+            <p style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>Processando...</p>
+            <p className="body-text">Aguarde enquanto preparamos seu pagamento.</p>
           </div>
         )}
 
         {/* PIX step */}
         {step === "pix" && pixData && (
-          <div className="max-w-md mx-auto">
-            <p className="lv-overline text-center mb-2">Pagamento PIX</p>
-            <h1 className="lv-heading-lg text-center mb-8">Escaneie ou copie</h1>
+          <div style={{ maxWidth: 420, margin: "0 auto" }}>
+            <div className="sec-label" style={{ textAlign: "center", marginBottom: 8 }}>Pagamento PIX</div>
+            <h1 style={{ fontSize: 24, fontWeight: 900, color: "var(--text-primary)", textAlign: "center", marginBottom: 32 }}>Escaneie ou copie</h1>
 
-            <div className="lv-card text-center space-y-6">
+            <div className="rd-card" style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 24 }}>
               {pixData.pix_qr_base64 && (
-                <div className="flex justify-center">
-                  <img src={`data:image/png;base64,${pixData.pix_qr_base64}`} alt="QR Code PIX" className="h-48 w-48 rounded-xl" />
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <img src={`data:image/png;base64,${pixData.pix_qr_base64}`} alt="QR Code PIX" style={{ height: 192, width: 192, borderRadius: "var(--r3)" }} />
                 </div>
               )}
 
               <div>
-                <p className="lv-overline mb-2">Código PIX Copia e Cola</p>
-                <div className="bg-muted/50 rounded-xl p-3 break-all text-xs font-mono text-foreground">
+                <div className="sec-label" style={{ marginBottom: 8 }}>Código PIX Copia e Cola</div>
+                <div style={{ background: "var(--bg-3)", borderRadius: "var(--r3)", padding: 12, wordBreak: "break-all", fontSize: 11, fontFamily: "var(--mono)", color: "var(--text-primary)" }}>
                   {pixData.pix_code.substring(0, 60)}...
                 </div>
               </div>
 
-              <button onClick={handleCopyPix} className="lv-btn-primary w-full h-11 text-sm flex items-center justify-center gap-2">
-                <Copy className="h-4 w-4" /> Copiar código PIX
+              <button onClick={handleCopyPix} className="gl primary" style={{ width: "100%", justifyContent: "center" }}>
+                <Copy size={14} /> Copiar código PIX
               </button>
 
-              <div className="lv-card-sm bg-accent/50">
-                <p className="lv-caption">
+              <div className="rd-card" style={{ background: "rgba(245,158,11,0.05)" }}>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
                   Após o pagamento, seu plano será ativado automaticamente em até 5 minutos.
                   Você receberá seu token de acesso no dashboard.
                 </p>
               </div>
 
-              <Link to="/dashboard" className="lv-btn-secondary w-full h-10 text-sm flex items-center justify-center">
+              <Link to="/dashboard" className="gl ghost" style={{ width: "100%", justifyContent: "center", textDecoration: "none" }}>
                 Ir para o Dashboard
               </Link>
             </div>
@@ -511,3 +512,4 @@ export default function Checkout() {
     </AppLayout>
   );
 }
+
