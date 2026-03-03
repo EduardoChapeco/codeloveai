@@ -5,8 +5,8 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
 import {
-  Brain, FolderOpen, Star, Heart,
-  ShoppingBag, BarChart3, CreditCard, Users, User,
+  Brain, FolderOpen, Star,
+  ShoppingBag, BarChart3, CreditCard, Users,
   LogOut, Sparkles, Shield, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -50,7 +50,6 @@ export default function StarbleSidebar() {
   const brandName = tenant?.name || "Starble";
 
   const [collapsed, setCollapsed] = useState(false);
-  const [codeloveOpen, setCodeloveOpen] = useState(true);
 
   if (!user) return null;
 
@@ -92,23 +91,7 @@ export default function StarbleSidebar() {
 
         <div className="divider" />
 
-        {/* Codelove module — Community + Profile */}
-        {!collapsed && (
-          <div
-            className="sb-section"
-            style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
-            onClick={() => setCodeloveOpen(!codeloveOpen)}
-          >
-            <Heart size={10} style={{ color: "var(--orange)" }} />
-            Codelove
-          </div>
-        )}
-        {(collapsed || codeloveOpen) && (
-          <>
-            <NavEntry to="/community" label="Comunidade" icon={Users} iconColor="ib-teal" active={isActive("/community")} badge="HOT" badgeVariant="new" collapsed={collapsed} sub={!collapsed} />
-            <NavEntry to={`/profile/${user.id}`} label="Perfil" icon={User} iconColor="ib-gray" active={isActive("/profile")} collapsed={collapsed} sub={!collapsed} />
-          </>
-        )}
+        <NavEntry to="/community" label="Comunidade" icon={Users} iconColor="ib-teal" active={isActive("/community")} badge="HOT" badgeVariant="new" collapsed={collapsed} />
 
         <div className="divider" />
 
