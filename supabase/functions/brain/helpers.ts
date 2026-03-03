@@ -434,7 +434,10 @@ export async function captureResponse(
         const mdContent = extractFileContent(srcData, "src/update.md");
         if (mdContent && /status:\s*done/i.test(mdContent)) {
           const mdTs = extractUpdateMdTimestamp(mdContent);
-          if (questionTimestamp && mdTs && mdTs < questionTimestamp) {
+          const elapsed = Date.now() - (questionTimestamp || 0);
+          // Accept stale timestamps after 30s of waiting
+          const acceptStale = elapsed > 30_000;
+          if (questionTimestamp && mdTs && mdTs < questionTimestamp && !acceptStale) {
             // Stale response, skip
           } else {
             const body = extractMdBody(mdContent);
