@@ -303,36 +303,7 @@ async function sendViaOpenRouter(prompt: string, systemPrompt?: string) {
   } catch (e) { return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) }; }
 }
 
-async function sendViaGateway(prompt: string, systemPrompt?: string) {
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  const t0 = Date.now();
-  if (!key) return { content: null, durationMs: 0, error: "LOVABLE_API_KEY not set" };
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 3000 }),
-    });
-    const d = Date.now() - t0;
-    if (res.ok) { const r = await res.json(); return { content: r?.choices?.[0]?.message?.content || null, durationMs: d }; }
-    const e = await res.text().catch(() => ""); return { content: null, durationMs: d, error: `HTTP ${res.status}: ${e.slice(0, 100)}` };
-  } catch (e) { return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) }; }
-}
-
-async function sendViaGeminiDirect(sc: SupabaseClient, prompt: string, systemPrompt?: string) {
-  const t0 = Date.now();
-  const { data: vk } = await sc.from("api_key_vault").select("id, api_key_encrypted, requests_count").eq("provider", "gemini").eq("is_active", true).order("requests_count", { ascending: true }).limit(1).maybeSingle();
-  if (!vk?.api_key_encrypted) return { content: null, durationMs: 0, error: "No Gemini key in vault" };
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${vk.api_key_encrypted}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt || "Return only valid JSON."}\n\n${prompt}` }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 4000 } }),
-    });
-    const d = Date.now() - t0;
-    await sc.from("api_key_vault").update({ requests_count: (vk.requests_count || 0) + 1, last_used_at: new Date().toISOString() }).eq("id", vk.id);
-    if (res.ok) { const r = await res.json(); return { content: r?.candidates?.[0]?.content?.parts?.[0]?.text || null, durationMs: d }; }
-    const e = await res.text().catch(() => ""); return { content: null, durationMs: d, error: `HTTP ${res.status}: ${e.slice(0, 100)}` };
-  } catch (e) { return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 100) }; }
-}
+// ─── sendViaGateway e sendViaGeminiDirect REMOVIDOS (proibido usar Gemini/Lovable AI no Cirius) ───
 
 // ─── PRD Generation (multi-engine cascade) ────────────────────────────────
 
@@ -424,15 +395,7 @@ Retorne APENAS este JSON (sem markdown, sem explicações):
   if (or.content) { const p = extractJSON(or.content); if (p) { await logEntry(sc, projectId, "prd_openrouter", "completed", `Claude PRD: ${p.tasks?.length} tasks`, { duration_ms: or.durationMs }); return p; } }
   attempts.push({ engine: "openrouter", ok: false, durationMs: or.durationMs, error: or.error });
 
-  // 3. GEMINI (Vault)
-  const gm = await sendViaGeminiDirect(sc, prompt);
-  if (gm.content) { const p = extractJSON(gm.content); if (p) { await logEntry(sc, projectId, "prd_gemini", "completed", `Gemini PRD: ${p.tasks?.length} tasks`, { duration_ms: gm.durationMs }); return p; } }
-  attempts.push({ engine: "gemini", ok: false, durationMs: gm.durationMs, error: gm.error });
-
-  // 4. AI GATEWAY (último recurso)
-  const gw = await sendViaGateway(prompt);
-  if (gw.content) { const p = extractJSON(gw.content); if (p) { await logEntry(sc, projectId, "prd_gateway", "completed", `Gateway PRD: ${p.tasks?.length} tasks`, { duration_ms: gw.durationMs }); return p; } }
-  attempts.push({ engine: "gateway", ok: false, durationMs: gw.durationMs, error: gw.error });
+  // 3. GEMINI / AI GATEWAY — REMOVIDOS (proibido usar Gemini/Lovable AI no Cirius)
 
   await logEntry(sc, projectId, "prd_all_failed", "failed", `ALL PRD engines failed: ${attempts.map(a => `${a.engine}(${a.error || "fail"})`).join(", ")}`, { metadata: { attempts } });
   return null;
@@ -453,14 +416,7 @@ async function refineSourceFiles(sc: SupabaseClient, projectId: string, files: R
   const sys = "You are a code reviewer. Return all source files wrapped in <file path=\"...\">content</file> tags. Do NOT wrap in JSON.";
   const t0 = Date.now();
 
-  // Try Gateway first
-  const gw = await sendViaGateway(prompt, sys);
-  if (gw.content) {
-    const p = tryParseRefinement(gw.content);
-    if (p) return { ok: true, files: mergeFileMaps(files, p), durationMs: Date.now() - t0 };
-  }
-
-  // Fallback to OpenRouter
+  // OpenRouter/Claude only (Gateway removido)
   const or2 = await sendViaOpenRouter(prompt, sys);
   if (or2.content) {
     const p = tryParseRefinement(or2.content);

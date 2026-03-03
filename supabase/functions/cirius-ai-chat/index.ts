@@ -248,38 +248,7 @@ async function sendViaOpenRouter(
   return { content: null, durationMs: d, error: `HTTP ${res.status}: ${e.slice(0, 100)}` };
 }
 
-// ─── AI Engine: Lovable AI Gateway (Gemini) ─────────────────
-
-async function sendViaGateway(
-  messages: Array<{ role: string; content: string }>,
-  opts: { maxTokens?: number } = {},
-): Promise<{ content: string | null; durationMs: number; error?: string }> {
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  const t0 = Date.now();
-  if (!key) return { content: null, durationMs: 0, error: "LOVABLE_API_KEY not set" };
-
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages,
-        temperature: 0.3,
-        max_tokens: opts.maxTokens || 16000,
-      }),
-    });
-    const durationMs = Date.now() - t0;
-    if (!res.ok) {
-      const e = await res.text().catch(() => "");
-      return { content: null, durationMs, error: `Gateway HTTP ${res.status}: ${e.slice(0, 100)}` };
-    }
-    const json = await res.json();
-    return { content: json?.choices?.[0]?.message?.content || null, durationMs };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 80) };
-  }
-}
+// ─── AI Engine: Lovable AI Gateway — REMOVIDO (proibido para Cirius) ─────
 
 // ─── Sequential Task Execution (Build Command) ──────────────
 
@@ -348,12 +317,6 @@ Output COMPLETE file content — never use "..." or placeholders.`;
 
     if ("content" in result && result.content && result.content.length > 100) {
       content = result.content;
-    } else {
-      const gwResult = await sendViaGateway(messages);
-      if (gwResult.content && gwResult.content.length > 100) {
-        content = gwResult.content;
-        engine = "gateway";
-      }
     }
 
     if (!content) {
@@ -472,14 +435,9 @@ serve(async (req) => {
         { role: "user", content: prdPrompt },
       ];
 
-      const gwResult = await sendViaGateway(prdMessages);
       let prd: any = null;
-      if (gwResult.content) prd = extractPrdJSON(gwResult.content);
-
-      if (!prd) {
-        const orResult = await sendViaOpenRouter(prdMessages);
-        if ("content" in orResult && orResult.content) prd = extractPrdJSON(orResult.content);
-      }
+      const orResult = await sendViaOpenRouter(prdMessages);
+      if ("content" in orResult && orResult.content) prd = extractPrdJSON(orResult.content);
 
       if (!prd || !prd.tasks?.length) {
         return new Response(JSON.stringify({
