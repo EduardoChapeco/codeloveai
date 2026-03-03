@@ -40,7 +40,7 @@ export default function AppNav() {
 
   return (
     <nav
-      className="sticky top-0 z-30 h-[58px] flex items-center justify-between px-5 bg-background/88 backdrop-blur-xl border-b border-border/50"
+      className="sticky top-0 z-30 h-[58px] flex items-center justify-between px-3 sm:px-5 bg-background/88 backdrop-blur-xl border-b border-border/50 min-w-0 overflow-hidden"
     >
       {/* ── Brand ── */}
       <Link to="/" className="flex items-center gap-2.5 shrink-0 select-none">
@@ -51,35 +51,35 @@ export default function AppNav() {
             {brandName.substring(0, 1)}
           </div>
         )}
-        <span className="text-[13px] font-bold text-foreground hidden sm:inline" style={{ letterSpacing: "-0.02em" }}>
+        <span className="text-[13px] font-bold text-foreground hidden lg:inline" style={{ letterSpacing: "-0.02em" }}>
           {brandName}
         </span>
       </Link>
 
       {/* ── Nav items ── */}
-      <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+      <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar min-w-0 flex-shrink">
         {navItems.filter(n => n.show).map(item => (
           <Link
             key={item.to}
             to={item.to}
-            className={`lv-nav-item ${isActive(item.to) ? "lv-nav-item-active" : "lv-nav-item-inactive"}`}
+            className={`lv-nav-item shrink-0 ${isActive(item.to) ? "lv-nav-item-active" : "lv-nav-item-inactive"}`}
           >
             <item.icon className="h-[15px] w-[15px] shrink-0" />
-            <span className="hidden md:inline">{item.label}</span>
+            <span className="hidden lg:inline">{item.label}</span>
           </Link>
         ))}
 
         <Link
           to={`/profile/${user.id}`}
-          className={`lv-nav-item ${location.pathname.startsWith("/profile") ? "lv-nav-item-active" : "lv-nav-item-inactive"}`}
+          className={`lv-nav-item shrink-0 ${location.pathname.startsWith("/profile") ? "lv-nav-item-active" : "lv-nav-item-inactive"}`}
         >
-          <span className="hidden sm:inline text-[13px]">Perfil</span>
+          <span className="hidden lg:inline text-[13px]">Perfil</span>
         </Link>
 
         {/* Chat AI button */}
         <button
           onClick={toggleChat}
-          className={`lv-btn-icon ${isChatOpen ? "!bg-primary/10 !text-primary" : ""}`}
+          className={`lv-btn-icon shrink-0 ${isChatOpen ? "!bg-primary/10 !text-primary" : ""}`}
           title={brandName + " AI"}
         >
           <Bot className="h-4 w-4" />
