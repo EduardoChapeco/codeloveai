@@ -7,21 +7,12 @@ import { useTenant } from "@/contexts/TenantContext";
 import AppLayout from "@/components/AppLayout";
 
 interface Plan {
-  id: string;
-  name: string;
-  price: number;
-  period: string;
-  description: string;
-  features: string[];
-  popular?: boolean;
-  highlight?: string | null;
-  maxProjects?: number | null;
-  billingCycle: string;
+  id: string; name: string; price: number; period: string; description: string;
+  features: string[]; popular?: boolean; highlight?: string | null;
+  maxProjects?: number | null; billingCycle: string;
 }
 
-const billingCycleLabels: Record<string, string> = {
-  daily: "/dia", weekly: "/semana", monthly: "/mês",
-};
+const billingCycleLabels: Record<string, string> = { daily: "/dia", weekly: "/semana", monthly: "/mês" };
 
 export default function PlansPage() {
   const { tenant } = useTenant();
@@ -37,29 +28,17 @@ export default function PlansPage() {
         const { data } = await supabase
           .from("plans")
           .select("id, name, type, price, billing_cycle, description, features, highlight_label, display_order, is_public, is_active, max_projects")
-          .eq("is_public", true)
-          .eq("is_active", true)
-          .order("display_order", { ascending: true });
-        
+          .eq("is_public", true).eq("is_active", true).order("display_order", { ascending: true });
         if (data) {
           setPlans(data.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            price: p.price / 100,
-            period: billingCycleLabels[p.billing_cycle] || p.billing_cycle,
-            description: p.description || "",
-            features: Array.isArray(p.features) ? p.features : [],
-            popular: p.highlight_label?.toLowerCase() === "popular",
-            highlight: p.highlight_label,
-            maxProjects: p.max_projects,
-            billingCycle: p.billing_cycle,
+            id: p.id, name: p.name, price: p.price / 100, period: billingCycleLabels[p.billing_cycle] || p.billing_cycle,
+            description: p.description || "", features: Array.isArray(p.features) ? p.features : [],
+            popular: p.highlight_label?.toLowerCase() === "popular", highlight: p.highlight_label,
+            maxProjects: p.max_projects, billingCycle: p.billing_cycle,
           })));
         }
-      } catch (err) {
-        console.error("Error fetching plans:", err);
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { console.error("Error fetching plans:", err); }
+      finally { setLoading(false); }
     };
     fetchPlans();
   }, []);
@@ -67,8 +46,8 @@ export default function PlansPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="flex items-center justify-center" style={{ minHeight: '60vh' }}>
+          <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
         </div>
       </AppLayout>
     );
@@ -80,159 +59,141 @@ export default function PlansPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto px-6 py-12">
-        <div className="text-center mb-12">
-          <p className="lv-overline mb-2">Preços Transparentes</p>
-          <h1 className="lv-heading-lg mb-3">Escolha o seu Plano</h1>
-          <p className="lv-body-lg max-w-2xl mx-auto">
-            Planos flexíveis para todas as necessidades. Comece grátis e escale conforme cresce.
-          </p>
-        </div>
-
-        {/* Daily plans grid */}
-        <div className={`grid gap-5 max-w-4xl mx-auto ${dailyPlans.length >= 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2"}`}>
-          {dailyPlans.map((plan) => (
-            <div
-              key={plan.id}
-              className={`clf-liquid-glass p-6 flex flex-col justify-between ${
-                plan.popular ? "ring-2 ring-primary/30" : ""
-              }`}
-            >
-              {plan.popular && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-full shadow-lg shadow-primary/20">
-                  Mais Popular
-                </span>
-              )}
-              <div>
-                <p className="lv-overline mb-3">{plan.name}</p>
-                <div className="flex items-baseline gap-1 mb-1">
-                  <span className="lv-stat text-3xl">
-                    R${plan.price.toFixed(2).replace(".", ",")}
-                  </span>
-                  <span className="lv-caption">{plan.period}</span>
-                </div>
-                <p className="lv-body mb-5 min-h-[2.5rem]">{plan.description}</p>
-
-                {plan.maxProjects && (
-                  <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-primary/5 border border-primary/10">
-                    <Crown className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-xs font-semibold text-primary">Até {plan.maxProjects} projetos</span>
-                  </div>
-                )}
-
-                <ul className="space-y-2.5 mb-6">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                      <span className="lv-body">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <button
-                onClick={() => plan.price === 0 ? navigate("/free") : navigate(`/checkout?plan=${plan.id}`)}
-                className={`w-full ${plan.popular ? "lv-btn-primary" : plan.price > 0 ? "lv-btn-secondary" : "lv-btn-ghost"} h-11 text-sm`}
-              >
-                {plan.price === 0 ? "Começar Grátis" : "Selecionar Plano"}
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {/* Monthly plans section */}
-        {monthlyPlans.length > 0 && (
-          <div className="max-w-4xl mx-auto mt-10">
-            <p className="lv-overline text-center mb-4">Planos Mensais</p>
-            <div className={`grid gap-5 ${monthlyPlans.length >= 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 max-w-md mx-auto"}`}>
-              {monthlyPlans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={`clf-liquid-glass p-6 flex flex-col justify-between ${
-                    plan.popular ? "ring-2 ring-primary/30" : ""
-                  }`}
-                >
-                  {plan.popular && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-full shadow-lg shadow-primary/20">
-                      Mais Popular
-                    </span>
-                  )}
-                  <div>
-                    <p className="lv-overline mb-3">{plan.name}</p>
-                    <div className="flex items-baseline gap-1 mb-1">
-                      <span className="lv-stat text-3xl">
-                        R${plan.price.toFixed(2).replace(".", ",")}
-                      </span>
-                      <span className="lv-caption">{plan.period}</span>
-                    </div>
-                    <p className="lv-body mb-5 min-h-[2.5rem]">{plan.description}</p>
-                    <ul className="space-y-2.5 mb-6">
-                      {plan.features.map((feature, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                          <span className="lv-body">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <button
-                    onClick={() => navigate(`/checkout?plan=${plan.id}`)}
-                    className="lv-btn-secondary w-full h-11 text-sm"
-                  >
-                    Selecionar Plano <ArrowRight className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
+      <div style={{ background: 'var(--bg-0)', minHeight: '100%' }}>
+        <div className="rd-page-content" style={{ maxWidth: 1100, paddingTop: 48, paddingBottom: 48 }}>
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: 40 }}>
+            <div className="sec-label" style={{ marginBottom: 8 }}>Preços Transparentes</div>
+            <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-0.04em', color: 'var(--text-primary)', marginBottom: 8 }}>
+              Escolha o seu Plano
+            </h1>
+            <p className="body-text" style={{ maxWidth: 500, margin: '0 auto' }}>
+              Planos flexíveis para todas as necessidades. Comece grátis e escale conforme cresce.
+            </p>
           </div>
-        )}
 
-        {/* White Label plan */}
-        {wlPlan && (
-          <div className="max-w-4xl mx-auto mt-10">
-            <div className="clf-liquid-glass p-6 md:p-8">
-              <div className="flex flex-col md:flex-row md:items-center gap-6">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Building2 className="h-5 w-5 text-primary" />
-                    <span className="lv-overline text-primary">{wlPlan.highlight || "Empresas"}</span>
+          {/* Daily plans */}
+          <div className={`rd-grid-${dailyPlans.length >= 3 ? '3' : '2'}`} style={{ maxWidth: 900, margin: '0 auto', marginBottom: 24 }}>
+            {dailyPlans.map((plan) => (
+              <div key={plan.id} className="rd-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', border: plan.popular ? '1.5px solid rgba(245,158,11,0.35)' : undefined }}>
+                {plan.popular && (
+                  <span className="chip ch-orange" style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)' }}>
+                    Mais Popular
+                  </span>
+                )}
+                <div>
+                  <div className="sec-label" style={{ marginBottom: 10 }}>{plan.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                    <span className="rd-stat-value">R${plan.price.toFixed(2).replace(".", ",")}</span>
+                    <span className="caption">{plan.period}</span>
                   </div>
-                  <h3 className="lv-heading-md mb-2">{wlPlan.name}</h3>
-                  <p className="lv-body mb-4">{wlPlan.description}</p>
-                  <div className="flex flex-wrap gap-3">
+                  <p className="body-text" style={{ marginBottom: 16, minHeight: 40 }}>{plan.description}</p>
+
+                  {plan.maxProjects && (
+                    <div className="rd-alert info" style={{ marginBottom: 12, padding: '8px 12px' }}>
+                      <Crown size={12} /> Até {plan.maxProjects} projetos
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                    {plan.features.map((feature, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                        <Check size={14} style={{ color: 'var(--green)', flexShrink: 0, marginTop: 2 }} />
+                        <span className="body-text">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => plan.price === 0 ? navigate("/free") : navigate(`/checkout?plan=${plan.id}`)}
+                  className={plan.popular ? "gl orange" : plan.price > 0 ? "gl" : "gl ghost"}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  {plan.price === 0 ? "Começar Grátis" : "Selecionar Plano"}
+                  <ArrowRight size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Monthly plans */}
+          {monthlyPlans.length > 0 && (
+            <div style={{ maxWidth: 900, margin: '0 auto', marginBottom: 24 }}>
+              <div className="sec-label" style={{ textAlign: 'center', marginBottom: 14 }}>Planos Mensais</div>
+              <div className="rd-grid-2">
+                {monthlyPlans.map((plan) => (
+                  <div key={plan.id} className="rd-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', border: plan.popular ? '1.5px solid rgba(245,158,11,0.35)' : undefined }}>
+                    {plan.popular && (
+                      <span className="chip ch-orange" style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)' }}>
+                        Mais Popular
+                      </span>
+                    )}
+                    <div>
+                      <div className="sec-label" style={{ marginBottom: 10 }}>{plan.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                        <span className="rd-stat-value">R${plan.price.toFixed(2).replace(".", ",")}</span>
+                        <span className="caption">{plan.period}</span>
+                      </div>
+                      <p className="body-text" style={{ marginBottom: 16, minHeight: 40 }}>{plan.description}</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                        {plan.features.map((feature, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                            <Check size={14} style={{ color: 'var(--green)', flexShrink: 0, marginTop: 2 }} />
+                            <span className="body-text">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={() => navigate(`/checkout?plan=${plan.id}`)} className="gl" style={{ width: '100%', justifyContent: 'center' }}>
+                      Selecionar Plano <ArrowRight size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* White Label */}
+          {wlPlan && (
+            <div className="rd-card-full" style={{ maxWidth: 900, margin: '0 auto', marginBottom: 24 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Building2 size={16} style={{ color: 'var(--purple)' }} />
+                  <span className="sec-label" style={{ color: 'var(--purple-l)' }}>{wlPlan.highlight || "Empresas"}</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>{wlPlan.name}</div>
+                  <p className="body-text" style={{ marginBottom: 12 }}>{wlPlan.description}</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                     {wlPlan.features.map((f, i) => (
-                      <span key={i} className="flex items-center gap-1.5 lv-caption">
-                        <Check className="h-3.5 w-3.5 text-primary" /> {f}
+                      <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
+                        <Check size={12} style={{ color: 'var(--green)' }} /> {f}
                       </span>
                     ))}
                   </div>
                 </div>
-                <div className="text-center md:text-right shrink-0">
-                  <div className="flex items-baseline gap-1 justify-center md:justify-end mb-1">
-                    <span className="lv-stat text-3xl">R${wlPlan.price.toFixed(2).replace(".", ",")}</span>
-                    <span className="lv-caption">{wlPlan.period}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <span className="rd-stat-value" style={{ fontSize: 24 }}>R${wlPlan.price.toFixed(2).replace(".", ",")}</span>
+                    <span className="caption" style={{ marginLeft: 4 }}>{wlPlan.period}</span>
+                    <div className="caption-sm" style={{ marginTop: 2 }}>+ 30% comissão por usuário ativo</div>
                   </div>
-                  <p className="lv-caption mb-4">+ 30% comissão por usuário ativo</p>
-                  <button
-                    onClick={() => navigate("/whitelabel")}
-                    className="lv-btn-primary h-11 px-8 text-sm mx-auto md:ml-auto md:mr-0"
-                  >
-                    Saiba Mais <ArrowRight className="h-4 w-4" />
+                  <button onClick={() => navigate("/whitelabel")} className="gl purple">
+                    Saiba Mais <ArrowRight size={12} />
                   </button>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="mt-8 text-center space-y-2">
-          <p className="lv-caption opacity-60">
-            * Em breve, o plano Individual terá limite de projetos. Contrate o plano Agência para múltiplos projetos.
-          </p>
-          <p className="lv-body">
-            Precisa de um plano personalizado? <Link to="/suporte" className="text-primary hover:underline">Fale conosco</Link>
-          </p>
+          <div style={{ textAlign: 'center', marginTop: 24 }}>
+            <p className="caption-sm" style={{ opacity: .5, marginBottom: 8 }}>
+              * Em breve, o plano Individual terá limite de projetos. Contrate o plano Agência para múltiplos projetos.
+            </p>
+            <p className="body-text">
+              Precisa de um plano personalizado? <Link to="/suporte" style={{ color: 'var(--blue-l)' }}>Fale conosco</Link>
+            </p>
+          </div>
         </div>
       </div>
     </AppLayout>
