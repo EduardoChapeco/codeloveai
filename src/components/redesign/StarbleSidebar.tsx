@@ -7,7 +7,7 @@ import {
   Brain, FolderOpen, Star,
   ShoppingBag, BarChart3, CreditCard, Users,
   LogOut, Sparkles, Shield, Settings, Plug,
-  Globe,
+  Globe, ArrowLeft, Puzzle, Layers, Cloud,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 
@@ -41,7 +41,7 @@ function NavEntry({ to, label, icon: Icon, iconColor, badge, badgeVariant = "def
 
 export default function StarbleSidebar() {
   const { user, signOut } = useAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const { tenant, isTenantAdmin } = useTenant();
   const { hasAccess } = useHasActiveAccess();
@@ -66,6 +66,9 @@ export default function StarbleSidebar() {
   const initial = (user.email?.[0] || "U").toUpperCase();
   const userName = user.user_metadata?.name || user.email?.split("@")[0] || "Usuário";
 
+  // Contextual: Are we in admin area?
+  const inAdminContext = location.pathname.startsWith("/admin");
+
   return (
     <div id="sidebar" className={collapsed ? "sb-collapsed" : ""}>
       {/* Header */}
@@ -84,41 +87,62 @@ export default function StarbleSidebar() {
 
       {/* Body */}
       <div className="sb-body">
-        {!collapsed && <div className="sb-section">Principal</div>}
-        <NavEntry to="/dashboard" label="Dashboard" icon={BarChart3} iconColor="ib-blue" active={isActive("/dashboard")} collapsed={collapsed} />
-        <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-indigo" active={isActive("/lovable/projects") || isActive("/cirius") || isActive("/projeto")} collapsed={collapsed} />
-        <NavEntry to="/lovable/connect" label="Painel & Conexão" icon={Plug} iconColor="ib-teal" active={isActive("/lovable/connect")} collapsed={collapsed} />
-        <NavEntry to="/brain" label="Star AI" icon={Brain} iconColor="ib-purple" active={isActive("/brain")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
-
-        <div className="divider" />
-
-        {!collapsed && <div className="sb-section">Comunidade & Loja</div>}
-        <NavEntry to="/community" label="Comunidade" icon={Users} iconColor="ib-teal" active={isActive("/community")} collapsed={collapsed} />
-        <NavEntry to="/marketplace" label="Loja" icon={ShoppingBag} iconColor="ib-pink" active={isActive("/marketplace")} collapsed={collapsed} />
-        <NavEntry to="/extensoes/venus" label="Venus AI" icon={Sparkles} iconColor="ib-green" active={isActive("/extensoes/venus")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
-
-        <div className="divider" />
-
-        {!collapsed && <div className="sb-section">Conta</div>}
-        <NavEntry to="/cirius/integrations" label="Configurações" icon={Settings} iconColor="ib-gray" active={isActive("/cirius/integrations")} collapsed={collapsed} />
-        <NavEntry to="/plans" label="Planos & Billing" icon={CreditCard} iconColor="ib-gray" active={isActive("/plans") || isActive("/checkout")} collapsed={collapsed} />
-
-        {/* Admin — Tenant */}
-        {(isAdmin || isTenantAdmin) && (
+        {inAdminContext && (isAdmin || isTenantAdmin) ? (
+          /* ── CONTEXTUAL ADMIN SIDEBAR ── */
           <>
+            <NavEntry to="/dashboard" label="← Voltar" icon={ArrowLeft} iconColor="ib-gray" collapsed={collapsed} />
             <div className="divider" />
-            {!collapsed && <div className="sb-section">Admin</div>}
-            <NavEntry to="/admin" label="Painel Admin" icon={Shield} iconColor="ib-red" active={isActive("/admin") && !isActive("/admin/global") && !isActive("/admin/integrations") && !isActive("/admin/cloud") && !isActive("/admin/brainchain")} collapsed={collapsed} />
-          </>
-        )}
+            {!collapsed && <div className="sb-section">Administração</div>}
+            <NavEntry to="/admin" label="Painel Admin" icon={Shield} iconColor="ib-red" active={location.pathname === "/admin"} collapsed={collapsed} />
 
-        {/* Admin Global — only for global admins */}
-        {isAdmin && (
+            {(isAdmin || isTenantAdmin) && (
+              <NavEntry to="/admin/global" label="Admin Global" icon={Globe} iconColor="ib-red" active={isActive("/admin/global")} collapsed={collapsed} sub />
+            )}
+
+            {isAdmin && (
+              <>
+                <NavEntry to="/admin/integrations" label="Integrações API" icon={Settings} iconColor="ib-gray" active={isActive("/admin/integrations")} collapsed={collapsed} sub />
+                <NavEntry to="/admin/cloud" label="Lovable Cloud" icon={Cloud} iconColor="ib-blue" active={isActive("/admin/cloud")} collapsed={collapsed} sub />
+                <NavEntry to="/admin/brainchain" label="Brainchain" icon={Brain} iconColor="ib-purple" active={isActive("/admin/brainchain")} collapsed={collapsed} sub />
+
+                <div className="divider" />
+                {!collapsed && <div className="sb-section">Gestão</div>}
+                <NavEntry to="/tenant/admin" label="Tenants" icon={Users} iconColor="ib-teal" active={isActive("/tenant/admin")} collapsed={collapsed} />
+                <NavEntry to="/admin/extensions" label="Extensões" icon={Puzzle} iconColor="ib-green" active={isActive("/admin/extensions")} collapsed={collapsed} />
+                <NavEntry to="/admin/modules" label="Módulos" icon={Layers} iconColor="ib-indigo" active={isActive("/admin/modules")} collapsed={collapsed} />
+              </>
+            )}
+          </>
+        ) : (
+          /* ── MAIN SIDEBAR ── */
           <>
-            <NavEntry to="/admin/global" label="Admin Global" icon={Globe} iconColor="ib-red" active={isActive("/admin/global")} collapsed={collapsed} sub />
-            <NavEntry to="/admin/integrations" label="Integrações API" icon={Settings} iconColor="ib-gray" active={isActive("/admin/integrations")} collapsed={collapsed} sub />
-            <NavEntry to="/admin/cloud" label="Lovable Cloud" icon={Sparkles} iconColor="ib-blue" active={isActive("/admin/cloud")} collapsed={collapsed} sub />
-            <NavEntry to="/admin/brainchain" label="Brainchain" icon={Brain} iconColor="ib-purple" active={isActive("/admin/brainchain")} collapsed={collapsed} sub />
+            {!collapsed && <div className="sb-section">Principal</div>}
+            <NavEntry to="/dashboard" label="Dashboard" icon={BarChart3} iconColor="ib-blue" active={isActive("/dashboard")} collapsed={collapsed} />
+            <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-indigo" active={isActive("/lovable/projects") || isActive("/cirius") || isActive("/projeto")} collapsed={collapsed} />
+            <NavEntry to="/lovable/connect" label="Painel & Conexão" icon={Plug} iconColor="ib-teal" active={isActive("/lovable/connect")} collapsed={collapsed} />
+            <NavEntry to="/brain" label="Star AI" icon={Brain} iconColor="ib-purple" active={isActive("/brain")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
+
+            <div className="divider" />
+
+            {!collapsed && <div className="sb-section">Comunidade & Loja</div>}
+            <NavEntry to="/community" label="Comunidade" icon={Users} iconColor="ib-teal" active={isActive("/community")} collapsed={collapsed} />
+            <NavEntry to="/marketplace" label="Loja" icon={ShoppingBag} iconColor="ib-pink" active={isActive("/marketplace")} collapsed={collapsed} />
+            <NavEntry to="/extensoes/venus" label="Venus AI" icon={Sparkles} iconColor="ib-green" active={isActive("/extensoes/venus")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
+
+            <div className="divider" />
+
+            {!collapsed && <div className="sb-section">Conta</div>}
+            <NavEntry to="/cirius/integrations" label="Configurações" icon={Settings} iconColor="ib-gray" active={isActive("/cirius/integrations")} collapsed={collapsed} />
+            <NavEntry to="/plans" label="Planos & Billing" icon={CreditCard} iconColor="ib-gray" active={isActive("/plans") || isActive("/checkout")} collapsed={collapsed} />
+
+            {/* Admin entry point */}
+            {(isAdmin || isTenantAdmin) && !adminLoading && (
+              <>
+                <div className="divider" />
+                {!collapsed && <div className="sb-section">Admin</div>}
+                <NavEntry to="/admin" label="Painel Admin" icon={Shield} iconColor="ib-red" active={isActive("/admin")} collapsed={collapsed} />
+              </>
+            )}
           </>
         )}
       </div>
