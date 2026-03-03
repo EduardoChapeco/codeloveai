@@ -314,10 +314,10 @@ export default function LovableConnect() {
   return (
     <AppLayout>
       <div className="max-w-xl mx-auto px-6 py-10">
-        <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-quaternary)" }}>Integração</p>
-        <h1 className="text-lg font-bold mb-2" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Lovable Connect</h1>
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--text-quaternary)" }}>Gerenciamento</p>
+        <h1 className="text-lg font-bold mb-2" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Painel</h1>
         <p className="text-xs mb-8" style={{ color: "var(--text-tertiary)" }}>
-          Gerencie projetos, deploys e previews conectando automaticamente via extensão.
+          Gerencie conexão, tokens, projetos e previews em um único lugar.
         </p>
 
         {loadingAccount ? (

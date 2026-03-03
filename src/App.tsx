@@ -178,7 +178,8 @@ const App = () => (
                 <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/notes" element={<Notes />} />
                 <Route path="/install" element={<Install />} />
-                <Route path="/lovable/connect" element={<LovableConnect />} />
+                <Route path="/painel" element={<LovableConnect />} />
+                <Route path="/lovable/connect" element={<LovableConnect />} /> {/* Legacy */}
                 <Route path="/lovable/projects" element={<LovableProjects />} />
                 <Route path="/lovable/preview" element={<LovablePreview />} />
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />

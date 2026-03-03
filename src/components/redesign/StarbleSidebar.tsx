@@ -119,7 +119,7 @@ export default function StarbleSidebar() {
             {!collapsed && <div className="sb-section">Principal</div>}
             <NavEntry to="/home" label="Home" icon={BarChart3} iconColor="ib-blue" active={isActive("/home")} collapsed={collapsed} />
             <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-indigo" active={isActive("/lovable/projects") || isActive("/cirius") || isActive("/projeto")} collapsed={collapsed} />
-            <NavEntry to="/lovable/connect" label="Painel & Conexão" icon={Plug} iconColor="ib-teal" active={isActive("/lovable/connect")} collapsed={collapsed} />
+            <NavEntry to="/painel" label="Painel" icon={Plug} iconColor="ib-teal" active={isActive("/painel") || isActive("/lovable/connect")} collapsed={collapsed} />
             <NavEntry to="/ai" label="Star AI" icon={Brain} iconColor="ib-purple" active={isActive("/ai")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
 
             <div className="divider" />
