@@ -387,150 +387,34 @@ export default function CiriusEditor() {
       const historyMsgs = chatMessages.slice(-20).map(m => ({ role: m.role, content: m.content }));
       historyMsgs.push({ role: "user", content: msg });
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      addTerminalLine("Enviando para Cirius Brain (md-mining)...", "system");
 
-      const applyJsonResult = async (payload: any) => {
-        const summaryContent = String(payload?.content || "Resposta recebida.");
-
-        const assistantMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: summaryContent,
-          timestamp: Date.now(),
-        };
-        setChatMessages(prev => [...prev, assistantMsg]);
-
-        const filesUpdated = payload?.files_updated || 0;
-        if (filesUpdated > 0 && payload?.raw_content) {
-          const newFiles = extractFileBlocks(payload.raw_content);
-          if (Object.keys(newFiles).length > 0) {
-            const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
-            setSourceFiles(merged);
-            sourceFilesRef.current = merged;
-            setPreviewHtml(buildPreviewFromFiles(merged));
-            setProject((prev: any) => ({ ...prev, source_files_json: merged }));
-            await supabase.from("cirius_projects" as any).update({ source_files_json: merged }).eq("id", id);
-            addTerminalLine(`${filesUpdated} arquivo(s) atualizado(s)`, "success");
-          }
-        }
-
-        if (payload?.command_type === "build" && payload?.orchestrator) {
-          addTerminalLine(`Pipeline: ${payload.pipeline?.task_count || 0} tarefas disparadas`, "system");
-          const bubbleId = `orch_${Date.now()}`;
-          setBubbles(prev => [...prev, {
-            id: bubbleId,
-            title: `Pipeline (${payload.pipeline?.task_count || 0} tasks)`,
-            phase: "running",
-            steps: [{ s: "run", t: "Tarefas distribuídas para os Brains..." }],
-            pct: 25,
-            startTime: Date.now(),
-          }]);
-          addToast(`🚀 Pipeline: ${payload.pipeline?.task_count || 0} tarefas em execução`, "success");
-          setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 120000);
-        }
-      };
-
-      const runJsonFallback = async (reason: string) => {
-        addTerminalLine(`Fallback sem streaming (${reason})...`, "warn");
-        const { data, error } = await supabase.functions.invoke("cirius-ai-chat", {
-          body: { messages: historyMsgs, project_id: id, stream: false },
-        });
-        if (error || data?.error) {
-          throw new Error(data?.error || error?.message || "Erro no fallback de chat");
-        }
-        await applyJsonResult(data || {});
-      };
-
-      if (!token) {
-        await runJsonFallback("sessão sem token");
-        setChatLoading(false);
-        return;
-      }
-
-      addTerminalLine("Conectando ao Cirius Brain (streaming)...", "system");
-
-      const controller = new AbortController();
-      const connectTimeout = setTimeout(() => controller.abort(), 45000);
-
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cirius-ai-chat`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ messages: historyMsgs, project_id: id, stream: true }),
+      // Brain-First: always JSON (no streaming needed — Brain mines .md internally)
+      const { data, error } = await supabase.functions.invoke("cirius-ai-chat", {
+        body: { messages: historyMsgs, project_id: id, stream: false },
       });
 
-      clearTimeout(connectTimeout);
-      if (!resp.ok) {
-        await runJsonFallback(`HTTP ${resp.status}`);
-        setChatLoading(false);
-        return;
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || "Erro no Cirius Brain");
       }
 
-      // Check if response is SSE stream
-      const contentType = resp.headers.get("content-type") || "";
-      
-      if (contentType.includes("text/event-stream") && resp.body) {
-        addTerminalLine("Stream SSE conectado (Brain/Gateway)", "success");
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = "";
-        let buffer = "";
+      const summaryContent = String(data?.content || "Resposta recebida.");
+      const providerUsed = data?.provider || "unknown";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: summaryContent,
+        timestamp: Date.now(),
+      };
+      setChatMessages(prev => [...prev, assistantMsg]);
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+      addTerminalLine(`Provedor: ${providerUsed}`, "info");
 
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const payload = line.slice(6).trim();
-            if (payload === "[DONE]") continue;
-
-            try {
-              const json = JSON.parse(payload);
-              const delta = json.choices?.[0]?.delta?.content;
-              if (delta) {
-                fullText += delta;
-                setStreamingText(fullText);
-              }
-            } catch {
-              // Non-JSON SSE line, skip
-            }
-          }
-        }
-
-        if (!fullText.trim()) {
-          setStreamingText("");
-          await runJsonFallback("stream vazio");
-          setChatLoading(false);
-          return;
-        }
-
-        // Final: extract files from streamed content
-        const newFiles = extractFileBlocks(fullText);
-        const filesUpdated = Object.keys(newFiles).length;
-
-        // Clean summary for display (strip file blocks)
-        const summaryContent = stripFileBlocks(fullText) || "Código gerado com sucesso.";
-
-        const assistantMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: summaryContent,
-          timestamp: Date.now(),
-        };
-        setChatMessages(prev => [...prev, assistantMsg]);
-        setStreamingText("");
-
-        if (filesUpdated > 0) {
+      const filesUpdated = data?.files_updated || 0;
+      if (filesUpdated > 0 && data?.raw_content) {
+        const newFiles = extractFileBlocks(data.raw_content);
+        if (Object.keys(newFiles).length > 0) {
           const fileNames = Object.keys(newFiles);
           setUpdatedFiles(fileNames);
           const merged = mergeFileMaps(sourceFilesRef.current, newFiles);
@@ -538,35 +422,31 @@ export default function CiriusEditor() {
           sourceFilesRef.current = merged;
           setPreviewHtml(buildPreviewFromFiles(merged));
           setProject((prev: any) => ({ ...prev, source_files_json: merged }));
-
-          // Save to DB
           await supabase.from("cirius_projects" as any).update({ source_files_json: merged }).eq("id", id);
-
           addTerminalLine(`${filesUpdated} arquivo(s) atualizado(s): ${fileNames.join(", ")}`, "success");
           addToast(`✅ ${filesUpdated} arquivo(s) atualizado(s)`, "success");
-        } else {
-          addTerminalLine("Resposta recebida (sem alterações de arquivo)", "info");
         }
+      } else if (filesUpdated > 0) {
+        // Files were updated server-side, reload
+        await loadProject();
+        addToast(`✅ ${filesUpdated} arquivo(s) atualizado(s)`, "success");
       } else {
-        // Fallback: JSON response
-        addTerminalLine("Resposta JSON recebida", "info");
-        const data = await resp.json().catch(() => ({}));
-        await applyJsonResult(data || {});
+        addTerminalLine("Resposta recebida (sem alterações de arquivo)", "info");
+      }
 
-        const filesUpdated = data?.files_updated || 0;
-        if (filesUpdated > 0) {
-          const cmdLabels: Record<string, string> = {
-            fix: "🔧 Correção aplicada",
-            improve: "✨ Melhoria aplicada",
-            refine: "🔍 Refinamento completo",
-            chat: "✅ Atualizado",
-          };
-          addToast(cmdLabels[data?.command_type] || `${filesUpdated} arquivo(s) atualizado(s)`, "success");
-        }
-
-        if (data?.command_type === "build") {
-          await loadProject();
-        }
+      if (data?.command_type === "build" && data?.orchestrator) {
+        addTerminalLine(`Pipeline: ${data.pipeline?.task_count || 0} tarefas disparadas`, "system");
+        const bubbleId = `orch_${Date.now()}`;
+        setBubbles(prev => [...prev, {
+          id: bubbleId,
+          title: `Pipeline (${data.pipeline?.task_count || 0} tasks)`,
+          phase: "running",
+          steps: [{ s: "run", t: "Tarefas distribuídas para os Brains..." }],
+          pct: 25,
+          startTime: Date.now(),
+        }]);
+        addToast(`🚀 Pipeline: ${data.pipeline?.task_count || 0} tarefas em execução`, "success");
+        setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 120000);
       }
     } catch (e) {
       const errText = e instanceof Error ? e.message : "Erro";

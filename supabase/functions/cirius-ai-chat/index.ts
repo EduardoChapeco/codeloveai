@@ -253,78 +253,266 @@ async function dispatchToOrchestrator(
   }
 }
 
-// ─── SSE Streaming via Gateway ──────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// BRAIN-FIRST ENGINE: Send via Brain → Mine .md → Extract files
+// Same pipeline as Star AI (proven, reliable)
+// ═══════════════════════════════════════════════════════════════
 
-async function streamViaGateway(prompt: string, systemPrompt: string): Promise<ReadableStream | null> {
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  if (!key) return null;
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        stream: true,
-        temperature: 0.3,
-        max_tokens: 16000,
-      }),
-    });
-    if (!res.ok || !res.body) return null;
-    return res.body;
-  } catch {
-    return null;
+const LOVABLE_API = "https://api.lovable.dev";
+const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
+
+function lovFetch(url: string, token: string, opts: RequestInit = {}) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Origin: "https://lovable.dev",
+    Referer: "https://lovable.dev/",
+    "X-Client-Git-SHA": GIT_SHA,
+    ...(opts.headers as Record<string, string> || {}),
+  };
+  if ((opts.method === "POST" || opts.method === "PUT" || opts.method === "PATCH") && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
   }
+  return fetch(url, { ...opts, headers });
 }
 
-// Non-streaming fallbacks
-async function sendViaOpenRouterPool(
-  sc: SupabaseClient, supabaseUrl: string, serviceKey: string,
-  prompt: string, systemPrompt: string, model = "anthropic/claude-sonnet-4",
-): Promise<{ content: string | null; durationMs: number; error?: string }> {
-  const t0 = Date.now();
+/** Get user's Lovable token from lovable_accounts */
+async function getUserLovableToken(sc: SupabaseClient, userId: string): Promise<string | null> {
+  const { data } = await sc.from("lovable_accounts")
+    .select("token_encrypted")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  return data?.token_encrypted?.trim() || null;
+}
+
+/** Refresh Lovable token if expired */
+async function refreshLovableToken(sc: SupabaseClient, userId: string): Promise<string | null> {
   try {
-    const keyRes = await fetch(`${supabaseUrl}/functions/v1/api-key-router`, {
+    const { data: acct } = await sc.from("lovable_accounts")
+      .select("refresh_token_encrypted")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!acct?.refresh_token_encrypted) return null;
+
+    const fbKey = Deno.env.get("FIREBASE_API_KEY");
+    if (!fbKey) return null;
+
+    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${fbKey}`, {
       method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(acct.refresh_token_encrypted)}`,
+    });
+    if (!res.ok) return null;
+
+    const payload = await res.json();
+    const newToken = payload.id_token || payload.access_token;
+    if (!newToken) return null;
+
+    await sc.from("lovable_accounts").update({
+      token_encrypted: newToken,
+      ...(payload.refresh_token ? { refresh_token_encrypted: payload.refresh_token } : {}),
+    }).eq("user_id", userId).eq("status", "active");
+
+    return newToken;
+  } catch { return null; }
+}
+
+async function getValidLovableToken(sc: SupabaseClient, userId: string): Promise<string | null> {
+  const token = await getUserLovableToken(sc, userId);
+  if (!token) return null;
+  try {
+    const probe = await lovFetch(`${LOVABLE_API}/user/workspaces`, token, { method: "GET" });
+    if (probe.ok) return token;
+    if (probe.status === 401 || probe.status === 403) return await refreshLovableToken(sc, userId);
+  } catch { /* keep current */ }
+  return token;
+}
+
+/** Get user's active Brain project ID */
+async function getUserBrainProject(sc: SupabaseClient, userId: string): Promise<string | null> {
+  const { data } = await sc.from("user_brain_projects")
+    .select("lovable_project_id")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .not("lovable_project_id", "like", "creating_%")
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.lovable_project_id || null;
+}
+
+/** Send message to Brain via venus-chat (same as Brain.send) */
+async function sendToBrain(
+  supabaseUrl: string, serviceKey: string,
+  projectId: string, token: string, message: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
+      method: "POST",
+      signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({ action: "get", provider: "openrouter" }),
+      body: JSON.stringify({
+        task: message,
+        project_id: projectId,
+        mode: "task",
+        lovable_token: token,
+        skip_suffix: false,
+      }),
     });
-    const keyData = await keyRes.json();
-    const apiKey = (keyRes.ok && keyData?.key) ? keyData.key : Deno.env.get("OPENROUTER_API_KEY");
-    if (!apiKey) return { content: null, durationMs: Date.now() - t0, error: "No OpenRouter keys" };
-    return await directOpenRouter(apiKey, prompt, systemPrompt, model, t0);
+    clearTimeout(timer);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) {
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    }
+    return { ok: true };
   } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 120) };
+    clearTimeout(timer);
+    return { ok: false, error: String(e).slice(0, 80) };
   }
 }
 
-async function directOpenRouter(
-  key: string, prompt: string, systemPrompt: string, model: string, t0: number
-): Promise<{ content: string | null; durationMs: number; error?: string }> {
+/** Parse latest-message SSE/JSON response */
+function parseLatestMessage(rawText: string): { id: string; role: string; content: string; is_streaming: boolean } | null {
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`, "Content-Type": "application/json",
-        "HTTP-Referer": "https://starble.lovable.app", "X-Title": "Cirius AI Chat",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
-        temperature: 0.3, max_tokens: 16000,
-      }),
-    });
-    const durationMs = Date.now() - t0;
-    if (!res.ok) return { content: null, durationMs, error: `HTTP ${res.status}` };
-    const result = await res.json();
-    return { content: result?.choices?.[0]?.message?.content || null, durationMs };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 120) };
-  }
+    let msgText = rawText;
+    if (rawText.includes("data:")) {
+      const lines = rawText.split("\n").filter(l => l.startsWith("data:"));
+      if (lines.length > 0) msgText = lines[lines.length - 1].replace(/^data:\s*/, "");
+    }
+    const msg = JSON.parse(msgText);
+    return {
+      id: msg?.id || msg?.message_id || "",
+      role: msg?.role || "",
+      content: msg?.content || msg?.message || msg?.text || "",
+      is_streaming: !!msg?.is_streaming,
+    };
+  } catch { return null; }
 }
+
+/** Extract file content from source-code response */
+function extractFileContent(srcData: any, filePath: string): string | null {
+  const files = srcData?.files || srcData?.data?.files || srcData?.source?.files || srcData;
+  if (!files) return null;
+  if (typeof files === "object" && !Array.isArray(files)) {
+    if (typeof files[filePath] === "string") return files[filePath];
+    if (files[filePath]?.content) return files[filePath].content;
+  }
+  if (Array.isArray(files)) {
+    const f = files.find((f: any) => f.path === filePath);
+    return f?.content || f?.source || null;
+  }
+  return null;
+}
+
+function extractMdBody(mdContent: string): string | null {
+  const parts = mdContent.split("---");
+  if (parts.length >= 3) {
+    let body = parts.slice(2).join("---").trim();
+    body = body.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+    return body.length > 5 ? body : null;
+  }
+  const afterFm = mdContent.replace(/^---[\s\S]*?---\s*/m, "").trim();
+  return afterFm.length > 5 ? afterFm : null;
+}
+
+function extractUpdateMdTimestamp(mdContent: string): number | null {
+  const match = mdContent.match(/updated_at:\s*(\S+)/);
+  if (!match) return null;
+  const d = new Date(match[1]);
+  return isNaN(d.getTime()) ? null : d.getTime();
+}
+
+/**
+ * CORE: Mine response from Brain project (same captureResponse as Brain helpers)
+ * Polls /chat/latest-message + source-code for src/update.md
+ */
+async function mineBrainResponse(
+  projectId: string,
+  token: string,
+  maxWaitMs = 60_000,
+  intervalMs = 4_000,
+  initialDelayMs = 5_000,
+  questionTs?: number,
+): Promise<{ response: string | null; status: "completed" | "processing" | "timeout" }> {
+  // Capture initial latest-message ID
+  let initialMsgId: string | null = null;
+  try {
+    const initRes = await lovFetch(`${LOVABLE_API}/projects/${projectId}/chat/latest-message`, token, { method: "GET" });
+    if (initRes.ok) {
+      const msg = parseLatestMessage(await initRes.text());
+      initialMsgId = msg?.id || null;
+    }
+  } catch { /* ignore */ }
+
+  await new Promise(r => setTimeout(r, initialDelayMs));
+  const deadline = Date.now() + maxWaitMs;
+
+  while (Date.now() < deadline) {
+    // PRIMARY: /chat/latest-message
+    try {
+      const ctrl = new AbortController();
+      const lmTimer = setTimeout(() => ctrl.abort(), 10_000);
+      const latestRes = await fetch(`${LOVABLE_API}/projects/${projectId}/chat/latest-message`, {
+        signal: ctrl.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Origin: "https://lovable.dev",
+          Referer: "https://lovable.dev/",
+          "X-Client-Git-SHA": GIT_SHA,
+        },
+      });
+      clearTimeout(lmTimer);
+
+      if (latestRes.ok) {
+        const msg = parseLatestMessage(await latestRes.text());
+        if (msg && msg.role !== "user" && !msg.is_streaming && msg.id !== initialMsgId) {
+          const content = (msg.content || "").trim();
+          if (content.length > 30) {
+            let cleaned = content.replace(/^---[\s\S]*?---\s*/m, "").trim();
+            cleaned = cleaned.replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/, "").trim();
+            cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+            if (cleaned.length > 20) {
+              console.log(`[cirius-brain] Got response via latest-message (${cleaned.length} chars)`);
+              return { response: cleaned, status: "completed" };
+            }
+          }
+        }
+      }
+    } catch { /* continue */ }
+
+    // SECONDARY: source-code for src/update.md
+    try {
+      const srcRes = await lovFetch(`${LOVABLE_API}/projects/${projectId}/source-code`, token, { method: "GET" });
+      if (srcRes.ok) {
+        let srcData: any = {};
+        try { srcData = JSON.parse(await srcRes.text()); } catch { /* ignore */ }
+
+        const mdContent = extractFileContent(srcData, "src/update.md");
+        if (mdContent && /status:\s*done/i.test(mdContent)) {
+          const mdTs = extractUpdateMdTimestamp(mdContent);
+          if (questionTs && mdTs && mdTs < questionTs) {
+            // Stale — skip
+          } else {
+            const body = extractMdBody(mdContent);
+            if (body && body.length > 20) {
+              console.log(`[cirius-brain] Got response from update.md (${body.length} chars)`);
+              return { response: body, status: "completed" };
+            }
+          }
+        }
+      }
+    } catch { /* continue */ }
+
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+
+  return { response: null, status: "timeout" };
+}
+
+// ─── Fallback: Gateway (sync, no streaming) ─────────────────
 
 async function sendViaGatewaySync(prompt: string, systemPrompt: string): Promise<{ content: string | null; durationMs: number; error?: string }> {
   const key = Deno.env.get("LOVABLE_API_KEY");
@@ -341,11 +529,7 @@ async function sendViaGatewaySync(prompt: string, systemPrompt: string): Promise
       }),
     });
     const durationMs = Date.now() - t0;
-    if (!res.ok) {
-      if (res.status === 429) return { content: null, durationMs, error: "Rate limit exceeded" };
-      if (res.status === 402) return { content: null, durationMs, error: "AI credits exhausted" };
-      return { content: null, durationMs, error: `Gateway HTTP ${res.status}` };
-    }
+    if (!res.ok) return { content: null, durationMs, error: `Gateway HTTP ${res.status}` };
     const json = await res.json();
     return { content: json?.choices?.[0]?.message?.content || null, durationMs };
   } catch (e) {
@@ -353,102 +537,15 @@ async function sendViaGatewaySync(prompt: string, systemPrompt: string): Promise
   }
 }
 
-async function sendViaBrainchain(
-  supabaseUrl: string, serviceKey: string, anonKey: string,
-  userId: string, message: string, brainType = "code",
-): Promise<{ content: string | null; durationMs: number; error?: string }> {
-  const t0 = Date.now();
-  try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/brainchain-send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}`, apikey: anonKey,
-      },
-      body: JSON.stringify({ user_id: userId, brain_type: brainType, message }),
-    });
-    const data = await res.json().catch(() => ({}));
-    const durationMs = Date.now() - t0;
-    if (res.ok && data?.ok && typeof data?.response === "string" && data.response.length > 0) {
-      return { content: data.response, durationMs };
-    }
-    return { content: null, durationMs, error: data?.error || "Brainchain unavailable" };
-  } catch (e) {
-    return { content: null, durationMs: Date.now() - t0, error: (e as Error).message.slice(0, 80) };
-  }
-}
-
-// ─── Brain Streaming SSE proxy ──────────────────────────────
-async function streamViaBrainchain(
-  supabaseUrl: string, serviceKey: string,
-  userId: string, message: string, brainType = "code",
-): Promise<ReadableStream | null> {
-  try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/brainchain-stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({ user_id: userId, brain_type: brainType, message }),
-    });
-    if (!res.ok || !res.body) return null;
-    
-    // Transform brain SSE events into OpenAI-compatible SSE format
-    const brainStream = res.body;
-    const decoder = new TextDecoder();
-    const encoder = new TextEncoder();
-    let buffer = "";
-
-    return new ReadableStream({
-      async start(controller) {
-        const reader = brainStream.getReader();
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              if (line.startsWith("event: delta")) continue;
-              if (line.startsWith("event: status")) continue;
-              if (line.startsWith("event: done")) continue;
-              if (line.startsWith("event: error")) continue;
-              if (!line.startsWith("data: ")) continue;
-
-              const payload = line.slice(6).trim();
-              try {
-                const data = JSON.parse(payload);
-                if (data.content) {
-                  // Transform to OpenAI SSE format
-                  const chunk = { choices: [{ delta: { content: data.content } }] };
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-                }
-                if (data.error) {
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: data.error })}\n\n`));
-                }
-                if (data.success !== undefined) {
-                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                }
-              } catch { /* skip non-json */ }
-            }
-          }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        } catch { /* stream error */ } finally {
-          controller.close();
-        }
-      }
-    });
-  } catch {
-    return null;
-  }
-}
-
-// ─── Main Handler ───────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ═══════════════════════════════════════════════════════════════
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, project_id, mode, stream: wantStream } = await req.json();
+    const { messages, project_id, stream: wantStream } = await req.json();
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "messages array required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -500,25 +597,19 @@ serve(async (req) => {
 
     const latestMsg = messages[messages.length - 1]?.content || "";
     const command = detectCommand(latestMsg);
-    console.log(`[cirius-ai-chat] Command: ${command.type}, Project: ${project_id?.slice(0, 8)}, Stream: ${!!wantStream}`);
+    console.log(`[cirius-ai-chat] Command: ${command.type}, Project: ${project_id?.slice(0, 8)}, Brain-First mode`);
 
     // ═══════════════════════════════════════════════════════════
     // BUILD COMMAND → Generate PRD → Dispatch to Orchestrator
-    // (Never streamed — returns JSON)
     // ═══════════════════════════════════════════════════════════
     if (command.type === "build" && project_id) {
       const prdPrompt = buildPrdPrompt(command.prompt, projectName, projectFiles);
       let prd: any = null;
-      let provider = "brainchain";
+      let provider = "gateway";
 
-      const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey, prdPrompt,
-        "Return only valid JSON, no markdown fences. No questions.", "anthropic/claude-sonnet-4");
-      if (orResult.content) { prd = extractPrdJSON(orResult.content); provider = "openrouter_claude"; }
-
-      if (!prd) {
-        const gwResult = await sendViaGatewaySync(prdPrompt, "Return only valid JSON, no markdown fences.");
-        if (gwResult.content) { prd = extractPrdJSON(gwResult.content); provider = "gateway"; }
-      }
+      // Use Gateway for PRD generation (fast, structured JSON)
+      const gwResult = await sendViaGatewaySync(prdPrompt, "Return only valid JSON, no markdown fences.");
+      if (gwResult.content) { prd = extractPrdJSON(gwResult.content); provider = "gateway"; }
 
       if (prd && prd.tasks.length > 0) {
         const orchestratorResult = await dispatchToOrchestrator(
@@ -543,194 +634,81 @@ serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // STREAMING PATH — chat, fix, improve, refine
+    // BRAIN-FIRST: Route through user's Brain project
+    // Same pipeline as Star AI — send → mine .md → extract files
     // ═══════════════════════════════════════════════════════════
-    if (wantStream) {
-      let prompt: string;
-      let systemPrompt = CODE_SYSTEM_PROMPT;
+
+    const lovableToken = await getValidLovableToken(supabase, userId);
+    const brainProjectId = lovableToken ? await getUserBrainProject(supabase, userId) : null;
+
+    let assistantContent = "";
+    let provider = "gateway_fallback";
+    const questionTs = Date.now();
+
+    if (brainProjectId && lovableToken) {
+      // ─── Build the prompt for the Brain ───
+      let brainPrompt: string;
       const filesContext = Object.keys(projectFiles).length > 0
-        ? `\nPROJECT FILES:\n${Object.keys(projectFiles).filter(f => !f.startsWith(".cirius/")).slice(0, 30).join(", ")}`
+        ? `\n\nARQUIVOS DO PROJETO CIRIUS (${Object.keys(projectFiles).length} arquivos):\n${Object.entries(projectFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 15).map(([p, c]) => `--- ${p} ---\n${c.slice(0, 2000)}`).join("\n\n")}`
         : "";
 
       if (command.type === "fix") {
+        brainPrompt = `${CODE_SYSTEM_PROMPT}\n\n${buildFixPrompt(command.prompt, projectFiles)}`;
+      } else if (command.type === "improve") {
+        brainPrompt = `${CODE_SYSTEM_PROMPT}\n\n${buildImprovePrompt(command.prompt, projectFiles)}`;
+      } else if (command.type === "refine") {
+        brainPrompt = `${CODE_SYSTEM_PROMPT}\n\n${buildRefinePrompt(projectFiles, projectPrd)}`;
+      } else {
+        // chat — include conversation history
+        const conversationText = messages.slice(-10)
+          .map((m: any) => `${m.role.toUpperCase()}:\n${String(m.content || "").slice(0, 4000)}`)
+          .join("\n\n");
+        brainPrompt = `${CODE_SYSTEM_PROMPT}${filesContext}\n\n[CONVERSA]\n${conversationText}`;
+      }
+
+      console.log(`[cirius-brain] Sending to Brain project=${brainProjectId.slice(0, 8)} (${brainPrompt.length} chars)`);
+
+      // Send to Brain via venus-chat
+      const sendResult = await sendToBrain(supabaseUrl, serviceRoleKey, brainProjectId, lovableToken, brainPrompt);
+
+      if (sendResult.ok) {
+        // Mine the response (same as Brain.capture)
+        const mineResult = await mineBrainResponse(brainProjectId, lovableToken, 60_000, 4_000, 5_000, questionTs);
+
+        if (mineResult.status === "completed" && mineResult.response) {
+          assistantContent = mineResult.response;
+          provider = "brain_md";
+          console.log(`[cirius-brain] Brain response mined (${assistantContent.length} chars)`);
+        } else {
+          console.warn(`[cirius-brain] Brain mining ${mineResult.status}, falling back to Gateway`);
+        }
+      } else {
+        console.warn(`[cirius-brain] Brain send failed: ${sendResult.error}, falling back to Gateway`);
+      }
+    }
+
+    // ─── FALLBACK: Gateway sync (if Brain failed or unavailable) ───
+    if (!assistantContent || assistantContent.trim().length < 10) {
+      console.log(`[cirius-ai-chat] Fallback to Gateway sync`);
+      let prompt: string;
+      if (command.type === "fix") {
         prompt = buildFixPrompt(command.prompt, projectFiles);
-        systemPrompt += filesContext;
       } else if (command.type === "improve") {
         prompt = buildImprovePrompt(command.prompt, projectFiles);
-        systemPrompt += filesContext;
       } else if (command.type === "refine") {
         prompt = buildRefinePrompt(projectFiles, projectPrd);
       } else {
-        // chat
-        systemPrompt += filesContext;
+        const filesContext = Object.keys(projectFiles).length > 0
+          ? `\nPROJECT FILES:\n${Object.keys(projectFiles).filter(f => !f.startsWith(".cirius/")).slice(0, 30).join(", ")}` : "";
         prompt = messages.slice(-20)
           .map((m: any) => `${m.role.toUpperCase()}:\n${String(m.content || "").slice(0, 6000)}`)
-          .join("\n\n");
+          .join("\n\n") + filesContext;
       }
 
-      // Try Brain streaming first (if use_brain_stream is set or as primary)
-      const brainStream = await streamViaBrainchain(
-        supabaseUrl, serviceRoleKey, userId!,
-        `[SYSTEM]\n${systemPrompt}\n\n[USER]\n${prompt}`,
-        command.type === "fix" || command.type === "improve" ? "code" : "general",
-      );
-      if (brainStream) {
-        // Background: tee and collect for file extraction
-        const [passThrough, collector] = brainStream.tee();
-
-        (async () => {
-          try {
-            const reader = collector.getReader();
-            const dec = new TextDecoder();
-            let fullText = "";
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              const chunk = dec.decode(value, { stream: true });
-              for (const line of chunk.split("\n")) {
-                if (!line.startsWith("data: ")) continue;
-                const jsonStr = line.slice(6).trim();
-                if (jsonStr === "[DONE]") continue;
-                try {
-                  const parsed = JSON.parse(jsonStr);
-                  const c = parsed.choices?.[0]?.delta?.content;
-                  if (c) fullText += c;
-                } catch { /* partial */ }
-              }
-            }
-            if (project_id && fullText.length > 10) {
-              let newFiles = extractFileBlocks(fullText);
-              if (Object.keys(newFiles).length === 0) newFiles = extractFilesFromMarkdown(fullText);
-              if (Object.keys(newFiles).length > 0) {
-                const merged = { ...projectFiles, ...newFiles };
-                await supabase.from("cirius_projects").update({ source_files_json: merged, updated_at: new Date().toISOString() }).eq("id", project_id);
-              }
-              const summary = fullText.split(/<file\s/)[0]?.trim().slice(0, 400) || "Brain stream response";
-              await supabase.from("cirius_chat_messages").insert({
-                project_id, user_id: userId, role: "assistant", content: summary,
-                metadata: { command_type: command.type, provider: "brain_stream", files_updated: Object.keys(newFiles || {}).length },
-              });
-            }
-          } catch (e) { console.error("[cirius-ai-chat] brain stream save error:", e); }
-        })();
-
-        return new Response(passThrough, {
-          headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
-        });
-      }
-
-      // Fallback: Gateway streaming
-      const stream = await streamViaGateway(prompt, systemPrompt);
-      if (stream) {
-        // Collect full response in background for file extraction + DB save
-        const [passThrough, collector] = stream.tee();
-
-        // Background: collect full text and save
-        (async () => {
-          try {
-            const reader = collector.getReader();
-            const decoder = new TextDecoder();
-            let fullText = "";
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              const chunk = decoder.decode(value, { stream: true });
-              for (const line of chunk.split("\n")) {
-                if (!line.startsWith("data: ")) continue;
-                const jsonStr = line.slice(6).trim();
-                if (jsonStr === "[DONE]") continue;
-                try {
-                  const parsed = JSON.parse(jsonStr);
-                  const c = parsed.choices?.[0]?.delta?.content;
-                  if (c) fullText += c;
-                } catch { /* partial */ }
-              }
-            }
-
-            // Extract and merge files
-            if (project_id && fullText.length > 10) {
-              let newFiles = extractFileBlocks(fullText);
-              if (Object.keys(newFiles).length === 0) {
-                newFiles = extractFilesFromMarkdown(fullText);
-              }
-              if (Object.keys(newFiles).length > 0) {
-                const merged = { ...projectFiles, ...newFiles };
-                await supabase.from("cirius_projects").update({
-                  source_files_json: merged,
-                  updated_at: new Date().toISOString(),
-                }).eq("id", project_id);
-              }
-
-              // Save assistant message
-              const summary = fullText.split(/<file\s/)[0]?.trim().slice(0, 400) || "Código atualizado";
-              await supabase.from("cirius_chat_messages").insert({
-                project_id, user_id: userId, role: "assistant", content: summary,
-                metadata: { command_type: command.type, provider: "gateway_stream", files_updated: Object.keys(newFiles || {}).length },
-              });
-            }
-          } catch (e) {
-            console.error("[cirius-ai-chat] background save error:", e);
-          }
-        })();
-
-        return new Response(passThrough, {
-          headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
-        });
-      }
-      // If stream fails, fall through to non-streaming
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // NON-STREAMING FALLBACK for fix/improve/refine/chat
-    // ═══════════════════════════════════════════════════════════
-    let assistantContent = "";
-    let provider = "brainchain";
-
-    if ((command.type === "fix" || command.type === "improve") && project_id) {
-      const prompt = command.type === "fix"
-        ? buildFixPrompt(command.prompt, projectFiles)
-        : buildImprovePrompt(command.prompt, projectFiles);
-      const systemPrompt = CODE_SYSTEM_PROMPT + `\nCURRENT FILES:\n${Object.keys(projectFiles).slice(0, 30).join(", ")}`;
-
-      const bcResult = await sendViaBrainchain(supabaseUrl, serviceRoleKey, anonKey, userId,
-        `[SYSTEM]\n${systemPrompt}\n\n[USER]\n${prompt}`, "code");
-      if (bcResult.content && bcResult.content.length > 50) {
-        assistantContent = bcResult.content; provider = "brainchain";
-      } else {
-        const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey, prompt, systemPrompt);
-        if (orResult.content) { assistantContent = orResult.content; provider = "openrouter"; }
-        else {
-          const gw = await sendViaGatewaySync(prompt, systemPrompt);
-          assistantContent = gw.content || ""; provider = "gateway";
-        }
-      }
-    } else if (command.type === "refine" && project_id) {
-      const prompt = buildRefinePrompt(projectFiles, projectPrd);
-      const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey, prompt, CODE_SYSTEM_PROMPT);
-      if (orResult.content) { assistantContent = orResult.content; provider = "openrouter_claude"; }
-      else {
-        const gw = await sendViaGatewaySync(prompt, CODE_SYSTEM_PROMPT);
-        assistantContent = gw.content || ""; provider = "gateway";
-      }
-    } else {
-      const filesContext = Object.keys(projectFiles).length > 0
-        ? `\nPROJECT FILES:\n${Object.keys(projectFiles).filter(f => !f.startsWith(".cirius/")).slice(0, 30).join(", ")}` : "";
-      const systemPrompt = CODE_SYSTEM_PROMPT + filesContext;
-      const conversationText = messages.slice(-20)
-        .map((m: any) => `${m.role.toUpperCase()}:\n${String(m.content || "").slice(0, 6000)}`).join("\n\n");
-
-      const bcResult = await sendViaBrainchain(supabaseUrl, serviceRoleKey, anonKey, userId,
-        `[SYSTEM]\n${systemPrompt}\n\n[CONVERSATION]\n${conversationText}`, "code");
-      if (bcResult.content && bcResult.content.length > 20) {
-        assistantContent = bcResult.content; provider = "brainchain";
-      } else {
-        const orResult = await sendViaOpenRouterPool(supabase, supabaseUrl, serviceRoleKey,
-          conversationText, systemPrompt, "anthropic/claude-sonnet-4");
-        if (orResult.content) { assistantContent = orResult.content; provider = "openrouter"; }
-        else {
-          const gw = await sendViaGatewaySync(conversationText, systemPrompt);
-          assistantContent = gw.content || ""; provider = "gateway";
-        }
+      const gw = await sendViaGatewaySync(prompt, CODE_SYSTEM_PROMPT);
+      if (gw.content) {
+        assistantContent = gw.content;
+        provider = "gateway";
       }
     }
 
@@ -738,20 +716,17 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         ok: false,
         error: "Empty AI response",
-        content: "⚠️ Não consegui gerar resposta agora. Tente novamente em alguns segundos.",
-        command_type: command.type,
-        provider,
-        files_updated: 0,
-        updated_paths: [],
-      }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        content: "⚠️ Não consegui gerar resposta. Tente novamente.",
+        command_type: command.type, provider,
+        files_updated: 0, updated_paths: [],
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // File extraction & merge
+    // ─── Extract files from response (supports <file> tags AND markdown fences) ───
     let filesUpdated = 0;
     let updatedPaths: string[] = [];
     if (project_id) {
+      // Try <file> tags first, then md-assembly markdown parsing
       let newFiles = extractFileBlocks(assistantContent);
       if (Object.keys(newFiles).length === 0) {
         newFiles = extractFilesFromMarkdown(assistantContent);
@@ -787,11 +762,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       ok: false,
       error: e instanceof Error ? e.message : "Unknown error",
-      content: "⚠️ O Cirius teve uma falha temporária e já aplicou fallback. Tente novamente.",
-      files_updated: 0,
-      updated_paths: [],
-    }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+      content: "⚠️ O Cirius teve uma falha temporária. Tente novamente.",
+      files_updated: 0, updated_paths: [],
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
