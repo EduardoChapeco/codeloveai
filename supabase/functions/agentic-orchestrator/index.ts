@@ -18,6 +18,33 @@ const corsHeaders = {
 
 const AQ_PREFIX = `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n`;
 
+// ─── MD Output Protocol ──────────────────────────────────────
+// Same protocol used by Brain — forces all responses into src/update.md for mining
+const MD_OUTPUT_PROTOCOL = `
+
+PROTOCOLO DE SAÍDA OBRIGATÓRIO:
+- TODA sua resposta com código DEVE ser escrita no arquivo src/update.md
+- O arquivo src/update.md é o ÚNICO canal de saída. NÃO responda apenas no chat.
+- Cada bloco de código DEVE ter o caminho do arquivo indicado. Use o formato:
+  \`\`\`tsx file:src/components/MeuComponente.tsx
+  // conteúdo do arquivo
+  \`\`\`
+  OU:
+  \`\`\`tsx src/components/MeuComponente.tsx
+  // conteúdo do arquivo
+  \`\`\`
+- O src/update.md DEVE começar com frontmatter:
+  ---
+  updated_at: [timestamp ISO 8601]
+  status: done
+  task: [resumo da tarefa]
+  ---
+- Inclua TODOS os arquivos completos e funcionais, prontos para uso.
+- NÃO use dados mock. NÃO use placeholders. Código REAL e COMPLETO.
+- NÃO responda apenas no chat inline. O chat pode ter um resumo curto, mas o código DEVE estar em src/update.md.
+
+`;
+
 // ─── Brain Specialization Context ─────────────────────────────
 // Injected as system context prefix per brain_type so each brain stays in its lane
 const BRAIN_CONTEXT: Record<string, string> = {
@@ -321,7 +348,7 @@ async function executeTaskViaBrainchain(
 
     const lvPayload = {
       id: msgId,
-      message: AQ_PREFIX + brainContext + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`,
+      message: AQ_PREFIX + brainContext + MD_OUTPUT_PROTOCOL + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`,
       chat_only: false,
       ai_message_id: aiMsgId,
       thread_id: "main",
