@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -40,22 +40,22 @@ export default function ResetPassword() {
           <span className="text-lg font-semibold tracking-tight text-foreground">{brandName}</span>
         </Link>
 
-        <div className="lv-card p-8">
-          <h1 className="lv-heading-md text-center mb-6">Nova senha</h1>
+        <div className="rd-card" style={{ padding: "2rem" }}>
+          <h1 className="rd-heading text-center mb-6">Nova senha</h1>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="lv-caption mb-1.5 block">Nova senha</label>
+              <label className="rd-label mb-1.5 block">Nova senha</label>
               <input
                 type="password"
                 placeholder="Mínimo 6 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="lv-input"
+                className="rd-input"
                 minLength={6}
                 required
               />
             </div>
-            <button type="submit" disabled={loading} className="lv-btn-primary w-full">
+            <button type="submit" disabled={loading} className="gl primary w-full">
               {loading ? "Salvando..." : "Salvar nova senha"}
             </button>
           </form>

@@ -39,7 +39,6 @@ export default function LovablePreview() {
     check();
   }, [user, checkConnection]);
 
-  // Load saved projects for dropdown
   useEffect(() => {
     if (!user) return;
     const loadSaved = async () => {
@@ -53,7 +52,6 @@ export default function LovablePreview() {
     loadSaved();
   }, [user]);
 
-  // Auto-load preview when projectId changes from URL
   useEffect(() => {
     const pid = searchParams.get("projectId");
     if (pid && pid !== projectId) {
@@ -66,10 +64,8 @@ export default function LovablePreview() {
   }, [projectId]);
 
   const getPreviewUrl = (pid: string): string => {
-    // Try published_url first from saved projects
     const saved = savedProjects.find(p => p.lovable_project_id === pid);
     if (saved?.published_url) return saved.published_url;
-    // Fallback to the standard preview URL pattern
     return `https://id-preview--${pid}.lovable.app`;
   };
 
@@ -85,7 +81,6 @@ export default function LovablePreview() {
   };
 
   const handleIframeError = () => {
-    // If preview URL fails, try the published URL or vice versa
     const saved = savedProjects.find(p => p.lovable_project_id === projectId);
     const altUrl = `https://id-preview--${projectId}.lovable.app`;
     if (previewUrl !== altUrl) {
@@ -102,21 +97,21 @@ export default function LovablePreview() {
   if (connectionStatus === "none" || connectionStatus === "expired") {
     return (
       <AppLayout>
-        <div className="max-w-xl mx-auto px-6 py-20 text-center">
+        <div className="rd-page-content text-center" style={{ maxWidth: 480, paddingTop: "5rem" }}>
           {connectionStatus === "expired" ? (
             <>
               <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
-              <h2 className="lv-heading-sm mb-2">Token expirado</h2>
-              <p className="lv-body mb-6">Reconecte sua conta para visualizar previews.</p>
+              <h2 className="rd-heading mb-2">Token expirado</h2>
+              <p className="rd-body mb-6">Reconecte sua conta para visualizar previews.</p>
             </>
           ) : (
             <>
               <Link2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h2 className="lv-heading-sm mb-2">Não conectado</h2>
-              <p className="lv-body mb-6">Conecte sua conta primeiro.</p>
+              <h2 className="rd-heading mb-2">Não conectado</h2>
+              <p className="rd-body mb-6">Conecte sua conta primeiro.</p>
             </>
           )}
-          <button onClick={() => navigate("/lovable/connect")} className="lv-btn-primary h-11 px-8 text-sm">
+          <button onClick={() => navigate("/lovable/connect")} className="gl primary">
             {connectionStatus === "expired" ? "Reconectar" : "Conectar"}
           </button>
         </div>
@@ -131,13 +126,13 @@ export default function LovablePreview() {
         <div className="border-b border-border/60 px-6 py-3 flex items-center gap-3 flex-wrap shrink-0">
           <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
 
-          {/* Project selector dropdown */}
           {savedProjects.length > 0 && (
             <div className="relative">
               <select
                 value={projectId}
                 onChange={(e) => handleProjectSelect(e.target.value)}
-                className="lv-input h-9 px-3 pr-8 text-xs appearance-none cursor-pointer min-w-[200px]"
+                className="rd-input"
+                style={{ height: 36, paddingRight: 28, minWidth: 200, fontSize: 12 }}
               >
                 <option value="">Selecionar projeto...</option>
                 {savedProjects.map((p) => (
@@ -152,17 +147,17 @@ export default function LovablePreview() {
 
           {previewUrl && (
             <div className="flex items-center gap-2 ml-auto">
-              <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+              <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="gl sm ghost">
                 <ExternalLink className="h-3.5 w-3.5" /> Nova aba
               </a>
               <button onClick={() => {
                 const editorUrl = `${window.location.origin}/projeto/${projectId}/editar`;
                 navigator.clipboard.writeText(editorUrl);
                 toast.success("Link copiado!");
-              }} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+              }} className="gl sm ghost">
                 <Copy className="h-3.5 w-3.5" /> Copiar
               </button>
-              <button onClick={loadPreview} className="lv-btn-secondary h-9 px-3 text-xs flex items-center gap-1.5">
+              <button onClick={loadPreview} className="gl sm ghost">
                 <RefreshCw className="h-3.5 w-3.5" /> Recarregar
               </button>
             </div>
@@ -174,13 +169,11 @@ export default function LovablePreview() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md px-4">
               <AlertTriangle className="h-10 w-10 mx-auto text-amber-500 mb-3" />
-              <p className="lv-body-strong mb-2">Preview indisponível</p>
-              <p className="lv-caption mb-4">O projeto pode não estar publicado ainda ou o preview expirou. Tente fazer um deploy primeiro.</p>
+              <p className="rd-body mb-2" style={{ fontWeight: 600 }}>Preview indisponível</p>
+              <p className="rd-label mb-4">O projeto pode não estar publicado ainda ou o preview expirou.</p>
               <div className="flex gap-3 justify-center">
-                <button onClick={loadPreview} className="lv-btn-secondary h-9 px-4 text-xs">
-                  Tentar novamente
-                </button>
-                <a href={previewUrl || ""} target="_blank" rel="noopener noreferrer" className="lv-btn-primary h-9 px-4 text-xs flex items-center gap-1.5">
+                <button onClick={loadPreview} className="gl sm ghost">Tentar novamente</button>
+                <a href={previewUrl || ""} target="_blank" rel="noopener noreferrer" className="gl sm primary">
                   <ExternalLink className="h-3.5 w-3.5" /> Abrir direto
                 </a>
               </div>
@@ -200,14 +193,14 @@ export default function LovablePreview() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <Monitor className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
-              <p className="lv-body-strong mb-1">Preview de Projetos</p>
-              <p className="lv-caption">
+              <p className="rd-body mb-1" style={{ fontWeight: 600 }}>Preview de Projetos</p>
+              <p className="rd-label">
                 {savedProjects.length > 0
                   ? "Selecione um projeto acima para visualizar"
                   : "Sincronize seus projetos primeiro em Meus Projetos"}
               </p>
               {savedProjects.length === 0 && (
-                <button onClick={() => navigate("/lovable/projects")} className="lv-btn-primary h-9 px-4 text-xs mt-4 flex items-center gap-1.5 mx-auto">
+                <button onClick={() => navigate("/lovable/projects")} className="gl sm primary mt-4">
                   <Globe className="h-3.5 w-3.5" /> Ir para Meus Projetos
                 </button>
               )}

@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -40,26 +40,26 @@ export default function ForgotPassword() {
           )}
         </Link>
 
-        <div className="clf-liquid-glass p-8">
-          <h1 className="lv-heading-md text-center mb-6">Recuperar senha</h1>
+        <div className="rd-card" style={{ padding: "2rem" }}>
+          <h1 className="rd-heading text-center mb-6">Recuperar senha</h1>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="lv-caption mb-1.5 block">Email</label>
+              <label className="rd-label mb-1.5 block">Email</label>
               <input
                 type="email"
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="lv-input"
+                className="rd-input"
                 required
               />
             </div>
-            <button type="submit" disabled={loading} className="lv-btn-primary w-full">
+            <button type="submit" disabled={loading} className="gl primary w-full">
               {loading ? "Enviando..." : "Enviar link de recuperação"}
             </button>
           </form>
 
-          <p className="mt-5 text-center lv-caption">
+          <p className="mt-5 text-center rd-label">
             <Link to="/login" className="text-primary font-medium hover:underline">Voltar ao login</Link>
           </p>
         </div>

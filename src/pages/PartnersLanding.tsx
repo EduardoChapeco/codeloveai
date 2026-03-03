@@ -1,4 +1,4 @@
-﻿import { Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Check, Users, Building2, Zap, Shield, MessageSquare, Clock, ChevronDown, ArrowRight, Star, DollarSign, Globe, Layers } from "lucide-react";
 import { useState } from "react";
 import { useSEO } from "@/hooks/useSEO";
@@ -56,50 +56,48 @@ export default function PartnersLanding() {
 
       {/* Nav */}
       <nav className="sticky top-0 z-20 px-6 py-3">
-        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+        <div className="rd-card flex items-center justify-between" style={{ padding: "0.625rem 1.25rem", borderRadius: 16 }}>
           <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
           <div className="flex items-center gap-2">
-            <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
-            <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+            <Link to="/login" className="gl sm ghost">Entrar</Link>
+            <Link to="/register" className="gl sm primary">Criar conta</Link>
           </div>
         </div>
       </nav>
 
       {/* Hero */}
       <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center animate-fade-in">
-        <p className="lv-overline mb-4">Programa de Parceiros</p>
-        <h1 className="lv-heading-xl mb-6">Ganhe dinheiro com {brandName}</h1>
-        <p className="lv-body text-base max-w-2xl mx-auto mb-10">
+        <p className="rd-label mb-4" style={{ textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 10 }}>Programa de Parceiros</p>
+        <h1 className="rd-heading mb-6" style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)" }}>Ganhe dinheiro com {brandName}</h1>
+        <p className="rd-body text-base max-w-2xl mx-auto mb-10" style={{ opacity: 0.7 }}>
           Seja afiliado e ganhe comissões por cada venda, ou monte seu próprio negócio com White Label — sua marca, seus clientes, seus preços.
         </p>
         <div className="flex items-center justify-center gap-3 flex-wrap">
-          <a href="#affiliates" className="lv-btn-primary lv-btn-lg">Ser Afiliado</a>
-          <a href="#whitelabel" className="lv-btn-secondary lv-btn-lg">White Label</a>
+          <a href="#affiliates" className="gl primary lg">Ser Afiliado</a>
+          <a href="#whitelabel" className="gl lg ghost">White Label</a>
         </div>
       </section>
 
       {/* Affiliates Section */}
       <section id="affiliates" className="px-6 pb-24 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-3">Programa de Afiliados</p>
-        <h2 className="lv-heading-lg text-center mb-4">Indique e ganhe</h2>
-        <p className="lv-body text-center max-w-2xl mx-auto mb-12">
+        <p className="rd-label text-center mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 10 }}>Programa de Afiliados</p>
+        <h2 className="rd-heading text-center mb-4" style={{ fontSize: "1.5rem" }}>Indique e ganhe</h2>
+        <p className="rd-body text-center max-w-2xl mx-auto mb-12" style={{ opacity: 0.7 }}>
           Cadastre-se como afiliado gratuitamente. Compartilhe seu link e ganhe comissão em cada venda. Você também recebe desconto automático nas suas compras.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="rd-grid-4 mb-8">
           {affiliateFeatures.map((f, i) => (
-            <div key={f.title} className="lv-card flex flex-col items-start gap-4" style={{ animationDelay: `${i * 100}ms` }}>
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                <f.icon className="h-5 w-5 text-primary" />
+            <div key={f.title} className="rd-card" style={{ animationDelay: `${i * 100}ms` }}>
+              <div className="rd-ico-box mb-4">
+                <f.icon className="h-5 w-5" />
               </div>
-              <div>
-                <h3 className="lv-heading-sm mb-2">{f.title}</h3>
-                <p className="lv-body">{f.desc}</p>
-              </div>
+              <h3 className="rd-body mb-2" style={{ fontWeight: 700 }}>{f.title}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{f.desc}</p>
             </div>
           ))}
         </div>
         <div className="text-center">
-          <Link to="/register" className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
+          <Link to="/register" className="gl primary lg inline-flex items-center gap-2">
             Quero ser afiliado <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -107,26 +105,24 @@ export default function PartnersLanding() {
 
       {/* White Label Section */}
       <section id="whitelabel" className="px-6 pb-24 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-3">White Label</p>
-        <h2 className="lv-heading-lg text-center mb-4">Sua marca, seu negócio</h2>
-        <p className="lv-body text-center max-w-2xl mx-auto mb-12">
+        <p className="rd-label text-center mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 10 }}>White Label</p>
+        <h2 className="rd-heading text-center mb-4" style={{ fontSize: "1.5rem" }}>Sua marca, seu negócio</h2>
+        <p className="rd-body text-center max-w-2xl mx-auto mb-12" style={{ opacity: 0.7 }}>
           Monte uma operação completa com sua própria marca. Logo, cores, domínio, termos customizados, painel admin e programa de afiliados próprio.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <div className="rd-grid-3 mb-8">
           {wlFeatures.map((f, i) => (
-            <div key={f.title} className="lv-card flex flex-col items-start gap-4" style={{ animationDelay: `${i * 100}ms` }}>
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                <f.icon className="h-5 w-5 text-primary" />
+            <div key={f.title} className="rd-card" style={{ animationDelay: `${i * 100}ms` }}>
+              <div className="rd-ico-box mb-4">
+                <f.icon className="h-5 w-5" />
               </div>
-              <div>
-                <h3 className="lv-heading-sm mb-2">{f.title}</h3>
-                <p className="lv-body">{f.desc}</p>
-              </div>
+              <h3 className="rd-body mb-2" style={{ fontWeight: 700 }}>{f.title}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{f.desc}</p>
             </div>
           ))}
         </div>
         <div className="text-center">
-          <Link to="/register" className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
+          <Link to="/register" className="gl primary lg inline-flex items-center gap-2">
             Quero White Label <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -134,13 +130,13 @@ export default function PartnersLanding() {
 
       {/* Modules */}
       <section className="px-6 pb-24 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-3">Módulos inclusos</p>
-        <h2 className="lv-heading-lg text-center mb-12">Tudo que você precisa</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <p className="rd-label text-center mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 10 }}>Módulos inclusos</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>Tudo que você precisa</h2>
+        <div className="rd-grid-4">
           {modules.map((m) => (
-            <div key={m.title} className="lv-card-sm">
-              <h3 className="lv-heading-sm mb-2">{m.title}</h3>
-              <p className="lv-body">{m.desc}</p>
+            <div key={m.title} className="rd-card" style={{ padding: "1rem" }}>
+              <h3 className="rd-body mb-2" style={{ fontWeight: 700 }}>{m.title}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{m.desc}</p>
             </div>
           ))}
         </div>
@@ -148,16 +144,16 @@ export default function PartnersLanding() {
 
       {/* FAQ */}
       <section className="px-6 pb-24 max-w-2xl mx-auto">
-        <p className="lv-overline text-center mb-3">Dúvidas frequentes</p>
-        <h2 className="lv-heading-lg text-center mb-10">FAQ Parceiros</h2>
+        <p className="rd-label text-center mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 10 }}>Dúvidas frequentes</p>
+        <h2 className="rd-heading text-center mb-10" style={{ fontSize: "1.5rem" }}>FAQ Parceiros</h2>
         <div className="space-y-2">
           {faqs.map((faq, i) => (
-            <div key={i} className="lv-card-sm cursor-pointer" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+            <div key={i} className="rd-card cursor-pointer" onClick={() => setOpenFaq(openFaq === i ? null : i)} style={{ padding: "0.75rem 1rem" }}>
               <div className="flex items-center justify-between">
-                <span className="lv-body-strong">{faq.q}</span>
+                <span className="rd-body" style={{ fontWeight: 600 }}>{faq.q}</span>
                 <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${openFaq === i ? "rotate-180" : ""}`} />
               </div>
-              {openFaq === i && <p className="mt-3 lv-body animate-fade-in">{faq.a}</p>}
+              {openFaq === i && <p className="mt-3 rd-body animate-fade-in" style={{ opacity: 0.7 }}>{faq.a}</p>}
             </div>
           ))}
         </div>
@@ -165,7 +161,7 @@ export default function PartnersLanding() {
 
       {/* Footer */}
       <footer className="border-t border-border/50 px-6 py-6 text-center">
-        <p className="lv-caption">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
+        <p className="rd-label">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
       </footer>
     </div>
   );
