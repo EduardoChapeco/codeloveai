@@ -625,7 +625,10 @@ Deno.serve(async (req) => {
                 const mdTs = updatedAtMatch ? new Date(updatedAtMatch[1]).getTime() : null;
                 const isStaleTs = mdTs && !isNaN(mdTs) && mdTs < convoTs;
 
-                if (isStaleTs && age < 60_000) {
+                // Accept stale timestamps after 45s (Brain may reuse old timestamp)
+                const acceptStale = age > 45_000;
+
+                if (isStaleTs && !acceptStale) {
                   console.log(`[bc] ${cid} S2 stale update.md (md_ts=${mdTs} < convo_ts=${convoTs}), waiting...`);
                 } else if (hasDone) {
                   const mdBody = extractMdBody(md);
@@ -637,10 +640,24 @@ Deno.serve(async (req) => {
                       request: "", response: cleanedBody, status: "done", brain_project_id: pid,
                     }).catch(() => {});
                     captured++;
-                    console.log(`[bc] ✅ ${cid} S2-md-body ${cleanedBody.length}c`);
+                    console.log(`[bc] ✅ ${cid} S2-md-body ${cleanedBody.length}c${isStaleTs ? ' (accepted-stale)' : ''}`);
                     continue;
                   }
                   console.log(`[bc] ${cid} S2 update.md=done but no body content`);
+                } else if (age > 90_000) {
+                  // After 90s without status:done, try extracting any content from update.md
+                  const mdBody = extractMdBody(md);
+                  if (mdBody && mdBody.length > 50) {
+                    const cleanedBody = cleanBrainResponse(mdBody);
+                    await sc.from("loveai_conversations").update({ ai_response: cleanedBody, status: "completed" }).eq("id", convo.id);
+                    await sc.from("brain_outputs").insert({
+                      user_id: userId, conversation_id: convo.id, skill: "general",
+                      request: "", response: cleanedBody, status: "done", brain_project_id: pid,
+                    }).catch(() => {});
+                    captured++;
+                    console.log(`[bc] ✅ ${cid} S2-force-extract ${cleanedBody.length}c`);
+                    continue;
+                  }
                 }
               } else {
                 console.log(`[bc] ${cid} S2 no-update-md`);
@@ -650,7 +667,34 @@ Deno.serve(async (req) => {
             }
           }
 
-          // S3 removed — S1 is now primary and handles latest-message
+          // S3: After 60s, try capturing latest-message regardless of initial ID match
+          if (age > 60_000) {
+            const r3 = await fetchText(`${API}/projects/${pid}/chat/latest-message`, tk, 4000, 3000);
+            if (r3 && r3.status === 200 && r3.body.length > 5) {
+              try {
+                let msgText = r3.body;
+                if (msgText.includes("data:")) {
+                  const lines = msgText.split("\n").filter((l: string) => l.startsWith("data:"));
+                  if (lines.length > 0) msgText = lines[lines.length - 1].replace(/^data:\s*/, "");
+                }
+                const msg = JSON.parse(msgText);
+                const txt = msg?.content || msg?.message || msg?.text || "";
+                if (msg?.role !== "user" && !msg?.is_streaming && txt.length > 50 && !isBootstrapResponse(txt)) {
+                  const cleanedTxt = cleanBrainResponse(txt.trim());
+                  if (cleanedTxt.length > 30) {
+                    await sc.from("loveai_conversations").update({ ai_response: cleanedTxt, status: "completed" }).eq("id", convo.id);
+                    await sc.from("brain_outputs").insert({
+                      user_id: userId, conversation_id: convo.id, skill: "general",
+                      request: "", response: cleanedTxt, status: "done", brain_project_id: pid,
+                    }).catch(() => {});
+                    captured++;
+                    console.log(`[bc] ✅ ${cid} S3-force-latest ${cleanedTxt.length}c`);
+                    continue;
+                  }
+                }
+              } catch { /* parse error */ }
+            }
+          }
 
           console.log(`[bc] ${cid} no-capture (age=${Math.round(age/1000)}s)`);
         }
