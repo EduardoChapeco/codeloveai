@@ -92,35 +92,36 @@ function TaskCard({ task }: { task: OrchestratorTask }) {
     : task.status === "running"   ? "text-amber-500"
     : "text-muted-foreground";
 
+  const chipClass =
+    task.status === "completed" ? "chip green"
+    : task.status === "failed"  ? "chip red"
+    : task.status === "running" ? "chip orange"
+    : "chip";
+
   return (
     <div className="border border-border/50 rounded-lg overflow-hidden">
       <button
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
         onClick={() => setExpanded(e => !e)}
       >
-        <span className="lv-caption text-muted-foreground w-6 shrink-0">#{task.task_index + 1}</span>
-        <span className={`lv-badge text-xs ${
-          task.status === "completed" ? "lv-badge-success"
-          : task.status === "failed"  ? "lv-badge-error"
-          : task.status === "running" ? "lv-badge-warning"
-          : "lv-badge-muted"
-        }`}>
+        <span className="rd-label w-6 shrink-0">#{task.task_index + 1}</span>
+        <span className={chipClass} style={{ fontSize: 10 }}>
           {INTENT_LABELS[task.intent] || task.intent}
         </span>
-        <span className="lv-body-strong text-sm flex-1 truncate">{task.title}</span>
-        <span className={`lv-caption ${statusColor}`}>{task.status}</span>
+        <span className="rd-body flex-1 truncate" style={{ fontWeight: 600, fontSize: 13 }}>{task.title}</span>
+        <span className={`rd-label ${statusColor}`}>{task.status}</span>
         {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
       </button>
       {expanded && (
         <div className="px-4 pb-3 pt-1 bg-muted/20 border-t border-border/30 space-y-1">
           {task.started_at && (
-            <p className="lv-caption text-muted-foreground">
+            <p className="rd-label">
               Início: {new Date(task.started_at).toLocaleTimeString("pt-BR")}
               {task.completed_at && ` → ${new Date(task.completed_at).toLocaleTimeString("pt-BR")}`}
             </p>
           )}
           {task.retry_count > 0 && (
-            <p className="lv-caption text-amber-500">Tentativas: {task.retry_count}/3</p>
+            <p className="rd-label text-amber-500">Tentativas: {task.retry_count}/3</p>
           )}
         </div>
       )}
@@ -171,7 +172,6 @@ export default function OrchestratorDashboard() {
   const [showPreview, setShowPreview] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
-  // Fetch user's brains
   const fetchBrains = useCallback(async () => {
     if (!user) return;
     const { data } = await (supabase as any)
@@ -182,7 +182,6 @@ export default function OrchestratorDashboard() {
     setBrains((data as UserBrain[]) || []);
   }, [user]);
 
-  // Fetch projects list
   const fetchProjects = useCallback(async () => {
     if (!user) return;
     const { data } = await (supabase as any)
@@ -195,7 +194,6 @@ export default function OrchestratorDashboard() {
     setLoadingProjects(false);
   }, [user]);
 
-  // Fetch details for selected project
   const fetchDetails = async (id: string) => {
     setLoadingDetails(true);
     const [{ data: t }, { data: l }] = await Promise.all([
@@ -216,38 +214,27 @@ export default function OrchestratorDashboard() {
     if (selectedId) fetchDetails(selectedId);
   }, [selectedId]);
 
-  // Realtime subscription for logs of selected project
   useEffect(() => {
     if (!selectedId) return;
-
     const channel = supabase
       .channel(`orchestrator-logs-${selectedId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "orchestrator_logs", filter: `project_id=eq.${selectedId}` },
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orchestrator_logs", filter: `project_id=eq.${selectedId}` },
         (payload) => {
           setLogs(prev => [...prev, payload.new as OrchestratorLog]);
           setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "orchestrator_projects", filter: `id=eq.${selectedId}` },
+        })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orchestrator_projects", filter: `id=eq.${selectedId}` },
         (payload) => {
           setProjects(prev => prev.map(p => p.id === selectedId ? { ...p, ...payload.new } : p));
-        }
-      )
+        })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [selectedId]);
 
-  // Auto-scroll logs
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  // Launch new orchestration
   const launchOrchestration = async () => {
     if (!prompt.trim()) return;
     setLaunching(true);
@@ -267,7 +254,6 @@ export default function OrchestratorDashboard() {
     }
   };
 
-  // Execute next task for selected project
   const executeNext = async () => {
     if (!selectedId) return;
     const { error } = await supabase.functions.invoke("agentic-orchestrator", {
@@ -277,7 +263,6 @@ export default function OrchestratorDashboard() {
     else { toast.success("Executando próxima task..."); fetchDetails(selectedId); fetchProjects(); }
   };
 
-  // Pause/resume selected project
   const togglePauseResume = async () => {
     if (!selectedId) return;
     const proj = projects.find(p => p.id === selectedId);
@@ -290,7 +275,6 @@ export default function OrchestratorDashboard() {
     else { fetchProjects(); }
   };
 
-  // Verify project health via debug_log
   const verifyProject = async () => {
     if (!selectedId) return;
     setVerifying(true);
@@ -319,16 +303,17 @@ export default function OrchestratorDashboard() {
   return (
     <div className="space-y-6">
       {/* Prompt input */}
-      <div className="lv-card space-y-3">
+      <div className="rd-card space-y-3">
         <div className="flex items-center justify-between">
-          <p className="lv-body-strong">Nova Orchestração</p>
+          <p className="rd-body" style={{ fontWeight: 600 }}>Nova Orchestração</p>
           {brains.length > 0 && (
             <div className="flex items-center gap-2">
               <BrainIcon className="h-3.5 w-3.5 text-muted-foreground" />
               <select
                 value={selectedBrainId}
                 onChange={e => setSelectedBrainId(e.target.value)}
-                className="h-7 px-2 text-[11px] rounded-lg bg-muted/30 border border-border/50 focus:outline-none text-muted-foreground"
+                className="rd-input"
+                style={{ height: 28, padding: "0 8px", fontSize: 11 }}
               >
                 <option value="">Sem Brain (IA direta)</option>
                 {brains.map(b => (
@@ -342,7 +327,8 @@ export default function OrchestratorDashboard() {
         </div>
         <div className="flex gap-3">
           <textarea
-            className="lv-input flex-1 resize-none"
+            className="rd-input flex-1"
+            style={{ resize: "none" }}
             rows={2}
             placeholder="Descreva o projeto que deseja criar com Lovable AI..."
             value={prompt}
@@ -352,13 +338,14 @@ export default function OrchestratorDashboard() {
           <button
             onClick={launchOrchestration}
             disabled={launching || !prompt.trim()}
-            className="lv-btn-primary h-auto px-5 flex flex-col items-center justify-center gap-1 shrink-0"
+            className="gl primary"
+            style={{ height: "auto", paddingInline: 20, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}
           >
             {launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            <span className="text-xs">Iniciar</span>
+            <span style={{ fontSize: 11 }}>Iniciar</span>
           </button>
         </div>
-        <p className="lv-caption text-muted-foreground">
+        <p className="rd-label">
           {selectedBrainId ? "Brain selecionado influencia PRD e routing de tarefas" : "Cmd+Enter para iniciar"}
         </p>
       </div>
@@ -366,14 +353,14 @@ export default function OrchestratorDashboard() {
       {loadingProjects ? (
         <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
       ) : projects.length === 0 ? (
-        <div className="lv-card text-center py-10">
-          <p className="lv-body text-muted-foreground">Nenhuma orchestração iniciada ainda.</p>
+        <div className="rd-card text-center py-10">
+          <p className="rd-body text-muted-foreground">Nenhuma orchestração iniciada ainda.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Project list */}
           <div className="space-y-2">
-            <p className="lv-caption text-muted-foreground mb-2">Projetos ({projects.length})</p>
+            <p className="rd-label mb-2">Projetos ({projects.length})</p>
             {projects.map(p => {
               const Icon = STATUS_ICONS[p.status] || Clock;
               const isSelected = p.id === selectedId;
@@ -383,22 +370,23 @@ export default function OrchestratorDashboard() {
                   onClick={() => setSelectedId(p.id)}
                   onDoubleClick={() => navigate(`/orquestrador/${p.id}`)}
                   title="Clique para selecionar · Duplo clique para abrir painel completo"
-                  className={`w-full text-left lv-card p-3 transition-colors ${isSelected ? "ring-2 ring-primary" : "hover:bg-muted/30"}`}
+                  className={`w-full text-left rd-card transition-colors ${isSelected ? "ring-2 ring-primary" : "hover:bg-muted/30"}`}
+                  style={{ padding: "0.75rem" }}
                 >
                   <div className="flex items-start gap-2">
                     <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${STATUS_COLORS[p.status] || ""} ${p.status === "executing" || p.status === "planning" ? "animate-spin" : ""}`} />
                     <div className="min-w-0 flex-1">
-                      <p className="lv-body-strong text-xs truncate">
+                      <p className="rd-body truncate" style={{ fontWeight: 600, fontSize: 12 }}>
                         {p.prd_json?.project_name || "Novo Projeto"}
                       </p>
-                      <p className="lv-caption truncate text-muted-foreground">{p.client_prompt.substring(0, 50)}...</p>
+                      <p className="rd-label truncate">{p.client_prompt.substring(0, 50)}...</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className={`lv-caption ${STATUS_COLORS[p.status]}`}>{p.status}</span>
+                        <span className={`rd-label ${STATUS_COLORS[p.status]}`}>{p.status}</span>
                         {p.total_tasks > 0 && (
-                          <span className="lv-caption text-muted-foreground">{p.current_task_index}/{p.total_tasks}</span>
+                          <span className="rd-label">{p.current_task_index}/{p.total_tasks}</span>
                         )}
                         {p.quality_score !== null && (
-                          <span className={`lv-caption ${p.quality_score >= 80 ? "text-emerald-500" : "text-amber-500"}`}>
+                          <span className={`rd-label ${p.quality_score >= 80 ? "text-emerald-500" : "text-amber-500"}`}>
                             Q:{p.quality_score}
                           </span>
                         )}
@@ -414,77 +402,58 @@ export default function OrchestratorDashboard() {
           {selected && (
             <div className="lg:col-span-2 space-y-4">
               {/* Header */}
-              <div className="lv-card">
+              <div className="rd-card">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="lv-body-strong truncate">{selected.prd_json?.project_name || "Projeto"}</p>
+                      <p className="rd-body truncate" style={{ fontWeight: 600 }}>{selected.prd_json?.project_name || "Projeto"}</p>
                       {selected.lovable_project_id ? (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-medium">
+                        <span className="chip green" style={{ fontSize: 10 }}>
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                           Projeto ativo
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-destructive/20 text-destructive text-[10px] font-medium">
+                        <span className="chip red" style={{ fontSize: 10 }}>
                           <XCircle className="h-3 w-3" />
                           Sem projeto
                         </span>
                       )}
                     </div>
-                    <p className="lv-caption text-muted-foreground truncate">{selected.prd_json?.summary || selected.client_prompt.substring(0, 100)}</p>
+                    <p className="rd-label truncate">{selected.prd_json?.summary || selected.client_prompt.substring(0, 100)}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => navigate(`/orquestrador/${selected.id}`)}
-                      className="lv-btn-primary h-8 px-3 text-xs flex items-center gap-1"
-                    >
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <button onClick={() => navigate(`/orquestrador/${selected.id}`)} className="gl sm primary">
                       <ArrowRight className="h-3.5 w-3.5" /> Abrir Painel
                     </button>
                     {selected.lovable_project_id && (
                       <button
                         onClick={() => setShowPreview(p => !p)}
-                        className={`lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1 ${showPreview ? "ring-2 ring-primary" : ""}`}
+                        className={`gl sm ghost ${showPreview ? "ring-2 ring-primary" : ""}`}
                         title="Preview ao vivo do projeto"
                       >
                         {showPreview ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                         Preview
                       </button>
                     )}
-                    <button
-                      onClick={verifyProject}
-                      disabled={verifying}
-                      className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1"
-                      title="Verificar saúde do projeto"
-                    >
+                    <button onClick={verifyProject} disabled={verifying} className="gl sm ghost" title="Verificar saúde do projeto">
                       {verifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
                       Verificar
                     </button>
                     {selected.lovable_project_id && (
-                      <a
-                        href={`https://lovable.dev/projects/${selected.lovable_project_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1"
-                      >
+                      <a href={`https://lovable.dev/projects/${selected.lovable_project_id}`} target="_blank" rel="noopener noreferrer" className="gl sm ghost">
                         <ExternalLink className="h-3 w-3" /> Lovable
                       </a>
                     )}
-                    <button
-                      onClick={togglePauseResume}
-                      className="lv-btn-secondary h-8 px-3 text-xs flex items-center gap-1"
-                    >
+                    <button onClick={togglePauseResume} className="gl sm ghost">
                       {selected.status === "executing" ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                       {selected.status === "executing" ? "Pausar" : "Retomar"}
                     </button>
                     {selected.status === "paused" && (
-                      <button
-                        onClick={executeNext}
-                        className="lv-btn-primary h-8 px-3 text-xs flex items-center gap-1"
-                      >
+                      <button onClick={executeNext} className="gl sm primary">
                         <Zap className="h-3 w-3" /> Executar
                       </button>
                     )}
-                    <button onClick={() => fetchDetails(selected.id)} className="lv-btn-icon h-8 w-8">
+                    <button onClick={() => fetchDetails(selected.id)} className="gl ico sm ghost">
                       <RefreshCw className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -494,14 +463,11 @@ export default function OrchestratorDashboard() {
                 {selected.total_tasks > 0 && (
                   <div className="mt-3 space-y-1">
                     <div className="flex justify-between">
-                      <span className="lv-caption text-muted-foreground">Progresso</span>
-                      <span className="lv-caption">{selected.current_task_index}/{selected.total_tasks} tasks · {progress}%</span>
+                      <span className="rd-label">Progresso</span>
+                      <span className="rd-label">{selected.current_task_index}/{selected.total_tasks} tasks · {progress}%</span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all duration-500"
-                        style={{ width: `${progress}%` }}
-                      />
+                      <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                     </div>
                   </div>
                 )}
@@ -511,14 +477,14 @@ export default function OrchestratorDashboard() {
                     {selected.quality_score >= 80
                       ? <CheckCircle className="h-4 w-4 text-emerald-500" />
                       : <AlertTriangle className="h-4 w-4 text-amber-500" />}
-                    <span className="lv-caption">Quality Score: <strong>{selected.quality_score}/100</strong></span>
+                    <span className="rd-label">Quality Score: <strong>{selected.quality_score}/100</strong></span>
                   </div>
                 )}
               </div>
 
               {/* Live Preview iframe */}
               {showPreview && selected.lovable_project_id && (
-                <div className="lv-card p-0 overflow-hidden">
+                <div className="rd-card overflow-hidden" style={{ padding: 0 }}>
                   <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30 border-b border-border/40">
                     <span className="flex items-center gap-1.5 text-[10px] font-medium text-emerald-400">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -547,14 +513,14 @@ export default function OrchestratorDashboard() {
                 <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
               ) : tasks.length > 0 && (
                 <div className="space-y-2">
-                  <p className="lv-caption text-muted-foreground">Tasks ({tasks.length})</p>
+                  <p className="rd-label">Tasks ({tasks.length})</p>
                   {tasks.map(t => <TaskCard key={t.id} task={t} />)}
                 </div>
               )}
 
               {/* Live log */}
-              <div className="lv-card">
-                <p className="lv-caption text-muted-foreground mb-3">Log em tempo real</p>
+              <div className="rd-card">
+                <p className="rd-label mb-3">Log em tempo real</p>
                 <div className="bg-muted/40 rounded-lg p-3 h-48 overflow-y-auto space-y-1">
                   {logs.length === 0 ? (
                     <p className="text-xs text-muted-foreground font-mono">Aguardando logs...</p>

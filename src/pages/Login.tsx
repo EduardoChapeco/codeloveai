@@ -55,41 +55,41 @@ export default function Login() {
           )}
         </Link>
 
-        <div className="clf-liquid-glass p-8">
-          <h1 className="lv-heading-md text-center mb-6">Entrar na sua conta</h1>
+        <div className="rd-card" style={{ padding: "2rem" }}>
+          <h1 className="rd-heading text-center mb-6">Entrar na sua conta</h1>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="lv-caption mb-1.5 block">Email</label>
+              <label className="rd-label mb-1.5 block">Email</label>
               <input
                 type="email"
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="lv-input"
+                className="rd-input"
                 required
               />
             </div>
             <div>
-              <label className="lv-caption mb-1.5 block">Senha</label>
+              <label className="rd-label mb-1.5 block">Senha</label>
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="lv-input"
+                className="rd-input"
                 required
               />
             </div>
-            <button type="submit" disabled={loading} className="lv-btn-primary w-full">
+            <button type="submit" disabled={loading} className="gl primary w-full">
               {loading ? "Entrando..." : "Entrar"}
             </button>
           </form>
 
           <div className="mt-5 text-center space-y-2">
-            <Link to="/forgot-password" className="lv-caption hover:text-foreground transition-colors block">
+            <Link to="/forgot-password" className="rd-label hover:text-foreground transition-colors block">
               Esqueceu a senha?
             </Link>
-            <p className="lv-caption">
+            <p className="rd-label">
               Não tem conta?{" "}
               <Link to="/register" className="text-primary font-medium hover:underline">Criar conta</Link>
             </p>

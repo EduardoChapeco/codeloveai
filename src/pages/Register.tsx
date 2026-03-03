@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -65,64 +65,62 @@ export default function Register() {
           )}
         </Link>
 
-        <div className="clf-liquid-glass p-8">
-          <h1 className="lv-heading-md text-center mb-6">Criar conta</h1>
+        <div className="rd-card" style={{ padding: "2rem" }}>
+          <h1 className="rd-heading text-center mb-6">Criar conta</h1>
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
-              <label className="lv-caption mb-1.5 block">Nome</label>
+              <label className="rd-label mb-1.5 block">Nome</label>
               <input
                 type="text"
                 placeholder="Seu nome"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="lv-input"
+                className="rd-input"
                 required
               />
             </div>
             <div>
-              <label className="lv-caption mb-1.5 block">Email</label>
+              <label className="rd-label mb-1.5 block">Email</label>
               <input
                 type="email"
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="lv-input"
+                className="rd-input"
                 required
               />
             </div>
             <div>
-              <label className="lv-caption mb-1.5 block">Senha</label>
+              <label className="rd-label mb-1.5 block">Senha</label>
               <input
                 type="password"
                 placeholder="Mínimo 6 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="lv-input"
+                className="rd-input"
                 minLength={6}
                 required
               />
             </div>
-            {/* Brain opt-in checkbox */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={wantBrain} onChange={(e) => setWantBrain(e.target.checked)} className="rounded border-border" />
-              <span className="lv-body">Ativar Star AI Brain (assistente IA dedicado)</span>
+              <span className="rd-body">Ativar Star AI Brain (assistente IA dedicado)</span>
             </label>
-            {/* Affiliate checkbox */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={wantAffiliate} onChange={(e) => setWantAffiliate(e.target.checked)} className="rounded border-border" />
-              <span className="lv-body">Quero ser afiliado (ganhe 30% de comissão)</span>
+              <span className="rd-body">Quero ser afiliado (ganhe 30% de comissão)</span>
             </label>
             {refCode && (
-              <div className="lv-card-sm bg-accent/50">
-                <p className="lv-caption">Indicado por: <strong className="text-foreground">{refCode}</strong></p>
+              <div className="rd-card" style={{ padding: "0.75rem 1rem", opacity: 0.8 }}>
+                <p className="rd-label">Indicado por: <strong className="text-foreground">{refCode}</strong></p>
               </div>
             )}
-            <button type="submit" disabled={loading} className="lv-btn-primary w-full">
+            <button type="submit" disabled={loading} className="gl primary w-full">
               {loading ? "Criando..." : "Criar conta"}
             </button>
           </form>
 
-          <p className="mt-5 text-center lv-caption">
+          <p className="mt-5 text-center rd-label">
             Já tem conta?{" "}
             <Link to="/login" className="text-primary font-medium hover:underline">Entrar</Link>
           </p>

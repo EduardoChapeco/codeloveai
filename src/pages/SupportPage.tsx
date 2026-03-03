@@ -17,10 +17,10 @@ type Ticket = {
 };
 
 const statusColors: Record<string, string> = {
-  open: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  in_progress: "bg-primary/10 text-primary border-primary/20",
-  resolved: "bg-green-500/10 text-green-500 border-green-500/20",
-  closed: "bg-muted text-muted-foreground border-border",
+  open: "chip orange",
+  in_progress: "chip indigo",
+  resolved: "chip green",
+  closed: "chip",
 };
 
 const statusIcons: Record<string, React.ReactNode> = {
@@ -56,7 +56,6 @@ export default function SupportPage() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ title: "", body: "", category: "general" });
 
-  // Load tickets on mount
   useEffect(() => {
     if (!user) { setLoading(false); return; }
     (supabase as any)
@@ -101,11 +100,13 @@ export default function SupportPage() {
   if (!user) {
     return (
       <AppLayout>
-        <div className="max-w-lg mx-auto px-6 py-24 text-center">
-          <LifeBuoy className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-          <h1 className="lv-heading-md mb-2">Acesse sua conta para abrir um ticket</h1>
-          <p className="lv-body mb-6">O suporte é exclusivo para usuários registrados.</p>
-          <Link to="/login" className="lv-btn-primary">Fazer Login</Link>
+        <div className="rd-page-content text-center" style={{ maxWidth: 480, paddingTop: "6rem" }}>
+          <div className="rd-ico-box" style={{ margin: "0 auto 1rem" }}>
+            <LifeBuoy />
+          </div>
+          <h1 className="rd-heading mb-2">Acesse sua conta para abrir um ticket</h1>
+          <p className="rd-body mb-6">O suporte é exclusivo para usuários registrados.</p>
+          <Link to="/login" className="gl primary">Fazer Login</Link>
         </div>
       </AppLayout>
     );
@@ -113,22 +114,19 @@ export default function SupportPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="rd-page-content">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <LifeBuoy className="h-6 w-6 text-primary" />
+            <div className="rd-ico-box">
+              <LifeBuoy />
             </div>
             <div>
-              <h1 className="lv-heading-md">Suporte</h1>
-              <p className="lv-caption">Seus tickets de atendimento</p>
+              <h1 className="rd-heading">Suporte</h1>
+              <p className="rd-label">Seus tickets de atendimento</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="lv-btn-primary h-10 px-4 text-sm flex items-center gap-2"
-          >
+          <button onClick={() => setShowForm(!showForm)} className="gl primary sm">
             <Plus className="h-4 w-4" />
             Novo Ticket
           </button>
@@ -136,55 +134,48 @@ export default function SupportPage() {
 
         {/* New ticket form */}
         {showForm && (
-          <form onSubmit={handleSubmit} className="mb-8 lv-card p-6">
-            <h2 className="lv-heading-sm mb-5">Abrir Novo Ticket</h2>
+          <form onSubmit={handleSubmit} className="mb-8 rd-card">
+            <h2 className="rd-heading mb-5" style={{ fontSize: 15 }}>Abrir Novo Ticket</h2>
             <div className="space-y-4">
               <div>
-                <label className="lv-caption mb-1.5 block">Categoria</label>
+                <label className="rd-label mb-1.5 block">Categoria</label>
                 <select
                   value={form.category}
                   onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                  className="lv-input"
+                  className="rd-input"
                 >
                   {categories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="lv-caption mb-1.5 block">Assunto</label>
+                <label className="rd-label mb-1.5 block">Assunto</label>
                 <input
                   type="text"
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="Descreva brevemente o problema..."
                   required
-                  className="lv-input"
+                  className="rd-input"
                 />
               </div>
               <div>
-                <label className="lv-caption mb-1.5 block">Descrição detalhada</label>
+                <label className="rd-label mb-1.5 block">Descrição detalhada</label>
                 <textarea
                   value={form.body}
                   onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
                   placeholder="Descreva o problema com o máximo de detalhes possível..."
                   required
                   rows={5}
-                  className="lv-input resize-none"
+                  className="rd-input"
+                  style={{ resize: "none" }}
                 />
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="lv-btn-primary h-10 px-5 text-sm flex items-center gap-2"
-                >
+                <button type="submit" disabled={submitting} className="gl primary sm">
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   {submitting ? "Enviando..." : "Enviar Ticket"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="lv-btn-ghost h-10 px-4 text-sm"
-                >
+                <button type="button" onClick={() => setShowForm(false)} className="gl sm ghost">
                   Cancelar
                 </button>
               </div>
@@ -200,8 +191,8 @@ export default function SupportPage() {
         ) : tickets.length === 0 ? (
           <div className="text-center py-20">
             <LifeBuoy className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
-            <p className="lv-body-strong">Nenhum ticket aberto</p>
-            <p className="lv-caption mt-1">Clique em "Novo Ticket" para entrar em contato com nosso suporte.</p>
+            <p className="rd-body" style={{ fontWeight: 600 }}>Nenhum ticket aberto</p>
+            <p className="rd-label mt-1">Clique em "Novo Ticket" para entrar em contato com nosso suporte.</p>
             <div className="mt-6">
               <Link to="/ajuda" className="text-sm text-primary hover:underline">Antes, verifique nossa Central de Ajuda →</Link>
             </div>
@@ -209,34 +200,31 @@ export default function SupportPage() {
         ) : (
           <div className="space-y-2">
             {tickets.map(t => (
-              <div
-                key={t.id}
-                className="lv-card-interactive flex items-center justify-between !p-4 group"
-              >
+              <div key={t.id} className="rd-card flex items-center justify-between group" style={{ padding: "0.75rem 1rem" }}>
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className="lv-caption shrink-0 font-mono">#{t.ticket_num}</div>
+                  <div className="rd-label shrink-0 font-mono">#{t.ticket_num}</div>
                   <div className="min-w-0">
-                    <p className="lv-body-strong truncate">{t.title}</p>
-                    <p className="lv-caption mt-0.5">
+                    <p className="rd-body truncate" style={{ fontWeight: 600 }}>{t.title}</p>
+                    <p className="rd-label mt-0.5">
                       {categories.find(c => c.value === t.category)?.label} · {new Date(t.created_at).toLocaleDateString("pt-BR")}
                     </p>
                   </div>
                 </div>
-                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium shrink-0 ml-4 ${statusColors[t.status]}`}>
+                <span className={statusColors[t.status]} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                   {statusIcons[t.status]}
                   {statusLabels[t.status]}
-                </div>
+                </span>
               </div>
             ))}
           </div>
         )}
 
         {/* Self-help banner */}
-        <div className="mt-12 lv-card-sm flex items-start gap-4">
+        <div className="mt-12 rd-card flex items-start gap-4">
           <LifeBuoy className="h-5 w-5 text-primary shrink-0 mt-0.5" />
           <div>
-            <p className="lv-body-strong mb-1">Muitos problemas têm solução rápida!</p>
-            <p className="lv-caption mb-3">Antes de abrir um ticket, confira nossa Central de Ajuda — há guias passo-a-passo para os problemas mais comuns.</p>
+            <p className="rd-body mb-1" style={{ fontWeight: 600 }}>Muitos problemas têm solução rápida!</p>
+            <p className="rd-label mb-3">Antes de abrir um ticket, confira nossa Central de Ajuda — há guias passo-a-passo para os problemas mais comuns.</p>
             <Link to="/ajuda" className="text-xs text-primary hover:underline flex items-center gap-1">
               Acessar Central de Ajuda <ChevronRight className="h-3 w-3" />
             </Link>
