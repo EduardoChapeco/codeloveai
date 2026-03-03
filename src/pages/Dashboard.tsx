@@ -8,7 +8,7 @@ import StarbleChatPage from "@/pages/redesign/StarbleChatPage";
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  useSEO({ title: "Assistente IA" });
+  useSEO({ title: "Home" });
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");

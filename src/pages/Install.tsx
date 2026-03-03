@@ -78,7 +78,7 @@ export default function Install() {
             </div>
             <h2 className="lv-heading-lg mb-3">App instalado!</h2>
             <p className="lv-body mb-8">O {brandName} já está na sua tela inicial.</p>
-            <Link to="/dashboard" className="lv-btn-primary lv-btn-lg">Ir para o Dashboard</Link>
+            <Link to="/home" className="lv-btn-primary lv-btn-lg">Ir para o Dashboard</Link>
           </div>
         ) : deferredPrompt ? (
           <div className="lv-card text-center py-12 mb-8">

@@ -149,7 +149,7 @@ export default function TenantAdmin({ embedded }: { embedded?: boolean } = {}) {
   useEffect(() => {
     if (!authLoading && !tenantLoading) {
       if (!user) navigate("/login");
-      else if (!canAccess) navigate("/dashboard");
+      else if (!canAccess) navigate("/home");
     }
   }, [user, canAccess, authLoading, tenantLoading, navigate]);
 

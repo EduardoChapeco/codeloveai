@@ -25,7 +25,7 @@ export default function Register() {
   const [wantBrain, setWantBrain] = useState(true);
 
   useEffect(() => {
-    if (!authLoading && user) navigate("/dashboard", { replace: true });
+    if (!authLoading && user) navigate("/home", { replace: true });
   }, [user, authLoading, navigate]);
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -48,7 +48,7 @@ export default function Register() {
       toast.error(error.message);
     } else {
       toast.success("Conta criada! Redirecionando...");
-      navigate("/dashboard");
+      navigate("/home");
     }
   };
 

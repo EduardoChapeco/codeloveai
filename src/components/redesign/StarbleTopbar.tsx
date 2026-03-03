@@ -3,11 +3,13 @@ import { Search, Bell, Settings, PanelLeftClose } from "lucide-react";
 
 const pageTitles: Record<string, string> = {
   "/lovable/projects": "Projetos",
+  "/ai": "Star AI",
   "/brain": "Star AI",
   "/community": "Comunidade",
   "/cirius": "Cirius Editor",
   "/marketplace": "Loja",
-  "/dashboard": "Assistente IA",
+  "/home": "Home",
+  "/dashboard": "Home",
   "/plans": "Planos & Billing",
   "/admin": "Admin",
   "/admin/tenant": "Admin Tenant",

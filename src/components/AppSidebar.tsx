@@ -389,7 +389,7 @@ export default function AppSidebar() {
         currentTab={currentTab}
         onTabChange={(tab) => setSearchParams({ tab })}
         title="Admin Operacional"
-        backTo="/dashboard"
+        backTo="/home"
         backLabel="Voltar"
         navPages={adminNavPages}
       />
@@ -420,7 +420,7 @@ export default function AppSidebar() {
         currentTab={currentTab}
         onTabChange={(tab) => setSearchParams({ tab })}
         title={tenant?.name || "Tenant"}
-        backTo="/dashboard"
+        backTo="/home"
         backLabel="Voltar"
       />
     );
@@ -516,7 +516,7 @@ export default function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip={brandName}>
-              <NavLink to="/dashboard" className="font-semibold flex items-center gap-2">
+              <NavLink to="/home" className="font-semibold flex items-center gap-2">
                 {tenant?.logo_url ? (
                   <img src={tenant.logo_url} alt="" className="h-5 w-5 rounded object-cover shrink-0" />
                 ) : (
@@ -641,8 +641,8 @@ export default function AppSidebar() {
             </SidebarMenuItem>
           )}
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isActive("/dashboard")} tooltip="Painel">
-              <NavLink to="/dashboard">
+            <SidebarMenuButton asChild isActive={isActive("/home")} tooltip="Home">
+              <NavLink to="/home">
                 <LayoutDashboard className="h-4 w-4" />
                 <span>Painel</span>
               </NavLink>

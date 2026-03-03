@@ -28,7 +28,7 @@ export default function OrchestratorLab() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   if (!loading && enabled) {
-    navigate("/brain");
+    navigate("/ai");
     return null;
   }
 
@@ -65,7 +65,7 @@ export default function OrchestratorLab() {
             <span className="font-bold text-sm">Starble</span>
           </Link>
           <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="text-sm text-white/60 hover:text-white transition-colors">Dashboard</Link>
+            <Link to="/home" className="text-sm text-white/60 hover:text-white transition-colors">Dashboard</Link>
             <Link to="/login" className="text-sm px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 transition-colors">Entrar</Link>
           </div>
         </div>

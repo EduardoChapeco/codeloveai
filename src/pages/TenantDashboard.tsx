@@ -29,7 +29,7 @@ export default function TenantDashboard() {
     if (!user) return;
     const load = async () => {
       const { data: tu } = await supabase.from("tenant_users").select("tenant_id, role").eq("user_id", user.id).in("role", ["tenant_owner", "tenant_admin"]).limit(1).maybeSingle();
-      if (!tu) { navigate("/dashboard"); return; }
+      if (!tu) { navigate("/home"); return; }
       const { data: t } = await supabase.from("tenants").select("id,name,slug,domain_custom,is_domain_approved,logo_url,primary_color,secondary_color,is_active,commission_percent,marketplace_commission_percent,custom_ai_name,custom_orchestrator_name,custom_venus_name,modules,created_at").eq("id", tu.tenant_id).single();
       setTenant(t);
       const { count: userCount } = await supabase.from("tenant_users").select("id", { count: "exact", head: true }).eq("tenant_id", tu.tenant_id);

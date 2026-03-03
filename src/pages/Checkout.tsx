@@ -501,7 +501,7 @@ export default function Checkout() {
                 </p>
               </div>
 
-              <Link to="/dashboard" className="gl ghost" style={{ width: "100%", justifyContent: "center", textDecoration: "none" }}>
+              <Link to="/home" className="gl ghost" style={{ width: "100%", justifyContent: "center", textDecoration: "none" }}>
                 Ir para o Dashboard
               </Link>
             </div>

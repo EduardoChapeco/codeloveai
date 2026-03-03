@@ -166,6 +166,7 @@ const App = () => (
                 <Route path="/cadastro" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/home" element={<Dashboard />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/global" element={<AdminGlobal />} />
@@ -181,6 +182,7 @@ const App = () => (
                 <Route path="/lovable/projects" element={<LovableProjects />} />
                 <Route path="/lovable/preview" element={<LovablePreview />} />
                 <Route path="/lovable/upload-test" element={<LovableUploadTest />} />
+                <Route path="/ai" element={<Brain />} />
                 <Route path="/brain" element={<Brain />} />
                 <Route path="/assistente" element={<Dashboard />} />
                 <Route path="/orquestrador" element={<OrchestratorPage />} />

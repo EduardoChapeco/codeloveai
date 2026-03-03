@@ -7,9 +7,9 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 
 const items = [
-  { to: "/dashboard", icon: Layout },
+  { to: "/home", icon: Layout },
   { to: "/lovable/projects", icon: FolderOpen },
-  { to: "/brain", icon: Brain },
+  { to: "/ai", icon: Brain },
   { to: "/community", icon: MessageCircle },
   { to: "/marketplace", icon: ShoppingBag },
   { to: "/plans", icon: CreditCard },
