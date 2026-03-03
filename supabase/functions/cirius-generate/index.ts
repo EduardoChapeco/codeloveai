@@ -623,179 +623,95 @@ Deno.serve(async (req) => {
 
     // ── STEP 5: CODE GENERATION ──────────────────────────────────────
 
-    if (noBrains) {
-      // ═══ NO BRAINS MODE: Direct Claude/OpenRouter generation ═══
-      await sc.from("cirius_projects").update({ generation_engine: "claude_direct" }).eq("id", projectId);
-      await logEntry(sc, projectId, "code", "started", "No Brains mode — generating directly via Claude (OpenRouter)");
+    // ═══ CLAUDE DIRECT MODE: Sequential task generation via OpenRouter ═══
+    await sc.from("cirius_projects").update({ generation_engine: "claude_direct" }).eq("id", projectId);
+    await logEntry(sc, projectId, "code", "started", `Claude Direct mode — ${prd.tasks.length} tasks sequenciais`);
 
-      // Build a comprehensive prompt with all PRD tasks
-      const taskPrompts = prd.tasks.map((t: any, i: number) => `### Task ${i + 1}: ${t.title}\n${t.prompt}`).join("\n\n");
-      const codePrompt = `You are a senior full-stack engineer. Generate a COMPLETE, production-ready project.
+    const CODE_SYS = "You are an expert React/TypeScript developer. Return only code files wrapped in <file path=\"...\">content</file> tags. No explanations outside file tags.";
+    let currentFiles: Record<string, string> = {};
+    let tasksDone = 0;
 
-## Project: "${projectName}"
-## Description: ${combinedPrompt}
-## Stack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM
-${blueprint.needsDatabase ? "## Database: Supabase (PostgreSQL + Auth + Storage)" : ""}
-
-## PRD Tasks:
-${taskPrompts}
-
-## RULES:
-- Return ALL files using <file path="path/to/file.tsx">content</file> tags
-- Include: App.tsx, main.tsx, index.css, all pages, components, hooks, lib utilities
-- Use modern, responsive design with dark mode support
-- Include loading states, empty states, error handling
-- Use shadcn/ui components (Button, Card, Input, etc.)
-- Use React Router DOM for navigation
-- DO NOT use mock data — connect to Supabase if database is needed
-- Each file must be COMPLETE and functional`;
-
-      const sysPrompt = "You are an expert React/TypeScript developer. Return only code files wrapped in <file path=\"...\">content</file> tags. No explanations outside file tags.";
-
-      // Try OpenRouter (Claude) first, then Gateway, then Gemini Direct
-      let generatedContent: string | null = null;
-      let engine = "";
-
-      const or = await sendViaOpenRouter(codePrompt, sysPrompt);
-      if (or.content && or.content.length > 200) {
-        generatedContent = or.content;
-        engine = "openrouter_claude";
-        await logEntry(sc, projectId, "code_claude", "completed", `Claude generated ${or.content.length} chars in ${or.durationMs}ms`);
-      }
-
-      if (!generatedContent) {
-        const gw = await sendViaGateway(codePrompt, sysPrompt);
-        if (gw.content && gw.content.length > 200) {
-          generatedContent = gw.content;
-          engine = "lovable_gateway";
-          await logEntry(sc, projectId, "code_gateway", "completed", `Gateway generated ${gw.content.length} chars in ${gw.durationMs}ms`);
-        }
-      }
-
-      if (!generatedContent) {
-        const gem = await sendViaGeminiDirect(sc, codePrompt, sysPrompt);
-        if (gem.content && gem.content.length > 200) {
-          generatedContent = gem.content;
-          engine = "gemini_direct";
-          await logEntry(sc, projectId, "code_gemini", "completed", `Gemini generated ${gem.content.length} chars in ${gem.durationMs}ms`);
-        }
-      }
-
-      if (!generatedContent) {
-        await sc.from("cirius_projects").update({ status: "failed", error_message: "All AI engines failed to generate code" }).eq("id", projectId);
-        await logEntry(sc, projectId, "code", "failed", "No Brains: all engines exhausted");
-        return json({ success: false, project_id: projectId, status: "failed", message: "Code generation failed — all engines exhausted" });
-      }
-
-      // Parse files from response
-      const parsedFiles = tryParseRefinement(generatedContent);
-      if (!parsedFiles || Object.keys(parsedFiles).length === 0) {
-        await sc.from("cirius_projects").update({ status: "failed", error_message: "AI response contained no parseable files" }).eq("id", projectId);
-        await logEntry(sc, projectId, "code", "failed", "No parseable files in AI response");
-        return json({ success: false, project_id: projectId, status: "failed", message: "No parseable files in AI response" });
-      }
-
-      // Refine
-      const refResult = await refineSourceFiles(sc, projectId, parsedFiles, projectName, combinedPrompt, prd);
-
-      const finalFiles = refResult.ok ? refResult.files : parsedFiles;
-
+    for (let i = 0; i < prd.tasks.length; i++) {
+      const task = prd.tasks[i];
+      const progressPct = Math.round(20 + (60 * (i / prd.tasks.length)));
+      
       await sc.from("cirius_projects").update({
-        source_files_json: finalFiles,
-        status: "live",
-        progress_pct: 100,
-        generation_ended_at: new Date().toISOString(),
-        generation_engine: engine,
+        progress_pct: progressPct,
+        current_step: `task_${i + 1}_of_${prd.tasks.length}`,
       }).eq("id", projectId);
 
-      await logEntry(sc, projectId, "complete", "completed", `No Brains complete: ${Object.keys(finalFiles).length} files via ${engine}`, {
-        metadata: { file_count: Object.keys(finalFiles).length, engine, refined: refResult.ok },
-      });
+      await logEntry(sc, projectId, `task_${i + 1}`, "started", `Tarefa ${i + 1}/${prd.tasks.length}: ${task.title}`);
 
-      return json({
-        success: true,
-        project_id: projectId,
-        status: "live",
-        message: `Generated ${Object.keys(finalFiles).length} files directly via ${engine}`,
-        file_count: Object.keys(finalFiles).length,
-        engine,
-      });
+      // Build context
+      const fileContext = Object.keys(currentFiles).length > 0
+        ? `\n\nARQUIVOS JÁ GERADOS (${Object.keys(currentFiles).length}):\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 25).map(([p, c]) => `--- ${p} ---\n${c.slice(0, 3000)}`).join("\n\n")}`
+        : "";
+
+      const taskPrompt = `Project: "${projectName}"\nDescription: ${combinedPrompt}\nStack: React 18 + Vite 5 + TypeScript + Tailwind CSS 3 + shadcn/ui + React Router DOM${blueprint.needsDatabase ? " + Supabase" : ""}\n\n## Task ${i + 1}/${prd.tasks.length}: ${task.title}\n\n${task.prompt}${fileContext}\n\nReturn ALL files using <file path="path/to/file.tsx">complete content</file> tags.`;
+
+      // Try OpenRouter (Claude) → Gateway → Gemini
+      let genContent: string | null = null;
+      let engine = "";
+
+      const or = await sendViaOpenRouter(taskPrompt, CODE_SYS);
+      if (or.content && or.content.length > 200) {
+        genContent = or.content; engine = "openrouter";
+      }
+      if (!genContent) {
+        const gw = await sendViaGateway(taskPrompt, CODE_SYS);
+        if (gw.content && gw.content.length > 200) { genContent = gw.content; engine = "gateway"; }
+      }
+      if (!genContent) {
+        const gem = await sendViaGeminiDirect(sc, taskPrompt, CODE_SYS);
+        if (gem.content && gem.content.length > 200) { genContent = gem.content; engine = "gemini"; }
+      }
+
+      if (genContent) {
+        const parsed = tryParseRefinement(genContent);
+        if (parsed && Object.keys(parsed).length > 0) {
+          currentFiles = { ...currentFiles, ...parsed };
+          tasksDone++;
+          // Persist intermediate
+          await sc.from("cirius_projects").update({
+            source_files_json: currentFiles, updated_at: new Date().toISOString(),
+          }).eq("id", projectId);
+          await logEntry(sc, projectId, `task_${i + 1}`, "completed", `${Object.keys(parsed).length} arquivos via ${engine}`, { metadata: { file_count: Object.keys(parsed).length, engine } });
+        } else {
+          await logEntry(sc, projectId, `task_${i + 1}`, "failed", "Sem arquivos parseáveis na resposta");
+        }
+      } else {
+        await logEntry(sc, projectId, `task_${i + 1}`, "failed", "Todos os motores falharam para esta tarefa");
+      }
     }
 
-    // ═══ STANDARD MODE: Brain + Orchestrator pipeline ═══
-    // Acquire brain for orchestrator
-    const { data: bcAccounts } = await sc.from("brainchain_accounts")
-      .select("id, brain_project_id, brain_type")
-      .eq("is_active", true).eq("is_busy", false).lt("error_count", 5)
-      .not("brain_project_id", "is", null)
-      .order("last_used_at", { ascending: true, nullsFirst: true })
-      .limit(1);
-
-    let brainProjectId = bcAccounts?.[0]?.brain_project_id || null;
-    if (!brainProjectId) {
-      const brain = await getUserBrain(sc, effectiveUserId);
-      brainProjectId = brain?.projectId || null;
+    if (tasksDone === 0 || Object.keys(currentFiles).length === 0) {
+      await sc.from("cirius_projects").update({ status: "failed", error_message: "Nenhuma tarefa completou" }).eq("id", projectId);
+      return json({ success: false, project_id: projectId, status: "failed", message: "No tasks completed" });
     }
 
-    if (!brainProjectId) {
-      await sc.from("cirius_projects").update({ status: "failed", error_message: "Nenhum Brain disponível" }).eq("id", projectId);
-      await logEntry(sc, projectId, "code", "failed", "No brain project available");
-      return json({ success: false, project_id: projectId, status: "failed", message: "No brain project available" });
-    }
-
-    await sc.from("cirius_projects").update({ brain_project_id: brainProjectId }).eq("id", projectId);
-
-    // Create orchestrator project + tasks
-    const prdCtx = `[CONTEXTO]\nNome: ${projectName}\nDescrição: ${combinedPrompt}\nStack: React + Tailwind + shadcn/ui + Supabase\n\n[PRD]\n${prd.tasks.map((t: any, i: number) => `${i + 1}. ${t.title}: ${t.prompt?.slice(0, 200)}`).join("\n")}\n\n`;
-
-    const { data: orchProject, error: orchErr } = await sc.from("orchestrator_projects").insert({
-      user_id: effectiveUserId, client_prompt: combinedPrompt,
-      status: "paused", total_tasks: prd.tasks.length, prd_json: prd,
-      lovable_project_id: brainProjectId,
-    }).select("id").single();
-
-    if (orchErr || !orchProject) {
-      await sc.from("cirius_projects").update({ status: "failed", error_message: "Orchestrator registration failed" }).eq("id", projectId);
-      return json({ success: false, project_id: projectId, status: "failed", message: "Orchestrator registration failed" });
-    }
-
-    const taskInserts = prd.tasks.map((t: any, i: number) => ({
-      project_id: orchProject.id, task_index: i,
-      title: t.title || `Task ${i + 1}`,
-      intent: t.intent || "security_fix_v2",
-      prompt: prdCtx + `[ESPECIALIDADE: ${t.title}]\n\n${t.prompt}`,
-      stop_condition: t.stop_condition || null,
-      brain_type: t.brain_type || "code",
-    }));
-
-    const { error: taskErr } = await sc.from("orchestrator_tasks").insert(taskInserts);
-    if (taskErr) {
-      await sc.from("orchestrator_projects").delete().eq("id", orchProject.id);
-      await sc.from("cirius_projects").update({ status: "failed", error_message: `Task insertion failed: ${taskErr.message}` }).eq("id", projectId);
-      return json({ success: false, project_id: projectId, status: "failed", message: taskErr.message });
-    }
+    // Refine
+    const refResult = await refineSourceFiles(sc, projectId, currentFiles, projectName, combinedPrompt, prd);
+    const finalFiles = refResult.ok ? refResult.files : currentFiles;
 
     await sc.from("cirius_projects").update({
-      orchestrator_project_id: orchProject.id, progress_pct: 25,
+      source_files_json: finalFiles,
+      status: "live",
+      progress_pct: 100,
+      generation_ended_at: new Date().toISOString(),
+      generation_engine: "claude_direct",
     }).eq("id", projectId);
 
-    await logEntry(sc, projectId, "code", "started",
-      `Pipeline iniciado: ${prd.tasks.length} tarefas → Brain ${brainProjectId.slice(0, 8)} (orch: ${orchProject.id.slice(0, 8)})`, {
-      metadata: { orchestrator_id: orchProject.id, brain_project: brainProjectId, task_count: prd.tasks.length },
+    await logEntry(sc, projectId, "complete", "completed", `Claude Direct: ${Object.keys(finalFiles).length} arquivos, ${tasksDone}/${prd.tasks.length} tarefas`, {
+      metadata: { file_count: Object.keys(finalFiles).length, tasks_done: tasksDone, refined: refResult.ok },
     });
 
-    // Fire orchestrator tick
-    autoTriggerTick(sc).catch(() => {});
-
-    // Return immediately — generation is async
     return json({
       success: true,
       project_id: projectId,
-      status: "generating_code",
-      message: `Pipeline started: ${prd.tasks.length} tasks via ${blueprint.suggestedEngine}`,
-      blueprint,
-      prd_task_count: prd.tasks.length,
-      orchestrator_project_id: orchProject.id,
+      status: "live",
+      message: `Generated ${Object.keys(finalFiles).length} files via Claude Direct (${tasksDone}/${prd.tasks.length} tasks)`,
+      file_count: Object.keys(finalFiles).length,
+      engine: "claude_direct",
     });
   }
 
@@ -1013,7 +929,7 @@ ${taskPrompts}
     return json({ prd_json: prd, task_count: prd.tasks.length, design: prd.design || null });
   }
 
-  // ─── GENERATE_CODE ───
+  // ─── GENERATE_CODE (Claude Direct) ───
   if (action === "generate_code") {
     const projectId = body.project_id;
     if (!projectId) return json({ error: "project_id required" }, 400);
@@ -1025,41 +941,51 @@ ${taskPrompts}
     if (!proj) return json({ error: "Not found" }, 404);
     if (!proj.prd_json) return json({ error: "PRD not generated" }, 400);
 
-    const { data: bcAcc } = await sc.from("brainchain_accounts")
-      .select("id, brain_project_id").eq("is_active", true).eq("is_busy", false).lt("error_count", 5)
-      .not("brain_project_id", "is", null).order("last_used_at", { ascending: true, nullsFirst: true }).limit(1);
-    let bpId = bcAcc?.[0]?.brain_project_id || null;
-    if (!bpId) { const b = await getUserBrain(sc, effectiveUserId); bpId = b?.projectId || null; }
-    if (!bpId) { await sc.from("cirius_projects").update({ status: "failed", error_message: "No Brain available" }).eq("id", projectId); return json({ error: "No brain project available" }, 503); }
+    await sc.from("cirius_projects").update({ status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20, generation_engine: "claude_direct" }).eq("id", projectId);
+    const prd = proj.prd_json as any;
+    const CODE_SYS = "You are an expert React/TypeScript developer. Return only code files wrapped in <file path=\"...\">content</file> tags.";
 
-    await sc.from("cirius_projects").update({ brain_project_id: bpId }).eq("id", projectId);
+    let currentFiles: Record<string, string> = (proj.source_files_json || {}) as Record<string, string>;
+    let tasksDone = 0;
 
-    if (proj.orchestrator_project_id) {
-      await sc.from("orchestrator_projects").update({ status: "paused", quality_score: 0, lovable_project_id: bpId }).eq("id", proj.orchestrator_project_id);
-      await sc.from("cirius_projects").update({ status: "generating_code", error_message: null, progress_pct: 25 }).eq("id", projectId);
-      autoTriggerTick(sc).catch(() => {});
-      return json({ started: true, engine: "orchestrator", orchestrator_project_id: proj.orchestrator_project_id, resumed: true });
+    for (let i = 0; i < prd.tasks.length; i++) {
+      const task = prd.tasks[i];
+      const pctNow = Math.round(20 + (60 * (i / prd.tasks.length)));
+      await sc.from("cirius_projects").update({ progress_pct: pctNow, current_step: `task_${i + 1}` }).eq("id", projectId);
+      await logEntry(sc, projectId, `task_${i + 1}`, "started", `Tarefa ${i + 1}: ${task.title}`);
+
+      const fileCtx = Object.keys(currentFiles).length > 0
+        ? `\n\nExisting files:\n${Object.entries(currentFiles).filter(([p]) => !p.startsWith(".cirius/")).slice(0, 20).map(([p, c]) => `--- ${p} ---\n${c.slice(0, 2000)}`).join("\n\n")}`
+        : "";
+      const taskPrompt = `Project: "${proj.name}"\n\n## Task ${i + 1}: ${task.title}\n${task.prompt}${fileCtx}\n\nReturn ALL files using <file path="...">content</file>.`;
+
+      let genContent: string | null = null;
+      let engine = "";
+      const or = await sendViaOpenRouter(taskPrompt, CODE_SYS);
+      if (or.content && or.content.length > 200) { genContent = or.content; engine = "openrouter"; }
+      if (!genContent) { const gw = await sendViaGateway(taskPrompt, CODE_SYS); if (gw.content && gw.content.length > 200) { genContent = gw.content; engine = "gateway"; } }
+
+      if (genContent) {
+        const parsed = tryParseRefinement(genContent);
+        if (parsed && Object.keys(parsed).length > 0) {
+          currentFiles = { ...currentFiles, ...parsed };
+          tasksDone++;
+          await sc.from("cirius_projects").update({ source_files_json: currentFiles }).eq("id", projectId);
+          await logEntry(sc, projectId, `task_${i + 1}`, "completed", `${Object.keys(parsed).length} arquivos via ${engine}`);
+        }
+      }
     }
 
-    await sc.from("cirius_projects").update({ status: "generating_code", generation_started_at: new Date().toISOString(), progress_pct: 20 }).eq("id", projectId);
-    const prd = proj.prd_json as any;
-    const prdCtx = `[CONTEXTO]\nNome: ${proj.name}\nStack: React + Tailwind + shadcn/ui + Supabase\n\n[PRD]\n${prd.tasks.map((t: any, i: number) => `${i + 1}. ${t.title}: ${t.prompt?.slice(0, 200)}`).join("\n")}\n\n`;
-    const { data: orchProj, error: orchErr } = await sc.from("orchestrator_projects").insert({
-      user_id: effectiveUserId, client_prompt: proj.description || proj.name,
-      status: "paused", total_tasks: prd.tasks.length, prd_json: prd, lovable_project_id: bpId,
-    }).select("id").single();
-    if (orchErr || !orchProj) { await sc.from("cirius_projects").update({ status: "failed" }).eq("id", projectId); return json({ error: "Orchestrator failed" }, 500); }
-    const inserts = prd.tasks.map((t: any, i: number) => ({
-      project_id: orchProj.id, task_index: i, title: t.title || `Task ${i + 1}`,
-      intent: t.intent || "security_fix_v2", prompt: prdCtx + `[${t.title}]\n\n${t.prompt}`,
-      stop_condition: t.stop_condition || null, brain_type: t.brain_type || "code",
-    }));
-    const { error: tErr } = await sc.from("orchestrator_tasks").insert(inserts);
-    if (tErr) { await sc.from("orchestrator_projects").delete().eq("id", orchProj.id); await sc.from("cirius_projects").update({ status: "failed" }).eq("id", projectId); return json({ error: tErr.message }, 500); }
-    await sc.from("cirius_projects").update({ orchestrator_project_id: orchProj.id, progress_pct: 25 }).eq("id", projectId);
-    await logEntry(sc, projectId, "code", "started", `Pipeline: ${prd.tasks.length} tasks → Brain ${bpId.slice(0, 8)}`, { metadata: { orchestrator_id: orchProj.id } });
-    autoTriggerTick(sc).catch(() => {});
-    return json({ started: true, engine: "orchestrator", orchestrator_project_id: orchProj.id, task_count: prd.tasks.length });
+    if (tasksDone === 0) {
+      await sc.from("cirius_projects").update({ status: "failed", error_message: "No tasks completed" }).eq("id", projectId);
+      return json({ error: "No tasks completed" }, 500);
+    }
+
+    const refResult = await refineSourceFiles(sc, projectId, currentFiles, proj.name || "", proj.description || "", prd);
+    const finalFiles = refResult.ok ? refResult.files : currentFiles;
+    await sc.from("cirius_projects").update({ source_files_json: finalFiles, status: "live", progress_pct: 100, generation_ended_at: new Date().toISOString() }).eq("id", projectId);
+    await logEntry(sc, projectId, "complete", "completed", `Claude Direct: ${Object.keys(finalFiles).length} files, ${tasksDone} tasks`);
+    return json({ started: true, engine: "claude_direct", task_count: tasksDone, file_count: Object.keys(finalFiles).length });
   }
 
   // ─── CAPTURE ───

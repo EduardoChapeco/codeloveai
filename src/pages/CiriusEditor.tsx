@@ -387,7 +387,7 @@ export default function CiriusEditor() {
       const historyMsgs = chatMessages.slice(-20).map(m => ({ role: m.role, content: m.content }));
       historyMsgs.push({ role: "user", content: msg });
 
-      addTerminalLine("Enviando para Cirius Brain (md-mining)...", "system");
+      addTerminalLine("Enviando para Cirius AI (Claude Direct)...", "system");
 
       // Brain-First: always JSON (no streaming needed — Brain mines .md internally)
       const { data, error } = await supabase.functions.invoke("cirius-ai-chat", {
@@ -441,7 +441,7 @@ export default function CiriusEditor() {
           id: bubbleId,
           title: `Pipeline (${data.pipeline?.task_count || 0} tasks)`,
           phase: "running",
-          steps: [{ s: "run", t: "Tarefas distribuídas para os Brains..." }],
+          steps: [{ s: "run", t: "Tarefas em execução via Claude..." }],
           pct: 25,
           startTime: Date.now(),
         }]);
@@ -523,7 +523,7 @@ export default function CiriusEditor() {
       setChatMessages(prev => [...prev, aiMsg]);
       persistMsg(aiMsg);
       setBubbles(prev => prev.map(b => b.id === bubbleId ? { ...b, phase: "done" as const, pct: 100, steps: [{ s: "done" as const, t: `${data?.task_count || 0} tarefas disparadas` }] } : b));
-      addToast("Multi-brain em execução!", "success");
+      addToast("Pipeline Claude em execução!", "success");
       await loadProject();
       setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubbleId)), 4000);
     } catch (e) {
