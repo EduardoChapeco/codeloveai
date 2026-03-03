@@ -104,6 +104,15 @@ Deno.serve(async (req: Request) => {
 
     const plan = (license.plan || "free").toLowerCase();
 
+    // Cirius limits based on plan
+    let ciriusLimit: number | null = null;
+    if (plan === "grátis" || plan === "free" || plan === "free master") {
+      ciriusLimit = 20;
+    } else if (plan.includes("mensal")) {
+      ciriusLimit = 200;
+    }
+    // daily plans & admin = null (unlimited)
+
     return new Response(
       JSON.stringify({
         ok: true,
@@ -117,6 +126,7 @@ Deno.serve(async (req: Request) => {
         deviceBound: !!license.device_id || !!hwid,
         dailyMessages: guard.dailyLimit ?? null,
         usedToday: guard.usedToday ?? 0,
+        ciriusLimit,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

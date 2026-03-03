@@ -234,11 +234,22 @@ Deno.serve(async (req) => {
     // Build CLF1 token
     const now = Date.now();
     const exp = now + expiresMs;
+    // Cirius limits: free=20/day, daily=unlimited, monthly=200/month
+    let ciriusLimit: number | null = null;
+    const planLower = resolvedPlan.toLowerCase();
+    if (planLower === "grátis" || planLower === "free" || planLower === "free master") {
+      ciriusLimit = 20;
+    } else if (planLower === "god mode mensal" || planLower === "wl god mode mensal") {
+      ciriusLimit = 200;
+    }
+    // daily plans & admin = null (unlimited)
+
     const payload = JSON.stringify({
       uid: userId,
       email: userEmail || profile.email,
       plan: resolvedPlan,
       dailyMessages,
+      ciriusLimit,
       exp,
       iat: now,
       v: 1,

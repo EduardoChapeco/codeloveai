@@ -16,17 +16,17 @@ interface EditorUsage {
   isDailyReset: boolean;
 }
 
-// Daily limits (per day) — unlimited for now
+// Daily limits (per day)
 const DAILY_LIMITS: Record<EditorPlan, number> = {
-  free: 9999,
-  daily: 9999,
+  free: 10,
+  daily: 9999, // unlimited
   pro: 9999,
   venus: 9999,
 };
 
-// Monthly limits — unlimited for now
+// Monthly limits
 const MONTHLY_LIMITS: Record<EditorPlan, number> = {
-  free: 9999,
+  free: 300, // 10/day * 30 days
   daily: 9999,
   pro: 9999,
   venus: 9999,
