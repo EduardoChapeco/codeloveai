@@ -1,9 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import {
   MessageCircle, FolderOpen, Brain, Paperclip, Clock, ArrowUp, Sparkles,
   Plus, Search, Code2, FileText, Bug, RefreshCw, ChevronLeft, Check, CheckCheck,
+  Rocket,
 } from "lucide-react";
 
 type ChatMode = "chat" | "build" | "brain";
@@ -79,6 +82,7 @@ const MODE_TABS: { id: BrainMode; label: string; icon: typeof Code2 }[] = [
 
 export default function StarbleChatPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   /* Chat mode */
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [heroVisible, setHeroVisible] = useState(true);
@@ -102,10 +106,58 @@ export default function StarbleChatPage() {
     setTimeout(() => target?.scrollTo({ top: target.scrollHeight, behavior: "smooth" }), 50);
   }, []);
 
+  /* ── Build mode: create Cirius project ── */
+  const handleBuildSend = useCallback(async (prompt: string) => {
+    if (!user) { toast.error("Faça login para continuar"); return; }
+    setGenerating(true);
+    setHeroVisible(false);
+
+    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", text: prompt, time: "agora" };
+    setMessages((prev) => [...prev, userMsg]);
+    scrollToBottom();
+
+    const aiMsg: Message = { id: `a-${Date.now()}`, role: "ai", text: "Criando seu projeto... <strong>Aguarde</strong>, você será redirecionado ao editor.", time: "agora" };
+    setMessages((prev) => [...prev, aiMsg]);
+    scrollToBottom();
+
+    try {
+      const name = `Projeto ${new Date().toLocaleDateString("pt-BR")}`;
+      const { data, error } = await supabase.functions.invoke("cirius-generate", {
+        body: {
+          action: "start",
+          user_prompt: prompt,
+          project_name: name,
+          config: { deploy_github: true, deploy_vercel: false, create_supabase: false, no_brains: false },
+        },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Erro ao iniciar geração");
+      toast.success("Projeto iniciado!");
+      const pid = data.project_id;
+      if (pid) navigate(`/cirius/editor/${pid}`);
+      else navigate("/projects");
+    } catch (e) {
+      toast.error((e as Error).message || "Erro ao gerar projeto");
+      setMessages((prev) => [...prev, { id: `e-${Date.now()}`, role: "ai", text: `❌ Erro: ${(e as Error).message}`, time: "agora" }]);
+      scrollToBottom();
+    } finally {
+      setGenerating(false);
+    }
+  }, [user, navigate, scrollToBottom]);
+
   /* ── Regular chat send ── */
   const handleSend = useCallback(() => {
     const msg = inputValue.trim();
     if (!msg || generating) return;
+
+    // If in build mode, create project instead
+    if (activeMode === "build") {
+      setInputValue("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      handleBuildSend(msg);
+      return;
+    }
+
     setGenerating(true);
     setInputValue("");
     setHeroVisible(false);
@@ -121,7 +173,7 @@ export default function StarbleChatPage() {
       setGenerating(false);
       scrollToBottom();
     }, 1600);
-  }, [inputValue, generating, scrollToBottom]);
+  }, [inputValue, generating, activeMode, handleBuildSend, scrollToBottom]);
 
   /* ── Brain chat send ── */
   const handleBrainSend = useCallback(() => {
@@ -371,9 +423,9 @@ export default function StarbleChatPage() {
               <div className="mc-desc">Converse e obtenha respostas instantâneas</div>
             </div>
             <div className={`mode-card mode-build ${activeMode === "build" ? "active" : ""}`} onClick={() => selectMode("build")}>
-              <div className="mc-ico ib-blue"><FolderOpen size={16} /></div>
-              <div className="mc-title">Construtor</div>
-              <div className="mc-desc">Crie sites e apps completos com IA</div>
+              <div className="mc-ico ib-blue"><Rocket size={16} /></div>
+              <div className="mc-title">Novo Projeto</div>
+              <div className="mc-desc">Descreva sua ideia e a IA constrói</div>
               <span className="mc-badge chip ch-blue">Novo</span>
             </div>
             <div className="mode-card" onClick={() => selectMode("brain")}>
@@ -438,7 +490,7 @@ export default function StarbleChatPage() {
                 onClick={() => selectMode(m)}
               >
                 {m === "chat" && <><MessageCircle size={11} /> Chat IA</>}
-                {m === "build" && <><FolderOpen size={11} /> Construtor</>}
+                {m === "build" && <><Rocket size={11} /> Novo Projeto</>}
                 {m === "brain" && <><Brain size={11} /> Brain</>}
               </button>
             ))}
@@ -447,7 +499,7 @@ export default function StarbleChatPage() {
             ref={textareaRef}
             className="cib-ta"
             rows={1}
-            placeholder="Descreva o que você quer criar ou perguntar..."
+            placeholder={activeMode === "build" ? "Descreva o projeto que você quer criar..." : "Descreva o que você quer criar ou perguntar..."}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onFocus={() => setModesOpen(true)}
