@@ -7,12 +7,20 @@
 export function extractFileBlocks(response: string): Record<string, string> {
   const files: Record<string, string> = {};
 
+  // Helper: strip markdown code fences from content
+  const stripFences = (c: string): string => {
+    let s = c.trim();
+    if (/^```\w*\s*\n/.test(s)) s = s.replace(/^```\w*\s*\n/, "");
+    if (/\n```\s*$/.test(s)) s = s.replace(/\n```\s*$/, "");
+    return s.trim();
+  };
+
   // 1. Try <file path="...">content</file> tags
   const re = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(response)) !== null) {
     const path = m[1].trim().replace(/^\.\//, "");
-    const content = m[2].replace(/^\n/, "").replace(/\s+$/, "") + "\n";
+    const content = stripFences(m[2].replace(/^\n/, "").replace(/\s+$/, "")) + "\n";
     if (path && content.trim().length > 1) files[path] = content;
   }
 
