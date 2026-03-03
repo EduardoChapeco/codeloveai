@@ -120,7 +120,12 @@ export function extractFilesFromMarkdown(markdown: string): Record<string, strin
     if (!path) path = pathFromContext(markdown, match.index);
     if (!path) continue;
 
-    const normalizedContent = code.replace(/^\n+/, "").replace(/\s+$/, "") + "\n";
+    // Strip any nested markdown code fences from content
+    let cleanCode = code.replace(/^\n+/, "").replace(/\s+$/, "");
+    if (/^```\w*\s*\n/.test(cleanCode)) cleanCode = cleanCode.replace(/^```\w*\s*\n/, "");
+    if (/\n```\s*$/.test(cleanCode)) cleanCode = cleanCode.replace(/\n```\s*$/, "");
+
+    const normalizedContent = cleanCode.replace(/^\n+/, "").replace(/\s+$/, "") + "\n";
     if (normalizedContent.trim().length < 2) continue;
     files[path] = normalizedContent;
   }

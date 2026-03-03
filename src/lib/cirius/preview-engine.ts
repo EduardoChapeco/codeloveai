@@ -377,13 +377,49 @@ window.supabase = { from: function() { return { select: function() { return { da
 </script>`;
 }
 
+// ─── Strip markdown code fences from file content ───
+function stripMarkdownFences(content: string): string {
+  let c = content.trim();
+  // Remove opening fence: ```lang\n or ```\n
+  if (/^```\w*\s*\n/.test(c)) {
+    c = c.replace(/^```\w*\s*\n/, "");
+  }
+  // Remove closing fence: \n```
+  if (/\n```\s*$/.test(c)) {
+    c = c.replace(/\n```\s*$/, "");
+  }
+  return c.trim();
+}
+
+// ─── Convert @tailwind/@apply CSS to raw CSS for CDN compatibility ───
+function convertTailwindCssToRaw(css: string): string {
+  let result = css;
+  // Remove @tailwind directives (CDN handles these)
+  result = result.replace(/@tailwind\s+(base|components|utilities)\s*;/g, "");
+  // Remove @layer wrappers but keep content
+  result = result.replace(/@layer\s+\w+\s*\{/g, "");
+  // Remove @apply directives (can't be processed by CDN)
+  result = result.replace(/\s*@apply\s+[^;]+;/g, "");
+  // Clean up empty blocks and extra closing braces from @layer removal
+  // This is imperfect but handles common cases
+  return result;
+}
+
 // ─── Main builder ───
 export function buildPreviewFromFiles(files: Record<string, string>): string | null {
   if (!files || Object.keys(files).length === 0) return null;
 
-  const html = files["index.html"] || files["dist/index.html"];
-  const cssFiles = Object.entries(files).filter(([k]) => k.endsWith(".css"));
-  const plainJs = Object.entries(files).filter(([k]) => k.endsWith(".js") && !k.includes("node_modules"));
+  // Sanitize all file contents: strip markdown fences
+  const sanitized: Record<string, string> = {};
+  for (const [k, v] of Object.entries(files)) {
+    sanitized[k] = stripMarkdownFences(v);
+  }
+  // Replace files reference with sanitized version
+  const cleanFiles = sanitized;
+
+  const html = cleanFiles["index.html"] || cleanFiles["dist/index.html"];
+  const cssFiles = Object.entries(cleanFiles).filter(([k]) => k.endsWith(".css")).map(([k, v]) => [k, convertTailwindCssToRaw(v)] as [string, string]);
+  const plainJs = Object.entries(cleanFiles).filter(([k]) => k.endsWith(".js") && !k.includes("node_modules"));
 
   // Check if HTML uses Vite module entry
   const hasViteModuleEntry = !!html && /<script[^>]+type=["']module["'][^>]+src=["'][^"']*(?:\/src\/main\.(?:tsx|ts|jsx|js)|\/main\.(?:tsx|ts|jsx|js))[^"']*["'][^>]*>/i.test(html);
@@ -413,7 +449,7 @@ export function buildPreviewFromFiles(files: Record<string, string>): string | n
   }
 
   // React/Vite project — build via Babel Standalone
-  const sourceModules = Object.entries(files).filter(([k]) => {
+  const sourceModules = Object.entries(cleanFiles).filter(([k]) => {
     if (!k.startsWith("src/")) return false;
     if (k.includes(".d.ts")) return false;
     if (k.endsWith(".css")) return false;
@@ -423,7 +459,7 @@ export function buildPreviewFromFiles(files: Record<string, string>): string | n
 
   if (sourceModules.length === 0) return html || null;
 
-  const fileKeys = Object.keys(files);
+  const fileKeys = Object.keys(cleanFiles);
   const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
 
   // Build module info
@@ -453,19 +489,52 @@ export function buildPreviewFromFiles(files: Record<string, string>): string | n
   const titleMatch = html?.match(/<title>([\s\S]*?)<\/title>/i);
   const title = titleMatch?.[1]?.trim() || "Preview";
 
+  // Extract custom font links from original HTML
+  const fontLinks: string[] = [];
+  if (html) {
+    const linkMatches = html.match(/<link[^>]*href="[^"]*fonts[^"]*"[^>]*>/gi) || [];
+    fontLinks.push(...linkMatches);
+    const preconnectMatches = html.match(/<link[^>]*rel="preconnect"[^>]*>/gi) || [];
+    fontLinks.push(...preconnectMatches);
+  }
+  const fontBlock = fontLinks.length > 0 ? fontLinks.join("\n") : `<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />`;
+
   return `<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>${title}</title>
 <script src="https://cdn.tailwindcss.com"><\/script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: { DEFAULT: 'hsl(var(--primary))', foreground: 'hsl(var(--primary-foreground))' },
+        secondary: { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
+        destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
+        muted: { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
+        accent: { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
+        popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
+        card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
+      },
+    },
+  },
+};
+<\/script>
 <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+${fontBlock}
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
