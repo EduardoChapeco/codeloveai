@@ -17,7 +17,8 @@ const pageTitles: Record<string, string> = {
   "/extensoes/venus": "Venus AI",
   "/notes": "Notas",
   "/ajuda": "Central de Ajuda",
-  "/lovable/connect": "Lovable Connect",
+  "/painel": "Painel",
+  "/lovable/connect": "Painel",
   "/automation": "Automação",
   "/suporte": "Suporte",
 };
