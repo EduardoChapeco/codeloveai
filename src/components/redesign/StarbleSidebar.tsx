@@ -120,14 +120,14 @@ export default function StarbleSidebar() {
             <NavEntry to="/home" label="Home" icon={BarChart3} iconColor="ib-blue" active={isActive("/home")} collapsed={collapsed} />
             <NavEntry to="/lovable/projects" label="Projetos" icon={FolderOpen} iconColor="ib-indigo" active={isActive("/lovable/projects") || isActive("/cirius") || isActive("/projeto")} collapsed={collapsed} />
             <NavEntry to="/painel" label="Painel" icon={Plug} iconColor="ib-teal" active={isActive("/painel") || isActive("/lovable/connect")} collapsed={collapsed} />
-            <NavEntry to="/ai" label="Star AI" icon={Brain} iconColor="ib-purple" active={isActive("/ai")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
+            <NavEntry to="/ai" label="AI" icon={Brain} iconColor="ib-purple" active={isActive("/ai")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
 
             <div className="divider" />
 
             {!collapsed && <div className="sb-section">Comunidade & Loja</div>}
             <NavEntry to="/community" label="Comunidade" icon={Users} iconColor="ib-teal" active={isActive("/community")} collapsed={collapsed} />
             <NavEntry to="/marketplace" label="Loja" icon={ShoppingBag} iconColor="ib-pink" active={isActive("/marketplace")} collapsed={collapsed} />
-            <NavEntry to="/extensoes/venus" label="Venus AI" icon={Sparkles} iconColor="ib-green" active={isActive("/extensoes/venus")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
+            <NavEntry to="/extensoes/venus" label="Venus" icon={Sparkles} iconColor="ib-green" active={isActive("/extensoes/venus")} badge="PRO" badgeVariant="pro" collapsed={collapsed} />
 
             <div className="divider" />
 
