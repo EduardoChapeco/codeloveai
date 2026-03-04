@@ -31,7 +31,7 @@ export default function SplitPreviewPanel({ frameMode, previewHtml, livePreviewU
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  useEffect(() => { setPreviewError(null); }, [previewHtml, livePreviewUrl]);
+  useEffect(() => { setPreviewError(null); setIframeKey(k => k + 1); }, [previewHtml, livePreviewUrl]);
   const hasLiveUrl = !!livePreviewUrl;
   const hasContent = hasLiveUrl || !!previewHtml;
   const previewUrlText = livePreviewUrl

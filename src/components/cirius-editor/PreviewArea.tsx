@@ -28,8 +28,8 @@ export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: 
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  // Clear errors on new preview
-  useEffect(() => { setPreviewError(null); }, [previewHtml, livePreviewUrl]);
+  // Clear errors and force iframe remount on new preview
+  useEffect(() => { setPreviewError(null); setIframeKey(k => k + 1); }, [previewHtml, livePreviewUrl]);
 
   const hasLiveUrl = !!livePreviewUrl;
   const hasContent = hasLiveUrl || !!previewHtml;
