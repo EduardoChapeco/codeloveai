@@ -295,7 +295,7 @@ async function sendViaOpenRouter(prompt: string, systemPrompt?: string) {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": "https://starble.lovable.app", "X-Title": "Cirius Generator" },
-      body: JSON.stringify({ model: "anthropic/claude-sonnet-4", messages: [{ role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 4000 }),
+      body: JSON.stringify({ model: "anthropic/claude-sonnet-4", messages: [{ role: "system", content: systemPrompt || "Return only valid JSON, no markdown fences." }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 16000 }),
     });
     const d = Date.now() - t0;
     if (res.ok) { const r = await res.json(); return { content: r?.choices?.[0]?.message?.content || null, durationMs: d }; }
@@ -366,38 +366,28 @@ Retorne APENAS este JSON (sem markdown, sem explicações):
 - brain_type: "code"
 - intent: DEVE ser "security_fix_v2"`;
 
-  const attempts: Array<{ engine: string; ok: boolean; durationMs: number; error?: string }> = [];
-
-  // 1. BRAINCHAIN
-  const bc = await sendViaBrainchain(sc, userId, prompt, "prd");
-  if (bc.ok && bc.response) {
-    const p = extractJSON(bc.response);
-    await logEntry(sc, projectId, "prd_brainchain", p ? "completed" : "failed", p ? `Brainchain PRD: ${p.tasks?.length} tasks` : "Brainchain not parseable", { duration_ms: bc.durationMs });
-    attempts.push({ engine: "brainchain", ok: !!p, durationMs: bc.durationMs || 0 });
-    if (p) return p;
-  } else if (bc.ok && bc.queueId) {
-    const t0 = Date.now();
-    let pollResult: string | null = null;
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 5000));
-      const { data: q } = await sc.from("brainchain_queue").select("status, response").eq("id", bc.queueId).maybeSingle();
-      if (q?.status === "done" && q.response) { pollResult = q.response; break; }
-      if (q?.status === "error") break;
+  // CLAUDE ONLY (OpenRouter) — Brainchain/Gemini/Gateway removidos
+  const or = await sendViaOpenRouter(prompt);
+  if (or.content) {
+    const p = extractJSON(or.content);
+    if (p) {
+      // Enforce task limits based on template type
+      const templateType = project.template_type || "custom";
+      const maxTasksMap: Record<string, number> = {
+        landing_page: 2, component: 1, marketing_site: 3,
+        crud_system: 4, dashboard: 3, ecommerce: 5, saas_app: 5, api_only: 2, custom: 3,
+      };
+      const maxTasks = maxTasksMap[templateType] || 3;
+      if (p.tasks.length > maxTasks) {
+        p.tasks = p.tasks.slice(0, maxTasks);
+        await logEntry(sc, projectId, "prd_truncated", "warning", `PRD truncado de ${p.tasks.length + (p.tasks.length - maxTasks)} para ${maxTasks} tarefas (tipo: ${templateType})`);
+      }
+      await logEntry(sc, projectId, "prd_openrouter", "completed", `Claude PRD: ${p.tasks?.length} tasks`, { duration_ms: or.durationMs });
+      return p;
     }
-    if (pollResult) { const p = extractJSON(pollResult); if (p) return p; }
-    attempts.push({ engine: "brainchain", ok: false, durationMs: Date.now() - t0, error: "poll timeout" });
-  } else {
-    attempts.push({ engine: "brainchain", ok: false, durationMs: bc.durationMs || 0, error: bc.error });
   }
 
-  // 2. CLAUDE (OpenRouter)
-  const or = await sendViaOpenRouter(prompt);
-  if (or.content) { const p = extractJSON(or.content); if (p) { await logEntry(sc, projectId, "prd_openrouter", "completed", `Claude PRD: ${p.tasks?.length} tasks`, { duration_ms: or.durationMs }); return p; } }
-  attempts.push({ engine: "openrouter", ok: false, durationMs: or.durationMs, error: or.error });
-
-  // 3. GEMINI / AI GATEWAY — REMOVIDOS (proibido usar Gemini/Lovable AI no Cirius)
-
-  await logEntry(sc, projectId, "prd_all_failed", "failed", `ALL PRD engines failed: ${attempts.map(a => `${a.engine}(${a.error || "fail"})`).join(", ")}`, { metadata: { attempts } });
+  await logEntry(sc, projectId, "prd_failed", "failed", `Claude PRD failed: ${or.error || "unparseable response"}`, { metadata: { durationMs: or.durationMs } });
   return null;
 }
 
@@ -674,21 +664,13 @@ ${fileContext}
 
 Return ALL files using <file path="path/to/file.tsx">COMPLETE file content</file> tags. Every file must be fully functional.`;
 
-      // Try OpenRouter (Claude) → Gateway → Gemini
+      // Claude only (OpenRouter)
       let genContent: string | null = null;
       let engine = "";
 
       const or = await sendViaOpenRouter(taskPrompt, CODE_SYS);
       if (or.content && or.content.length > 200) {
         genContent = or.content; engine = "openrouter";
-      }
-      if (!genContent) {
-        const gw = await sendViaGateway(taskPrompt, CODE_SYS);
-        if (gw.content && gw.content.length > 200) { genContent = gw.content; engine = "gateway"; }
-      }
-      if (!genContent) {
-        const gem = await sendViaGeminiDirect(sc, taskPrompt, CODE_SYS);
-        if (gem.content && gem.content.length > 200) { genContent = gem.content; engine = "gemini"; }
       }
 
       if (genContent) {
@@ -1017,7 +999,6 @@ Return ALL files using <file path="path/to/file.tsx">COMPLETE file content</file
       let engine = "";
       const or = await sendViaOpenRouter(taskPrompt, CODE_SYS);
       if (or.content && or.content.length > 200) { genContent = or.content; engine = "openrouter"; }
-      if (!genContent) { const gw = await sendViaGateway(taskPrompt, CODE_SYS); if (gw.content && gw.content.length > 200) { genContent = gw.content; engine = "gateway"; } }
 
       if (genContent) {
         const parsed = tryParseRefinement(genContent);
