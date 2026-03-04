@@ -81,75 +81,11 @@ function stripTypeScript(code: string): string {
 }
 
 // ─── Fix dynamic JSX component references ───
-// Babel treats <f.icon> as DOM element (lowercase). Transform to variable reference.
-// Strategy: Replace self-closing <obj.prop .../> with React.createElement call,
-// and block-level <obj.Prop>...</obj.Prop> with IIFE that creates a local alias.
+// NOTE: Babel (react preset) already supports JSX member expressions like <motion.div /> and <f.icon />.
+// Agressive regex rewrites were causing malformed output for complex props (spread/nested objects),
+// which could blank the preview. Keep this pass intentionally conservative.
 function fixDynamicJsx(code: string): string {
-  let result = code;
-
-  // 1. Self-closing tags: <f.icon size={24} /> → {React.createElement(f.icon, {size: 24})}
-  // Match: <word.word attributes... />
-  result = result.replace(/<(\w+)\.(\w+)(\s+[^>]*?)?\s*\/>/g, (match, obj, prop, attrs) => {
-    // Skip known DOM namespace patterns
-    if (/^(svg|math|html)$/i.test(obj)) return match;
-    // Parse attributes into object notation for React.createElement
-    const attrStr = (attrs || "").trim();
-    if (!attrStr) {
-      return `{React.createElement(${obj}.${prop}, null)}`;
-    }
-    // Convert JSX attrs to object: size={24} → size: 24, className="x" → className: "x"
-    return `{React.createElement(${obj}.${prop}, ${jsxAttrsToObject(attrStr)})}`;
-  });
-
-  // 2. Block-level tags with uppercase Prop: <obj.Comp>...</obj.Comp>
-  // Use IIFE wrapper: {(() => { var _C = obj.Comp; return <_C>...</_C>; })()}
-  result = result.replace(/<(\w+)\.([A-Z]\w+)([\s>])/g, (match, obj, prop, trail) => {
-    if (/^(svg|math|html)$/i.test(obj)) return match;
-    return `<${obj}_${prop}${trail}`;
-  });
-  result = result.replace(/<\/(\w+)\.([A-Z]\w+)>/g, (match, obj, prop) => {
-    if (/^(svg|math|html)$/i.test(obj)) return match;
-    return `</${obj}_${prop}>`;
-  });
-
-  // Collect uppercase aliases and declare them — these are typically top-level refs
-  const ucAliases = new Set<string>();
-  const ucRe = /(\w+)_([A-Z]\w+)(?=[\s<>\/])/g;
-  let um;
-  while ((um = ucRe.exec(result)) !== null) {
-    ucAliases.add(`${um[1]}.${um[2]}`);
-  }
-  if (ucAliases.size > 0) {
-    const decls = Array.from(ucAliases).map(cp => {
-      const [o, p] = cp.split(".");
-      return `var ${o}_${p} = (typeof ${o} !== 'undefined' && ${o}.${p}) || function(p) { return React.createElement('span', p, p.children); };`;
-    }).join("\n");
-    result = decls + "\n" + result;
-  }
-
-  return result;
-}
-
-// Helper: Convert JSX attributes string to a JS object expression
-// e.g., 'size={24} className="text-red"' → '{size: 24, className: "text-red"}'
-function jsxAttrsToObject(attrs: string): string {
-  const parts: string[] = [];
-  // Match: name={expression} or name="string" or name='string' or name (boolean)
-  const re = /(\w+)(?:\s*=\s*(?:\{([^}]*)\}|"([^"]*)"|'([^']*)'))?/g;
-  let m;
-  while ((m = re.exec(attrs)) !== null) {
-    const name = m[1];
-    if (m[2] !== undefined) {
-      parts.push(`${name}: ${m[2]}`);
-    } else if (m[3] !== undefined) {
-      parts.push(`${name}: "${m[3]}"`);
-    } else if (m[4] !== undefined) {
-      parts.push(`${name}: '${m[4]}'`);
-    } else {
-      parts.push(`${name}: true`);
-    }
-  }
-  return `{${parts.join(", ")}}`;
+  return code;
 }
 
 // ─── Safe export transformation ───
