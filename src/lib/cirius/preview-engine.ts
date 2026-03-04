@@ -548,9 +548,27 @@ ${ERROR_BRIDGE_SCRIPT}
 ${buildStubsScript()}
 ${componentScripts}
 <script type="text/babel" data-presets="typescript,react">
-// --- Mount root ---
+// --- Auto-bind named exports as module defaults & cross-module resolution ---
 var mods = window.__ciriusModules;
 var exps = window.__ciriusExports;
+
+// Auto-bind: if a module has no default but has named exports, create a namespace default
+var allPaths = ${JSON.stringify(sorted.map(m => m.path))};
+allPaths.forEach(function(p) {
+  if (!mods[p]) {
+    // Try to find a matching named export from the component name
+    var base = p.split('/').pop().replace(/\\.(tsx|ts|jsx|js)$/, '');
+    var capName = base.charAt(0).toUpperCase() + base.slice(1);
+    if (exps[capName]) { mods[p] = exps[capName]; }
+    else if (exps[base]) { mods[p] = exps[base]; }
+  }
+});
+
+// Resolve @/ alias imports: bind window globals for any named export
+Object.keys(exps).forEach(function(name) {
+  if (!window[name]) window[name] = exps[name];
+});
+
 var RootComp = mods["${rootModulePath || ""}"] || exps["${rootName}"] || window.${rootName} || window.App || function() { 
   return React.createElement('div', {
     style: {display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#f8fafc',fontFamily:'Inter,sans-serif'}
