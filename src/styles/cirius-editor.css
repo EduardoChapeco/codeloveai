@@ -2197,3 +2197,47 @@
 .ctc-progress-fill.error {
   background: linear-gradient(90deg, #f87171, #fca5a5);
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TOPBAR — Integration quick links & responsive fixes
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Quick integration link buttons */
+.sp-tb-link {
+  width: 28px; height: 28px;
+  border-radius: var(--r2);
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--b1);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.12s;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+.sp-tb-link:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+.sp-tb-link-live {
+  border-color: rgba(34,197,94,0.25);
+  color: var(--green-l);
+}
+.sp-tb-link-live:hover {
+  background: rgba(34,197,94,0.12);
+  color: var(--green-l);
+}
+
+/* Responsive: hide non-essential elements on compact screens */
+@media (max-width: 1100px) {
+  .sp-hide-compact { display: none !important; }
+  .sp-tb-center { position: static; transform: none; }
+  .sp-topbar { gap: 6px; padding: 0 8px; flex-wrap: nowrap; }
+  .sp-tb-left, .sp-tb-right { gap: 3px; }
+  .sp-tb-right { flex-shrink: 0; }
+  .sp-tb-left { flex-shrink: 1; min-width: 0; overflow: hidden; }
+}
+
+@media (max-width: 768px) {
+  .sp-tb-center { display: none; }
+  .sp-topbar { height: 42px; }
+  .sp-tb-link { width: 24px; height: 24px; }
+  .gl.sm { height: 26px; padding: 0 8px; font-size: 11px; }
+}

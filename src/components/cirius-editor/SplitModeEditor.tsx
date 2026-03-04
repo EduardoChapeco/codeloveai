@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import SplitTopBar from "./SplitTopBar";
 import SplitChatPanel from "./SplitChatPanel";
 import SplitResizer from "./SplitResizer";
@@ -8,6 +9,7 @@ import FileExplorer from "./FileExplorer";
 import FileMiningFeed from "./FileMiningFeed";
 import CodeViewer from "./CodeViewer";
 import TerminalPanel, { type TerminalLine } from "./TerminalPanel";
+import DrawerDeploy from "./DrawerDeploy";
 import type { FrameMode, ActiveMode, EditorToast, ChatMessage, Bubble } from "./types";
 import type { TaskItem } from "./ChatTaskCard";
 import type { EditorMode } from "./SplitTopBar";
@@ -59,6 +61,7 @@ export default function SplitModeEditor({
   taskItems, onRetryTask,
   onDownload,
 }: Props) {
+  const navigate = useNavigate();
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
   const [activeMode, setActiveMode] = useState<ActiveMode>("build");
   const [chatWidth, setChatWidth] = useState(400);
@@ -66,6 +69,7 @@ export default function SplitModeEditor({
   const [showFiles, setShowFiles] = useState(true);
   const [rightPanel, setRightPanel] = useState<"preview" | "code">("preview");
   const [showTerminal, setShowTerminal] = useState(false);
+  const [showDeploy, setShowDeploy] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1440,
   );
@@ -108,6 +112,10 @@ export default function SplitModeEditor({
 
   const handleClear = useCallback(() => {}, []);
 
+  const handlePublish = useCallback(() => {
+    setShowDeploy(true);
+  }, []);
+
   const errorCount = terminalLines.filter(l => l.type === "error").length;
   const fileCount = Object.keys(files).length;
 
@@ -120,7 +128,7 @@ export default function SplitModeEditor({
         editorMode="split"
         onEditorModeChange={onEditorModeChange}
         isLive={isLive}
-        onPublish={() => {}}
+        onPublish={handlePublish}
         onHistoryClick={() => {}}
         onShareClick={() => {}}
         onDownload={onDownload}
@@ -129,6 +137,7 @@ export default function SplitModeEditor({
         showFiles={showFiles}
         onToggleFiles={() => setShowFiles(p => !p)}
         fileCount={fileCount}
+        project={project}
       />
 
       <div className="sp-body">
@@ -233,8 +242,15 @@ export default function SplitModeEditor({
         </div>
       </div>
 
+      {/* Deploy Drawer */}
+      <DrawerDeploy
+        visible={showDeploy}
+        onClose={() => setShowDeploy(false)}
+        project={project}
+        onNavigateIntegrations={() => navigate("/cirius/integrations")}
+      />
+
       <EditorToasts toasts={toasts} />
     </div>
   );
 }
-
