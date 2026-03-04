@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   MessageCircle, Trash2, Clock, Code, CheckSquare, Info, Shield,
-  Paperclip, Camera, ArrowUp, X, Sparkles, Zap, MessageSquare
+  Paperclip, Camera, ArrowUp, X, Sparkles, Zap, MessageSquare,
+  Link2, Mic, Pencil, ListOrdered
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import PRDCard from "./PRDCard";
@@ -38,6 +39,15 @@ interface Props {
   /** Multi-task items for timeline */
   taskItems?: TaskItem[];
   onRetryTask?: (taskId: string) => void;
+  /** Action callbacks for toolbar buttons */
+  onCmdOpen?: () => void;
+  onChainOpen?: () => void;
+  onAttach?: () => void;
+  onVoice?: () => void;
+  onDraw?: () => void;
+  onReview?: () => void;
+  queueCount?: number;
+  onClearQueue?: () => void;
 }
 
 const SUGGESTIONS = [
@@ -53,6 +63,8 @@ export default function SplitChatPanel({
   buildStages, buildProgress, buildComplete, buildError, deployUrls, projectName,
   bubbles, onRemoveBubble, streamingText, updatedFiles,
   taskItems, onRetryTask,
+  onCmdOpen, onChainOpen, onAttach, onVoice, onDraw, onReview,
+  queueCount = 0, onClearQueue,
 }: Props) {
   const [text, setText] = useState("");
   const [modesOpen, setModesOpen] = useState(false);
@@ -264,6 +276,15 @@ export default function SplitChatPanel({
         {/* Task bubbles removed — ChatTaskCard handles all task progress inline */}
       </div>
 
+      {/* Queue Pill */}
+      {queueCount > 0 && (
+        <div className="ce-queue-pill" style={{ margin: "0 12px 6px" }}>
+          <ListOrdered size={12} />
+          {queueCount} na fila
+          <button className="gl xs" onClick={onClearQueue}><X size={10} /> Limpar</button>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="sp-chat-input-area">
         <div className={`sp-ci-wrap ${isGenerating ? "disabled" : ""}`}>
@@ -275,12 +296,19 @@ export default function SplitChatPanel({
             <button className={`sp-ci-mbtn ${activeMode === "task" ? "on c-orange" : ""}`} onClick={() => setActiveMode("task")}>
               <CheckSquare size={11} /> Tarefa
             </button>
+            <button className="sp-ci-mbtn" onClick={onChainOpen}>
+              <Link2 size={11} /> Encadeado
+            </button>
+            <div className="sp-ci-msep" />
+            <button className="sp-ci-mbtn" onClick={onReview}>
+              <Shield size={11} /> Review
+            </button>
             <button className={`sp-ci-mbtn ${activeMode === "debug" ? "on c-blue" : ""}`} onClick={() => setActiveMode("debug")}>
               <Info size={11} /> Debug
             </button>
             <div className="sp-ci-msep" />
-            <button className="sp-ci-mbtn" onClick={() => { setActiveMode("debug"); }}>
-              <Shield size={11} /> Review
+            <button className="sp-ci-mbtn" onClick={onCmdOpen}>
+              <MessageCircle size={11} /> BLE
             </button>
           </div>
 
@@ -312,11 +340,15 @@ export default function SplitChatPanel({
           {/* Toolbar */}
           <div className="sp-ci-toolbar">
             <div className="sp-ci-tl">
-              <button className="sp-ci-tbtn ico" onClick={() => setText(prev => prev + " [anexo]")} title="Anexar arquivo"><Paperclip size={11} /></button>
-              <button className="sp-ci-tbtn ico" onClick={() => setContextFiles(prev => [...prev, "Hero.tsx"])} title="Adicionar contexto"><Code size={11} /></button>
-              <button className="sp-ci-tbtn ico" onClick={() => setText(prev => prev + " [screenshot]")} title="Captura de tela"><Camera size={11} /></button>
+              <button className="sp-ci-tbtn ico" onClick={onAttach} title="Anexar arquivo"><Paperclip size={11} /></button>
+              <button className="sp-ci-tbtn" onClick={onCmdOpen}>
+                <Code size={11} /> Código
+                <kbd style={{ fontSize: 10, opacity: 0.5, marginLeft: 4, fontFamily: "var(--mono)" }}>⌘K</kbd>
+              </button>
             </div>
             <div className="sp-ci-tr">
+              <button className="sp-ci-tbtn ico" onClick={onDraw} title="Desenhar na tela"><Pencil size={11} /></button>
+              <button className="sp-ci-tbtn ico" onClick={onVoice} title="Entrada por voz"><Mic size={11} /></button>
               <span style={{ fontSize: 10, fontFamily: "var(--mono)", color: "var(--text-quaternary)" }}>⌘↵</span>
               <button className="sp-ci-send" onClick={doSend} disabled={isGenerating || !text.trim()}>
                 <ArrowUp size={13} />
