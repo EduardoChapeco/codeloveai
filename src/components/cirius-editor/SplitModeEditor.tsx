@@ -10,7 +10,9 @@ import FileMiningFeed from "./FileMiningFeed";
 import CodeViewer from "./CodeViewer";
 import TerminalPanel, { type TerminalLine } from "./TerminalPanel";
 import DrawerDeploy from "./DrawerDeploy";
-import type { FrameMode, ActiveMode, EditorToast, ChatMessage, Bubble } from "./types";
+import DrawerChain from "./DrawerChain";
+import CmdPanel from "./CmdPanel";
+import type { FrameMode, ActiveMode, CmdMode, EditorToast, ChatMessage, Bubble } from "./types";
 import type { TaskItem } from "./ChatTaskCard";
 import type { EditorMode } from "./SplitTopBar";
 import type { BuildStage } from "./BuildProgressCard";
@@ -47,6 +49,13 @@ interface Props {
   taskItems?: TaskItem[];
   onRetryTask?: (taskId: string) => void;
   onDownload?: () => void;
+  onChatSend?: (msg: string) => void;
+  onAttach?: () => void;
+  onVoice?: () => void;
+  onDraw?: () => void;
+  onReview?: () => void;
+  queueCount?: number;
+  onClearQueue?: () => void;
 }
 
 export default function SplitModeEditor({
@@ -60,6 +69,8 @@ export default function SplitModeEditor({
   terminalLines = [], onClearTerminal,
   taskItems, onRetryTask,
   onDownload,
+  onChatSend, onAttach, onVoice, onDraw, onReview,
+  queueCount = 0, onClearQueue,
 }: Props) {
   const navigate = useNavigate();
   const [frameMode, setFrameMode] = useState<FrameMode>("desktop");
@@ -70,6 +81,9 @@ export default function SplitModeEditor({
   const [rightPanel, setRightPanel] = useState<"preview" | "code">("preview");
   const [showTerminal, setShowTerminal] = useState(false);
   const [showDeploy, setShowDeploy] = useState(false);
+  const [showChain, setShowChain] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [cmdMode, setCmdMode] = useState<CmdMode>("code");
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1440,
   );
@@ -115,6 +129,16 @@ export default function SplitModeEditor({
   const handlePublish = useCallback(() => {
     setShowDeploy(true);
   }, []);
+
+  // Keyboard shortcut ⌘K for CmdPanel
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setCmdOpen(prev => !prev); }
+      if (e.key === "Escape" && cmdOpen) setCmdOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [cmdOpen]);
 
   const errorCount = terminalLines.filter(l => l.type === "error").length;
   const fileCount = Object.keys(files).length;
@@ -167,6 +191,14 @@ export default function SplitModeEditor({
             updatedFiles={updatedFiles}
             taskItems={taskItems}
             onRetryTask={onRetryTask}
+            onCmdOpen={() => setCmdOpen(true)}
+            onChainOpen={() => setShowChain(true)}
+            onAttach={onAttach}
+            onVoice={onVoice}
+            onDraw={onDraw}
+            onReview={onReview}
+            queueCount={queueCount}
+            onClearQueue={onClearQueue}
           />
         </div>
 
@@ -249,6 +281,26 @@ export default function SplitModeEditor({
         project={project}
         onNavigateIntegrations={() => navigate("/cirius/integrations")}
       />
+
+      {/* Chain Drawer */}
+      <DrawerChain
+        visible={showChain}
+        onClose={() => setShowChain(false)}
+        tasks={project?.prd_json?.tasks || []}
+      />
+
+      {/* CmdPanel */}
+      {cmdOpen && (
+        <CmdPanel
+          mode={cmdMode}
+          onModeChange={setCmdMode}
+          onClose={() => setCmdOpen(false)}
+          sourceFiles={files}
+          chatMessages={chatMessages}
+          onChatSend={onChatSend || handleSend}
+          chatLoading={chatLoading}
+        />
+      )}
 
       <EditorToasts toasts={toasts} />
     </div>

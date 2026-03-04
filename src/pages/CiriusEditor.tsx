@@ -517,6 +517,13 @@ export default function CiriusEditor() {
         terminalLines={terminalLines}
         onClearTerminal={clearTerminal}
         onDownload={handleDownload}
+        onChatSend={sendChatMsg}
+        onAttach={() => addToast("Anexar: em breve", "info")}
+        onVoice={() => addToast("Voz: em breve", "info")}
+        onDraw={() => addToast("Desenho: em breve", "info")}
+        onReview={() => { setActiveMode("debug"); addToast("Review mode ativo", "info"); }}
+        queueCount={queueCount}
+        onClearQueue={() => setQueueCount(0)}
       />
     );
   }
