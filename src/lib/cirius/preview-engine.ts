@@ -767,7 +767,7 @@ body { font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
 ${cssBlock}
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#888;font-family:Inter,sans-serif;font-size:14px;">Carregando preview...</div></div>
 ${ERROR_BRIDGE_SCRIPT}
 ${buildStubsScript()}
 ${componentScripts}

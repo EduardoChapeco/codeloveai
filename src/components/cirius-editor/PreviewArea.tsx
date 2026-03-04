@@ -91,7 +91,8 @@ export default function PreviewArea({ frameMode, previewHtml, livePreviewUrl }: 
             key={iframeKey}
             className="ce-preview-iframe"
             srcDoc={previewHtml}
-            sandbox="allow-scripts allow-same-origin"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            allow="cross-origin-isolated"
             title="Static Preview"
           />
         ) : (

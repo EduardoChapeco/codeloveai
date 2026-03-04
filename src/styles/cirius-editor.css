@@ -477,6 +477,7 @@
   width: 100%; height: 100%;
   border-radius: 0;
   overflow: hidden;
+  position: relative;
   transition: all 0.3s var(--ease-spring);
 }
 .ce-preview-wrap.tablet .ce-preview-outer { border-radius: 16px; box-shadow: 0 0 60px rgba(0,0,0,0.5); }
@@ -486,7 +487,12 @@
   box-shadow: 0 0 60px rgba(0,0,0,0.5);
 }
 
-.ce-preview-iframe { width: 100%; height: 100%; min-width: 0; min-height: 0; display: block; border: none; background: #0c0c10; }
+.ce-preview-iframe {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  min-width: 0; min-height: 0;
+  display: block; border: none; background: #0c0c10;
+}
 
 /* ── Empty state ── */
 .ce-empty {
@@ -1330,7 +1336,7 @@
 
 /* ── Preview Panel ── */
 .sp-preview-panel {
-  flex: 1; min-width: 0;
+  flex: 1; min-width: 0; min-height: 0;
   display: flex; flex-direction: column;
   background: #0c0c10;
   border-left: 1px solid var(--b1);
@@ -1358,8 +1364,9 @@
 
 /* Preview content */
 .sp-preview-content {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  overflow: hidden; position: relative;
+  flex: 1; position: relative;
+  overflow: hidden;
+  min-height: 0;
   transition: padding 0.4s var(--ease-spring);
 }
 .sp-preview-content.desktop { padding: 0; }
@@ -1367,25 +1374,27 @@
 .sp-preview-content.mobile  { padding: 16px; }
 
 .sp-preview-outer {
-  width: 100%; height: 100%; background: #0a0a0f;
-  overflow: auto; transition: all 0.4s var(--ease-spring);
-  position: relative;
+  position: absolute; inset: 0;
+  background: #0a0a0f;
+  overflow: hidden;
+  transition: all 0.4s var(--ease-spring);
 }
 .sp-preview-content.tablet .sp-preview-outer {
-  width: min(100%, 834px);
-  max-height: 100%;
+  position: relative; width: min(100%, 834px); height: 100%;
   margin: 0 auto;
   border-radius: var(--r4);
   box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 20px 60px rgba(0,0,0,0.8);
 }
 .sp-preview-content.mobile .sp-preview-outer {
-  width: min(100%, 390px);
-  max-height: 100%;
+  position: relative; width: min(100%, 390px); height: 100%;
   margin: 0 auto;
   border-radius: 32px;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.07), 0 24px 80px rgba(0,0,0,0.85);
 }
-.sp-preview-iframe { width: 100%; height: 100%; min-width: 0; min-height: 0; display: block; border: none; }
+.sp-preview-iframe {
+  width: 100%; height: 100%;
+  display: block; border: none;
+}
 
 /* Empty state */
 .sp-preview-empty {

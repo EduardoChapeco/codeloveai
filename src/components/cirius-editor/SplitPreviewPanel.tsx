@@ -126,7 +126,8 @@ export default function SplitPreviewPanel({ frameMode, previewHtml, livePreviewU
               key={iframeKey}
               className="sp-preview-iframe"
               srcDoc={previewHtml}
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              allow="cross-origin-isolated"
               title="Static Preview"
             />
           )}
