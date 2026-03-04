@@ -1,14 +1,7 @@
 /**
- * Cirius Preview Engine v2
- * Robust local preview builder that replaces the fragile regex-based cleanComponent.
- * 
- * Key improvements:
- * - Safe TypeScript export transformation (handles typed exports correctly)
- * - Module registration system (window.__ciriusModules)
- * - Import alias resolution (@/ → src/)
- * - Topological dependency ordering
- * - Error bridge (postMessage to host)
- * - External library stubs (lucide-react icons, shadcn/ui, etc.)
+ * Cirius Preview Engine v3
+ * Robust local preview builder with comprehensive TypeScript stripping,
+ * inter-module resolution, and production-quality component stubbing.
  */
 
 // ─── Types ───
@@ -19,15 +12,84 @@ interface ModuleInfo {
   name: string;
 }
 
+// ─── Comprehensive TypeScript stripper ───
+// Strips ALL TypeScript-specific syntax to produce valid JS for Babel standalone
+function stripTypeScript(code: string): string {
+  let result = code;
+
+  // Remove import type / export type statements entirely
+  result = result.replace(/^import\s+type\s+[\s\S]*?from\s+['"][^'"]+['"];?\s*$/gm, "");
+  result = result.replace(/^export\s+type\s+[\s\S]*?(?:;|\}\s*$)/gm, "");
+  result = result.replace(/^export\s+interface\s+\w+[\s\S]*?^\}/gm, "");
+
+  // Remove standalone interface declarations (multi-line)
+  result = result.replace(/^interface\s+\w+[^{]*\{[\s\S]*?^\}/gm, "");
+
+  // Remove standalone type aliases
+  result = result.replace(/^type\s+\w+\s*(?:<[^>]*>)?\s*=\s*[\s\S]*?;\s*$/gm, "");
+
+  // Remove type assertions: `as Type` (but not `as const`)
+  result = result.replace(/\s+as\s+(?!const\b)[A-Z]\w*(?:<[^>]*>)?/g, "");
+
+  // Remove generic type parameters from function calls and definitions
+  // e.g., useState<string>(...) → useState(...)
+  // Be careful not to strip JSX: only strip <Type> after identifiers, not after = or return
+  result = result.replace(/(\w)\s*<([A-Z]\w*(?:\s*\|\s*\w+)*(?:\s*,\s*[A-Z]\w*)*)>\s*\(/g, "$1(");
+
+  // Remove angle bracket type params from function definitions
+  // e.g., function foo<T>(... → function foo(...
+  result = result.replace(/(function\s+\w+)\s*<[^>]+>/g, "$1");
+
+  // Remove type annotations from parameters: (param: Type) → (param)
+  // Handle complex types like Record<string, any>, React.FC<Props>, etc.
+  result = result.replace(/(\w)\s*:\s*(?:React\.(?:FC|Component|ReactNode|CSSProperties|MouseEvent|ChangeEvent|FormEvent)(?:<[^>]*>)?|string|number|boolean|any|void|never|null|undefined|unknown|Record<[^>]*>|Array<[^>]*>|Promise<[^>]*>|Partial<[^>]*>|Omit<[^>]*>|Pick<[^>]*>|\w+(?:\[\])?(?:\s*\|\s*(?:string|number|boolean|null|undefined|\w+(?:\[\])?))*)/g, "$1");
+
+  // Remove remaining simple type annotations in destructured params
+  // { prop }: Props → { prop }
+  result = result.replace(/\}\s*:\s*(?:Props|[A-Z]\w+(?:Props|Config|Options|State|Context|Data|Type)?)/g, "}");
+
+  // Remove `: React.FC<...> =` patterns  
+  result = result.replace(/:\s*React\.FC(?:<[^>]*>)?\s*=/g, " =");
+
+  // Remove return type annotations from functions
+  // ): ReturnType { → ) {
+  // ): React.ReactNode => → ) =>
+  result = result.replace(/\)\s*:\s*(?:React\.(?:ReactNode|ReactElement|JSX\.Element)|JSX\.Element|string|number|boolean|void|any|Promise<[^>]*>|\w+(?:\[\])?)\s*([\{=>])/g, ") $1");
+
+  // Remove non-null assertions
+  result = result.replace(/!(?=\.|\[|\))/g, "");
+
+  // Remove `satisfies Type` expressions
+  result = result.replace(/\s+satisfies\s+\w+(?:<[^>]*>)?/g, "");
+
+  // Remove `declare` statements
+  result = result.replace(/^declare\s+[\s\S]*?;\s*$/gm, "");
+
+  // Remove `readonly` modifiers
+  result = result.replace(/\breadonly\s+/g, "");
+
+  // Remove enum declarations (replace with object)
+  result = result.replace(/^(?:export\s+)?enum\s+(\w+)\s*\{([\s\S]*?)^\}/gm, (_, name, body) => {
+    const entries = body.split(",").map((e: string) => e.trim()).filter(Boolean).map((e: string) => {
+      const [k, v] = e.split("=").map((s: string) => s.trim());
+      return v ? `${k}: ${v}` : `${k}: "${k}"`;
+    });
+    return `const ${name} = { ${entries.join(", ")} };`;
+  });
+
+  return result;
+}
+
 // ─── Safe export transformation ───
-// This replaces the broken regex that turned `export const X: React.FC = ...`
-// into `window.X = : React.FC = ...` (invalid JS)
 function safeTransformExports(code: string, moduleName: string): string {
   let result = code;
 
-  // Remove all import statements (Babel handles resolution via stubs)
+  // Remove all import statements
   result = result.replace(/^import\s+[\s\S]*?from\s+['"][^'"]+['"];?\s*$/gm, "");
   result = result.replace(/^import\s+['"][^'"]+['"];?\s*$/gm, "");
+
+  // Strip TypeScript before processing exports
+  result = stripTypeScript(result);
 
   // Handle: export default function Name(...)
   result = result.replace(
@@ -41,7 +103,7 @@ function safeTransformExports(code: string, moduleName: string): string {
     `window.__ciriusModules["${moduleName}"] = class $1`
   );
 
-  // Handle: export default (expression)
+  // Handle: export default (expression) — must come after function/class
   result = result.replace(
     /^export\s+default\s+/gm,
     `window.__ciriusModules["${moduleName}"] = `
@@ -53,27 +115,16 @@ function safeTransformExports(code: string, moduleName: string): string {
     (_, name) => `window.__ciriusExports["${name}"] = function ${name}`
   );
 
-  // Handle: export const Name: Type = ... (THE CRITICAL FIX)
-  // Must strip the type annotation to produce valid JS
+  // Handle: export const Name = ... (with or without remaining type annotations)
   result = result.replace(
-    /^export\s+const\s+(\w+)\s*:\s*[^=]+=\s*/gm,
-    (_, name) => `window.__ciriusExports["${name}"] = `
-  );
-
-  // Handle: export const Name = ... (no type annotation)
-  result = result.replace(
-    /^export\s+const\s+(\w+)\s*=/gm,
-    (_, name) => `window.__ciriusExports["${name}"] = `
+    /^export\s+const\s+(\w+)\s*(?::\s*[^=]*)?\s*=/gm,
+    (_, name) => `window.__ciriusExports["${name}"] =`
   );
 
   // Handle: export let Name = ...
   result = result.replace(
-    /^export\s+let\s+(\w+)\s*:\s*[^=]+=\s*/gm,
-    (_, name) => `window.__ciriusExports["${name}"] = `
-  );
-  result = result.replace(
-    /^export\s+let\s+(\w+)\s*=/gm,
-    (_, name) => `window.__ciriusExports["${name}"] = `
+    /^export\s+let\s+(\w+)\s*(?::\s*[^=]*)?\s*=/gm,
+    (_, name) => `window.__ciriusExports["${name}"] =`
   );
 
   // Handle: export { ... } statements — remove them
@@ -81,11 +132,6 @@ function safeTransformExports(code: string, moduleName: string): string {
 
   // Handle: export type / export interface — remove (not runtime)
   result = result.replace(/^export\s+(?:type|interface)\s+[\s\S]*?(?:;|\})\s*$/gm, "");
-
-  // Strip remaining TypeScript type annotations that Babel might miss
-  // Remove `: React.FC<...>` patterns after variable names
-  result = result.replace(/:\s*React\.FC(?:<[^>]*>)?\s*=/g, " =");
-  result = result.replace(/:\s*React\.FC(?:<[^>]*>)?\s*$/gm, "");
 
   return result.trim();
 }
@@ -103,12 +149,34 @@ function extractDeps(code: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = importRe.exec(code)) !== null) {
     const dep = m[1];
-    // Only track local deps (not node_modules)
     if (dep.startsWith(".") || dep.startsWith("@/") || dep.startsWith("src/")) {
       deps.push(dep);
     }
   }
   return deps;
+}
+
+// ─── Extract imported names from import statements ───
+function extractImportedNames(code: string): Map<string, string> {
+  const names = new Map<string, string>(); // name → source path
+  const re = /^import\s+(?:\{([^}]+)\}|(\w+))\s+from\s+['"]([^'"]+)['"]/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) {
+    const source = m[3];
+    if (m[1]) {
+      // Named imports: { A, B as C }
+      m[1].split(",").forEach(n => {
+        const parts = n.trim().split(/\s+as\s+/);
+        const localName = (parts[1] || parts[0]).trim();
+        if (localName && /^[A-Z]/.test(localName)) names.set(localName, source);
+      });
+    }
+    if (m[2]) {
+      // Default import
+      if (/^[A-Z]/.test(m[2])) names.set(m[2], source);
+    }
+  }
+  return names;
 }
 
 // ─── Resolve import path to file key ───
@@ -131,7 +199,6 @@ function resolveImport(from: string, importPath: string, fileKeys: string[]): st
     resolved = importPath;
   }
 
-  // Try exact match, then with extensions
   const extensions = ["", ".tsx", ".ts", ".jsx", ".js", "/index.tsx", "/index.ts", "/index.jsx", "/index.js"];
   for (const ext of extensions) {
     const candidate = resolved + ext;
@@ -162,17 +229,12 @@ function topoSort(modules: ModuleInfo[], fileKeys: string[]): ModuleInfo[] {
     if (visited.has(path)) return;
     visited.add(path);
     const deps = graph.get(path) || new Set();
-    for (const dep of deps) {
-      visit(dep);
-    }
+    for (const dep of deps) visit(dep);
     const mod = moduleMap.get(path);
     if (mod) result.push(mod);
   }
 
-  for (const mod of modules) {
-    visit(mod.path);
-  }
-
+  for (const mod of modules) visit(mod.path);
   return result;
 }
 
@@ -206,7 +268,6 @@ window.__ciriusModules = window.__ciriusModules || {};
 window.__ciriusExports = window.__ciriusExports || {};
 window.onerror = function(msg, src, line, col, err) {
   var msgStr = String(msg || '');
-  // Skip generic cross-origin errors — not actionable
   if (msgStr === 'Script error.' || msgStr === 'Script error' || !msgStr.trim()) return true;
   var errDiv = document.getElementById('__cirius-error');
   if (!errDiv) {
@@ -256,9 +317,9 @@ window.SelectTrigger = function(props) { return React.createElement('button', {c
 window.SelectContent = function(props) { return null; };
 window.SelectItem = function(props) { return null; };
 window.SelectValue = function(props) { return React.createElement('span', null, props.placeholder || ''); };
-window.Tabs = function(props) { return React.createElement('div', {className: props.className||''}, props.children); };
-window.TabsList = function(props) { return React.createElement('div', {className: 'flex gap-1 border-b mb-4 ' + (props.className||'')}, props.children); };
-window.TabsTrigger = function(props) { return React.createElement('button', {className: 'px-4 py-2 text-sm font-medium ' + (props.className||''), onClick: props.onClick}, props.children); };
+window.Tabs = function(props) { var defaultVal = props.defaultValue || ''; var val = React.useState(defaultVal); var current = val[0]; var setCurrent = val[1]; return React.createElement('div', {className: props.className||''}, React.Children.map(props.children, function(child) { if (!child || !child.props) return child; if (child.type === window.TabsList) return React.cloneElement(child, { _current: current, _setCurrent: setCurrent }); if (child.type === window.TabsContent) return child.props.value === current ? child : null; return child; })); };
+window.TabsList = function(props) { return React.createElement('div', {className: 'flex gap-1 border-b mb-4 ' + (props.className||'')}, React.Children.map(props.children, function(child) { if (!child || !child.props) return child; return React.cloneElement(child, { _current: props._current, _setCurrent: props._setCurrent }); })); };
+window.TabsTrigger = function(props) { var isActive = props._current === props.value; return React.createElement('button', {className: 'px-4 py-2 text-sm font-medium border-b-2 transition-colors ' + (isActive ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700') + ' ' + (props.className||''), onClick: function() { if (props._setCurrent) props._setCurrent(props.value); if (props.onClick) props.onClick(); }}, props.children); };
 window.TabsContent = function(props) { return React.createElement('div', {className: props.className||''}, props.children); };
 window.Dialog = function(props) { return React.createElement('div', null, props.children); };
 window.DialogTrigger = function(props) { return React.createElement('div', null, props.children); };
@@ -270,26 +331,46 @@ window.ScrollArea = function(props) { return React.createElement('div', {classNa
 window.Skeleton = function(props) { return React.createElement('div', {className: 'animate-pulse bg-gray-200 rounded ' + (props.className||'')}); };
 window.Progress = function(props) { return React.createElement('div', {className: 'w-full bg-gray-200 rounded-full h-2'}, React.createElement('div', {className: 'bg-blue-600 h-2 rounded-full', style: {width: (props.value||0)+'%'}})); };
 window.Tooltip = function(props) { return React.createElement('div', null, props.children); };
-window.TooltipTrigger = function(props) { return React.createElement('div', null, props.children); };
+window.TooltipTrigger = function(props) { return React.createElement('div', {className: 'inline-flex'}, props.children); };
 window.TooltipContent = function(props) { return null; };
 window.TooltipProvider = function(props) { return React.createElement('div', null, props.children); };
 window.Accordion = function(props) { return React.createElement('div', {className: props.className||''}, props.children); };
-window.AccordionItem = function(props) { return React.createElement('div', {className: 'border-b'}, props.children); };
-window.AccordionTrigger = function(props) { return React.createElement('button', {className: 'flex w-full justify-between py-4 font-medium'}, props.children); };
-window.AccordionContent = function(props) { return React.createElement('div', {className: 'pb-4'}, props.children); };
-window.DropdownMenu = function(props) { return React.createElement('div', null, props.children); };
+window.AccordionItem = function(props) { var open = React.useState(false); return React.createElement('div', {className: 'border-b'}, React.Children.map(props.children, function(c) { if (!c) return c; return React.cloneElement(c, { _open: open[0], _toggle: function() { open[1](!open[0]); } }); })); };
+window.AccordionTrigger = function(props) { return React.createElement('button', {className: 'flex w-full justify-between py-4 font-medium', onClick: props._toggle}, props.children, React.createElement('span', {className: 'transform transition-transform ' + (props._open ? 'rotate-180' : '')}, '▼')); };
+window.AccordionContent = function(props) { return props._open ? React.createElement('div', {className: 'pb-4'}, props.children) : null; };
+window.DropdownMenu = function(props) { return React.createElement('div', {className: 'relative inline-block'}, props.children); };
 window.DropdownMenuTrigger = function(props) { return React.createElement('div', null, props.children); };
 window.DropdownMenuContent = function(props) { return null; };
 window.DropdownMenuItem = function(props) { return null; };
 window.Sheet = function(props) { return React.createElement('div', null, props.children); };
 window.SheetTrigger = function(props) { return React.createElement('div', null, props.children); };
 window.SheetContent = function(props) { return null; };
+window.Popover = function(props) { return React.createElement('div', {className: 'relative inline-block'}, props.children); };
+window.PopoverTrigger = function(props) { return React.createElement('div', null, props.children); };
+window.PopoverContent = function(props) { return null; };
+window.Checkbox = function(props) { return React.createElement('input', {type: 'checkbox', checked: props.checked, onChange: function(e) { if(props.onCheckedChange) props.onCheckedChange(e.target.checked); }, className: 'w-4 h-4 rounded border-gray-300'}); };
+window.RadioGroup = function(props) { return React.createElement('div', {className: 'flex flex-col gap-2 ' + (props.className||'')}, props.children); };
+window.RadioGroupItem = function(props) { return React.createElement('input', {type: 'radio', value: props.value, className: 'w-4 h-4'}); };
+window.Slider = function(props) { return React.createElement('input', {type: 'range', min: props.min||0, max: props.max||100, className: 'w-full'}); };
+window.Table = function(props) { return React.createElement('table', {className: 'w-full border-collapse ' + (props.className||'')}, props.children); };
+window.TableHeader = function(props) { return React.createElement('thead', null, props.children); };
+window.TableBody = function(props) { return React.createElement('tbody', null, props.children); };
+window.TableRow = function(props) { return React.createElement('tr', {className: 'border-b ' + (props.className||'')}, props.children); };
+window.TableHead = function(props) { return React.createElement('th', {className: 'px-4 py-3 text-left text-sm font-medium text-gray-500 ' + (props.className||'')}, props.children); };
+window.TableCell = function(props) { return React.createElement('td', {className: 'px-4 py-3 text-sm ' + (props.className||'')}, props.children); };
+window.Collapsible = function(props) { return React.createElement('div', null, props.children); };
+window.CollapsibleTrigger = function(props) { return React.createElement('div', null, props.children); };
+window.CollapsibleContent = function(props) { return React.createElement('div', null, props.children); };
+window.HoverCard = function(props) { return React.createElement('div', null, props.children); };
+window.HoverCardTrigger = function(props) { return React.createElement('div', null, props.children); };
+window.HoverCardContent = function(props) { return null; };
 
 // Navigation stubs
 window.Link = function(props) { return React.createElement('a', {href: props.to || props.href || '#', className: props.className||'', style: props.style, onClick: function(e) { e.preventDefault(); if(props.onClick) props.onClick(e); }}, props.children); };
-window.useNavigate = function() { return function() {}; };
+window.NavLink = function(props) { return React.createElement('a', {href: props.to || '#', className: (typeof props.className === 'function' ? props.className({isActive: false}) : props.className) || ''}, props.children); };
+window.useNavigate = function() { return function(path) { console.log('[nav]', path); }; };
 window.useParams = function() { return {}; };
-window.useLocation = function() { return { pathname: '/', search: '', hash: '' }; };
+window.useLocation = function() { return { pathname: '/', search: '', hash: '', state: null }; };
 window.useSearchParams = function() { return [new URLSearchParams(), function(){}]; };
 window.BrowserRouter = function(props) { return React.createElement('div', null, props.children); };
 window.Routes = function(props) { 
@@ -299,28 +380,29 @@ window.Routes = function(props) {
 window.Route = function(props) { return props.element || null; };
 window.Outlet = function() { return null; };
 
-// React hooks stubs for common patterns
+// React hooks stubs
 window.useState = React.useState;
 window.useEffect = React.useEffect;
 window.useRef = React.useRef;
 window.useCallback = React.useCallback;
 window.useMemo = React.useMemo;
+window.useContext = React.useContext;
+window.createContext = React.createContext;
+window.forwardRef = React.forwardRef;
+window.memo = React.memo;
 
 // Utility stubs
 window.cn = function() { return Array.from(arguments).filter(Boolean).join(' '); };
 window.clsx = window.cn;
 window.cva = function(base) { return function(props) { return base; }; };
-window.toast = function(msg) { console.log('[toast]', msg); };
-window.useToast = function() { return { toast: window.toast }; };
-
-// Recharts stubs
-var rechartsStub = function(props) { return React.createElement('div', {className: 'w-full h-64 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 text-sm', style: props.style}, props.children || '[Chart]'); };
-['AreaChart','BarChart','LineChart','PieChart','RadarChart','ComposedChart','ResponsiveContainer','XAxis','YAxis','CartesianGrid','Area','Bar','Line','Pie','Cell','Legend','RechartsTooltip','RadialBarChart','RadialBar','Treemap','Funnel','FunnelChart','Scatter','ScatterChart'].forEach(function(n) { window[n] = rechartsStub; });
-window.Tooltip = window.Tooltip; // Keep UI tooltip, not recharts
+window.toast = function(msg) { console.log('[toast]', typeof msg === 'object' ? JSON.stringify(msg) : msg); };
+window.useToast = function() { return { toast: window.toast, dismiss: function(){} }; };
+window.Toaster = function() { return null; };
+window.sonner = { toast: window.toast };
 
 // Icon stubs
 var iconStub = function(props) { 
-  var s = props.size || 16;
+  var s = props.size || props.width || 16;
   return React.createElement('svg', {
     width: s, height: s, viewBox: '0 0 24 24', fill: 'none', 
     stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
@@ -331,14 +413,19 @@ var iconStub = function(props) {
 ${iconStubs}
 
 // Framer motion stubs
-window.motion = new Proxy({}, { get: function(_, tag) { return function(props) { var p = Object.assign({}, props); delete p.initial; delete p.animate; delete p.exit; delete p.transition; delete p.whileHover; delete p.whileTap; delete p.whileInView; delete p.variants; delete p.layout; return React.createElement(tag, p); }; } });
+window.motion = new Proxy({}, { get: function(_, tag) { return React.forwardRef(function(props, ref) { var p = Object.assign({}, props); delete p.initial; delete p.animate; delete p.exit; delete p.transition; delete p.whileHover; delete p.whileTap; delete p.whileInView; delete p.variants; delete p.layout; delete p.layoutId; p.ref = ref; return React.createElement(tag, p); }); } });
 window.AnimatePresence = function(props) { return React.createElement(React.Fragment, null, props.children); };
 window.useAnimation = function() { return { start: function(){}, stop: function(){} }; };
-window.useInView = function() { return [null, true]; };
+window.useInView = function() { return [React.useRef(null), true]; };
+window.useScroll = function() { return { scrollY: { get: function(){ return 0; } }, scrollYProgress: { get: function(){ return 0; } } }; };
+window.useTransform = function(v, i, o) { return { get: function(){ return o ? o[0] : 0; } }; };
+window.useSpring = function(v) { return v; };
+window.useMotionValue = function(v) { return { get: function(){ return v; }, set: function(){} }; };
 
 // Date-fns stubs
 window.format = function(d, f) { try { return new Date(d).toLocaleDateString(); } catch(e) { return String(d); } };
 window.formatDistance = function(a, b) { return 'some time ago'; };
+window.formatRelative = function(a, b) { return 'recently'; };
 window.parseISO = function(s) { return new Date(s); };
 window.isValid = function(d) { return d instanceof Date && !isNaN(d); };
 window.addDays = function(d, n) { var r = new Date(d); r.setDate(r.getDate()+n); return r; };
@@ -347,61 +434,69 @@ window.startOfWeek = function(d) { return new Date(d); };
 window.endOfWeek = function(d) { return new Date(d); };
 window.startOfMonth = function(d) { return new Date(d); };
 window.endOfMonth = function(d) { return new Date(d); };
+window.differenceInDays = function(a, b) { return Math.round((new Date(a) - new Date(b)) / 86400000); };
+window.isBefore = function(a, b) { return new Date(a) < new Date(b); };
+window.isAfter = function(a, b) { return new Date(a) > new Date(b); };
 
 // Zod stubs
-window.z = {
-  string: function() { return window.z; },
-  number: function() { return window.z; },
-  boolean: function() { return window.z; },
-  object: function(s) { return { parse: function(v) { return v; }, safeParse: function(v) { return {success:true,data:v}; } }; },
-  array: function() { return window.z; },
-  enum: function() { return window.z; },
-  min: function() { return window.z; },
-  max: function() { return window.z; },
-  email: function() { return window.z; },
-  optional: function() { return window.z; },
-  nullable: function() { return window.z; },
-  default: function() { return window.z; },
-  parse: function(v) { return v; },
-  safeParse: function(v) { return {success:true,data:v}; },
+var zodChain = {};
+['string','number','boolean','object','array','enum','min','max','email','optional','nullable','default','url','uuid','regex','trim','nonempty','positive','negative','int','finite','nonnegative','describe','refine','transform','pipe','catch'].forEach(function(m) { zodChain[m] = function() { return zodChain; }; });
+zodChain.parse = function(v) { return v; };
+zodChain.safeParse = function(v) { return {success:true,data:v}; };
+window.z = zodChain;
+
+// React Hook Form stubs
+window.useForm = function(opts) { 
+  var vals = (opts && opts.defaultValues) || {};
+  return { 
+    register: function(name) { return { name: name, onChange: function(){}, onBlur: function(){}, ref: function(){} }; },
+    handleSubmit: function(fn) { return function(e) { if(e && e.preventDefault) e.preventDefault(); fn(vals); }; },
+    watch: function(n) { return n ? vals[n] : vals; },
+    setValue: function(n, v) { vals[n] = v; },
+    getValues: function() { return vals; },
+    reset: function() {},
+    formState: { errors: {}, isSubmitting: false, isDirty: false, isValid: true },
+    control: {},
+  };
 };
+window.Controller = function(props) { return props.render ? props.render({ field: { value: '', onChange: function(){} }, fieldState: { error: null } }) : null; };
+window.FormProvider = function(props) { return React.createElement('div', null, props.children); };
+window.useFormContext = function() { return window.useForm(); };
 
 // React Query stubs
-window.useQuery = function(opts) { return { data: undefined, isLoading: false, error: null, refetch: function(){} }; };
-window.useMutation = function(opts) { return { mutate: function(){}, mutateAsync: function(){ return Promise.resolve(); }, isLoading: false, isPending: false }; };
-window.QueryClient = function() { return {}; };
+window.useQuery = function(opts) { return { data: opts && opts.initialData || undefined, isLoading: false, error: null, refetch: function(){}, isFetching: false, isError: false, isSuccess: true }; };
+window.useMutation = function(opts) { return { mutate: function(v) { if(opts && opts.onSuccess) opts.onSuccess(v); }, mutateAsync: function(v){ return Promise.resolve(v); }, isLoading: false, isPending: false, isError: false }; };
+window.useQueryClient = function() { return { invalidateQueries: function(){}, setQueryData: function(){} }; };
+window.QueryClient = function() { return { invalidateQueries: function(){}, setQueryData: function(){} }; };
 window.QueryClientProvider = function(props) { return React.createElement('div', null, props.children); };
 
+// Recharts stubs
+var rechartsStub = function(props) { return React.createElement('div', {className: 'w-full h-64 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 text-sm', style: props.style}, props.children || '[Chart]'); };
+['AreaChart','BarChart','LineChart','PieChart','RadarChart','ComposedChart','ResponsiveContainer','XAxis','YAxis','CartesianGrid','Area','Bar','Line','Pie','Cell','Legend','RechartsTooltip','RadialBarChart','RadialBar','Treemap','Funnel','FunnelChart','Scatter','ScatterChart'].forEach(function(n) { window[n] = rechartsStub; });
+window.Tooltip = window.Tooltip; // Keep UI tooltip, not recharts
+
 // Supabase stub
-window.supabase = { from: function() { return { select: function() { return { data: [], error: null, eq: function() { return this; }, order: function() { return this; }, limit: function() { return this; }, single: function() { return { data: null, error: null }; }, maybeSingle: function() { return { data: null, error: null }; } }; }, insert: function() { return { data: null, error: null }; }, update: function() { return { eq: function() { return { data: null, error: null }; } }; }, delete: function() { return { eq: function() { return { data: null, error: null }; } }; } }; }, auth: { getUser: function() { return { data: { user: null } }; }, signInWithPassword: function() { return { data: null, error: null }; }, signUp: function() { return { data: null, error: null }; }, signOut: function() { return { error: null }; }, onAuthStateChange: function(cb) { return { data: { subscription: { unsubscribe: function(){} } } }; } }, functions: { invoke: function() { return Promise.resolve({ data: null, error: null }); } }, storage: { from: function() { return { upload: function() { return { data: null, error: null }; }, getPublicUrl: function() { return { data: { publicUrl: '' } }; } }; } } };
+window.supabase = { from: function(table) { var chain = { select: function() { return chain; }, insert: function() { return chain; }, update: function() { return chain; }, delete: function() { return chain; }, upsert: function() { return chain; }, eq: function() { return chain; }, neq: function() { return chain; }, gt: function() { return chain; }, gte: function() { return chain; }, lt: function() { return chain; }, lte: function() { return chain; }, in: function() { return chain; }, like: function() { return chain; }, ilike: function() { return chain; }, is: function() { return chain; }, order: function() { return chain; }, limit: function() { return chain; }, range: function() { return chain; }, single: function() { return { data: null, error: null }; }, maybeSingle: function() { return { data: null, error: null }; }, then: function(fn) { return Promise.resolve({ data: [], error: null }).then(fn); }, data: [], error: null }; return chain; }, auth: { getUser: function() { return Promise.resolve({ data: { user: null } }); }, getSession: function() { return Promise.resolve({ data: { session: null } }); }, signInWithPassword: function() { return Promise.resolve({ data: null, error: null }); }, signUp: function() { return Promise.resolve({ data: null, error: null }); }, signOut: function() { return Promise.resolve({ error: null }); }, signInWithOAuth: function() { return Promise.resolve({ data: null, error: null }); }, onAuthStateChange: function(cb) { return { data: { subscription: { unsubscribe: function(){} } } }; } }, functions: { invoke: function() { return Promise.resolve({ data: null, error: null }); } }, storage: { from: function() { return { upload: function() { return Promise.resolve({ data: null, error: null }); }, getPublicUrl: function() { return { data: { publicUrl: '' } }; }, list: function() { return Promise.resolve({ data: [], error: null }); }, remove: function() { return Promise.resolve({ data: null, error: null }); } }; } }, channel: function() { return { on: function() { return this; }, subscribe: function() { return this; } }; }, removeChannel: function() {} };
+
+// createClient stub
+window.createClient = function() { return window.supabase; };
 </script>`;
 }
 
 // ─── Strip markdown code fences from file content ───
 function stripMarkdownFences(content: string): string {
   let c = content.trim();
-  // Remove opening fence: ```lang\n or ```\n
-  if (/^```\w*\s*\n/.test(c)) {
-    c = c.replace(/^```\w*\s*\n/, "");
-  }
-  // Remove closing fence: \n```
-  if (/\n```\s*$/.test(c)) {
-    c = c.replace(/\n```\s*$/, "");
-  }
+  if (/^```\w*\s*\n/.test(c)) c = c.replace(/^```\w*\s*\n/, "");
+  if (/\n```\s*$/.test(c)) c = c.replace(/\n```\s*$/, "");
   return c.trim();
 }
 
 // ─── Convert @tailwind/@apply CSS to raw CSS for CDN compatibility ───
 function convertTailwindCssToRaw(css: string): string {
   let result = css;
-  // Remove @tailwind directives (CDN handles these)
   result = result.replace(/@tailwind\s+(base|components|utilities)\s*;/g, "");
-  // Remove @layer wrappers but keep content
   result = result.replace(/@layer\s+\w+\s*\{/g, "");
-  // Remove @apply directives (can't be processed by CDN)
   result = result.replace(/\s*@apply\s+[^;]+;/g, "");
-  // Clean up empty blocks and extra closing braces from @layer removal
-  // This is imperfect but handles common cases
   return result;
 }
 
@@ -409,22 +504,19 @@ function convertTailwindCssToRaw(css: string): string {
 export function buildPreviewFromFiles(files: Record<string, string>): string | null {
   if (!files || Object.keys(files).length === 0) return null;
 
-  // Sanitize all file contents: strip markdown fences
-  const sanitized: Record<string, string> = {};
+  // Sanitize all file contents
+  const cleanFiles: Record<string, string> = {};
   for (const [k, v] of Object.entries(files)) {
-    sanitized[k] = stripMarkdownFences(v);
+    cleanFiles[k] = stripMarkdownFences(v);
   }
-  // Replace files reference with sanitized version
-  const cleanFiles = sanitized;
 
   const html = cleanFiles["index.html"] || cleanFiles["dist/index.html"];
   const cssFiles = Object.entries(cleanFiles).filter(([k]) => k.endsWith(".css")).map(([k, v]) => [k, convertTailwindCssToRaw(v)] as [string, string]);
   const plainJs = Object.entries(cleanFiles).filter(([k]) => k.endsWith(".js") && !k.includes("node_modules"));
 
-  // Check if HTML uses Vite module entry
   const hasViteModuleEntry = !!html && /<script[^>]+type=["']module["'][^>]+src=["'][^"']*(?:\/src\/main\.(?:tsx|ts|jsx|js)|\/main\.(?:tsx|ts|jsx|js))[^"']*["'][^>]*>/i.test(html);
 
-  // Static HTML project (no React/Vite)
+  // Static HTML project
   if (html && !hasViteModuleEntry) {
     let assembled = html;
     if (cssFiles.length > 0) {
@@ -439,7 +531,6 @@ export function buildPreviewFromFiles(files: Record<string, string>): string | n
         ? assembled.replace("</body>", `${jsBlock}\n</body>`)
         : `${assembled}\n${jsBlock}`;
     }
-    // Inject Tailwind CDN if classes are used
     if (!assembled.includes("cdn.tailwindcss.com") && /class="[^"]*(?:flex|grid|bg-|text-|p-|m-|rounded|shadow)/.test(assembled)) {
       assembled = assembled.includes("</head>")
         ? assembled.replace("</head>", `<script src="https://cdn.tailwindcss.com"><\/script>\n</head>`)
@@ -462,13 +553,19 @@ export function buildPreviewFromFiles(files: Record<string, string>): string | n
   const fileKeys = Object.keys(cleanFiles);
   const cssBlock = cssFiles.map(([, v]) => `<style>${v}</style>`).join("\n");
 
-  // Build module info
+  // Build module info with import analysis
   const modules: ModuleInfo[] = sourceModules.map(([path, code]) => ({
     path,
     code,
     deps: extractDeps(code),
     name: getComponentName(path),
   }));
+
+  // Build import graph for cross-module resolution
+  const importGraph = new Map<string, Map<string, string>>(); // file → (localName → sourcePath)
+  for (const mod of modules) {
+    importGraph.set(mod.path, extractImportedNames(mod.code));
+  }
 
   // Topological sort
   const sorted = topoSort(modules, fileKeys);
@@ -489,7 +586,6 @@ export function buildPreviewFromFiles(files: Record<string, string>): string | n
   const titleMatch = html?.match(/<title>([\s\S]*?)<\/title>/i);
   const title = titleMatch?.[1]?.trim() || "Preview";
 
-  // Extract custom font links from original HTML
   const fontLinks: string[] = [];
   if (html) {
     const linkMatches = html.match(/<link[^>]*href="[^"]*fonts[^"]*"[^>]*>/gi) || [];
@@ -500,6 +596,10 @@ export function buildPreviewFromFiles(files: Record<string, string>): string | n
   const fontBlock = fontLinks.length > 0 ? fontLinks.join("\n") : `<link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />`;
+
+  // Build inter-module resolution map
+  // Maps: for each file, which names it imports from which resolved paths
+  const moduleResolutionScript = buildModuleResolutionScript(sorted, importGraph, fileKeys);
 
   return `<!DOCTYPE html>
 <html lang="pt-BR" class="dark">
@@ -527,6 +627,11 @@ tailwind.config = {
         popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
         card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
       },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
     },
   },
 };
@@ -539,6 +644,50 @@ ${fontBlock}
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
 #root { min-height: 100vh; }
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
+  --radius: 0.5rem;
+}
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 224.3 76.3% 48%;
+  --radius: 0.5rem;
+}
 </style>
 ${cssBlock}
 </head>
@@ -548,34 +697,24 @@ ${ERROR_BRIDGE_SCRIPT}
 ${buildStubsScript()}
 ${componentScripts}
 <script type="text/babel" data-presets="typescript,react">
-// --- Auto-bind named exports as module defaults & cross-module resolution ---
+// --- Inter-module resolution & mount ---
 var mods = window.__ciriusModules;
 var exps = window.__ciriusExports;
 
-// Auto-bind: if a module has no default but has named exports, create a namespace default
-var allPaths = ${JSON.stringify(sorted.map(m => m.path))};
-allPaths.forEach(function(p) {
-  if (!mods[p]) {
-    // Try to find a matching named export from the component name
-    var base = p.split('/').pop().replace(/\\.(tsx|ts|jsx|js)$/, '');
-    var capName = base.charAt(0).toUpperCase() + base.slice(1);
-    if (exps[capName]) { mods[p] = exps[capName]; }
-    else if (exps[base]) { mods[p] = exps[base]; }
-  }
-});
+${moduleResolutionScript}
 
-// Resolve @/ alias imports: bind window globals for any named export
+// Fallback: promote all named exports to window globals
 Object.keys(exps).forEach(function(name) {
   if (!window[name]) window[name] = exps[name];
 });
 
 var RootComp = mods["${rootModulePath || ""}"] || exps["${rootName}"] || window.${rootName} || window.App || function() { 
   return React.createElement('div', {
-    style: {display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#f8fafc',fontFamily:'Inter,sans-serif'}
-  }, React.createElement('div', {style:{textAlign:'center',color:'#64748b'}},
+    style: {display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',fontFamily:'Inter,sans-serif'}
+  }, React.createElement('div', {style:{textAlign:'center',color:'#fff'}},
     React.createElement('div', {style:{fontSize:48,marginBottom:16}}, '✨'),
-    React.createElement('h2', {style:{fontSize:20,fontWeight:600,color:'#334155',marginBottom:8}}, 'Preview pronto'),
-    React.createElement('p', {style:{fontSize:14}}, 'Nenhum componente raiz encontrado')
+    React.createElement('h2', {style:{fontSize:24,fontWeight:700,marginBottom:8}}, 'Projeto criado!'),
+    React.createElement('p', {style:{fontSize:14,opacity:0.8}}, 'Use o chat para adicionar funcionalidades.')
   ));
 };
 try {
@@ -587,4 +726,45 @@ try {
 <\/script>
 </body>
 </html>`;
+}
+
+// ─── Build inter-module resolution script ───
+function buildModuleResolutionScript(
+  sorted: ModuleInfo[],
+  importGraph: Map<string, Map<string, string>>,
+  fileKeys: string[],
+): string {
+  const lines: string[] = [];
+  const allPaths = sorted.map(m => m.path);
+
+  // Step 1: Auto-bind named exports as module defaults where no default exists
+  lines.push(`var allPaths = ${JSON.stringify(allPaths)};`);
+  lines.push(`allPaths.forEach(function(p) {
+  if (!mods[p]) {
+    var base = p.split('/').pop().replace(/\\.(tsx|ts|jsx|js)$/, '');
+    var capName = base.charAt(0).toUpperCase() + base.slice(1);
+    if (exps[capName]) { mods[p] = exps[capName]; }
+    else if (exps[base]) { mods[p] = exps[base]; }
+  }
+});`);
+
+  // Step 2: Cross-module named import resolution
+  // For each module, check what it imports and bind those names to window
+  for (const mod of sorted) {
+    const imports = importGraph.get(mod.path);
+    if (!imports || imports.size === 0) continue;
+
+    for (const [localName, sourcePath] of imports) {
+      const resolved = resolveImport(mod.path, sourcePath, fileKeys);
+      if (!resolved) continue;
+
+      // If importing a name that exists in exports, bind it
+      lines.push(`if (!window["${localName}"]) {
+  if (exps["${localName}"]) window["${localName}"] = exps["${localName}"];
+  else if (mods["${resolved}"]) window["${localName}"] = mods["${resolved}"];
+}`);
+    }
+  }
+
+  return lines.join("\n");
 }
