@@ -80,6 +80,47 @@ function stripTypeScript(code: string): string {
   return result;
 }
 
+// ─── Fix dynamic JSX component references ───
+// Babel treats <f.icon> as DOM element (lowercase). Transform to variable reference.
+function fixDynamicJsx(code: string): string {
+  let result = code;
+  // Pattern: <identifier.Property — transform to use a local variable
+  // e.g., <f.icon size={24} /> → { var _Comp = f.icon; return <_Comp size={24} />; }
+  // Simpler approach: extract and capitalize
+  // Replace <varname.PropName with {React.createElement(varname.PropName, ...)}
+  // Actually, easiest fix: convert <x.Y ...> to use a capitalized alias
+  result = result.replace(/<(\w+)\.(\w+)(\s)/g, (match, obj, prop, space) => {
+    // Only transform if it looks like a component (prop starts uppercase)
+    if (/^[A-Z]/.test(prop)) {
+      return `<${obj}_${prop}${space}`;
+    }
+    return match;
+  });
+  result = result.replace(/<\/(\w+)\.(\w+)>/g, (match, obj, prop) => {
+    if (/^[A-Z]/.test(prop)) {
+      return `</${obj}_${prop}>`;
+    }
+    return match;
+  });
+  // Now add the variable declarations before the return/function body
+  // Find all unique obj.Prop patterns and declare them
+  const dynamicComps = new Set<string>();
+  const dynRe = /(\w+)_([A-Z]\w+)/g;
+  let dm;
+  while ((dm = dynRe.exec(result)) !== null) {
+    dynamicComps.add(`${dm[1]}.${dm[2]}`);
+  }
+  if (dynamicComps.size > 0) {
+    const declarations = Array.from(dynamicComps).map(cp => {
+      const [obj, prop] = cp.split(".");
+      return `var ${obj}_${prop} = ${obj}.${prop} || function(p) { return React.createElement('span', p, p.children); };`;
+    }).join("\n");
+    // Insert declarations at the top of the code
+    result = declarations + "\n" + result;
+  }
+  return result;
+}
+
 // ─── Safe export transformation ───
 function safeTransformExports(code: string, moduleName: string): string {
   let result = code;
@@ -90,6 +131,9 @@ function safeTransformExports(code: string, moduleName: string): string {
 
   // Strip TypeScript before processing exports
   result = stripTypeScript(result);
+
+  // Fix dynamic JSX component references (e.g., <f.icon />)
+  result = fixDynamicJsx(result);
 
   // Handle: export default function Name(...)
   result = result.replace(
