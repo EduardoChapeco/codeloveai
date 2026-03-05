@@ -28,7 +28,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Open Starble Connect page when user clicks the extension icon
 chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: "https://starble.lovable.app/lovable/connect" });
+  chrome.tabs.create({ url: "https://starble.lovable.app/painel" });
 });
 
 async function getPlatformUrl() {
