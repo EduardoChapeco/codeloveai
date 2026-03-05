@@ -440,7 +440,7 @@ export default function AppSidebar() {
   ];
 
   const lovableItems = [
-    { to: "/lovable/connect", label: "Conectar", icon: Link2, desc: "Vincular conta" },
+    { to: "/painel", label: "Conectar", icon: Link2, desc: "Vincular conta" },
     { to: "/cirius/integrations", label: "Integrações Cirius", icon: Key, desc: "GitHub, Vercel, Supabase" },
   ];
 

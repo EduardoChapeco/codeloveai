@@ -339,7 +339,7 @@ export default function LovableConnect() {
                     : isConnected ? "Token ativo" : "Acesse lovable.dev para conectar"}
                 </p>
               </div>
-              {isConnected && <span className="chip green">Ativo</span>}
+              {isConnected && <span className="chip ch-green">Ativo</span>}
             </div>
 
             {/* SSO Bridge Status */}

@@ -28,7 +28,7 @@ export default function AppNav() {
     { to: "/cirius",            label: "Cirius",      icon: Bot,             show: true },
     { to: "/community",         label: "Comunidade",  icon: MessageCircle,   show: true },
     { to: "/afiliado/dashboard", label: "Afiliado",    icon: Users,           show: isAffiliate },
-    { to: "/lovable/connect",   label: "Lovable",     icon: Link2,           show: true },
+    { to: "/painel",            label: "Painel",      icon: Link2,           show: true },
     { to: "/lovable/projects",  label: "Projetos",    icon: FolderOpen,      show: true },
     { to: "/plans",             label: "Planos",      icon: CreditCard,      show: true },
     { to: "/admin/tenant",      label: "Meu WL",      icon: Settings2,       show: isTenantAdmin || isTenantOwner },
