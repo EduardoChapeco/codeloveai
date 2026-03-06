@@ -210,3 +210,6 @@ verify_jwt = false
 
 [functions.crm-smart-import]
 verify_jwt = false
+
+[functions.track-access]
+verify_jwt = false

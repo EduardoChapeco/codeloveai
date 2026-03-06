@@ -14,6 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_logs: {
+        Row: {
+          as_number: string | null
+          browser: string | null
+          browser_version: string | null
+          city: string | null
+          country: string | null
+          country_code: string | null
+          created_at: string
+          device_type: string | null
+          id: string
+          ip_address: string | null
+          is_mobile: boolean | null
+          is_vpn: boolean | null
+          isp: string | null
+          language: string | null
+          latitude: number | null
+          longitude: number | null
+          org: string | null
+          os: string | null
+          os_version: string | null
+          page_url: string | null
+          referrer: string | null
+          region: string | null
+          screen_height: number | null
+          screen_width: number | null
+          session_id: string | null
+          tenant_id: string | null
+          timezone: string | null
+          user_agent: string | null
+          user_email: string | null
+          user_id: string | null
+        }
+        Insert: {
+          as_number?: string | null
+          browser?: string | null
+          browser_version?: string | null
+          city?: string | null
+          country?: string | null
+          country_code?: string | null
+          created_at?: string
+          device_type?: string | null
+          id?: string
+          ip_address?: string | null
+          is_mobile?: boolean | null
+          is_vpn?: boolean | null
+          isp?: string | null
+          language?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          org?: string | null
+          os?: string | null
+          os_version?: string | null
+          page_url?: string | null
+          referrer?: string | null
+          region?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string | null
+          tenant_id?: string | null
+          timezone?: string | null
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          as_number?: string | null
+          browser?: string | null
+          browser_version?: string | null
+          city?: string | null
+          country?: string | null
+          country_code?: string | null
+          created_at?: string
+          device_type?: string | null
+          id?: string
+          ip_address?: string | null
+          is_mobile?: boolean | null
+          is_vpn?: boolean | null
+          isp?: string | null
+          language?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          org?: string | null
+          os?: string | null
+          os_version?: string | null
+          page_url?: string | null
+          referrer?: string | null
+          region?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string | null
+          tenant_id?: string | null
+          timezone?: string | null
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       admin_commissions: {
         Row: {
           commission_amount: number

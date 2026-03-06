@@ -22,6 +22,7 @@ import ModulesManagementTab from "@/components/admin/ModulesManagementTab";
 
 import ExtensionsManagementTab from "@/components/admin/ExtensionsManagementTab";
 import ActivityDashboard from "@/components/admin/ActivityDashboard";
+import AccessLogsPanel from "@/components/admin/AccessLogsPanel";
 
 interface TenantRow {
   id: string;
@@ -138,7 +139,7 @@ interface FeatureFlag {
   updated_at: string;
 }
 
-type Tab = "tenants" | "plans" | "extensions" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules" | "activity";
+type Tab = "tenants" | "plans" | "extensions" | "feature_flags" | "finances" | "commissions" | "wallets" | "ledger" | "operations" | "wl_plans" | "wl_affiliates" | "wl_subs" | "lovable_cloud" | "modules" | "activity" | "access_logs";
 
 export default function AdminGlobal() {
   const { user, loading: authLoading } = useAuth();
@@ -468,6 +469,7 @@ export default function AdminGlobal() {
                 tab === "wl_subs" ? "WL Assinaturas" :
                 tab === "lovable_cloud" ? "Lovable Cloud" :
                 tab === "activity" ? "Atividade" :
+                tab === "access_logs" ? "Acessos / IP" :
                 "Admin Global"
               }</h1>
             </div>
@@ -871,6 +873,9 @@ export default function AdminGlobal() {
 
           {/* ─── ACTIVITY DASHBOARD TAB ─── */}
           {tab === "activity" && <ActivityDashboard isGlobalAdmin={true} />}
+
+          {/* ─── ACCESS LOGS TAB ─── */}
+          {tab === "access_logs" && <AccessLogsPanel />}
 
           {/* ─── OPERATIONS TAB ─── */}
           {tab === "operations" && (
