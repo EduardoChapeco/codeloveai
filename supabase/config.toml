@@ -204,3 +204,6 @@ verify_jwt = false
 
 [functions.cirius-github-import]
 verify_jwt = false
+
+[functions.send-bulk-invite]
+verify_jwt = false
