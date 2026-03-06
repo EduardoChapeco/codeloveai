@@ -450,13 +450,29 @@ export default function AdminGlobal() {
       <div className="min-h-full">
         <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
+           <div className="flex items-center justify-between">
             <div>
               <p className="lv-overline mb-1">Administração Global</p>
-              <h1 className="lv-heading-lg">White Label</h1>
+              <h1 className="lv-heading-lg">{
+                tab === "tenants" ? "Tenants" :
+                tab === "plans" ? "Planos" :
+                tab === "extensions" ? "Extensões" :
+                tab === "modules" ? "Módulos" :
+                tab === "feature_flags" ? "Feature Flags" :
+                tab === "finances" ? "Finanças" :
+                tab === "commissions" ? "Comissões" :
+                tab === "wallets" ? "Wallets" :
+                tab === "ledger" ? "Ledger" :
+                tab === "wl_plans" ? "WL Planos" :
+                tab === "wl_affiliates" ? "WL Afiliados" :
+                tab === "wl_subs" ? "WL Assinaturas" :
+                tab === "lovable_cloud" ? "Lovable Cloud" :
+                tab === "activity" ? "Atividade" :
+                "Admin Global"
+              }</h1>
             </div>
             <button onClick={() => navigate("/admin")} className="lv-btn-secondary h-9 px-4 text-xs flex items-center gap-2">
-              <ArrowLeft className="h-3.5 w-3.5" /> Admin Tenant
+              <ArrowLeft className="h-3.5 w-3.5" /> Operacional
             </button>
           </div>
 
