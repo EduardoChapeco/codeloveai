@@ -22,6 +22,7 @@ import ModulesManagementTab from "@/components/admin/ModulesManagementTab";
 
 import ExtensionsManagementTab from "@/components/admin/ExtensionsManagementTab";
 import ActivityDashboard from "@/components/admin/ActivityDashboard";
+import AccessLogsPanel from "@/components/admin/AccessLogsPanel";
 
 interface TenantRow {
   id: string;
