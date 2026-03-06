@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -82,6 +82,7 @@ const MODE_TABS: { id: BrainMode; label: string; icon: typeof Code2 }[] = [
 
 export default function StarbleChatPage() {
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   /* Chat mode */
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
@@ -422,11 +423,21 @@ export default function StarbleChatPage() {
               <div className="mc-title">Chat IA</div>
               <div className="mc-desc">Converse e obtenha respostas instantâneas</div>
             </div>
-            <div className={`mode-card mode-build ${activeMode === "build" ? "active" : ""}`} onClick={() => selectMode("build")}>
+            <div
+              className={`mode-card mode-build ${activeMode === "build" ? "active" : ""} ${!isAdmin ? "mode-disabled" : ""}`}
+              onClick={() => {
+                if (!isAdmin) {
+                  toast.info("Em breve! Seu novo criador de vibecoding favorito! 🚀");
+                  return;
+                }
+                selectMode("build");
+              }}
+              style={!isAdmin ? { opacity: 0.55, cursor: "default" } : undefined}
+            >
               <div className="mc-ico ib-blue"><Rocket size={16} /></div>
               <div className="mc-title">Novo Projeto</div>
-              <div className="mc-desc">Descreva sua ideia e a IA constrói</div>
-              <span className="mc-badge chip ch-blue">Novo</span>
+              <div className="mc-desc">{isAdmin ? "Descreva sua ideia e a IA constrói" : "Em breve! 🚀"}</div>
+              <span className="mc-badge chip ch-blue">{isAdmin ? "Novo" : "Em breve"}</span>
             </div>
             <div className="mode-card" onClick={() => selectMode("brain")}>
               <div className="mc-ico ib-indigo"><Brain size={16} /></div>
@@ -486,11 +497,18 @@ export default function StarbleChatPage() {
             {(["chat", "build", "brain"] as ChatMode[]).map((m) => (
               <button
                 key={m}
-                className={`cib-mode-btn ${inputMode === m ? modeClass(m) : ""}`}
-                onClick={() => selectMode(m)}
+                className={`cib-mode-btn ${inputMode === m ? modeClass(m) : ""} ${m === "build" && !isAdmin ? "mode-disabled" : ""}`}
+                onClick={() => {
+                  if (m === "build" && !isAdmin) {
+                    toast.info("Em breve! Seu novo criador de vibecoding favorito! 🚀");
+                    return;
+                  }
+                  selectMode(m);
+                }}
+                style={m === "build" && !isAdmin ? { opacity: 0.5 } : undefined}
               >
                 {m === "chat" && <><MessageCircle size={11} /> Chat IA</>}
-                {m === "build" && <><Rocket size={11} /> Novo Projeto</>}
+                {m === "build" && <><Rocket size={11} /> {isAdmin ? "Novo Projeto" : "Em breve"}</>}
                 {m === "brain" && <><Brain size={11} /> Brain</>}
               </button>
             ))}
