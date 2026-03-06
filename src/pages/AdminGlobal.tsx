@@ -874,6 +874,9 @@ export default function AdminGlobal() {
           {/* ─── ACTIVITY DASHBOARD TAB ─── */}
           {tab === "activity" && <ActivityDashboard isGlobalAdmin={true} />}
 
+          {/* ─── ACCESS LOGS TAB ─── */}
+          {tab === "access_logs" && <AccessLogsPanel />}
+
           {/* ─── OPERATIONS TAB ─── */}
           {tab === "operations" && (
             <div className="space-y-6">
