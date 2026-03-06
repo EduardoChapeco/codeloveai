@@ -424,20 +424,13 @@ export default function StarbleChatPage() {
               <div className="mc-desc">Converse e obtenha respostas instantâneas</div>
             </div>
             <div
-              className={`mode-card mode-build ${activeMode === "build" ? "active" : ""} ${!isAdmin ? "mode-disabled" : ""}`}
-              onClick={() => {
-                if (!isAdmin) {
-                  toast.info("Em breve! Seu novo criador de vibecoding favorito! 🚀");
-                  return;
-                }
-                selectMode("build");
-              }}
-              style={!isAdmin ? { opacity: 0.55, cursor: "default" } : undefined}
+              className="mode-card mode-build"
+              onClick={() => window.open("https://chromewebstore.google.com/detail/starble-speed/YOUR_EXTENSION_ID", "_blank")}
             >
-              <div className="mc-ico ib-blue"><Rocket size={16} /></div>
-              <div className="mc-title">Novo Projeto</div>
-              <div className="mc-desc">{isAdmin ? "Descreva sua ideia e a IA constrói" : "Em breve! 🚀"}</div>
-              <span className="mc-badge chip ch-blue">{isAdmin ? "Novo" : "Em breve"}</span>
+              <div className="mc-ico ib-blue"><Zap size={16} /></div>
+              <div className="mc-title">Baixe nossa extensão</div>
+              <div className="mc-desc">Acesse seus projetos Lovable com superpoderes</div>
+              <span className="mc-badge chip ch-green">Grátis</span>
             </div>
             <div className="mode-card" onClick={() => selectMode("brain")}>
               <div className="mc-ico ib-indigo"><Brain size={16} /></div>
