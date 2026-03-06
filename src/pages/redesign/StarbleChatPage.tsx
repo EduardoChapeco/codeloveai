@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   MessageCircle, FolderOpen, Brain, Paperclip, Clock, ArrowUp, Sparkles,
   Plus, Search, Code2, FileText, Bug, RefreshCw, ChevronLeft, Check, CheckCheck,
-  Rocket,
+  Rocket, Zap,
 } from "lucide-react";
 
 type ChatMode = "chat" | "build" | "brain";
