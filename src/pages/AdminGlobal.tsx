@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
@@ -146,8 +146,8 @@ export default function AdminGlobal() {
   useSEO({ title: "Admin Global" });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const location = window.location.pathname;
-  const pathTab = location.includes("/admin/extensions") ? "extensions" : location.includes("/admin/modules") ? "modules" : null;
+  const loc = useLocation();
+  const pathTab = loc.pathname.includes("/admin/extensions") ? "extensions" : loc.pathname.includes("/admin/modules") ? "modules" : null;
   const tab = (searchParams.get("tab") || pathTab || "tenants") as Tab;
 
   const [tenants, setTenants] = useState<TenantRow[]>([]);
