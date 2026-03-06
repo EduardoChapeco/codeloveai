@@ -207,3 +207,6 @@ verify_jwt = false
 
 [functions.send-bulk-invite]
 verify_jwt = false
+
+[functions.crm-smart-import]
+verify_jwt = false

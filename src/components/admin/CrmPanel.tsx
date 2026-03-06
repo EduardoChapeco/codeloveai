@@ -9,7 +9,7 @@ import {
   Eye, ArrowRight, GripVertical, Building2, MapPin, Mail,
   TrendingUp, TrendingDown, UserCheck, UserX, Activity,
   MessageCircle, Calendar, DollarSign, ChevronDown, ChevronUp,
-  Star, Edit3, Save, ExternalLink, Hash
+  Star, Edit3, Save, ExternalLink, Hash, Sparkles, Brain
 } from "lucide-react";
 import WhatsAppConnect from "@/components/WhatsAppConnect";
 
@@ -140,6 +140,14 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
   const [uploading, setUploading] = useState(false);
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Smart Import state
+  const [showSmartImport, setShowSmartImport] = useState(false);
+  const [smartImportStep, setSmartImportStep] = useState<"analyzing" | "mapping" | "importing" | "done">("analyzing");
+  const [smartImportMapping, setSmartImportMapping] = useState<any>(null);
+  const [smartImportRows, setSmartImportRows] = useState<string[]>([]);
+  const [smartImportFileName, setSmartImportFileName] = useState("");
+  const [smartImportResult, setSmartImportResult] = useState<{ imported: number; duplicates: number; total: number } | null>(null);
 
   // Detail panel
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -304,58 +312,73 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
   // ═══ CSV Upload ═══
   const handleFileUpload = async (files: FileList) => {
     if (!files.length) return;
+    const file = files[0];
     setUploading(true);
-    for (const file of Array.from(files)) {
-      try {
-        const text = await file.text();
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 1) continue;
+    try {
+      const text = await file.text();
+      const rows = text.split(/\r?\n/).filter(l => l.trim());
+      if (rows.length < 2) { toast.error("Arquivo vazio ou com poucos dados"); setUploading(false); return; }
 
-        const { data: list, error: listErr } = await supabase.from("crm_contact_lists").insert({
-          tenant_id: tenantId, user_id: userId, name: file.name.replace(/\.(csv|xlsx|xls|txt)$/i, ""),
-          file_name: file.name, total_rows: lines.length, status: "processing"
-        } as any).select("id").single();
-        if (listErr || !list) { toast.error(`Erro: ${listErr?.message}`); continue; }
+      setSmartImportFileName(file.name);
+      setSmartImportRows(rows);
+      setSmartImportStep("analyzing");
+      setShowSmartImport(true);
+      setSmartImportResult(null);
 
-        const phoneRegex = /(\+?\d[\d\s\-().]{7,}\d)/g;
-        const parsed: { phone: string; phone_normalized: string; name: string; is_international: boolean }[] = [];
-        const seen = new Set<string>();
+      // Send to AI for analysis
+      const { data, error } = await supabase.functions.invoke("crm-smart-import", {
+        body: { action: "analyze", raw_text: rows.slice(0, 15).join("\n") }
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || "Erro na análise IA");
+        setShowSmartImport(false);
+        setUploading(false);
+        return;
+      }
 
-        for (const line of lines) {
-          const phones = line.match(phoneRegex);
-          if (!phones) continue;
-          for (const rawPhone of phones) {
-            const normalized = normalizePhone(rawPhone);
-            if (seen.has(normalized)) continue;
-            seen.add(normalized);
-            const nameMatch = line.replace(rawPhone, "").replace(/[,;|"\t]+/g, " ").trim();
-            parsed.push({ phone: rawPhone.trim(), phone_normalized: normalized, name: nameMatch.substring(0, 100), is_international: !normalized.startsWith("+55") });
-          }
-        }
-
-        let imported = 0, duplicates = 0;
-        const BATCH_SIZE = 100;
-        for (let i = 0; i < parsed.length; i += BATCH_SIZE) {
-          const batch = parsed.slice(i, i + BATCH_SIZE).map(c => ({
-            tenant_id: tenantId, user_id: userId, phone: c.phone, phone_normalized: c.phone_normalized,
-            name: c.name, is_international: c.is_international, source: "csv",
-            tags: [file.name.replace(/\.\w+$/, "")], pipeline_stage: "lead",
-          }));
-          const { data: result, error } = await supabase.from("crm_contacts")
-            .upsert(batch as any[], { onConflict: "tenant_id,phone_normalized", ignoreDuplicates: true }).select("id");
-          if (!error) imported += result?.length || 0;
-          duplicates += batch.length - (result?.length || 0);
-        }
-
-        await supabase.from("crm_contact_lists").update({
-          status: "completed", imported_count: imported, duplicates_found: duplicates, total_rows: parsed.length
-        } as any).eq("id", list.id);
-        toast.success(`${file.name}: ${imported} importados, ${duplicates} duplicados`);
-      } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+      // Set mapping with confirmed_field defaulting to suggested_field
+      const mapping = data.mapping;
+      mapping.columns = mapping.columns.map((col: any) => ({
+        ...col,
+        confirmed_field: col.suggested_field,
+      }));
+      setSmartImportMapping(mapping);
+      setSmartImportStep("mapping");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao ler arquivo");
+      setShowSmartImport(false);
     }
     setUploading(false);
-    fetchContacts();
-    fetchLists();
+  };
+
+  const executeSmartImport = async () => {
+    if (!smartImportMapping) return;
+    setSmartImportStep("importing");
+    try {
+      const { data, error } = await supabase.functions.invoke("crm-smart-import", {
+        body: {
+          action: "import",
+          column_mapping: smartImportMapping,
+          rows: smartImportRows,
+          tenant_id: tenantId,
+          user_id: userId,
+          file_name: smartImportFileName,
+        }
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || "Erro na importação");
+        setSmartImportStep("mapping");
+        return;
+      }
+      setSmartImportResult(data);
+      setSmartImportStep("done");
+      toast.success(`${data.imported} contatos importados!`);
+      fetchContacts();
+      fetchLists();
+    } catch (err: any) {
+      toast.error(err.message);
+      setSmartImportStep("mapping");
+    }
   };
 
   // ═══ Campaign actions ═══
@@ -506,12 +529,12 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
               {waConnected ? "Online" : "Offline"}
             </div>
           )}
-          <input type="file" ref={fileRef} accept=".csv,.txt,.xls,.xlsx" multiple className="hidden"
+          <input type="file" ref={fileRef} accept=".csv,.txt,.xls,.xlsx,.tsv,.vcf" className="hidden"
             onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <button onClick={() => fileRef.current?.click()} disabled={uploading}
             className="h-11 px-5 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2 hover:shadow-lg hover:shadow-primary/25 transition-all active:scale-[0.97]">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Importar Contatos
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            Importar com IA
           </button>
         </div>
       </div>
@@ -1176,6 +1199,130 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
                 <Trash2 className="h-4 w-4" /> Remover Contato
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SMART IMPORT MODAL ═══ */}
+      {showSmartImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { if (smartImportStep !== "importing" && smartImportStep !== "analyzing") setShowSmartImport(false); }}>
+          <div className="w-full max-w-2xl mx-4 rounded-3xl border border-white/[0.08] overflow-hidden" style={{ background: "var(--background)" }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 border-b border-white/[0.06] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Brain className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Importação Inteligente</h3>
+                  <p className="text-[11px] text-muted-foreground">{smartImportFileName} • {smartImportRows.length} linhas</p>
+                </div>
+              </div>
+              {smartImportStep !== "importing" && smartImportStep !== "analyzing" && (
+                <button onClick={() => setShowSmartImport(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+
+            {/* Analyzing */}
+            {smartImportStep === "analyzing" && (
+              <div className="p-12 flex flex-col items-center gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-bold text-foreground">IA analisando colunas...</p>
+                <p className="text-xs text-muted-foreground">Identificando campos automaticamente</p>
+              </div>
+            )}
+
+            {/* Mapping */}
+            {smartImportStep === "mapping" && smartImportMapping && (
+              <div className="p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <p className="text-sm font-bold text-foreground">Colunas identificadas</p>
+                  <span className="text-[10px] text-muted-foreground">Delimitador: {smartImportMapping.delimiter} • Header: {smartImportMapping.has_header ? "Sim" : "Não"}</span>
+                </div>
+
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {smartImportMapping.columns.map((col: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate">{col.detected_header}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {(col.sample_values || []).slice(0, 3).join(" • ")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="h-1.5 w-12 rounded-full bg-white/[0.06] overflow-hidden">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${(col.confidence || 0) * 100}%` }} />
+                        </div>
+                        <select
+                          value={col.confirmed_field}
+                          onChange={e => {
+                            const updated = { ...smartImportMapping };
+                            updated.columns = updated.columns.map((c: any, i: number) =>
+                              i === idx ? { ...c, confirmed_field: e.target.value } : c
+                            );
+                            setSmartImportMapping(updated);
+                          }}
+                          className="h-9 px-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        >
+                          <option value="name">Nome</option>
+                          <option value="email">Email</option>
+                          <option value="phone">Telefone</option>
+                          <option value="company">Empresa</option>
+                          <option value="city">Cidade</option>
+                          <option value="tags">Tags</option>
+                          <option value="notes">Notas</option>
+                          <option value="skip">Ignorar</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button onClick={() => setShowSmartImport(false)} className="h-11 px-5 rounded-2xl text-sm font-bold text-muted-foreground hover:text-foreground">
+                    Cancelar
+                  </button>
+                  <button onClick={executeSmartImport} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2">
+                    <Upload className="h-4 w-4" /> Importar {smartImportRows.length - (smartImportMapping.has_header ? 1 : 0)} contatos
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Importing */}
+            {smartImportStep === "importing" && (
+              <div className="p-12 flex flex-col items-center gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-bold text-foreground">Importando contatos...</p>
+                <p className="text-xs text-muted-foreground">Processando {smartImportRows.length} linhas</p>
+              </div>
+            )}
+
+            {/* Done */}
+            {smartImportStep === "done" && smartImportResult && (
+              <div className="p-12 flex flex-col items-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <CheckCircle2 className="h-7 w-7 text-emerald-400" />
+                </div>
+                <p className="text-base font-bold text-foreground">Importação concluída!</p>
+                <div className="flex gap-6 text-center">
+                  <div>
+                    <p className="text-2xl font-black text-emerald-400 tabular-nums">{smartImportResult.imported}</p>
+                    <p className="text-[10px] text-muted-foreground">importados</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-amber-400 tabular-nums">{smartImportResult.duplicates}</p>
+                    <p className="text-[10px] text-muted-foreground">duplicados</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowSmartImport(false)} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold mt-2">
+                  Fechar
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
