@@ -208,7 +208,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             'Content-Type': 'application/json',
             'Origin': 'https://lovable.dev',
             'Referer': 'https://lovable.dev/',
-            'x-client-git-sha': '9810ecd6b501b23b14c5d4ee731d8cda244d003b'
+            'x-client-git-sha': '3d7a3673c6f02b606137a12ddc0ab88f6b775113'
           },
           body: safeBody ? JSON.stringify(safeBody) : undefined
         });
