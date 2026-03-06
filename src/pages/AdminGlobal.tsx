@@ -469,6 +469,7 @@ export default function AdminGlobal() {
                 tab === "wl_subs" ? "WL Assinaturas" :
                 tab === "lovable_cloud" ? "Lovable Cloud" :
                 tab === "activity" ? "Atividade" :
+                tab === "access_logs" ? "Acessos / IP" :
                 "Admin Global"
               }</h1>
             </div>
