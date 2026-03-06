@@ -162,6 +162,7 @@ export default function StarbleSidebar() {
             <NavEntry to="/admin/cloud" label="Lovable Cloud" icon={Cloud} iconColor="ib-blue" active={isActive("/admin/cloud")} collapsed={collapsed} />
             <NavEntry to="/admin/brainchain" label="Brainchain" icon={Brain} iconColor="ib-purple" active={isActive("/admin/brainchain")} collapsed={collapsed} />
             <NavEntry to="/admin/global?tab=activity" label="Atividade" icon={BarChart3} iconColor="ib-teal" active={location.search.includes("tab=activity") && isActive("/admin/global")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=access_logs" label="Acessos / IP" icon={Globe} iconColor="ib-orange" active={location.search.includes("tab=access_logs") && isActive("/admin/global")} collapsed={collapsed} />
 
             <div className="divider" />
             {!collapsed && <div className="sb-section">Tenant</div>}
