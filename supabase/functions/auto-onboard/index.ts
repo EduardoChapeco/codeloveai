@@ -126,11 +126,11 @@ Deno.serve(async (req) => {
       .eq("is_active", true)
       .maybeSingle() : { data: null };
 
-    const activePlan = freeMasterPlan || fallbackPlan;
+     const activePlan = freeMasterPlan || fallbackPlan;
     const planId = activePlan?.id || null;
-    const dailyMessages = activePlan?.daily_message_limit || null; // NULL = unlimited
+    const dailyMessages = activePlan?.daily_message_limit ?? 10; // Default 10/day
     const planName = freeMasterPlan ? "free_master" : "free";
-    const isUnlimited = dailyMessages === null;
+    const isUnlimited = false; // Free plan always has limits
 
     // 30 days for Free Master, 100 years for old free
     const now = Date.now();
@@ -182,7 +182,7 @@ Deno.serve(async (req) => {
           plan_type: "messages",
           type: "daily_token",
           status: "active",
-          daily_messages: isUnlimited ? null : dailyMessages,
+          daily_messages: dailyMessages,
           expires_at: expiresAt,
         })
         .select("id")

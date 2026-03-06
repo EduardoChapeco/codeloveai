@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
 import IslandLeft from "@/components/cirius-editor/IslandLeft";
@@ -32,6 +32,7 @@ import type { EditorMode } from "@/components/cirius-editor/SplitTopBar";
 export default function CiriusEditor() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
   const navigate = useNavigate();
 
   const [project, setProject] = useState<any>(null);
@@ -478,7 +479,26 @@ export default function CiriusEditor() {
   }, [project, chatMessages, persistMsg]);
 
   if (!user) { navigate("/login"); return null; }
-  if (loading) return <div className="ce-root" />;
+  if (loading || adminLoading) return <div className="ce-root" />;
+
+  // Block non-admins
+  if (!isAdmin) {
+    return (
+      <div className="ce-root" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center", maxWidth: 420, padding: 40 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🚀</div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--ts)", marginBottom: 8 }}>Em breve!</h2>
+          <p style={{ fontSize: 14, color: "var(--tt)", lineHeight: 1.6 }}>
+            Seu novo criador de vibecoding favorito!<br />
+            Estamos finalizando os últimos detalhes para trazer a melhor experiência.
+          </p>
+          <button className="gl md primary" onClick={() => navigate("/home")} style={{ marginTop: 16 }}>
+            Voltar ao início
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const projectName = project?.name || "Novo Projeto";
   const isLive = project?.status === "live";

@@ -83,6 +83,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           // Dispatch role check after callback to avoid deadlock
           setTimeout(() => checkRoles(session.user.id), 0);
+
+          // Auto-onboard: provision free CLF1 token for new users
+          if (_event === 'SIGNED_IN') {
+            supabase.functions.invoke('auto-onboard', {}).catch(() => {/* silent */});
+          }
         } else {
           setIsAdmin(false);
           setAdminLoading(false);

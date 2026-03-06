@@ -108,8 +108,8 @@ export default function StarbleSidebar() {
                 <div className="divider" />
                 {!collapsed && <div className="sb-section">Gestão</div>}
                 <NavEntry to="/tenant/admin" label="Tenants" icon={Users} iconColor="ib-teal" active={isActive("/tenant/admin")} collapsed={collapsed} />
-                <NavEntry to="/admin/extensions" label="Extensões" icon={Puzzle} iconColor="ib-green" active={isActive("/admin/extensions")} collapsed={collapsed} />
-                <NavEntry to="/admin/modules" label="Módulos" icon={Layers} iconColor="ib-indigo" active={isActive("/admin/modules")} collapsed={collapsed} />
+                <NavEntry to="/admin/extensions?tab=extensions" label="Extensões" icon={Puzzle} iconColor="ib-green" active={isActive("/admin/extensions")} collapsed={collapsed} />
+                <NavEntry to="/admin/modules?tab=modules" label="Módulos" icon={Layers} iconColor="ib-indigo" active={isActive("/admin/modules")} collapsed={collapsed} />
               </>
             )}
           </>

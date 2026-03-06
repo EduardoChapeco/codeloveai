@@ -172,7 +172,7 @@ const App = () => (
                 <Route path="/admin/global" element={<AdminGlobal />} />
                 <Route path="/admin/integrations" element={<AdminIntegrations />} />
                 <Route path="/admin/tenant" element={<Admin />} />
-                <Route path="/admin/extensions" element={<Admin />} />
+                <Route path="/admin/extensions" element={<AdminGlobal />} />
                 <Route path="/admin/modules" element={<AdminGlobal />} />
                 <Route path="/admin/cloud" element={<LovableCloudAdmin />} />
                 <Route path="/admin/brainchain" element={<BrainchainAdmin />} />
