@@ -9,7 +9,7 @@ import {
   Eye, ArrowRight, GripVertical, Building2, MapPin, Mail,
   TrendingUp, TrendingDown, UserCheck, UserX, Activity,
   MessageCircle, Calendar, DollarSign, ChevronDown, ChevronUp,
-  Star, Edit3, Save, ExternalLink, Hash
+  Star, Edit3, Save, ExternalLink, Hash, Sparkles, Brain
 } from "lucide-react";
 import WhatsAppConnect from "@/components/WhatsAppConnect";
 
