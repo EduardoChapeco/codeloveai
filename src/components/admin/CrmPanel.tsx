@@ -1202,6 +1202,130 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
           </div>
         </div>
       )}
+
+      {/* ═══ SMART IMPORT MODAL ═══ */}
+      {showSmartImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { if (smartImportStep !== "importing" && smartImportStep !== "analyzing") setShowSmartImport(false); }}>
+          <div className="w-full max-w-2xl mx-4 rounded-3xl border border-white/[0.08] overflow-hidden" style={{ background: "var(--background)" }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 border-b border-white/[0.06] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Brain className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Importação Inteligente</h3>
+                  <p className="text-[11px] text-muted-foreground">{smartImportFileName} • {smartImportRows.length} linhas</p>
+                </div>
+              </div>
+              {smartImportStep !== "importing" && smartImportStep !== "analyzing" && (
+                <button onClick={() => setShowSmartImport(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+
+            {/* Analyzing */}
+            {smartImportStep === "analyzing" && (
+              <div className="p-12 flex flex-col items-center gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-bold text-foreground">IA analisando colunas...</p>
+                <p className="text-xs text-muted-foreground">Identificando campos automaticamente</p>
+              </div>
+            )}
+
+            {/* Mapping */}
+            {smartImportStep === "mapping" && smartImportMapping && (
+              <div className="p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <p className="text-sm font-bold text-foreground">Colunas identificadas</p>
+                  <span className="text-[10px] text-muted-foreground">Delimitador: {smartImportMapping.delimiter} • Header: {smartImportMapping.has_header ? "Sim" : "Não"}</span>
+                </div>
+
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {smartImportMapping.columns.map((col: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate">{col.detected_header}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {(col.sample_values || []).slice(0, 3).join(" • ")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="h-1.5 w-12 rounded-full bg-white/[0.06] overflow-hidden">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${(col.confidence || 0) * 100}%` }} />
+                        </div>
+                        <select
+                          value={col.confirmed_field}
+                          onChange={e => {
+                            const updated = { ...smartImportMapping };
+                            updated.columns = updated.columns.map((c: any, i: number) =>
+                              i === idx ? { ...c, confirmed_field: e.target.value } : c
+                            );
+                            setSmartImportMapping(updated);
+                          }}
+                          className="h-9 px-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        >
+                          <option value="name">Nome</option>
+                          <option value="email">Email</option>
+                          <option value="phone">Telefone</option>
+                          <option value="company">Empresa</option>
+                          <option value="city">Cidade</option>
+                          <option value="tags">Tags</option>
+                          <option value="notes">Notas</option>
+                          <option value="skip">Ignorar</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button onClick={() => setShowSmartImport(false)} className="h-11 px-5 rounded-2xl text-sm font-bold text-muted-foreground hover:text-foreground">
+                    Cancelar
+                  </button>
+                  <button onClick={executeSmartImport} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2">
+                    <Upload className="h-4 w-4" /> Importar {smartImportRows.length - (smartImportMapping.has_header ? 1 : 0)} contatos
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Importing */}
+            {smartImportStep === "importing" && (
+              <div className="p-12 flex flex-col items-center gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-bold text-foreground">Importando contatos...</p>
+                <p className="text-xs text-muted-foreground">Processando {smartImportRows.length} linhas</p>
+              </div>
+            )}
+
+            {/* Done */}
+            {smartImportStep === "done" && smartImportResult && (
+              <div className="p-12 flex flex-col items-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <CheckCircle2 className="h-7 w-7 text-emerald-400" />
+                </div>
+                <p className="text-base font-bold text-foreground">Importação concluída!</p>
+                <div className="flex gap-6 text-center">
+                  <div>
+                    <p className="text-2xl font-black text-emerald-400 tabular-nums">{smartImportResult.imported}</p>
+                    <p className="text-[10px] text-muted-foreground">importados</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-amber-400 tabular-nums">{smartImportResult.duplicates}</p>
+                    <p className="text-[10px] text-muted-foreground">duplicados</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowSmartImport(false)} className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground text-sm font-bold mt-2">
+                  Fechar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
