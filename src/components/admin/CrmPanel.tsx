@@ -312,58 +312,73 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
   // ═══ CSV Upload ═══
   const handleFileUpload = async (files: FileList) => {
     if (!files.length) return;
+    const file = files[0];
     setUploading(true);
-    for (const file of Array.from(files)) {
-      try {
-        const text = await file.text();
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 1) continue;
+    try {
+      const text = await file.text();
+      const rows = text.split(/\r?\n/).filter(l => l.trim());
+      if (rows.length < 2) { toast.error("Arquivo vazio ou com poucos dados"); setUploading(false); return; }
 
-        const { data: list, error: listErr } = await supabase.from("crm_contact_lists").insert({
-          tenant_id: tenantId, user_id: userId, name: file.name.replace(/\.(csv|xlsx|xls|txt)$/i, ""),
-          file_name: file.name, total_rows: lines.length, status: "processing"
-        } as any).select("id").single();
-        if (listErr || !list) { toast.error(`Erro: ${listErr?.message}`); continue; }
+      setSmartImportFileName(file.name);
+      setSmartImportRows(rows);
+      setSmartImportStep("analyzing");
+      setShowSmartImport(true);
+      setSmartImportResult(null);
 
-        const phoneRegex = /(\+?\d[\d\s\-().]{7,}\d)/g;
-        const parsed: { phone: string; phone_normalized: string; name: string; is_international: boolean }[] = [];
-        const seen = new Set<string>();
+      // Send to AI for analysis
+      const { data, error } = await supabase.functions.invoke("crm-smart-import", {
+        body: { action: "analyze", raw_text: rows.slice(0, 15).join("\n") }
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || "Erro na análise IA");
+        setShowSmartImport(false);
+        setUploading(false);
+        return;
+      }
 
-        for (const line of lines) {
-          const phones = line.match(phoneRegex);
-          if (!phones) continue;
-          for (const rawPhone of phones) {
-            const normalized = normalizePhone(rawPhone);
-            if (seen.has(normalized)) continue;
-            seen.add(normalized);
-            const nameMatch = line.replace(rawPhone, "").replace(/[,;|"\t]+/g, " ").trim();
-            parsed.push({ phone: rawPhone.trim(), phone_normalized: normalized, name: nameMatch.substring(0, 100), is_international: !normalized.startsWith("+55") });
-          }
-        }
-
-        let imported = 0, duplicates = 0;
-        const BATCH_SIZE = 100;
-        for (let i = 0; i < parsed.length; i += BATCH_SIZE) {
-          const batch = parsed.slice(i, i + BATCH_SIZE).map(c => ({
-            tenant_id: tenantId, user_id: userId, phone: c.phone, phone_normalized: c.phone_normalized,
-            name: c.name, is_international: c.is_international, source: "csv",
-            tags: [file.name.replace(/\.\w+$/, "")], pipeline_stage: "lead",
-          }));
-          const { data: result, error } = await supabase.from("crm_contacts")
-            .upsert(batch as any[], { onConflict: "tenant_id,phone_normalized", ignoreDuplicates: true }).select("id");
-          if (!error) imported += result?.length || 0;
-          duplicates += batch.length - (result?.length || 0);
-        }
-
-        await supabase.from("crm_contact_lists").update({
-          status: "completed", imported_count: imported, duplicates_found: duplicates, total_rows: parsed.length
-        } as any).eq("id", list.id);
-        toast.success(`${file.name}: ${imported} importados, ${duplicates} duplicados`);
-      } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+      // Set mapping with confirmed_field defaulting to suggested_field
+      const mapping = data.mapping;
+      mapping.columns = mapping.columns.map((col: any) => ({
+        ...col,
+        confirmed_field: col.suggested_field,
+      }));
+      setSmartImportMapping(mapping);
+      setSmartImportStep("mapping");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao ler arquivo");
+      setShowSmartImport(false);
     }
     setUploading(false);
-    fetchContacts();
-    fetchLists();
+  };
+
+  const executeSmartImport = async () => {
+    if (!smartImportMapping) return;
+    setSmartImportStep("importing");
+    try {
+      const { data, error } = await supabase.functions.invoke("crm-smart-import", {
+        body: {
+          action: "import",
+          column_mapping: smartImportMapping,
+          rows: smartImportRows,
+          tenant_id: tenantId,
+          user_id: userId,
+          file_name: smartImportFileName,
+        }
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || "Erro na importação");
+        setSmartImportStep("mapping");
+        return;
+      }
+      setSmartImportResult(data);
+      setSmartImportStep("done");
+      toast.success(`${data.imported} contatos importados!`);
+      fetchContacts();
+      fetchLists();
+    } catch (err: any) {
+      toast.error(err.message);
+      setSmartImportStep("mapping");
+    }
   };
 
   // ═══ Campaign actions ═══
