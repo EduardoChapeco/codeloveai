@@ -141,6 +141,14 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Smart Import state
+  const [showSmartImport, setShowSmartImport] = useState(false);
+  const [smartImportStep, setSmartImportStep] = useState<"analyzing" | "mapping" | "importing" | "done">("analyzing");
+  const [smartImportMapping, setSmartImportMapping] = useState<any>(null);
+  const [smartImportRows, setSmartImportRows] = useState<string[]>([]);
+  const [smartImportFileName, setSmartImportFileName] = useState("");
+  const [smartImportResult, setSmartImportResult] = useState<{ imported: number; duplicates: number; total: number } | null>(null);
+
   // Detail panel
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [contactActivities, setContactActivities] = useState<CrmActivity[]>([]);
