@@ -100,6 +100,7 @@ export default function ProjectEditor() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [connectedEmail, setConnectedEmail] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -127,6 +128,12 @@ export default function ProjectEditor() {
     if (!id || !user) return;
     loadProject();
     loadSandboxUrl();
+    // Check which Lovable account is connected
+    supabase.from("lovable_accounts").select("status, updated_at")
+      .eq("user_id", user.id).eq("status", "active").limit(1)
+      .then(({ data }) => {
+        if (data?.[0]) setConnectedEmail("active");
+      });
   }, [id, user]);
 
   useEffect(() => {

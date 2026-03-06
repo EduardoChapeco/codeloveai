@@ -160,14 +160,37 @@ export default function StarbleProjectsPage() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
 
-  /* ── Load Lovable projects ── */
+  /* ── Load local projects from lovable_projects table ── */
+  const loadLocalProjects = useCallback(async () => {
+    if (!user) return [];
+    const { data } = await supabase
+      .from("lovable_projects")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+    return (data || []).map((p: any) => ({
+      id: p.lovable_project_id, name: p.name, display_name: p.display_name || p.name,
+      source: "lovable" as const,
+      status: p.published_url ? "live" : "draft",
+      latest_screenshot_url: p.latest_screenshot_url,
+      published_url: p.published_url,
+    }));
+  }, [user]);
+
+  /* ── Load Lovable projects (API live + local fallback) ── */
   useEffect(() => {
     if (!user) return;
     checkConnection(user.id).then((status) => {
       setConnectionStatus(status);
-      if (status !== "active") setLoadingLovable(false);
+      if (status !== "active") {
+        // No active connection — load from local DB only
+        loadLocalProjects().then((local) => {
+          if (local.length > 0) setLovableProjects(local);
+          setLoadingLovable(false);
+        });
+      }
     });
-  }, [user, checkConnection]);
+  }, [user, checkConnection, loadLocalProjects]);
 
   useEffect(() => {
     if (connectionStatus !== "active") return;
@@ -178,19 +201,34 @@ export default function StarbleProjectsPage() {
         if (wsList.length > 0) {
           const data = await invoke({ route: `/workspaces/${wsList[0].id}/projects` }) as any;
           const list = Array.isArray(data) ? data : data?.projects || [];
-          setLovableProjects(list.map((p: any) => ({
+          const apiProjects = list.map((p: any) => ({
             id: p.id, name: p.name, display_name: p.display_name || p.name,
             source: "lovable" as const,
             status: p.published_url ? "live" : "draft",
             latest_screenshot_url: p.latest_screenshot_url,
             published_url: p.published_url,
-          })));
+          }));
+          if (apiProjects.length > 0) {
+            setLovableProjects(apiProjects);
+          } else {
+            // API returned empty — fallback to local
+            const local = await loadLocalProjects();
+            if (local.length > 0) setLovableProjects(local);
+          }
+        } else {
+          // No workspaces — fallback to local
+          const local = await loadLocalProjects();
+          if (local.length > 0) setLovableProjects(local);
         }
-      } catch { /* silent */ }
+      } catch {
+        // API failed — fallback to local
+        const local = await loadLocalProjects();
+        if (local.length > 0) setLovableProjects(local);
+      }
       setLoadingLovable(false);
     };
     load();
-  }, [connectionStatus, invoke]);
+  }, [connectionStatus, invoke, loadLocalProjects]);
 
   /* ── Load Cirius projects ── */
   useEffect(() => {
