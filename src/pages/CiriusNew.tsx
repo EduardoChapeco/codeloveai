@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { classifyIntent, generatePRDTasks, type ProjectBlueprint, type PRDTask } from "@/lib/cirius/intentClassifier";
 import AppLayout from "@/components/AppLayout";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -47,6 +47,7 @@ const COLOR_MAP: Record<string, string> = {
 export default function CiriusNew() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
 
   const [prompt, setPrompt] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
@@ -128,6 +129,27 @@ export default function CiriusNew() {
       setLoading(false);
     }
   }, [prompt, projectName, sourceUrl, deployGithub, deployVercel, createSupabase, noBrains, user, navigate]);
+
+  // Block non-admins
+  if (!adminLoading && !isAdmin) {
+    return (
+      <AppLayout>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16, padding: 40, textAlign: "center" }}>
+          <div className="nav-ico-box ib-orange" style={{ width: 56, height: 56, borderRadius: 16 }}>
+            <Zap size={24} />
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--ts)" }}>Em breve!</h2>
+          <p style={{ fontSize: 14, color: "var(--tt)", maxWidth: 420, lineHeight: 1.6 }}>
+            Seu novo criador de vibecoding favorito! 🚀<br />
+            Estamos finalizando os últimos detalhes para trazer a melhor experiência de criação de projetos com IA.
+          </p>
+          <button className="gl md primary" onClick={() => navigate("/home")} style={{ marginTop: 8 }}>
+            Voltar ao início
+          </button>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>

@@ -146,7 +146,9 @@ export default function AdminGlobal() {
   useSEO({ title: "Admin Global" });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = (searchParams.get("tab") || "tenants") as Tab;
+  const location = window.location.pathname;
+  const pathTab = location.includes("/admin/extensions") ? "extensions" : location.includes("/admin/modules") ? "modules" : null;
+  const tab = (searchParams.get("tab") || pathTab || "tenants") as Tab;
 
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [wallets, setWallets] = useState<TenantWallet[]>([]);
