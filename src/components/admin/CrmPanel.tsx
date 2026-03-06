@@ -529,12 +529,12 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
               {waConnected ? "Online" : "Offline"}
             </div>
           )}
-          <input type="file" ref={fileRef} accept=".csv,.txt,.xls,.xlsx" multiple className="hidden"
+          <input type="file" ref={fileRef} accept=".csv,.txt,.xls,.xlsx,.tsv,.vcf" className="hidden"
             onChange={e => e.target.files && handleFileUpload(e.target.files)} />
           <button onClick={() => fileRef.current?.click()} disabled={uploading}
             className="h-11 px-5 rounded-2xl bg-primary text-primary-foreground text-sm font-bold flex items-center gap-2 hover:shadow-lg hover:shadow-primary/25 transition-all active:scale-[0.97]">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Importar Contatos
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            Importar com IA
           </button>
         </div>
       </div>
