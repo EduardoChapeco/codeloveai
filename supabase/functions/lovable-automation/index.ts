@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-const GIT_SHA = "9810ecd6b501b23b14c5d4ee731d8cda244d003b";
+const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
 const LOVABLE_API = "https://api.lovable.dev";
 
 // ── HARDCODED — NUNCA ALTERAR ──
