@@ -99,8 +99,24 @@ async function handleManagementAction(body: Record<string, unknown>, userId: str
   if (action === "save-token") {
     const token = body.token as string;
     const refreshToken = body.refreshToken as string | undefined;
+    const lovableEmail = body.lovableEmail as string | undefined;
     if (!token) return { error: "Token obrigatório", status: 400 };
     const encrypted = token; // already handled by previous flow
+    
+    // Try to extract email from Firebase JWT
+    let detectedEmail = lovableEmail || null;
+    if (!detectedEmail) {
+      try {
+        const parts = token.split(".");
+        if (parts.length >= 2) {
+          let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+          b64 += "=".repeat((4 - (b64.length % 4)) % 4);
+          const payload = JSON.parse(atob(b64));
+          detectedEmail = payload.email || null;
+        }
+      } catch { /* ignore */ }
+    }
+
     const row: Record<string, unknown> = {
       user_id: userId,
       token_encrypted: encrypted,
@@ -108,13 +124,15 @@ async function handleManagementAction(body: Record<string, unknown>, userId: str
       updated_at: new Date().toISOString(),
     };
     if (refreshToken) row.refresh_token_encrypted = refreshToken;
+    if (detectedEmail) row.lovable_email = detectedEmail;
+    
     const { data: existing } = await sc.from("lovable_accounts").select("id").eq("user_id", userId).maybeSingle();
     if (existing) {
       await sc.from("lovable_accounts").update(row).eq("user_id", userId);
     } else {
       await sc.from("lovable_accounts").insert(row);
     }
-    return { ok: true };
+    return { ok: true, lovable_email: detectedEmail };
   }
 
   if (action === "delete-token") {

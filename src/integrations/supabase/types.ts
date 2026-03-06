@@ -3114,6 +3114,8 @@ export type Database = {
           id: string
           is_admin_account: boolean | null
           last_verified_at: string | null
+          lovable_email: string | null
+          lovable_uid: string | null
           refresh_failure_count: number
           refresh_token_encrypted: string | null
           status: string
@@ -3129,6 +3131,8 @@ export type Database = {
           id?: string
           is_admin_account?: boolean | null
           last_verified_at?: string | null
+          lovable_email?: string | null
+          lovable_uid?: string | null
           refresh_failure_count?: number
           refresh_token_encrypted?: string | null
           status?: string
@@ -3144,6 +3148,8 @@ export type Database = {
           id?: string
           is_admin_account?: boolean | null
           last_verified_at?: string | null
+          lovable_email?: string | null
+          lovable_uid?: string | null
           refresh_failure_count?: number
           refresh_token_encrypted?: string | null
           status?: string

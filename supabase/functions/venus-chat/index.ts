@@ -475,6 +475,9 @@ Deno.serve(async (req: Request) => {
     },
   };
 
+  // Log which account is being used for diagnostics
+  console.log(`[venus-chat] project=${projectId} mode=${mode} token_prefix=${lovableToken.slice(0, 20)}...`);
+
   // Send to Lovable
   let lovableRes: Response;
   try {
