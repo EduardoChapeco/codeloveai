@@ -117,24 +117,51 @@ export default function StarbleSidebar() {
             <NavEntry to="/home" label="← Voltar" icon={ArrowLeft} iconColor="ib-gray" collapsed={collapsed} />
             <div className="divider" />
 
-            {!collapsed && <div className="sb-section">Admin Master</div>}
-            <NavEntry to="/admin" label="Operacional" icon={Shield} iconColor="ib-red" active={location.pathname === "/admin"} collapsed={collapsed} />
-            <NavEntry to="/admin?tab=members" label="Membros" icon={Users} iconColor="ib-blue" active={location.pathname === "/admin" && (!location.search || location.search.includes("tab=members"))} collapsed={collapsed} sub />
-            <NavEntry to="/admin?tab=affiliates" label="Afiliados" icon={Users} iconColor="ib-green" active={location.search.includes("tab=affiliates")} collapsed={collapsed} sub />
-            <NavEntry to="/admin?tab=extension" label="Extensão Upload" icon={Puzzle} iconColor="ib-teal" active={location.search.includes("tab=extension")} collapsed={collapsed} sub />
-            <NavEntry to="/admin?tab=support" label="Suporte" icon={Users} iconColor="ib-pink" active={location.search.includes("tab=support")} collapsed={collapsed} sub />
+            {/* Operacional (Admin.tsx tabs) */}
+            {!collapsed && <div className="sb-section">Operacional</div>}
+            <NavEntry to="/admin?tab=members" label="Membros" icon={Users} iconColor="ib-blue" active={location.pathname === "/admin" && (!location.search || location.search.includes("tab=members"))} collapsed={collapsed} />
+            <NavEntry to="/admin?tab=affiliates" label="Afiliados" icon={Users} iconColor="ib-green" active={location.pathname === "/admin" && location.search.includes("tab=affiliates")} collapsed={collapsed} />
+            <NavEntry to="/admin?tab=extension" label="Extensão Upload" icon={Puzzle} iconColor="ib-teal" active={location.pathname === "/admin" && location.search.includes("tab=extension")} collapsed={collapsed} />
+            <NavEntry to="/admin?tab=support" label="Suporte" icon={Users} iconColor="ib-pink" active={location.pathname === "/admin" && location.search.includes("tab=support")} collapsed={collapsed} />
+            <NavEntry to="/admin?tab=worker-tokens" label="Worker Tokens" icon={Shield} iconColor="ib-gray" active={location.pathname === "/admin" && location.search.includes("tab=worker-tokens")} collapsed={collapsed} />
+            <NavEntry to="/admin?tab=messages" label="Mensagens" icon={Users} iconColor="ib-indigo" active={location.pathname === "/admin" && location.search.includes("tab=messages")} collapsed={collapsed} />
+            <NavEntry to="/admin?tab=notifications" label="Notificações" icon={Users} iconColor="ib-purple" active={location.pathname === "/admin" && location.search.includes("tab=notifications")} collapsed={collapsed} />
 
             <div className="divider" />
+
+            {/* Plataforma (AdminGlobal tabs) */}
             {!collapsed && <div className="sb-section">Plataforma</div>}
-            <NavEntry to="/admin/global" label="Admin Global" icon={Globe} iconColor="ib-red" active={isActive("/admin/global")} collapsed={collapsed} />
-            <NavEntry to="/admin/extensions?tab=extensions" label="Extensões" icon={Puzzle} iconColor="ib-green" active={isActive("/admin/extensions")} collapsed={collapsed} sub />
-            <NavEntry to="/admin/modules?tab=modules" label="Módulos" icon={Layers} iconColor="ib-indigo" active={isActive("/admin/modules")} collapsed={collapsed} sub />
+            <NavEntry to="/admin/global?tab=tenants" label="Tenants" icon={Globe} iconColor="ib-red" active={isActive("/admin/global") && (!location.search || location.search.includes("tab=tenants"))} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=plans" label="Planos" icon={CreditCard} iconColor="ib-blue" active={location.search.includes("tab=plans") && isActive("/admin/global")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=feature_flags" label="Feature Flags" icon={Settings} iconColor="ib-gray" active={location.search.includes("tab=feature_flags") && isActive("/admin/global")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=extensions" label="Extensões" icon={Puzzle} iconColor="ib-green" active={isActive("/admin/extensions") || (location.search.includes("tab=extensions") && isActive("/admin/global"))} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=modules" label="Módulos" icon={Layers} iconColor="ib-indigo" active={isActive("/admin/modules") || (location.search.includes("tab=modules") && isActive("/admin/global"))} collapsed={collapsed} />
 
             <div className="divider" />
+
+            {/* Financeiro (AdminGlobal tabs) */}
+            {!collapsed && <div className="sb-section">Financeiro</div>}
+            <NavEntry to="/admin/global?tab=finances" label="Finanças" icon={CreditCard} iconColor="ib-green" active={location.search.includes("tab=finances") && isActive("/admin/global")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=commissions" label="Comissões" icon={CreditCard} iconColor="ib-teal" active={location.search.includes("tab=commissions") && isActive("/admin/global")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=wallets" label="Wallets" icon={CreditCard} iconColor="ib-purple" active={location.search.includes("tab=wallets") && isActive("/admin/global")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=ledger" label="Ledger" icon={BarChart3} iconColor="ib-gray" active={location.search.includes("tab=ledger") && isActive("/admin/global")} collapsed={collapsed} />
+
+            <div className="divider" />
+
+            {/* White Label (AdminGlobal tabs) */}
+            {!collapsed && <div className="sb-section">White Label</div>}
+            <NavEntry to="/admin/global?tab=wl_plans" label="WL Planos" icon={CreditCard} iconColor="ib-pink" active={location.search.includes("tab=wl_plans") && isActive("/admin/global")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=wl_affiliates" label="WL Afiliados" icon={Users} iconColor="ib-green" active={location.search.includes("tab=wl_affiliates") && isActive("/admin/global")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=wl_subs" label="WL Assinaturas" icon={Users} iconColor="ib-indigo" active={location.search.includes("tab=wl_subs") && isActive("/admin/global")} collapsed={collapsed} />
+
+            <div className="divider" />
+
+            {/* Infraestrutura */}
             {!collapsed && <div className="sb-section">Infraestrutura</div>}
             <NavEntry to="/admin/integrations" label="Integrações API" icon={Settings} iconColor="ib-gray" active={isActive("/admin/integrations")} collapsed={collapsed} />
             <NavEntry to="/admin/cloud" label="Lovable Cloud" icon={Cloud} iconColor="ib-blue" active={isActive("/admin/cloud")} collapsed={collapsed} />
             <NavEntry to="/admin/brainchain" label="Brainchain" icon={Brain} iconColor="ib-purple" active={isActive("/admin/brainchain")} collapsed={collapsed} />
+            <NavEntry to="/admin/global?tab=activity" label="Atividade" icon={BarChart3} iconColor="ib-teal" active={location.search.includes("tab=activity") && isActive("/admin/global")} collapsed={collapsed} />
 
             <div className="divider" />
             {!collapsed && <div className="sb-section">Tenant</div>}
