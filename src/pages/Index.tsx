@@ -156,10 +156,14 @@ export default function Index() {
 
       {/* ━━━ HERO ━━━ */}
       <section className="px-6 py-24 lg:py-32 max-w-4xl mx-auto text-center animate-fade-in">
-        <div className="inline-flex items-center gap-2 mb-6">
+        <div className="inline-flex items-center gap-2 mb-6 flex-wrap justify-center">
           <span className="chip indigo">
             <Sparkles className="h-3.5 w-3.5" />
             Venus God Mode — poder máximo
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold" style={{ background: "rgba(34,197,94,0.12)", color: "hsl(var(--primary))", border: "1px solid rgba(34,197,94,0.25)" }}>
+            <Shield className="h-3 w-3" style={{ color: "#22c55e" }} />
+            Atualização Bypass Cloudflare
           </span>
         </div>
         <h1 className="rd-heading mb-6" style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)", lineHeight: 1.2 }}>
