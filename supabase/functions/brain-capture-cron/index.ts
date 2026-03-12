@@ -370,9 +370,7 @@ Use react-markdown se disponível no projeto, senão renderize com <pre> formata
 ${UPDATE_SUFFIX}`;
 
     case 13:
-      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
-
-Finalize a interface terminal do Brain:
+      return `Finalize a interface terminal do Brain:
 
 1. Adicione um componente de empty state quando não há mensagens:
    - ASCII art do logo Star AI
