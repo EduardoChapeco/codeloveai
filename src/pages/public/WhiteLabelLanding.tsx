@@ -2,7 +2,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, Building2, Globe, Users, Shield, Palette, BarChart2, ChevronDown, Lock, CheckCircle2, Star, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
-import MeshBackground from "@/components/MeshBackground";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
