@@ -252,7 +252,7 @@ ${UPDATE_SUFFIX}`;
       return `Crie src/capabilities.json com manifesto de capacidades.${UPDATE_SUFFIX}`;
 
     case 5:
-      return `IMPORTANTE: Execute diretamente. Crie src/security-guardrails.md com políticas de segurança.${UPDATE_SUFFIX}`;
+      return `Crie src/security-guardrails.md com políticas de segurança.${UPDATE_SUFFIX}`;
 
     case 6:
       return `IMPORTANTE: Execute diretamente. Crie src/error-handlers.md com estratégias de retry e fallback.${UPDATE_SUFFIX}`;
