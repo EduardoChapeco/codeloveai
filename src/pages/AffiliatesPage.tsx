@@ -193,17 +193,17 @@ export default function AffiliatesPage() {
 
       {/* CTA */}
       <section className="px-6 pb-20 max-w-3xl mx-auto">
-        <div className="lv-card text-center py-12">
-          <h2 className="lv-heading-lg mb-3">Pronto para começar?</h2>
-          <p className="lv-body text-base mb-8 max-w-md mx-auto">
+        <div className="rd-card text-center py-12">
+          <h2 className="rd-heading mb-3" style={{ fontSize: "1.5rem" }}>Pronto para começar?</h2>
+          <p className="rd-body text-base mb-8 max-w-md mx-auto">
             Cadastre-se, adquira um plano e ative seu link de afiliado em segundos.
           </p>
           {!authLoading && user ? (
-            <button onClick={() => setShowEnrollForm(true)} className="lv-btn-primary lv-btn-lg px-8">
+            <button onClick={() => setShowEnrollForm(true)} className="gl primary lg">
               Ativar meu link de afiliado
             </button>
           ) : (
-            <Link to="/register" className="lv-btn-primary lv-btn-lg px-8">
+            <Link to="/register" className="gl primary lg">
               Criar conta grátis
             </Link>
           )}
