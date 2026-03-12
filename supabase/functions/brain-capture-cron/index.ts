@@ -522,7 +522,7 @@ Deno.serve(async (req) => {
         }
 
         console.log(`[bc] brain=${brain.id.slice(0,8)} phase=${phase} skill=${brain.brain_skill} sending...`);
-        const ok = await sendViaVenus(brain.lovable_project_id, prompt, acct.token_encrypted, supabaseUrl, serviceKey);
+        const ok = await sendViaVenus(brain.lovable_project_id, prompt, acct.token_encrypted, supabaseUrl, serviceKey, phase);
 
         if (ok) {
           const nextPhase = phase >= 13 ? 0 : phase + 1;
