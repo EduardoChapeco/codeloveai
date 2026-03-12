@@ -128,16 +128,16 @@ export default function AffiliatesPage() {
 
       {/* Benefits */}
       <section className="px-6 pb-16 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-2">Vantagens</p>
-        <h2 className="lv-heading-lg text-center mb-12">Por que ser afiliado?</h2>
+        <p className="rd-label text-center mb-2" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Vantagens</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>Por que ser afiliado?</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {benefits.map((b, idx) => (
-            <div key={idx} className="lv-card">
-              <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                <b.icon className="h-5 w-5 text-primary" />
+            <div key={idx} className="rd-card">
+              <div className="rd-ico-box mb-4">
+                <b.icon className="h-5 w-5" />
               </div>
-              <h3 className="lv-heading-sm text-sm mb-2">{b.title}</h3>
-              <p className="lv-body">{b.desc}</p>
+              <h3 className="rd-body mb-2" style={{ fontWeight: 700 }}>{b.title}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{b.desc}</p>
             </div>
           ))}
         </div>
