@@ -255,7 +255,7 @@ ${UPDATE_SUFFIX}`;
       return `Crie src/security-guardrails.md com políticas de segurança.${UPDATE_SUFFIX}`;
 
     case 6:
-      return `IMPORTANTE: Execute diretamente. Crie src/error-handlers.md com estratégias de retry e fallback.${UPDATE_SUFFIX}`;
+      return `Crie src/error-handlers.md com estratégias de retry e fallback.${UPDATE_SUFFIX}`;
 
     case 7:
       return `IMPORTANTE: Execute diretamente. Crie src/output-formats.ts com helpers markdown/json/html.${UPDATE_SUFFIX}`;
