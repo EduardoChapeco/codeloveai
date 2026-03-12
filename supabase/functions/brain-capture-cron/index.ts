@@ -311,9 +311,7 @@ ${UPDATE_SUFFIX}`;
     // ── FASES DE UI VISUAL DO BRAIN PROJECT ──
 
     case 11:
-      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
-
-Crie uma interface visual estilo terminal/CMD para este projeto Brain. O frontend será um chat visual onde o usuário vê as respostas do Brain formatadas como um terminal.
+      return `Crie uma interface visual estilo terminal/CMD para este projeto Brain. O frontend será um chat visual onde o usuário vê as respostas do Brain formatadas como um terminal.
 
 Crie a página principal src/pages/Index.tsx com:
 
