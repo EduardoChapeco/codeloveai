@@ -1,5 +1,4 @@
-﻿import { Link, useNavigate } from "react-router-dom";
-import MeshBackground from "@/components/MeshBackground";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
