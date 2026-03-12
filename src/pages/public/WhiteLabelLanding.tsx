@@ -244,16 +244,16 @@ export default function WhiteLabelLanding() {
       {/* FAQ */}
       <section className="py-24 px-6 border-y border-border/50">
         <div className="max-w-2xl mx-auto">
-          <h2 className="lv-heading-lg text-center mb-14">Perguntas Frequentes</h2>
+          <h2 className="rd-heading text-center mb-14" style={{ fontSize: "1.5rem" }}>Perguntas Frequentes</h2>
           <div className="space-y-3">
             {faqs.map((faq, i) => (
               <div key={i} onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                className="lv-card-sm cursor-pointer">
+                className="rd-card cursor-pointer" style={{ padding: "14px" }}>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="lv-body-strong">{faq.q}</span>
+                  <span className="rd-body" style={{ fontWeight: 600 }}>{faq.q}</span>
                   <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${openFaq === i ? "rotate-180" : ""}`} />
                 </div>
-                {openFaq === i && <p className="lv-body mt-3 animate-fade-in">{faq.a}</p>}
+                {openFaq === i && <p className="rd-body mt-3 animate-fade-in" style={{ opacity: 0.6 }}>{faq.a}</p>}
               </div>
             ))}
           </div>
@@ -263,21 +263,21 @@ export default function WhiteLabelLanding() {
       {/* Final CTA */}
       <section className="py-24 px-6 text-center">
         <div className="max-w-xl mx-auto">
-          <h2 className="lv-heading-xl mb-4">Pronto para lançar sua plataforma?</h2>
-          <p className="lv-body-lg mb-8">Configuração em 2 horas. Primeira venda em dias. Sua marca no mercado de IA.</p>
-          <Link to={onboardingLink} className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
+          <h2 className="rd-heading mb-4" style={{ fontSize: "clamp(1.5rem, 4vw, 2rem)" }}>Pronto para lançar sua plataforma?</h2>
+          <p className="rd-body text-base mb-8">Configuração em 2 horas. Primeira venda em dias. Sua marca no mercado de IA.</p>
+          <Link to={onboardingLink} className="gl primary lg inline-flex items-center gap-2">
             Configurar agora — é gratuito <ArrowRight className="h-5 w-5" />
           </Link>
-          <p className="lv-caption mt-4"><Lock className="h-3 w-3 inline mr-1" />Sem taxas de setup. Cancele quando quiser.</p>
+          <p className="rd-label mt-4"><Lock className="h-3 w-3 inline mr-1" />Sem taxas de setup. Cancele quando quiser.</p>
         </div>
       </section>
 
       <footer className="border-t border-border/50 py-8 px-6 text-center">
-        <p className="lv-caption">© 2026 {appName}. Programa White Label.</p>
+        <p className="rd-label">© 2026 {appName}. Programa White Label.</p>
         <div className="flex justify-center gap-6 mt-3">
-          <Link to="/termos" className="lv-caption hover:text-foreground transition-colors">Termos</Link>
-          <Link to="/afiliados" className="lv-caption hover:text-foreground transition-colors">Afiliados</Link>
-          <Link to="/ajuda" className="lv-caption hover:text-foreground transition-colors">Ajuda</Link>
+          <Link to="/termos" className="rd-label hover:text-foreground transition-colors">Termos</Link>
+          <Link to="/afiliados" className="rd-label hover:text-foreground transition-colors">Afiliados</Link>
+          <Link to="/ajuda" className="rd-label hover:text-foreground transition-colors">Ajuda</Link>
         </div>
       </footer>
     </div>

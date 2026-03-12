@@ -308,10 +308,10 @@ export default function CommunityTestSession() {
 
           {/* Preview Panel */}
           <div className="hidden md:flex flex-1 flex-col">
-            <div className="px-4 py-2 flex items-center gap-2" style={{ borderBottom: "0.5px solid var(--clf-border)" }}>
-              <div className="h-2 w-2 rounded-full animate-pulse" style={{ background: "var(--clf-ok)" }} />
-              <span className="lv-overline">PREVIEW AO VIVO</span>
-              <span className="lv-caption truncate flex-1">{session.preview_url}</span>
+            <div className="px-4 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--b1)" }}>
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="rd-label" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>PREVIEW AO VIVO</span>
+              <span className="rd-label text-xs truncate flex-1">{session.preview_url}</span>
             </div>
             <iframe
               src={session.preview_url}
