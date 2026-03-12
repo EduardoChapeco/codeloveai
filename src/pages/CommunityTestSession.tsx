@@ -273,7 +273,7 @@ export default function CommunityTestSession() {
 
             {/* Input */}
             {session.status === "active" && user && (
-              <div className="px-3 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--clf-border)" }}>
+              <div className="px-3 py-3 shrink-0" style={{ borderTop: "1px solid var(--b1)" }}>
                 <div className="flex items-end gap-2">
                   <button
                     onClick={() => setShowReactions(!showReactions)}
