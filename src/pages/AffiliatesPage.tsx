@@ -255,7 +255,7 @@ export default function AffiliatesPage() {
       </Sheet>
 
       <footer className="border-t border-border/60 px-6 py-6 text-center">
-        <p className="lv-caption">© 2025 {brandName} — Todos os direitos reservados</p>
+        <p className="rd-label">© 2025 {brandName} — Todos os direitos reservados</p>
       </footer>
     </div>
   );
