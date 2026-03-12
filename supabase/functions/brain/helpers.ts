@@ -457,16 +457,12 @@ export async function captureResponse(
   return { response: null, status: "timeout" };
 }
 
-// ── Prompt Building ──
+// ── Prompt Building (v2 — content for encoder) ──
 
 export function buildBrainPrompt(skill: BrainSkill, message: string): string {
   const label = SKILL_LABELS[skill] || SKILL_LABELS.general;
 
-  return `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.
-
-IMPORTANTE: Execute diretamente, sem perguntas ou planos.
-
-Voce e o Star AI — ${label}.
+  return `Voce e o Star AI — ${label}.
 Voce possui PhD e 50+ anos de experiencia na area. Responda como o maior especialista do mundo.
 
 O usuario solicitou: "${message}"
