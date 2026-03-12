@@ -246,7 +246,7 @@ ${UPDATE_SUFFIX}`;
       return `Verifique arquivos: .lovable/plan.md, src/INSTRUCTIONS.md. Crie faltantes.${UPDATE_SUFFIX}`;
 
     case 3:
-      return `IMPORTANTE: Execute diretamente. Crie src/response-templates.md com templates de resposta.${UPDATE_SUFFIX}`;
+      return `Crie src/response-templates.md com templates de resposta.${UPDATE_SUFFIX}`;
 
     case 4:
       return `IMPORTANTE: Execute diretamente. Crie src/capabilities.json com manifesto de capacidades.${UPDATE_SUFFIX}`;
