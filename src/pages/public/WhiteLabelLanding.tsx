@@ -171,8 +171,8 @@ export default function WhiteLabelLanding() {
             { value: "0", label: "taxa de setup" },
           ].map((s, i) => (
             <div key={i}>
-              <div className="lv-stat text-3xl">{s.value}</div>
-              <p className="lv-caption mt-1">{s.label}</p>
+              <div className="rd-heading text-3xl">{s.value}</div>
+              <p className="rd-label mt-1">{s.label}</p>
             </div>
           ))}
         </div>
