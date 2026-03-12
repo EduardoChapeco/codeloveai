@@ -136,8 +136,8 @@ export default function CommunityTestSession() {
     <AppLayout>
       <div className="h-full flex items-center justify-center">
         <div className="text-center space-y-3">
-          <p className="lv-body text-muted-foreground">Sessão não encontrada.</p>
-          <button onClick={() => navigate("/community")} className="lv-btn-primary h-9 px-4 text-xs">VOLTAR</button>
+          <p className="rd-body text-muted-foreground">Sessão não encontrada.</p>
+          <button onClick={() => navigate("/community")} className="gl sm primary">VOLTAR</button>
         </div>
       </div>
     </AppLayout>
