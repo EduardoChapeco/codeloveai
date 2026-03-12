@@ -108,19 +108,19 @@ export default function AffiliatesPage() {
 
       {/* How it works */}
       <section className="px-6 pb-16 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-2">Como funciona</p>
-        <h2 className="lv-heading-lg text-center mb-12">4 passos simples</h2>
+        <p className="rd-label text-center mb-2" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Como funciona</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>4 passos simples</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {steps.map((step, idx) => (
-            <div key={idx} className="lv-card text-center relative">
+            <div key={idx} className="rd-card text-center relative">
               <div className="absolute -top-3 -left-1">
                 <span className="text-3xl font-bold text-foreground/5">{String(idx + 1).padStart(2, "0")}</span>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <step.icon className="h-5 w-5 text-primary" />
+              <div className="rd-ico-box mx-auto mb-4">
+                <step.icon className="h-5 w-5" />
               </div>
-              <h3 className="lv-heading-sm text-sm mb-2">{step.title}</h3>
-              <p className="lv-body">{step.desc}</p>
+              <h3 className="rd-body mb-2" style={{ fontWeight: 700 }}>{step.title}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{step.desc}</p>
             </div>
           ))}
         </div>
