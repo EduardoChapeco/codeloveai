@@ -394,24 +394,42 @@ ${UPDATE_SUFFIX}`;
   }
 }
 
+// ── Phase name labels for tracing ──────────────────────────────
+const PHASE_NAMES: Record<number, string> = {
+  1: "Initialize project structure",
+  2: "Verify core files",
+  3: "Create response templates",
+  4: "Create capabilities manifest",
+  5: "Create security guardrails",
+  6: "Create error handlers",
+  7: "Create output format helpers",
+  8: "Reinforce Rule Zero",
+  9: "Skills injection protocol",
+  10: "Active memory protocol",
+  11: "Terminal UI - main layout",
+  12: "Terminal UI - enhancements",
+  13: "Terminal UI - finalization",
+};
+
 // ── Send prompt via venus-chat ──────────────────────────────────
 
-async function sendViaVenus(projectId: string, prompt: string, token: string, supabaseUrl: string, serviceKey: string): Promise<boolean> {
+async function sendViaVenus(projectId: string, prompt: string, token: string, supabaseUrl: string, serviceKey: string, phase?: number): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30_000);
   try {
+    const taskName = phase ? `Bootstrap Phase ${phase}: ${PHASE_NAMES[phase] || "setup"}` : undefined;
     const res = await fetch(`${supabaseUrl}/functions/v1/venus-chat`, {
       method: "POST",
       signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({ task: prompt, project_id: projectId, mode: "task", lovable_token: token, skip_suffix: true }),
+      body: JSON.stringify({ task: prompt, project_id: projectId, mode: "task", lovable_token: token, task_name: taskName }),
     });
     clearTimeout(timer);
     const text = await res.text().catch(() => "{}");
     let data: any = {};
     try { data = JSON.parse(text); } catch {}
     const ok = res.ok && data?.ok;
-    console.log(`[bc:venus] project=${projectId.slice(0,8)} ok=${ok} status=${res.status}`);
+    console.log(`[bc:venus] project=${projectId.slice(0,8)} phase=${phase || "?"} ok=${ok} status=${res.status}`);
     return ok;
   } catch (e) {
     clearTimeout(timer);
