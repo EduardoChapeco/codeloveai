@@ -303,7 +303,7 @@ Deno.serve(async (req) => {
       if (!sendResult.ok && (sendResult.status === 401 || sendResult.status === 403)) {
         const newToken = await refreshToken(sc, userId);
         if (newToken) {
-          sendResult = await sendViaBrain(brainProjectId, newToken, prompt, false);
+          sendResult = await sendViaBrain(brainProjectId, newToken, prompt, false, skill);
         }
       }
 
