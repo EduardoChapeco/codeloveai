@@ -322,13 +322,14 @@ export async function createFreshBrain(
   }
 }
 
-// ── Send Message via venus-chat ──
+// ── Send Message via venus-chat (with encoder support) ──
 
 export async function sendViaBrain(
   projectId: string,
   token: string,
   message: string,
   skipSuffix = false,
+  skill: BrainSkill = "general",
 ): Promise<{ ok: boolean; status?: number; error?: string; msgId?: string }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -347,9 +348,9 @@ export async function sendViaBrain(
       body: JSON.stringify({
         task: message,
         project_id: projectId,
-        mode: "task",
+        mode: "brain",
         lovable_token: token,
-        skip_suffix: skipSuffix,
+        task_name: `Star AI — ${SKILL_LABELS[skill] || SKILL_LABELS.general}`,
       }),
     });
     clearTimeout(timer);
