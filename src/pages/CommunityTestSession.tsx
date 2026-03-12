@@ -255,7 +255,7 @@ export default function CommunityTestSession() {
             {/* Reactions bar */}
             {showReactions && (
               <div className="px-3 py-2 animate-in slide-in-from-bottom duration-200"
-                style={{ borderTop: "0.5px solid var(--clf-border)" }}>
+                style={{ borderTop: "1px solid var(--b1)" }}>
                 <div className="flex items-center gap-1 flex-wrap">
                   {REACTIONS.map(r => (
                     <button
