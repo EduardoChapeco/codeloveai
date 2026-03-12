@@ -17,7 +17,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const AQ_PREFIX = `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n`;
+// AQ_PREFIX removed — replaced by JSON Encode Engine via task-encoder.ts
 
 // ─── MD Output Protocol ──────────────────────────────────────
 const MD_OUTPUT_PROTOCOL = `
