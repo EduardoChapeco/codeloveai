@@ -139,22 +139,22 @@ export default function WhiteLabelLanding() {
       )}
 
       {/* Hero */}
-      <section className={`${!user ? "pt-32" : "pt-12"} pb-24 px-6 text-center relative overflow-hidden`}>
+      <section className={`${!user ? "pt-12" : "pt-12"} pb-24 px-6 text-center relative overflow-hidden`}>
         <div className="relative max-w-4xl mx-auto">
-          <span className="chip chip-purple mb-6">White Label</span>
-          <h1 className="lv-heading-xl mb-6">
+          <span className="chip indigo mb-6">White Label</span>
+          <h1 className="rd-heading mb-6" style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)" }}>
             Sua Plataforma. Seu Negócio.
           </h1>
-          <p className="lv-body-lg text-base max-w-2xl mx-auto mb-4">
+          <p className="rd-body text-base max-w-2xl mx-auto mb-4">
             Lance uma plataforma de IA completa com a sua marca em dias, não meses.
             <br /><span className="text-foreground">Tecnologia que custaria R$500k para construir — disponível agora.</span>
           </p>
-          <p className="lv-caption mb-10 max-w-xl mx-auto">Perfeito para agências, empresas de tecnologia e empreendedores digitais que querem escalar com IA.</p>
+          <p className="rd-label mb-10 max-w-xl mx-auto">Perfeito para agências, empresas de tecnologia e empreendedores digitais que querem escalar com IA.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to={onboardingLink} className="lv-btn-primary lv-btn-lg">
+            <Link to={onboardingLink} className="gl primary lg inline-flex items-center gap-2">
               Configurar meu White Label <ArrowRight className="h-5 w-5" />
             </Link>
-            <Link to={faqLink} className="lv-btn-secondary lv-btn-lg">
+            <Link to={faqLink} className="gl lg ghost">
               Ver documentação
             </Link>
           </div>
