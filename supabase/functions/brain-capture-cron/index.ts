@@ -202,9 +202,7 @@ function buildPhasePrompt(phase: number, skill: string, ctx: { supabaseUrl: stri
 
   switch (phase) {
     case 1:
-      return `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
-
-Criar Projeto (Brain Specialist — ${p.title}):
+      return `Criar Projeto (Brain Specialist — ${p.title}):
 
 Este projeto é um sistema de IA especializada com interface visual estilo terminal/CMD.
 
