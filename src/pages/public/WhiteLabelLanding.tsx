@@ -201,26 +201,26 @@ export default function WhiteLabelLanding() {
       {/* Plans */}
       <section className="py-24 px-6 border-y border-border/50">
         <div className="max-w-4xl mx-auto">
-          <h2 className="lv-heading-lg text-center mb-4">Investimento</h2>
-          <p className="lv-body text-center mb-14">Valores personalizados de acordo com volume e funcionalidades.</p>
+          <h2 className="rd-heading text-center mb-4" style={{ fontSize: "1.5rem" }}>Investimento</h2>
+          <p className="rd-body text-center mb-14">Valores personalizados de acordo com volume e funcionalidades.</p>
           <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
             {plans.map((p, i) => (
-              <div key={i} className={`lv-card ${p.featured ? "ring-2 ring-primary/30" : ""}`}>
-                {p.featured && <p className="lv-overline text-primary mb-3">Mais escolhido</p>}
-                <h3 className="lv-heading-sm mb-1">{p.name}</h3>
-                <p className="lv-stat text-2xl mb-0">
+              <div key={i} className={`rd-card ${p.featured ? "ring-2 ring-foreground/10" : ""}`}>
+                {p.featured && <p className="rd-label mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700, color: "var(--text-primary)" }}>Mais escolhido</p>}
+                <h3 className="rd-body mb-1" style={{ fontWeight: 700 }}>{p.name}</h3>
+                <p className="rd-heading text-2xl mb-0">
                   {p.price}<span className="text-sm font-normal text-muted-foreground">{p.period}</span>
                 </p>
-                <p className="lv-caption mb-6">{p.desc}</p>
+                <p className="rd-label mb-6">{p.desc}</p>
                 <ul className="space-y-2 mb-8">
                   {p.features.map((feat, j) => (
-                    <li key={j} className="flex items-center gap-2 lv-body">
-                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />{feat}
+                    <li key={j} className="flex items-center gap-2 rd-body">
+                      <CheckCircle2 className="h-4 w-4 text-foreground shrink-0" />{feat}
                     </li>
                   ))}
                 </ul>
                 <Link to={onboardingLink}
-                  className={p.featured ? "lv-btn-primary w-full text-center" : "lv-btn-secondary w-full text-center"}>
+                  className={p.featured ? "gl primary w-full text-center" : "gl ghost w-full text-center"}>
                   {p.cta}
                 </Link>
               </div>
