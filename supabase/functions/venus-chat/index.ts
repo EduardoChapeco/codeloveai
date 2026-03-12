@@ -9,6 +9,8 @@ import {
   EXECUTE_CMD,
   MODE_CONFIG,
   buildGitViewPrefix,
+  isEncoderEnabled,
+  AQ_PREFIX_LEGACY,
   type ModeConfig,
 } from "../_shared/task-encoder.ts";
 
