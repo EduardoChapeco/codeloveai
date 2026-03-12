@@ -243,7 +243,7 @@ Protocolo: sistema de IA com interface terminal visual.
 ${UPDATE_SUFFIX}`;
 
     case 2:
-      return `IMPORTANTE: Execute diretamente. Verifique arquivos: .lovable/plan.md, src/INSTRUCTIONS.md. Crie faltantes.${UPDATE_SUFFIX}`;
+      return `Verifique arquivos: .lovable/plan.md, src/INSTRUCTIONS.md. Crie faltantes.${UPDATE_SUFFIX}`;
 
     case 3:
       return `IMPORTANTE: Execute diretamente. Crie src/response-templates.md com templates de resposta.${UPDATE_SUFFIX}`;
