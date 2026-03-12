@@ -261,7 +261,7 @@ ${UPDATE_SUFFIX}`;
       return `Crie src/output-formats.ts com helpers markdown/json/html.${UPDATE_SUFFIX}`;
 
     case 8:
-      return `IMPORTANTE: Execute diretamente. Reforce a Rule Zero no src/INSTRUCTIONS.md: "EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO."${UPDATE_SUFFIX}`;
+      return `Reforce a Rule Zero no src/INSTRUCTIONS.md: "EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO."${UPDATE_SUFFIX}`;
 
     case 9:
       return `IMPORTANTE: Execute diretamente. Crie o arquivo src/skills-injection.md com o seguinte conteúdo:
