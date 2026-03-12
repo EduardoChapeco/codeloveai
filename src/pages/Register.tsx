@@ -6,7 +6,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
 import { isDisposableEmail } from "@/lib/disposable-emails";
-import MeshBackground from "@/components/MeshBackground";
 
 export default function Register() {
   const { user, loading: authLoading } = useAuth();
