@@ -343,9 +343,7 @@ NÃO use bibliotecas externas além do que já existe no projeto (React, Tailwin
 ${UPDATE_SUFFIX}`;
 
     case 12:
-      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
-
-Melhore a interface terminal do Brain adicionando:
+      return `Melhore a interface terminal do Brain adicionando:
 
 1. Componente de loading com fases animadas:
    - Mostrar "THINKING...", "GENERATING...", "PROCESSING...", "FINALIZING..." com dots animados
