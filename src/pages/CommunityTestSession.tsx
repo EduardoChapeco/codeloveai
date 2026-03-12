@@ -136,8 +136,8 @@ export default function CommunityTestSession() {
     <AppLayout>
       <div className="h-full flex items-center justify-center">
         <div className="text-center space-y-3">
-          <p className="lv-body text-muted-foreground">Sessão não encontrada.</p>
-          <button onClick={() => navigate("/community")} className="lv-btn-primary h-9 px-4 text-xs">VOLTAR</button>
+          <p className="rd-body text-muted-foreground">Sessão não encontrada.</p>
+          <button onClick={() => navigate("/community")} className="gl sm primary">VOLTAR</button>
         </div>
       </div>
     </AppLayout>
@@ -150,27 +150,25 @@ export default function CommunityTestSession() {
     <AppLayout>
       <div className="h-[calc(100vh-0px)] md:h-screen flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="clf-liquid-glass px-4 py-3 flex items-center gap-3 shrink-0" style={{ borderBottom: "0.5px solid var(--clf-border)" }}>
+        <div className="bg-background border-b border-border px-4 py-3 flex items-center gap-3 shrink-0">
           <button onClick={() => navigate("/community/tests")}
             className="h-8 w-8 rounded-[10px] bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="lv-body-strong text-sm truncate">{session.title || "Teste & Feedback"}</h1>
+            <h1 className="rd-body text-sm font-semibold truncate">{session.title || "Teste & Feedback"}</h1>
             <div className="flex items-center gap-3 mt-0.5">
-              <span className="lv-caption flex items-center gap-1">
+              <span className="rd-label text-xs flex items-center gap-1">
                 <Users className="h-3 w-3" /> {sessionProfile?.name || "Criador"}
               </span>
-              <span className="lv-caption flex items-center gap-1">
+              <span className="rd-label text-xs flex items-center gap-1">
                 <Clock className="h-3 w-3" /> {new Date(session.created_at).toLocaleDateString("pt-BR")}
               </span>
               <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
                 session.status === "active"
-                  ? ""
+                  ? "bg-green-50 text-green-700"
                   : "bg-muted text-muted-foreground"
-              }`}
-                style={session.status === "active" ? { background: "var(--clf-ok-bg)", color: "var(--clf-ok)" } : undefined}
-              >
+              }`}>
                 {session.status === "active" ? "● AO VIVO" : "ENCERRADO"}
               </span>
             </div>
@@ -182,8 +180,7 @@ export default function CommunityTestSession() {
                 setSession((s: any) => ({ ...s, status: "closed" }));
                 toast({ title: "Sessão encerrada" });
               }}
-              className="lv-btn-secondary h-8 px-3 text-[9px]"
-              style={{ color: "var(--clf-err)", borderColor: "rgba(255,59,48,0.2)" }}
+              className="gl sm ghost text-destructive"
             >
               ENCERRAR
             </button>
@@ -193,11 +190,11 @@ export default function CommunityTestSession() {
         {/* Main split */}
         <div className="flex-1 flex overflow-hidden">
           {/* Chat Panel */}
-          <div className="w-full md:w-[380px] lg:w-[420px] shrink-0 flex flex-col bg-background/30"
-            style={{ borderRight: "0.5px solid var(--clf-border)" }}>
+          <div className="w-full md:w-[380px] lg:w-[420px] shrink-0 flex flex-col bg-background"
+            style={{ borderRight: "1px solid var(--b1)" }}>
             {session.description && (
-              <div className="px-4 py-3" style={{ borderBottom: "0.5px solid var(--clf-border)" }}>
-                <p className="lv-caption leading-relaxed">{session.description}</p>
+              <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--b1)" }}>
+                <p className="rd-label leading-relaxed">{session.description}</p>
               </div>
             )}
 
@@ -206,8 +203,8 @@ export default function CommunityTestSession() {
               {messages.length === 0 && (
                 <div className="text-center py-12">
                   <MessageCircle className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
-                  <p className="lv-body text-muted-foreground">Seja o primeiro a dar feedback!</p>
-                  <p className="lv-caption mt-1">Teste o projeto e compartilhe sua opinião.</p>
+                  <p className="rd-body text-muted-foreground">Seja o primeiro a dar feedback!</p>
+                  <p className="rd-label mt-1">Teste o projeto e compartilhe sua opinião.</p>
                 </div>
               )}
               {messages.map(msg => {
@@ -223,7 +220,7 @@ export default function CommunityTestSession() {
                           {(prof?.name || "?")[0]}
                         </div>
                       </div>
-                      <span className="lv-caption">{prof?.name || "Anônimo"}</span>
+                      <span className="rd-label text-xs">{prof?.name || "Anônimo"}</span>
                       {(() => { const R = REACTIONS.find(r => r.key === msg.reaction_type); return R ? <R.icon className="h-5 w-5 text-primary" /> : <span className="text-lg">{msg.reaction_type}</span>; })()}
                     </div>
                   );
@@ -241,7 +238,7 @@ export default function CommunityTestSession() {
                       <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed ${
                         isMe
                           ? "bg-primary text-primary-foreground rounded-br-md"
-                          : "clf-liquid-glass rounded-bl-md"
+                          : "bg-muted border border-border rounded-bl-md"
                       }`}>
                         {msg.content}
                       </div>
@@ -258,7 +255,7 @@ export default function CommunityTestSession() {
             {/* Reactions bar */}
             {showReactions && (
               <div className="px-3 py-2 animate-in slide-in-from-bottom duration-200"
-                style={{ borderTop: "0.5px solid var(--clf-border)" }}>
+                style={{ borderTop: "1px solid var(--b1)" }}>
                 <div className="flex items-center gap-1 flex-wrap">
                   {REACTIONS.map(r => (
                     <button
@@ -276,7 +273,7 @@ export default function CommunityTestSession() {
 
             {/* Input */}
             {session.status === "active" && user && (
-              <div className="px-3 py-3 shrink-0" style={{ borderTop: "0.5px solid var(--clf-border)" }}>
+              <div className="px-3 py-3 shrink-0" style={{ borderTop: "1px solid var(--b1)" }}>
                 <div className="flex items-end gap-2">
                   <button
                     onClick={() => setShowReactions(!showReactions)}
@@ -294,7 +291,7 @@ export default function CommunityTestSession() {
                       onKeyDown={handleKeyDown}
                       placeholder="Escreva seu feedback..."
                       rows={1}
-                      className="lv-input w-full min-h-[36px] max-h-[100px] resize-none text-xs pr-10"
+                      className="rd-input w-full min-h-[36px] max-h-[100px] resize-none text-xs pr-10"
                     />
                   </div>
                   <button
@@ -311,10 +308,10 @@ export default function CommunityTestSession() {
 
           {/* Preview Panel */}
           <div className="hidden md:flex flex-1 flex-col">
-            <div className="px-4 py-2 flex items-center gap-2" style={{ borderBottom: "0.5px solid var(--clf-border)" }}>
-              <div className="h-2 w-2 rounded-full animate-pulse" style={{ background: "var(--clf-ok)" }} />
-              <span className="lv-overline">PREVIEW AO VIVO</span>
-              <span className="lv-caption truncate flex-1">{session.preview_url}</span>
+            <div className="px-4 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--b1)" }}>
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="rd-label" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>PREVIEW AO VIVO</span>
+              <span className="rd-label text-xs truncate flex-1">{session.preview_url}</span>
             </div>
             <iframe
               src={session.preview_url}

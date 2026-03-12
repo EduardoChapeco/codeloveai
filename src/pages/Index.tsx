@@ -5,7 +5,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
 import AppLayout from "@/components/AppLayout";
-import MeshBackground from "@/components/MeshBackground";
 import { hexToHSL, getThemePreset } from "@/lib/tenant-themes";
 
 const benefits = [
@@ -150,8 +149,7 @@ export default function Index() {
   ) : null;
 
   const content = (
-    <div className="min-h-screen relative">
-      {(!authLoading && !user) && <MeshBackground />}
+    <div className="min-h-screen relative bg-background">
       {guestNav}
 
       {/* ━━━ HERO ━━━ */}

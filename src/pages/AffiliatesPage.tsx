@@ -1,5 +1,4 @@
-﻿import { Link, useNavigate } from "react-router-dom";
-import MeshBackground from "@/components/MeshBackground";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
@@ -69,18 +68,17 @@ export default function AffiliatesPage() {
   };
 
   return (
-    <div className="min-h-screen relative">
-      <MeshBackground />
-      <nav className="sticky top-0 z-20 px-6 py-3">
-        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+    <div className="min-h-screen relative bg-background">
+      <nav className="sticky top-0 z-20 bg-background/80 backdrop-blur-xl border-b border-border/60">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
           <div className="flex items-center gap-3">
             {!authLoading && user ? (
-              <Link to="/home" className="lv-btn-secondary h-9 px-4 text-xs">Dashboard</Link>
+              <Link to="/home" className="gl sm ghost">Dashboard</Link>
             ) : (
               <>
-                <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
-                <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+                <Link to="/login" className="gl sm ghost">Entrar</Link>
+                <Link to="/register" className="gl sm primary">Criar conta</Link>
               </>
             )}
           </div>
@@ -89,19 +87,19 @@ export default function AffiliatesPage() {
 
       {/* Hero */}
       <section className="px-6 py-20 max-w-4xl mx-auto text-center">
-        <p className="lv-overline mb-4">Programa de Afiliados</p>
-        <h1 className="lv-heading-xl mb-6">Ganhe dinheiro indicando o {brandName}</h1>
-        <p className="lv-body text-base max-w-2xl mx-auto mb-10">
+        <p className="rd-label mb-4" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Programa de Afiliados</p>
+        <h1 className="rd-heading mb-6" style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)" }}>Ganhe dinheiro indicando o {brandName}</h1>
+        <p className="rd-body text-base max-w-2xl mx-auto mb-10">
           Torne-se afiliado, compartilhe seu link exclusivo e receba <strong className="text-foreground">30% de comissão</strong> em cada venda.
           Além disso, ganhe <strong className="text-foreground">20% de desconto</strong> nos seus próprios planos.
         </p>
         <div className="flex items-center justify-center gap-4">
           {!authLoading && user ? (
-            <button onClick={() => setShowEnrollForm(true)} className="lv-btn-primary lv-btn-lg px-8">
+            <button onClick={() => setShowEnrollForm(true)} className="gl primary lg">
               Quero ser afiliado
             </button>
           ) : (
-            <Link to="/register" className="lv-btn-primary lv-btn-lg px-8">
+            <Link to="/register" className="gl primary lg">
               Criar conta e ser afiliado
             </Link>
           )}
@@ -110,19 +108,19 @@ export default function AffiliatesPage() {
 
       {/* How it works */}
       <section className="px-6 pb-16 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-2">Como funciona</p>
-        <h2 className="lv-heading-lg text-center mb-12">4 passos simples</h2>
+        <p className="rd-label text-center mb-2" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Como funciona</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>4 passos simples</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {steps.map((step, idx) => (
-            <div key={idx} className="lv-card text-center relative">
+            <div key={idx} className="rd-card text-center relative">
               <div className="absolute -top-3 -left-1">
                 <span className="text-3xl font-bold text-foreground/5">{String(idx + 1).padStart(2, "0")}</span>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <step.icon className="h-5 w-5 text-primary" />
+              <div className="rd-ico-box mx-auto mb-4">
+                <step.icon className="h-5 w-5" />
               </div>
-              <h3 className="lv-heading-sm text-sm mb-2">{step.title}</h3>
-              <p className="lv-body">{step.desc}</p>
+              <h3 className="rd-body mb-2" style={{ fontWeight: 700 }}>{step.title}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{step.desc}</p>
             </div>
           ))}
         </div>
@@ -130,16 +128,16 @@ export default function AffiliatesPage() {
 
       {/* Benefits */}
       <section className="px-6 pb-16 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-2">Vantagens</p>
-        <h2 className="lv-heading-lg text-center mb-12">Por que ser afiliado?</h2>
+        <p className="rd-label text-center mb-2" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Vantagens</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>Por que ser afiliado?</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {benefits.map((b, idx) => (
-            <div key={idx} className="lv-card">
-              <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                <b.icon className="h-5 w-5 text-primary" />
+            <div key={idx} className="rd-card">
+              <div className="rd-ico-box mb-4">
+                <b.icon className="h-5 w-5" />
               </div>
-              <h3 className="lv-heading-sm text-sm mb-2">{b.title}</h3>
-              <p className="lv-body">{b.desc}</p>
+              <h3 className="rd-body mb-2" style={{ fontWeight: 700 }}>{b.title}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{b.desc}</p>
             </div>
           ))}
         </div>
@@ -147,15 +145,15 @@ export default function AffiliatesPage() {
 
       {/* Commission Table */}
       <section className="px-6 pb-16 max-w-3xl mx-auto">
-        <p className="lv-overline text-center mb-2">Simulação</p>
-        <h2 className="lv-heading-lg text-center mb-12">Quanto você pode ganhar</h2>
-        <div className="lv-card overflow-hidden p-0">
+        <p className="rd-label text-center mb-2" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Simulação</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>Quanto você pode ganhar</h2>
+        <div className="rd-card overflow-hidden p-0">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border/60">
-                <th className="lv-overline text-left p-5">Plano</th>
-                <th className="lv-overline text-right p-5">Preço</th>
-                <th className="lv-overline text-right p-5">Sua comissão (30%)</th>
+                <th className="rd-label text-left p-5" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Plano</th>
+                <th className="rd-label text-right p-5" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Preço</th>
+                <th className="rd-label text-right p-5" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Sua comissão (30%)</th>
               </tr>
             </thead>
             <tbody>
@@ -164,30 +162,30 @@ export default function AffiliatesPage() {
                 { plan: "Mensal Ilimitado", price: 149.90 },
               ].map((row) => (
                 <tr key={row.plan} className="border-b border-border/40 last:border-0">
-                  <td className="p-5 lv-body-strong">{row.plan}</td>
-                  <td className="p-5 lv-body text-right">R${row.price.toFixed(2)}</td>
+                  <td className="p-5 rd-body" style={{ fontWeight: 600 }}>{row.plan}</td>
+                  <td className="p-5 rd-body text-right">R${row.price.toFixed(2)}</td>
                   <td className="p-5 text-right">
-                    <span className="lv-stat text-lg">R${(row.price * 0.3).toFixed(2)}</span>
+                    <span className="rd-heading text-lg">R${(row.price * 0.3).toFixed(2)}</span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="text-center lv-caption mt-3 italic">
+        <p className="text-center rd-label mt-3 italic">
           Exemplo: 10 vendas do plano Mensal = R$449,70 em comissões por mês.
         </p>
       </section>
 
       {/* FAQ */}
       <section className="px-6 pb-16 max-w-3xl mx-auto">
-        <p className="lv-overline text-center mb-2">Dúvidas frequentes</p>
-        <h2 className="lv-heading-lg text-center mb-12">FAQ</h2>
+        <p className="rd-label text-center mb-2" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Dúvidas frequentes</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>FAQ</h2>
         <div className="space-y-3">
           {faqs.map((faq, idx) => (
-            <div key={idx} className="lv-card">
-              <h3 className="lv-body-strong mb-2">{faq.q}</h3>
-              <p className="lv-body">{faq.a}</p>
+            <div key={idx} className="rd-card">
+              <h3 className="rd-body mb-2" style={{ fontWeight: 600 }}>{faq.q}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{faq.a}</p>
             </div>
           ))}
         </div>
@@ -195,17 +193,17 @@ export default function AffiliatesPage() {
 
       {/* CTA */}
       <section className="px-6 pb-20 max-w-3xl mx-auto">
-        <div className="lv-card text-center py-12">
-          <h2 className="lv-heading-lg mb-3">Pronto para começar?</h2>
-          <p className="lv-body text-base mb-8 max-w-md mx-auto">
+        <div className="rd-card text-center py-12">
+          <h2 className="rd-heading mb-3" style={{ fontSize: "1.5rem" }}>Pronto para começar?</h2>
+          <p className="rd-body text-base mb-8 max-w-md mx-auto">
             Cadastre-se, adquira um plano e ative seu link de afiliado em segundos.
           </p>
           {!authLoading && user ? (
-            <button onClick={() => setShowEnrollForm(true)} className="lv-btn-primary lv-btn-lg px-8">
+            <button onClick={() => setShowEnrollForm(true)} className="gl primary lg">
               Ativar meu link de afiliado
             </button>
           ) : (
-            <Link to="/register" className="lv-btn-primary lv-btn-lg px-8">
+            <Link to="/register" className="gl primary lg">
               Criar conta grátis
             </Link>
           )}
@@ -216,48 +214,48 @@ export default function AffiliatesPage() {
       <Sheet open={showEnrollForm} onOpenChange={setShowEnrollForm}>
         <SheetContent side="bottom" className="rounded-t-2xl px-6 pb-8 pt-6 max-h-[85vh] overflow-y-auto">
           <SheetHeader className="text-left mb-5">
-            <p className="lv-overline mb-1">Ativação</p>
-            <SheetTitle className="lv-heading-lg text-xl">Tornar-se afiliado</SheetTitle>
-            <SheetDescription className="lv-body">
+            <p className="rd-label mb-1" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10, fontWeight: 700 }}>Ativação</p>
+            <SheetTitle className="rd-heading text-xl">Tornar-se afiliado</SheetTitle>
+            <SheetDescription className="rd-body">
               Escolha um nome de exibição para seu perfil de afiliado.
             </SheetDescription>
           </SheetHeader>
 
           <div className="space-y-5">
             <div>
-              <label className="lv-overline ml-1 block mb-1.5">Nome de exibição</label>
+              <label className="rd-label ml-1 block mb-1.5" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Nome de exibição</label>
               <input
                 type="text"
                 value={enrollName}
                 onChange={(e) => setEnrollName(e.target.value)}
                 placeholder="Ex: João Dev"
-                className="lv-input h-12 text-base px-5"
+                className="rd-input h-12 text-base px-5"
                 maxLength={50}
               />
             </div>
 
-            <div className="lv-card-sm bg-muted/30">
-              <p className="lv-overline mb-3">Você receberá:</p>
+            <div className="rd-card" style={{ padding: "14px" }}>
+              <p className="rd-label mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Você receberá:</p>
               <ul className="space-y-2">
                 {["Link exclusivo de indicação", "30% de comissão por venda", "20% de desconto nos seus planos", "Painel financeiro completo", "Programa CodeCoins"].map((item) => (
-                  <li key={item} className="flex items-center gap-2 lv-body">
-                    <Check className="h-3.5 w-3.5 text-primary shrink-0" /> {item}
+                  <li key={item} className="flex items-center gap-2 rd-body">
+                    <Check className="h-3.5 w-3.5 text-foreground shrink-0" /> {item}
                   </li>
                 ))}
               </ul>
             </div>
 
-            <button onClick={handleEnroll} disabled={enrolling} className="lv-sheet-btn">
+            <button onClick={handleEnroll} disabled={enrolling} className="gl primary w-full" style={{ height: 44 }}>
               {enrolling ? "Ativando..." : "Confirmar ativação"}
             </button>
 
-            <p className="text-center lv-caption pt-4">{brandName} — Programa de Afiliados</p>
+            <p className="text-center rd-label pt-4">{brandName} — Programa de Afiliados</p>
           </div>
         </SheetContent>
       </Sheet>
 
       <footer className="border-t border-border/60 px-6 py-6 text-center">
-        <p className="lv-caption">© 2025 {brandName} — Todos os direitos reservados</p>
+        <p className="rd-label">© 2025 {brandName} — Todos os direitos reservados</p>
       </footer>
     </div>
   );

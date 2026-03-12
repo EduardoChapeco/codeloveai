@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
-import MeshBackground from "@/components/MeshBackground";
 
 export default function Login() {
   const { user, loading: authLoading } = useAuth();
@@ -43,9 +42,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 relative">
-      <MeshBackground />
-
+    <div className="min-h-screen flex items-center justify-center px-6 relative bg-background">
       <div className="w-full max-w-sm animate-fade-in">
         <Link to="/" className="block text-center mb-10">
           {tenant?.logo_url ? (

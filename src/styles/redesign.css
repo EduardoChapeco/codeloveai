@@ -1043,7 +1043,32 @@ select.rd-input option { background: var(--bg-0); color: var(--text-primary); }
 .venus-feat-desc { font-size: 12px; color: var(--text-tertiary); line-height: 1.5; }
 
 /* ══════════════════════════════════════════════════════════════════════
-   LEGACY COMPAT
+   TYPOGRAPHY CLASSES (rd-heading, rd-body, rd-label)
+   Used across ~20+ pages — PRD White Dev-First tokens
+   ══════════════════════════════════════════════════════════════════════ */
+
+.rd-heading {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  line-height: 1.15;
+  font-size: 22px;
+}
+
+.rd-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.rd-label {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LEGACY COMPAT — lv-* / clf-* aliases mapped to rd-*/gl system
    ══════════════════════════════════════════════════════════════════════ */
 
 .lv-glass {
@@ -1052,10 +1077,82 @@ select.rd-input option { background: var(--bg-0); color: var(--text-primary); }
   box-shadow: var(--shadow-sm);
 }
 
-/* Variable aliases for components using --tp, --ts, --tt, --tq shorthand */
+/* Typography aliases */
+.lv-heading-xl { font-size: clamp(28px, 5vw, 42px); font-weight: 800; letter-spacing: -0.04em; color: var(--text-primary); line-height: 1.1; }
+.lv-heading-lg { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; color: var(--text-primary); line-height: 1.15; }
+.lv-heading-sm { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); }
+.lv-body { font-size: 14px; line-height: 1.6; color: var(--text-secondary); }
+.lv-body-lg { font-size: 16px; line-height: 1.6; color: var(--text-secondary); }
+.lv-body-strong { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.lv-caption { font-size: 12px; color: var(--text-tertiary); line-height: 1.5; }
+.lv-overline { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-quaternary); }
+.lv-stat { font-weight: 800; letter-spacing: -0.03em; color: var(--text-primary); }
+
+/* Button aliases */
+.lv-btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 36px; padding: 0 16px; border-radius: 8px;
+  background: #18181B; color: #fff; font-size: 13px; font-weight: 600;
+  border: none; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.lv-btn-primary:hover { background: #09090B; transform: scale(0.98); }
+
+.lv-btn-secondary, .lv-btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 36px; padding: 0 16px; border-radius: 8px;
+  background: transparent; color: var(--text-primary); font-size: 13px; font-weight: 500;
+  border: 1px solid var(--b1); cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.lv-btn-secondary:hover, .lv-btn-ghost:hover { background: var(--bg-3); border-color: var(--b2); }
+
+.lv-btn-lg { height: 44px; padding: 0 20px; font-size: 14px; border-radius: 10px; }
+
+/* Card aliases */
+.lv-card {
+  background: var(--bg-0); border: 1px solid var(--b1); border-radius: 12px;
+  padding: 20px; transition: border-color 0.14s;
+}
+.lv-card:hover { border-color: var(--b2); }
+
+.lv-card-sm {
+  background: var(--bg-0); border: 1px solid var(--b1); border-radius: 12px;
+  padding: 14px; transition: border-color 0.14s;
+}
+.lv-card-sm:hover { border-color: var(--b2); }
+
+.lv-card-interactive { composes: lv-card; cursor: pointer; }
+.lv-card-interactive:hover { box-shadow: var(--shadow-md); }
+.lv-card-active { border-color: var(--b2); }
+
+/* Input alias */
+.lv-input {
+  height: 36px; width: 100%; border-radius: 8px;
+  padding: 0 12px; font-size: 14px;
+  color: var(--text-primary); background: var(--bg-0);
+  border: 1px solid var(--b1); outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.lv-input:focus { border-color: #18181B; box-shadow: 0 0 0 3px rgba(24,24,27,0.06); }
+.lv-input::placeholder { color: var(--text-quaternary); }
+
+/* Nav alias */
+.clf-glass-nav {
+  background: rgba(255,255,255,0.8); backdrop-filter: blur(12px) saturate(150%);
+  border-bottom: 1px solid var(--b1);
+}
+
+.clf-liquid-glass {
+  background: var(--bg-0); border: 1px solid var(--b1);
+}
+
+/* Variable aliases */
 :root {
   --tp: var(--text-primary);
   --ts: var(--text-secondary);
   --tt: var(--text-tertiary);
   --tq: var(--text-quaternary);
+  --clf-border: var(--b1);
+  --clf-ok: var(--green);
+  --clf-ok-bg: rgba(34,197,94,0.08);
+  --clf-err: var(--red);
 }
