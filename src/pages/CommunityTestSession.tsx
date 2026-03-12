@@ -291,7 +291,7 @@ export default function CommunityTestSession() {
                       onKeyDown={handleKeyDown}
                       placeholder="Escreva seu feedback..."
                       rows={1}
-                      className="lv-input w-full min-h-[36px] max-h-[100px] resize-none text-xs pr-10"
+                      className="rd-input w-full min-h-[36px] max-h-[100px] resize-none text-xs pr-10"
                     />
                   </div>
                   <button
