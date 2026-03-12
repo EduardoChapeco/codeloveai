@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { encodeTaskAsViewDesc, EXECUTE_CMD } from '../_shared/task-encoder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -215,23 +216,32 @@ Deno.serve(async (req) => {
     const msgId = 'usermsg_' + rb32(26);
     const aiMsgId = 'aimsg_' + rb32(26);
 
+    const encoded = encodeTaskAsViewDesc(normalizedMessage, {
+      name: `BrainChain — ${normalizedBrainType}`,
+      internalId: `bc_${normalizedBrainType}_${Date.now()}`,
+      viewPrefix: "The user is viewing the Timeline tab on the Activity view.",
+    });
+
     const lvPayload = {
       id: msgId,
-      message,
+      message: EXECUTE_CMD,
+      intent: "security_fix_v2",
       chat_only: false,
       ai_message_id: aiMsgId,
       thread_id: 'main',
       view: 'editor',
-      view_description: 'User is requesting Brain analysis and response.',
+      view_description: encoded,
       model: null,
       session_replay: '[]',
       client_logs: [],
       network_requests: [],
       runtime_errors: [],
       files: [],
+      selected_elements: [],
+      optimisticImageUrls: [],
+      debug_mode: false,
       integration_metadata: {
-        browser: { preview_viewport_width: 1280, preview_viewport_height: 854, auth_token: token },
-        supabase: { auth_token: token },
+        browser: { preview_viewport_width: 1280, preview_viewport_height: 854 },
       },
     };
 

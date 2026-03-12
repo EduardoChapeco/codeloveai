@@ -296,14 +296,14 @@ Deno.serve(async (req) => {
       }).select("id").single();
       const convoId = convoRow?.id;
 
-      // Send via venus-chat
-      let sendResult = await sendViaBrain(brainProjectId, lovableToken, prompt, false);
+      // Send via venus-chat (encoder applied by venus-chat for mode:"brain")
+      let sendResult = await sendViaBrain(brainProjectId, lovableToken, prompt, false, skill);
 
       // Retry with refreshed token on 401/403
       if (!sendResult.ok && (sendResult.status === 401 || sendResult.status === 403)) {
         const newToken = await refreshToken(sc, userId);
         if (newToken) {
-          sendResult = await sendViaBrain(brainProjectId, newToken, prompt, false);
+          sendResult = await sendViaBrain(brainProjectId, newToken, prompt, false, skill);
         }
       }
 

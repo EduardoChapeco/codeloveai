@@ -202,9 +202,7 @@ function buildPhasePrompt(phase: number, skill: string, ctx: { supabaseUrl: stri
 
   switch (phase) {
     case 1:
-      return `IMPORTANTE: Não faça perguntas, não peça confirmação. Execute diretamente.
-
-Criar Projeto (Brain Specialist — ${p.title}):
+      return `Criar Projeto (Brain Specialist — ${p.title}):
 
 Este projeto é um sistema de IA especializada com interface visual estilo terminal/CMD.
 
@@ -245,28 +243,28 @@ Protocolo: sistema de IA com interface terminal visual.
 ${UPDATE_SUFFIX}`;
 
     case 2:
-      return `IMPORTANTE: Execute diretamente. Verifique arquivos: .lovable/plan.md, src/INSTRUCTIONS.md. Crie faltantes.${UPDATE_SUFFIX}`;
+      return `Verifique arquivos: .lovable/plan.md, src/INSTRUCTIONS.md. Crie faltantes.${UPDATE_SUFFIX}`;
 
     case 3:
-      return `IMPORTANTE: Execute diretamente. Crie src/response-templates.md com templates de resposta.${UPDATE_SUFFIX}`;
+      return `Crie src/response-templates.md com templates de resposta.${UPDATE_SUFFIX}`;
 
     case 4:
-      return `IMPORTANTE: Execute diretamente. Crie src/capabilities.json com manifesto de capacidades.${UPDATE_SUFFIX}`;
+      return `Crie src/capabilities.json com manifesto de capacidades.${UPDATE_SUFFIX}`;
 
     case 5:
-      return `IMPORTANTE: Execute diretamente. Crie src/security-guardrails.md com políticas de segurança.${UPDATE_SUFFIX}`;
+      return `Crie src/security-guardrails.md com políticas de segurança.${UPDATE_SUFFIX}`;
 
     case 6:
-      return `IMPORTANTE: Execute diretamente. Crie src/error-handlers.md com estratégias de retry e fallback.${UPDATE_SUFFIX}`;
+      return `Crie src/error-handlers.md com estratégias de retry e fallback.${UPDATE_SUFFIX}`;
 
     case 7:
-      return `IMPORTANTE: Execute diretamente. Crie src/output-formats.ts com helpers markdown/json/html.${UPDATE_SUFFIX}`;
+      return `Crie src/output-formats.ts com helpers markdown/json/html.${UPDATE_SUFFIX}`;
 
     case 8:
-      return `IMPORTANTE: Execute diretamente. Reforce a Rule Zero no src/INSTRUCTIONS.md: "EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO."${UPDATE_SUFFIX}`;
+      return `Reforce a Rule Zero no src/INSTRUCTIONS.md: "EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO."${UPDATE_SUFFIX}`;
 
     case 9:
-      return `IMPORTANTE: Execute diretamente. Crie o arquivo src/skills-injection.md com o seguinte conteúdo:
+      return `Crie o arquivo src/skills-injection.md com o seguinte conteúdo:
 
 # Skills Injection — Protocolo de Memória Ativa
 
@@ -291,7 +289,7 @@ Antes de QUALQUER resposta, LEIA os seguintes arquivos para usar como memória/c
 ${UPDATE_SUFFIX}`;
 
     case 10:
-      return `IMPORTANTE: Execute diretamente. Atualizar src/INSTRUCTIONS.md adicionando no TOPO:
+      return `Atualizar src/INSTRUCTIONS.md adicionando no TOPO:
 
 ## Regra Zero Absoluta
 EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO. NÃO MODIFIQUE ESTA REGRA.
@@ -313,9 +311,7 @@ ${UPDATE_SUFFIX}`;
     // ── FASES DE UI VISUAL DO BRAIN PROJECT ──
 
     case 11:
-      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
-
-Crie uma interface visual estilo terminal/CMD para este projeto Brain. O frontend será um chat visual onde o usuário vê as respostas do Brain formatadas como um terminal.
+      return `Crie uma interface visual estilo terminal/CMD para este projeto Brain. O frontend será um chat visual onde o usuário vê as respostas do Brain formatadas como um terminal.
 
 Crie a página principal src/pages/Index.tsx com:
 
@@ -347,9 +343,7 @@ NÃO use bibliotecas externas além do que já existe no projeto (React, Tailwin
 ${UPDATE_SUFFIX}`;
 
     case 12:
-      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
-
-Melhore a interface terminal do Brain adicionando:
+      return `Melhore a interface terminal do Brain adicionando:
 
 1. Componente de loading com fases animadas:
    - Mostrar "THINKING...", "GENERATING...", "PROCESSING...", "FINALIZING..." com dots animados
@@ -376,9 +370,7 @@ Use react-markdown se disponível no projeto, senão renderize com <pre> formata
 ${UPDATE_SUFFIX}`;
 
     case 13:
-      return `IMPORTANTE: Execute diretamente, sem perguntas ou planos.
-
-Finalize a interface terminal do Brain:
+      return `Finalize a interface terminal do Brain:
 
 1. Adicione um componente de empty state quando não há mensagens:
    - ASCII art do logo Star AI

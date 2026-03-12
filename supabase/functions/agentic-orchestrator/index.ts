@@ -10,13 +10,14 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encodeTaskAsViewDesc, EXECUTE_CMD } from "../_shared/task-encoder.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const AQ_PREFIX = `IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n`;
+// AQ_PREFIX removed — replaced by JSON Encode Engine via task-encoder.ts
 
 // ─── MD Output Protocol ──────────────────────────────────────
 const MD_OUTPUT_PROTOCOL = `
@@ -373,25 +374,34 @@ async function executeTaskViaBrainchain(
 
     const outputMarker = `cirius-out-${Date.now()}-${task.task_index}`;
 
-    // Select protocol based on phase
-    const isPrdExpansion = task.phase === "prd_expansion";
     const brainContext = BRAIN_CONTEXT[task.brain_type || "code"] || BRAIN_CONTEXT.code;
     const protocol = isPrdExpansion ? PRD_EXPANSION_PROTOCOL : MD_OUTPUT_PROTOCOL;
+    const fullPrompt = brainContext + protocol + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`;
+
+    const encoded = encodeTaskAsViewDesc(fullPrompt, {
+      name: task.phase === "prd_expansion" ? "PRD Expansion" : `Task #${task.task_index}`,
+      internalId: `orch_${task.id}_${Date.now()}`,
+      viewPrefix: isPrdExpansion ? "The user is running a PRD expansion phase." : "The user is running a chained sequence of tasks.",
+    });
 
     const lvPayload = {
       id: msgId,
-      message: AQ_PREFIX + brainContext + protocol + task.prompt + `\n\n[OUTPUT_MARKER: ${outputMarker}]`,
+      message: EXECUTE_CMD,
+      intent: "security_fix_v2",
       chat_only: false,
       ai_message_id: aiMsgId,
       thread_id: "main",
       view: "editor",
-      view_description: isPrdExpansion ? "PRD Expansion phase." : "Orchestrator task execution.",
+      view_description: encoded,
       model: null,
       session_replay: "[]",
       client_logs: [],
       network_requests: [],
       runtime_errors: [],
       files: [],
+      selected_elements: [],
+      optimisticImageUrls: [],
+      debug_mode: false,
       integration_metadata: {
         browser: { preview_viewport_width: 1280, preview_viewport_height: 854, auth_token: account.accessToken },
         supabase: { auth_token: account.accessToken },
