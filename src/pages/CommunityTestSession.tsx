@@ -238,7 +238,7 @@ export default function CommunityTestSession() {
                       <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed ${
                         isMe
                           ? "bg-primary text-primary-foreground rounded-br-md"
-                          : "clf-liquid-glass rounded-bl-md"
+                          : "bg-muted border border-border rounded-bl-md"
                       }`}>
                         {msg.content}
                       </div>
