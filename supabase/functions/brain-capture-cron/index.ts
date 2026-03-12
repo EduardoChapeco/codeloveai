@@ -249,7 +249,7 @@ ${UPDATE_SUFFIX}`;
       return `Crie src/response-templates.md com templates de resposta.${UPDATE_SUFFIX}`;
 
     case 4:
-      return `IMPORTANTE: Execute diretamente. Crie src/capabilities.json com manifesto de capacidades.${UPDATE_SUFFIX}`;
+      return `Crie src/capabilities.json com manifesto de capacidades.${UPDATE_SUFFIX}`;
 
     case 5:
       return `IMPORTANTE: Execute diretamente. Crie src/security-guardrails.md com políticas de segurança.${UPDATE_SUFFIX}`;
