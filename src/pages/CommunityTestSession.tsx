@@ -220,7 +220,7 @@ export default function CommunityTestSession() {
                           {(prof?.name || "?")[0]}
                         </div>
                       </div>
-                      <span className="lv-caption">{prof?.name || "Anônimo"}</span>
+                      <span className="rd-label text-xs">{prof?.name || "Anônimo"}</span>
                       {(() => { const R = REACTIONS.find(r => r.key === msg.reaction_type); return R ? <R.icon className="h-5 w-5 text-primary" /> : <span className="text-lg">{msg.reaction_type}</span>; })()}
                     </div>
                   );
