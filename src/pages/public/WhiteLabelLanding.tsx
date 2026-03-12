@@ -233,11 +233,11 @@ export default function WhiteLabelLanding() {
       <section className="py-16 px-6">
         <div className="max-w-3xl mx-auto text-center">
           <div className="flex justify-center gap-1 mb-4">
-            {[...Array(5)].map((_, i) => <Star key={i} className="h-5 w-5 text-primary fill-primary" />)}
+            {[...Array(5)].map((_, i) => <Star key={i} className="h-5 w-5 text-foreground fill-foreground" />)}
           </div>
           <p className="text-xl text-muted-foreground italic mb-4">"Lançamos nossa plataforma de IA em 4 dias. Nossa agência passou de prestadora de serviços para empresa de produto. ROI em menos de 60 dias."</p>
           <p className="text-sm font-semibold text-foreground">Ana Paula Ramos</p>
-          <p className="lv-caption">CEO, Digital Growth Agency · SP</p>
+          <p className="rd-label">CEO, Digital Growth Agency · SP</p>
         </div>
       </section>
 
