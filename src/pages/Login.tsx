@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSEO } from "@/hooks/useSEO";
 import { useTenant } from "@/contexts/TenantContext";
-import MeshBackground from "@/components/MeshBackground";
 
 export default function Login() {
   const { user, loading: authLoading } = useAuth();
