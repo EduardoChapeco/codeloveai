@@ -144,7 +144,7 @@ export default function SplitModeEditor({
   const fileCount = Object.keys(files).length;
 
   return (
-    <div className="sp-root dark">
+    <div className="sp-root">
       <SplitTopBar
         projectName={projectName}
         frameMode={frameMode}
