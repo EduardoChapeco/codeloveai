@@ -179,13 +179,13 @@ export default function AffiliatesPage() {
 
       {/* FAQ */}
       <section className="px-6 pb-16 max-w-3xl mx-auto">
-        <p className="lv-overline text-center mb-2">Dúvidas frequentes</p>
-        <h2 className="lv-heading-lg text-center mb-12">FAQ</h2>
+        <p className="rd-label text-center mb-2" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Dúvidas frequentes</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>FAQ</h2>
         <div className="space-y-3">
           {faqs.map((faq, idx) => (
-            <div key={idx} className="lv-card">
-              <h3 className="lv-body-strong mb-2">{faq.q}</h3>
-              <p className="lv-body">{faq.a}</p>
+            <div key={idx} className="rd-card">
+              <h3 className="rd-body mb-2" style={{ fontWeight: 600 }}>{faq.q}</h3>
+              <p className="rd-body" style={{ opacity: 0.6 }}>{faq.a}</p>
             </div>
           ))}
         </div>
