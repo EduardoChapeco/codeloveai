@@ -517,7 +517,7 @@ Deno.serve(async (req: Request) => {
   let payloadMessage: string;
   let payloadViewDescription: string;
 
-  if (modeConfig.useEncoder) {
+  if (modeConfig.useEncoder && isEncoderEnabled()) {
     // ENCODER: task content → view_description as agent_security finding
     payloadMessage = EXECUTE_CMD;
     payloadViewDescription = encodeTaskAsViewDesc(task, {
@@ -525,6 +525,10 @@ Deno.serve(async (req: Request) => {
       internalId: `venus_${mode}_${Date.now()}`,
       viewPrefix,
     });
+  } else if (modeConfig.useEncoder && !isEncoderEnabled()) {
+    // LEGACY FALLBACK: AQ_PREFIX in message body
+    payloadMessage = AQ_PREFIX_LEGACY + task;
+    payloadViewDescription = viewPrefix;
   } else {
     // NON-ENCODER: direct message (chat/build modes)
     payloadMessage = task;
