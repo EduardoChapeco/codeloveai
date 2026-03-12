@@ -42,9 +42,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 relative">
-      <MeshBackground />
-
+    <div className="min-h-screen flex items-center justify-center px-6 relative bg-background">
       <div className="w-full max-w-sm animate-fade-in">
         <Link to="/" className="block text-center mb-10">
           {tenant?.logo_url ? (

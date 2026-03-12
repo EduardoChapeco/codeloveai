@@ -115,25 +115,24 @@ export default function WhiteLabelLanding() {
 
   const content = (
     <div className="min-h-screen bg-background text-foreground">
-      {(!authLoading && !user) && <MeshBackground />}
 
       {/* Nav */}
       {(!authLoading && !user) && (
-        <nav className="fixed top-0 inset-x-0 z-50 clf-glass-nav">
+        <nav className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/60">
           <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2">
               {brand.logo_url ? (
                 <img src={brand.logo_url} alt={appName} className="h-7 w-7 rounded-lg object-cover" />
               ) : (
-                <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-black text-xs">
+                <div className="h-7 w-7 rounded-lg bg-foreground flex items-center justify-center text-background font-black text-xs">
                   {logoInitial}
                 </div>
               )}
               <span className="font-bold text-sm text-foreground">{appName}</span>
             </Link>
-            <div className="flex items-center gap-4">
-              <Link to="/login" className="lv-btn-ghost h-9 px-3 text-xs">Entrar</Link>
-              <Link to={onboardingLink} className="lv-btn-primary h-9 px-4 text-xs">Começar agora</Link>
+            <div className="flex items-center gap-3">
+              <Link to="/login" className="gl sm ghost">Entrar</Link>
+              <Link to={onboardingLink} className="gl sm primary">Começar agora</Link>
             </div>
           </div>
         </nav>

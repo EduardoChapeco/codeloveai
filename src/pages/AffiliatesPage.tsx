@@ -68,18 +68,17 @@ export default function AffiliatesPage() {
   };
 
   return (
-    <div className="min-h-screen relative">
-      <MeshBackground />
-      <nav className="sticky top-0 z-20 px-6 py-3">
-        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+    <div className="min-h-screen relative bg-background">
+      <nav className="sticky top-0 z-20 bg-background/80 backdrop-blur-xl border-b border-border/60">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/" className="text-base font-semibold tracking-tight text-foreground">{brandName}</Link>
           <div className="flex items-center gap-3">
             {!authLoading && user ? (
-              <Link to="/home" className="lv-btn-secondary h-9 px-4 text-xs">Dashboard</Link>
+              <Link to="/home" className="gl sm ghost">Dashboard</Link>
             ) : (
               <>
-                <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
-                <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+                <Link to="/login" className="gl sm ghost">Entrar</Link>
+                <Link to="/register" className="gl sm primary">Criar conta</Link>
               </>
             )}
           </div>

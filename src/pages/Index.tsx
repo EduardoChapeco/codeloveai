@@ -149,8 +149,7 @@ export default function Index() {
   ) : null;
 
   const content = (
-    <div className="min-h-screen relative">
-      {(!authLoading && !user) && <MeshBackground />}
+    <div className="min-h-screen relative bg-background">
       {guestNav}
 
       {/* ━━━ HERO ━━━ */}
