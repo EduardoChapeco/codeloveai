@@ -145,15 +145,15 @@ export default function AffiliatesPage() {
 
       {/* Commission Table */}
       <section className="px-6 pb-16 max-w-3xl mx-auto">
-        <p className="lv-overline text-center mb-2">Simulação</p>
-        <h2 className="lv-heading-lg text-center mb-12">Quanto você pode ganhar</h2>
-        <div className="lv-card overflow-hidden p-0">
+        <p className="rd-label text-center mb-2" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Simulação</p>
+        <h2 className="rd-heading text-center mb-12" style={{ fontSize: "1.5rem" }}>Quanto você pode ganhar</h2>
+        <div className="rd-card overflow-hidden p-0">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border/60">
-                <th className="lv-overline text-left p-5">Plano</th>
-                <th className="lv-overline text-right p-5">Preço</th>
-                <th className="lv-overline text-right p-5">Sua comissão (30%)</th>
+                <th className="rd-label text-left p-5" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Plano</th>
+                <th className="rd-label text-right p-5" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Preço</th>
+                <th className="rd-label text-right p-5" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Sua comissão (30%)</th>
               </tr>
             </thead>
             <tbody>
@@ -162,17 +162,17 @@ export default function AffiliatesPage() {
                 { plan: "Mensal Ilimitado", price: 149.90 },
               ].map((row) => (
                 <tr key={row.plan} className="border-b border-border/40 last:border-0">
-                  <td className="p-5 lv-body-strong">{row.plan}</td>
-                  <td className="p-5 lv-body text-right">R${row.price.toFixed(2)}</td>
+                  <td className="p-5 rd-body" style={{ fontWeight: 600 }}>{row.plan}</td>
+                  <td className="p-5 rd-body text-right">R${row.price.toFixed(2)}</td>
                   <td className="p-5 text-right">
-                    <span className="lv-stat text-lg">R${(row.price * 0.3).toFixed(2)}</span>
+                    <span className="rd-heading text-lg">R${(row.price * 0.3).toFixed(2)}</span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="text-center lv-caption mt-3 italic">
+        <p className="text-center rd-label mt-3 italic">
           Exemplo: 10 vendas do plano Mensal = R$449,70 em comissões por mês.
         </p>
       </section>
