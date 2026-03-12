@@ -87,19 +87,19 @@ export default function AffiliatesPage() {
 
       {/* Hero */}
       <section className="px-6 py-20 max-w-4xl mx-auto text-center">
-        <p className="lv-overline mb-4">Programa de Afiliados</p>
-        <h1 className="lv-heading-xl mb-6">Ganhe dinheiro indicando o {brandName}</h1>
-        <p className="lv-body text-base max-w-2xl mx-auto mb-10">
+        <p className="rd-label mb-4" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>Programa de Afiliados</p>
+        <h1 className="rd-heading mb-6" style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)" }}>Ganhe dinheiro indicando o {brandName}</h1>
+        <p className="rd-body text-base max-w-2xl mx-auto mb-10">
           Torne-se afiliado, compartilhe seu link exclusivo e receba <strong className="text-foreground">30% de comissão</strong> em cada venda.
           Além disso, ganhe <strong className="text-foreground">20% de desconto</strong> nos seus próprios planos.
         </p>
         <div className="flex items-center justify-center gap-4">
           {!authLoading && user ? (
-            <button onClick={() => setShowEnrollForm(true)} className="lv-btn-primary lv-btn-lg px-8">
+            <button onClick={() => setShowEnrollForm(true)} className="gl primary lg">
               Quero ser afiliado
             </button>
           ) : (
-            <Link to="/register" className="lv-btn-primary lv-btn-lg px-8">
+            <Link to="/register" className="gl primary lg">
               Criar conta e ser afiliado
             </Link>
           )}
