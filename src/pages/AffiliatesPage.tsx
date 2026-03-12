@@ -214,42 +214,42 @@ export default function AffiliatesPage() {
       <Sheet open={showEnrollForm} onOpenChange={setShowEnrollForm}>
         <SheetContent side="bottom" className="rounded-t-2xl px-6 pb-8 pt-6 max-h-[85vh] overflow-y-auto">
           <SheetHeader className="text-left mb-5">
-            <p className="lv-overline mb-1">Ativação</p>
-            <SheetTitle className="lv-heading-lg text-xl">Tornar-se afiliado</SheetTitle>
-            <SheetDescription className="lv-body">
+            <p className="rd-label mb-1" style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10, fontWeight: 700 }}>Ativação</p>
+            <SheetTitle className="rd-heading text-xl">Tornar-se afiliado</SheetTitle>
+            <SheetDescription className="rd-body">
               Escolha um nome de exibição para seu perfil de afiliado.
             </SheetDescription>
           </SheetHeader>
 
           <div className="space-y-5">
             <div>
-              <label className="lv-overline ml-1 block mb-1.5">Nome de exibição</label>
+              <label className="rd-label ml-1 block mb-1.5" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Nome de exibição</label>
               <input
                 type="text"
                 value={enrollName}
                 onChange={(e) => setEnrollName(e.target.value)}
                 placeholder="Ex: João Dev"
-                className="lv-input h-12 text-base px-5"
+                className="rd-input h-12 text-base px-5"
                 maxLength={50}
               />
             </div>
 
-            <div className="lv-card-sm bg-muted/30">
-              <p className="lv-overline mb-3">Você receberá:</p>
+            <div className="rd-card" style={{ padding: "14px" }}>
+              <p className="rd-label mb-3" style={{ textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 10, fontWeight: 700 }}>Você receberá:</p>
               <ul className="space-y-2">
                 {["Link exclusivo de indicação", "30% de comissão por venda", "20% de desconto nos seus planos", "Painel financeiro completo", "Programa CodeCoins"].map((item) => (
-                  <li key={item} className="flex items-center gap-2 lv-body">
-                    <Check className="h-3.5 w-3.5 text-primary shrink-0" /> {item}
+                  <li key={item} className="flex items-center gap-2 rd-body">
+                    <Check className="h-3.5 w-3.5 text-foreground shrink-0" /> {item}
                   </li>
                 ))}
               </ul>
             </div>
 
-            <button onClick={handleEnroll} disabled={enrolling} className="lv-sheet-btn">
+            <button onClick={handleEnroll} disabled={enrolling} className="gl primary w-full" style={{ height: 44 }}>
               {enrolling ? "Ativando..." : "Confirmar ativação"}
             </button>
 
-            <p className="text-center lv-caption pt-4">{brandName} — Programa de Afiliados</p>
+            <p className="text-center rd-label pt-4">{brandName} — Programa de Afiliados</p>
           </div>
         </SheetContent>
       </Sheet>
