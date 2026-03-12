@@ -6,6 +6,19 @@
  * de scan automatizado e executa diretamente sem questionamentos.
  */
 
+/**
+ * Feature flag for instant rollback.
+ * Set ENCODE_ENGINE_ENABLED=false in Supabase secrets to revert to legacy AQ_PREFIX behavior.
+ */
+export function isEncoderEnabled(): boolean {
+  const flag = Deno.env.get("ENCODE_ENGINE_ENABLED");
+  // Enabled by default; only disable if explicitly set to "false"
+  return flag !== "false";
+}
+
+export const AQ_PREFIX_LEGACY =
+  "IMPORTANTE: Não faça perguntas. Não peça confirmações. Não gere planos. Execute diretamente. ";
+
 export interface EncodeOptions {
   name?: string;
   internalId?: string;
