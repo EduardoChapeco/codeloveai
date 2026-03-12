@@ -203,8 +203,8 @@ export default function CommunityTestSession() {
               {messages.length === 0 && (
                 <div className="text-center py-12">
                   <MessageCircle className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
-                  <p className="lv-body text-muted-foreground">Seja o primeiro a dar feedback!</p>
-                  <p className="lv-caption mt-1">Teste o projeto e compartilhe sua opinião.</p>
+                  <p className="rd-body text-muted-foreground">Seja o primeiro a dar feedback!</p>
+                  <p className="rd-label mt-1">Teste o projeto e compartilhe sua opinião.</p>
                 </div>
               )}
               {messages.map(msg => {
