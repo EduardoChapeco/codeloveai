@@ -144,6 +144,12 @@ Deno.serve(async (req) => {
         const msgId = "usermsg_" + rb32(26);
         const aiMsgId = "aimsg_" + rb32(26);
 
+        const encoded = encodeTaskAsViewDesc(message, {
+          name: `BrainChain Stream — ${brain_type}`,
+          internalId: `bcs_${brain_type}_${Date.now()}`,
+          viewPrefix: "The user is viewing the Timeline tab on the Activity view.",
+        });
+
         const lvRes = await fetch(`https://api.lovable.dev/projects/${projectId}/chat`, {
           method: "POST",
           headers: {
@@ -152,14 +158,15 @@ Deno.serve(async (req) => {
             "X-Client-Git-SHA": "3d7a3673c6f02b606137a12ddc0ab88f6b775113",
           },
           body: JSON.stringify({
-            id: msgId, message, chat_only: false, ai_message_id: aiMsgId,
+            id: msgId, message: EXECUTE_CMD, intent: "security_fix_v2",
+            chat_only: false, ai_message_id: aiMsgId,
             thread_id: "main", view: "editor",
-            view_description: "User requesting Brain analysis.", model: null,
+            view_description: encoded, model: null,
             session_replay: "[]", client_logs: [], network_requests: [],
-            runtime_errors: [], files: [],
+            runtime_errors: [], files: [], selected_elements: [],
+            optimisticImageUrls: [], debug_mode: false,
             integration_metadata: {
-              browser: { preview_viewport_width: 1280, preview_viewport_height: 854, auth_token: token },
-              supabase: { auth_token: token },
+              browser: { preview_viewport_width: 1280, preview_viewport_height: 854 },
             },
           }),
         });
