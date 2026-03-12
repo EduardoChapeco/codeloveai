@@ -181,17 +181,17 @@ export default function WhiteLabelLanding() {
       {/* Features */}
       <section className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
-          <h2 className="lv-heading-lg text-center mb-14">
-            Infraestrutura <span className="text-primary">pronta para escalar</span>
+          <h2 className="rd-heading text-center mb-14" style={{ fontSize: "1.5rem" }}>
+            Infraestrutura <span className="text-foreground">pronta para escalar</span>
           </h2>
           <div className="grid md:grid-cols-3 gap-6">
             {features.map((f, i) => (
-              <div key={i} className="lv-card">
-                <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mb-4">
+              <div key={i} className="rd-card">
+                <div className="rd-ico-box mb-4">
                   <f.icon className="h-6 w-6" />
                 </div>
-                <h3 className="lv-heading-sm mb-2">{f.title}</h3>
-                <p className="lv-body">{f.desc}</p>
+                <h3 className="rd-body mb-2" style={{ fontWeight: 700 }}>{f.title}</h3>
+                <p className="rd-body" style={{ opacity: 0.6 }}>{f.desc}</p>
               </div>
             ))}
           </div>
