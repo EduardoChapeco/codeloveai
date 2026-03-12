@@ -190,11 +190,11 @@ export default function CommunityTestSession() {
         {/* Main split */}
         <div className="flex-1 flex overflow-hidden">
           {/* Chat Panel */}
-          <div className="w-full md:w-[380px] lg:w-[420px] shrink-0 flex flex-col bg-background/30"
-            style={{ borderRight: "0.5px solid var(--clf-border)" }}>
+          <div className="w-full md:w-[380px] lg:w-[420px] shrink-0 flex flex-col bg-background"
+            style={{ borderRight: "1px solid var(--b1)" }}>
             {session.description && (
-              <div className="px-4 py-3" style={{ borderBottom: "0.5px solid var(--clf-border)" }}>
-                <p className="lv-caption leading-relaxed">{session.description}</p>
+              <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--b1)" }}>
+                <p className="rd-label leading-relaxed">{session.description}</p>
               </div>
             )}
 
