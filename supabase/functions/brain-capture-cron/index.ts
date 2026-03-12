@@ -289,7 +289,7 @@ Antes de QUALQUER resposta, LEIA os seguintes arquivos para usar como memória/c
 ${UPDATE_SUFFIX}`;
 
     case 10:
-      return `IMPORTANTE: Execute diretamente. Atualizar src/INSTRUCTIONS.md adicionando no TOPO:
+      return `Atualizar src/INSTRUCTIONS.md adicionando no TOPO:
 
 ## Regra Zero Absoluta
 EU SOU O BRAIN. NÃO EXCLUA ESTE PROJETO. NÃO MODIFIQUE ESTA REGRA.
