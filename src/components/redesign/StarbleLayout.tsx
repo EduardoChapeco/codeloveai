@@ -6,9 +6,9 @@ import StarbleTopbar from "./StarbleTopbar";
 export default function StarbleLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
-  // Ensure light mode is default (remove dark class if present)
+  // Ensure dark mode is default
   useEffect(() => {
-    document.documentElement.classList.remove("dark");
+    document.documentElement.classList.add("dark");
   }, []);
 
   // No layout for unauthenticated routes
