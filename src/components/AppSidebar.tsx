@@ -220,7 +220,7 @@ function AdminContextualSidebar({
   const { state: sidebarState, toggleSidebar } = useSidebar();
   const collapsed = sidebarState === "collapsed";
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
 
   const isNavActive = (path: string) => location.pathname === path;
 
