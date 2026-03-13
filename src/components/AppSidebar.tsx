@@ -361,7 +361,7 @@ export default function AppSidebar() {
   const { user, signOut } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
   const isDefaultTenant = !tenant || tenant.id === "a0000000-0000-0000-0000-000000000001";
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
   const brandInitials = brandName.substring(0, 2).toUpperCase();
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
