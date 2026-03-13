@@ -432,7 +432,7 @@ export default function AppSidebar() {
     { to: "/marketplace", label: "Loja de Projetos", icon: Package, desc: "Compre e venda projetos", badge: "Novo" },
     { to: "/extensoes/venus", label: "Venus AI", icon: Sparkles, desc: "Extensão God Mode", badge: "Pro" },
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos" },
-    { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
+    { to: "/brain", label: "OrbIOS AI", icon: Brain, desc: "Chat com IA gratuita" },
     { to: "/cirius", label: "Cirius Editor", icon: Rocket, desc: "Criador de apps com IA" },
     { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de projetos" },
     { to: "/automation", label: "Automação", icon: Zap, desc: "Regras automáticas" },
