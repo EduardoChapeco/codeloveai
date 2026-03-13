@@ -4,7 +4,8 @@ import "./index.css";
 import "./styles/redesign.css";
 import { registerSWUpdate, checkAppVersion } from "./sw-update";
 
-// Force cache bust on new deployments
+// Force dark theme globally and cache bust on new deployments
+document.documentElement.classList.add("dark");
 checkAppVersion();
 registerSWUpdate();
 
