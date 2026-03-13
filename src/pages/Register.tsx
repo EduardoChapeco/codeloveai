@@ -10,7 +10,7 @@ import { isDisposableEmail } from "@/lib/disposable-emails";
 export default function Register() {
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
   useSEO({ title: "Criar conta" });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -101,7 +101,7 @@ export default function Register() {
             </div>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={wantBrain} onChange={(e) => setWantBrain(e.target.checked)} className="rounded border-border" />
-              <span className="rd-body">Ativar Star AI Brain (assistente IA dedicado)</span>
+              <span className="rd-body">Ativar OrbIOS AI Brain (assistente IA dedicado)</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={wantAffiliate} onChange={(e) => setWantAffiliate(e.target.checked)} className="rounded border-border" />

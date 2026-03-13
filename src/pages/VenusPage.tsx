@@ -26,7 +26,7 @@ interface VenusPlan {
 const features = [
   { icon: Crown, title: "God Mode", desc: "Acesso ilimitado a todas as funcionalidades sem restrições." },
   { icon: Workflow, title: "Modo Orquestrado", desc: "Automação inteligente com execução sequencial e paralela." },
-  { icon: Brain, title: "Star AI Brain", desc: "IA contextual que entende seu projeto e executa correções." },
+  { icon: Brain, title: "OrbIOS AI Brain", desc: "IA contextual que entende seu projeto e executa correções." },
   { icon: Cpu, title: "Chat Multi-Modo", desc: "5 modos: task, chat, security, build error e task error." },
   { icon: Bolt, title: "Build Automation", desc: "Detecção e correção automática de erros em tempo real." },
   { icon: Target, title: "Tasks & PRD Engine", desc: "Motor de geração e execução de PRDs com acompanhamento." },
@@ -46,7 +46,7 @@ export default function VenusPage() {
   const { tenant } = useTenant();
   const navigate = useNavigate();
   const { hasAccessTo, loading: accessLoading } = useExtensionAccess();
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
   const [plans, setPlans] = useState<VenusPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);

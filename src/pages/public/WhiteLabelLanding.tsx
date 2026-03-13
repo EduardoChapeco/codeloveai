@@ -25,8 +25,8 @@ const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
 const defaultBranding: TenantBranding = {
   id: DEFAULT_TENANT_ID,
-  name: "Starble",
-  slug: "starble",
+  name: "OrbIOS",
+  slug: "orbios",
   primary_color: "#6366f1",
   secondary_color: "#4f46e5",
   accent_color: "#818cf8",
@@ -94,7 +94,7 @@ export default function WhiteLabelLanding() {
   }, [tenantSlug]);
 
   const isCustom = brand.id !== DEFAULT_TENANT_ID;
-  const appName = brand.name || "Starble";
+  const appName = brand.name || "OrbIOS";
   const logoInitial = appName.charAt(0).toUpperCase();
 
   const onboardingLink = isCustom

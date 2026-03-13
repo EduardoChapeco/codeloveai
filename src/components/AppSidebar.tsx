@@ -220,7 +220,7 @@ function AdminContextualSidebar({
   const { state: sidebarState, toggleSidebar } = useSidebar();
   const collapsed = sidebarState === "collapsed";
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
 
   const isNavActive = (path: string) => location.pathname === path;
 
@@ -361,7 +361,7 @@ export default function AppSidebar() {
   const { user, signOut } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
   const isDefaultTenant = !tenant || tenant.id === "a0000000-0000-0000-0000-000000000001";
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
   const brandInitials = brandName.substring(0, 2).toUpperCase();
   const { isAdmin } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
@@ -432,7 +432,7 @@ export default function AppSidebar() {
     { to: "/marketplace", label: "Loja de Projetos", icon: Package, desc: "Compre e venda projetos", badge: "Novo" },
     { to: "/extensoes/venus", label: "Venus AI", icon: Sparkles, desc: "Extensão God Mode", badge: "Pro" },
     { to: "/lovable/projects", label: "Projetos", icon: FolderOpen, desc: "Seus projetos" },
-    { to: "/brain", label: "Star AI", icon: Brain, desc: "Chat com IA gratuita" },
+    { to: "/brain", label: "OrbIOS AI", icon: Brain, desc: "Chat com IA gratuita" },
     { to: "/cirius", label: "Cirius Editor", icon: Rocket, desc: "Criador de apps com IA" },
     { to: "/orquestrador", label: "Orquestrador", icon: Workflow, desc: "Automação de projetos" },
     { to: "/automation", label: "Automação", icon: Zap, desc: "Regras automáticas" },

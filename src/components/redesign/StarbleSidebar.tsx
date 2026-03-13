@@ -47,7 +47,7 @@ export default function StarbleSidebar() {
   const { hasAccess } = useHasActiveAccess();
   const location = useLocation();
   const navigate = useNavigate();
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
 
   const [collapsed, setCollapsed] = useState(false);
 
@@ -211,7 +211,7 @@ export default function StarbleSidebar() {
               <Sparkles size={11} style={{ display: "inline", marginRight: 4 }} />
               Upgrade para Pro
             </div>
-            <div className="su-desc">Acesse Star Brain e recursos avançados</div>
+            <div className="su-desc">Acesse OrbIOS Brain e recursos avançados</div>
             <button className="gl sm primary" style={{ width: "100%" }}>Ver planos</button>
           </div>
         )}

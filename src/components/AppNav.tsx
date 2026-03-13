@@ -15,7 +15,7 @@ export default function AppNav() {
   const { toggleChat, isChatOpen } = useChatContext();
   const { tenant, isTenantAdmin, isTenantOwner } = useTenant();
   const { hasAccess } = useHasActiveAccess();
-  const brandName = tenant?.name || "Starble Ai";
+  const brandName = tenant?.name || "OrbIOS AI";
   const location = useLocation();
 
   if (authLoading || !user) return null;
