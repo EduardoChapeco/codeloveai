@@ -54,7 +54,7 @@ export default function HelpCenter() {
             <BookOpen style={{ width: 32, height: 32 }} />
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", color: "var(--text-primary)", marginBottom: 6 }}>Central de Ajuda</h1>
-          <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 400, margin: "0 auto" }}>Artigos, guias e respostas para tudo sobre o Starble.</p>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 400, margin: "0 auto" }}>Artigos, guias e respostas para tudo sobre o OrbIOS.</p>
         </div>
 
         {/* Search */}

@@ -343,7 +343,7 @@ export default function StarbleProjectsPage() {
       {/* Grid */}
       <div className="proj-grid" style={{ padding: "0 28px 28px" }}>
         {/* New project card */}
-        <div className="proj-card new-card" onClick={() => window.open("https://chromewebstore.google.com/detail/starble-speed/YOUR_EXTENSION_ID", "_blank")}>
+        <div className="proj-card new-card" onClick={() => window.open("https://chromewebstore.google.com/detail/orbios/YOUR_EXTENSION_ID", "_blank")}>
           <div className="nc-ico"><Zap size={18} /></div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--tp)" }}>Baixe nossa extensão</div>
           <div style={{ fontSize: 11, color: "var(--tt)" }}>Acesse seus projetos Lovable com superpoderes</div>

@@ -25,76 +25,10 @@ const DEFAULT_TENANT_ID = "a0000000-0000-0000-0000-000000000001";
 
 const defaultBranding: TenantBranding = {
   id: DEFAULT_TENANT_ID,
-  name: "Starble",
-  slug: "starble",
-  primary_color: "#6366f1",
-  secondary_color: "#4f46e5",
-  accent_color: "#818cf8",
-  logo_url: null,
-  favicon_url: null,
-  font_family: "Inter",
-  border_radius: "0.75rem",
-  theme_preset: "default",
-  meta_title: null,
-  meta_description: null,
-};
-
-const features = [
-  { icon: Palette, title: "Sua Marca. 100% Sua.", desc: "Logotipo, cores, domínio personalizado — seus clientes nunca saberão o que há por baixo. Marca branca completa." },
-  { icon: Users, title: "Gestão de Clientes Integrada", desc: "Dashboard completo para gerenciar usuários, planos, limites de uso e faturamento — tudo num só lugar." },
-  { icon: BarChart2, title: "Relatórios e Analytics", desc: "Métricas de engajamento, retenção, receita e crescimento. Dados que embasam decisões estratégicas." },
-  { icon: Shield, title: "SLA e Suporte Dedicado", desc: "Canal de suporte exclusivo para operadores White Label. Atendimento prioritário e SLA garantido." },
-  { icon: Globe, title: "Domínio Personalizado", desc: "Configure seu próprio domínio com SSL automático. Experiência completamente customizada." },
-  { icon: Building2, title: "Multi-tenant por Natureza", desc: "A arquitetura foi construída para white-label desde o início. Sem gambiarras ou adaptações superficiais." },
-];
-
-const plans = [
-  { name: "Diário", price: "R$7,96", period: "/usuário/dia", desc: "40% do preço final — pague apenas quando o usuário estiver ativo", cta: "Começar agora", features: ["Marca personalizada", "Domínio próprio", "Planos customizáveis", "Suporte dedicado"] },
-  { name: "Mensal", price: "R$59,96", period: "/usuário/mês", desc: "40% do preço final — economia vs diário", cta: "Começar agora", features: ["Tudo do Diário", "Desconto recorrente", "Relatórios avançados", "Suporte prioritário", "SLA 99.9%"], featured: true },
-];
-
-const faqs = [
-  { q: "Posso criar meu próprio programa de afiliados?", a: "Sim. Operadores White Label têm acesso a um sistema de afiliados próprio dentro do seu tenant, com splits de comissão configuráveis." },
-  { q: "Meus clientes sabem a plataforma base?", a: "Não, se você configurar um domínio personalizado e sua própria marca. A experiência é completamente sua." },
-  { q: "Quanto tempo leva para configurar?", a: "A configuração básica (marca + domínio + primeiros usuários) pode ser feita em menos de 2 horas. Nosso onboarding guiado te leva passo a passo." },
-  { q: "Posso oferecer preços diferentes?", a: "Sim. Você define os preços para seus clientes. A plataforma cobra um custo por usuário — a margem é toda sua." },
-  { q: "E se eu precisar de funcionalidades customizadas?", a: "Projetos Enterprise podem incluir desenvolvimento personalizado. Fale com nosso time comercial para avaliar a viabilidade." },
-];
-
-export default function WhiteLabelLanding() {
-  const [searchParams] = useSearchParams();
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const { user, loading: authLoading } = useAuth();
-  const [brand, setBrand] = useState<TenantBranding>(defaultBranding);
-  const [loading, setLoading] = useState(true);
-
-  const tenantSlug = searchParams.get("tenant");
-
-  useEffect(() => {
-    async function loadTenantBranding() {
-      if (!tenantSlug) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const sanitized = tenantSlug.replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
-        const { data } = await supabase
-          .from("tenants")
-          .select("id,name,slug,primary_color,secondary_color,accent_color,logo_url,favicon_url,font_family,border_radius,theme_preset,meta_title,meta_description")
-          .eq("slug", sanitized)
-          .eq("is_active", true)
-          .maybeSingle();
-        if (data) {
-          setBrand(data as TenantBranding);
-        }
-      } catch { /* fallback to default */ }
-      setLoading(false);
-    }
-    loadTenantBranding();
-  }, [tenantSlug]);
-
-  const isCustom = brand.id !== DEFAULT_TENANT_ID;
-  const appName = brand.name || "Starble";
+  name: "OrbIOS",
+  slug: "orbios",
+...
+  const appName = brand.name || "OrbIOS";
   const logoInitial = appName.charAt(0).toUpperCase();
 
   const onboardingLink = isCustom

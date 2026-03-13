@@ -47,7 +47,7 @@ export default function PartnersLanding() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { tenant } = useTenant();
   const { user, loading: authLoading } = useAuth();
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
   useSEO({ title: `Parceiros — ${brandName}`, description: "Programa de afiliados e White Label. Ganhe comissões ou revenda com sua própria marca." });
 
   const content = (
