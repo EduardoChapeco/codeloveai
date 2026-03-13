@@ -9,7 +9,7 @@ import { useTenant } from "@/contexts/TenantContext";
 export default function Login() {
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "Starble";
+  const brandName = tenant?.name || "OrbIOS";
   useSEO({ title: "Entrar" });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

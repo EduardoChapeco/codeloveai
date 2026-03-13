@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Speed",
-  "short_name": "Speed",
+  "name": "OrbIOS",
+  "short_name": "OrbIOS",
   "version": "1.0.0",
-  "description": "Speed — AI chat para Lovable.dev",
+  "description": "OrbIOS — AI chat para Lovable.dev",
   "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
   "action": {
     "default_icon": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
-    "default_title": "Speed"
+    "default_title": "OrbIOS"
   },
   "side_panel": { "default_path": "panel.html" },
   "background": { "service_worker": "background.js" },

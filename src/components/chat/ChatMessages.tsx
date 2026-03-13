@@ -27,7 +27,7 @@ export default function ChatMessages() {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="text-center space-y-2">
-          <p className="text-lg font-bold">Starble</p>
+          <p className="text-lg font-bold">OrbIOS</p>
           <p className="text-sm text-muted-foreground">Como posso ajudar você hoje?</p>
         </div>
       </div>
