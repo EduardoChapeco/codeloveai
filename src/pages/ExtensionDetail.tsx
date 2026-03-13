@@ -47,7 +47,70 @@ export default function ExtensionDetail() {
   const navigate = useNavigate();
   const { hasAccessTo, loading: accessLoading } = useExtensionAccess();
   const brandName = tenant?.name || "OrbIOS";
-...
+
+  const [ext, setExt] = useState<Extension | null>(null);
+  const [plans, setPlans] = useState<LinkedPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!slug) return;
+    const fetch = async () => {
+      const { data } = await supabase
+        .from("extension_catalog")
+        .select("*")
+        .eq("slug", slug)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!data) {
+        setLoading(false);
+        return;
+      }
+
+      const raw = data as Record<string, unknown>;
+      setExt({
+        id: raw.id as string,
+        slug: raw.slug as string,
+        name: raw.name as string,
+        tagline: raw.tagline as string,
+        description: raw.description as string,
+        icon: raw.icon as string,
+        hero_color: raw.hero_color as string,
+        tier: raw.tier as string,
+        is_featured: raw.is_featured as boolean,
+        version: raw.version as string,
+        features: Array.isArray(raw.features) ? (raw.features as { title: string; description: string }[]) : [],
+        requirements: Array.isArray(raw.requirements) ? (raw.requirements as string[]) : [],
+      });
+
+      const { data: peData } = await supabase
+        .from("plan_extensions")
+        .select("plan_id")
+        .eq("extension_id", data.id);
+
+      if (peData && peData.length > 0) {
+        const planIds = peData.map((pe: any) => pe.plan_id);
+        const { data: plansData } = await supabase
+          .from("plans")
+          .select("id, name, price, billing_cycle")
+          .in("id", planIds)
+          .eq("is_active", true)
+          .eq("is_public", true)
+          .order("price", { ascending: true });
+
+        setPlans((plansData || []) as LinkedPlan[]);
+      }
+      setLoading(false);
+    };
+    fetch();
+  }, [slug]);
+
+  const userHasAccess = !accessLoading && slug ? hasAccessTo(slug) : false;
+
+  const handleDownload = async () => {
+    if (!user) { navigate("/login"); return; }
+    if (!ext) return;
+    if (ext.tier === "white_label_only") {
       toast.error("OrbIOS Labs é exclusivo para proprietários de White Label.");
       return;
     }

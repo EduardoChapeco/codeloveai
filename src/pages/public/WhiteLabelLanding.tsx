@@ -27,7 +27,51 @@ const defaultBranding: TenantBranding = {
   id: DEFAULT_TENANT_ID,
   name: "OrbIOS",
   slug: "orbios",
-...
+  primary_color: "#6366f1",
+  secondary_color: "#4f46e5",
+  accent_color: "#818cf8",
+  logo_url: null,
+  favicon_url: null,
+  font_family: "Inter",
+  border_radius: "0.75rem",
+  theme_preset: "default",
+  meta_title: null,
+  meta_description: null,
+};
+
+export default function WhiteLabelLanding() {
+  const [searchParams] = useSearchParams();
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const { user, loading: authLoading } = useAuth();
+  const [brand, setBrand] = useState<TenantBranding>(defaultBranding);
+  const [loading, setLoading] = useState(true);
+
+  const tenantSlug = searchParams.get("tenant");
+
+  useEffect(() => {
+    async function loadTenantBranding() {
+      if (!tenantSlug) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const sanitized = tenantSlug.replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
+        const { data } = await supabase
+          .from("tenants")
+          .select("id,name,slug,primary_color,secondary_color,accent_color,logo_url,favicon_url,font_family,border_radius,theme_preset,meta_title,meta_description")
+          .eq("slug", sanitized)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (data) {
+          setBrand(data as TenantBranding);
+        }
+      } catch { /* fallback to default */ }
+      setLoading(false);
+    }
+    loadTenantBranding();
+  }, [tenantSlug]);
+
+  const isCustom = brand.id !== DEFAULT_TENANT_ID;
   const appName = brand.name || "OrbIOS";
   const logoInitial = appName.charAt(0).toUpperCase();
 

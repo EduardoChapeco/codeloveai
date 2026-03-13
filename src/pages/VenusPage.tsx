@@ -27,7 +27,25 @@ const features = [
   { icon: Crown, title: "God Mode", desc: "Acesso ilimitado a todas as funcionalidades sem restrições." },
   { icon: Workflow, title: "Modo Orquestrado", desc: "Automação inteligente com execução sequencial e paralela." },
   { icon: Brain, title: "OrbIOS AI Brain", desc: "IA contextual que entende seu projeto e executa correções." },
-...
+  { icon: Cpu, title: "Chat Multi-Modo", desc: "5 modos: task, chat, security, build error e task error." },
+  { icon: Bolt, title: "Build Automation", desc: "Detecção e correção automática de erros em tempo real." },
+  { icon: Target, title: "Tasks & PRD Engine", desc: "Motor de geração e execução de PRDs com acompanhamento." },
+  { icon: Shield, title: "Anti-Bypass", desc: "Proteção avançada com bloqueio automático contra uso indevido." },
+  { icon: Zap, title: "Zero Latência", desc: "Execução direta via canal nativo — sem intermediários." },
+];
+
+const faqs = [
+  { q: "Preciso de um plano Lovable pago?", a: "Não necessariamente. Venus funciona com qualquer conta Lovable, mas ter um plano pago pode melhorar a experiência geral." },
+  { q: "O que acontece se meu token expirar?", a: "A extensão detecta automaticamente tokens expirados e tenta um refresh. Se falhar, basta reconectar na extensão." },
+  { q: "Posso usar em múltiplos projetos?", a: "Sim! Venus funciona em qualquer projeto Lovable vinculado à sua conta. Basta selecionar o projeto ativo na extensão." },
+  { q: "É seguro usar?", a: "Venus utiliza criptografia de ponta, tokens CLF1 assinados via HMAC-SHA256 e validação de hardware. Tentativas de bypass resultam em bloqueio automático." },
+];
+
+export default function VenusPage() {
+  const { user } = useAuth();
+  const { tenant } = useTenant();
+  const navigate = useNavigate();
+  const { hasAccessTo, loading: accessLoading } = useExtensionAccess();
   const brandName = tenant?.name || "OrbIOS";
   const [plans, setPlans] = useState<VenusPlan[]>([]);
   const [loading, setLoading] = useState(true);
