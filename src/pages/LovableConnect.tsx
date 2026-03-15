@@ -362,7 +362,7 @@ export default function LovableConnect() {
                     {ssoStatus === "success" && "✅ Extensão conectada com sucesso!"}
                     {ssoStatus === "error" && "❌ Erro ao conectar extensão"}
                   </p>
-                  <p className="lv-caption text-xs">
+                  <p className="text-xs text-muted-foreground">
                     {ssoStatus === "waiting" && "Recebendo token da extensão Chrome"}
                     {ssoStatus === "connecting" && "Buscando licença CLF1..."}
                     {ssoStatus === "success" && "Token CLF1 enviado para a extensão"}
