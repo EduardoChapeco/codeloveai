@@ -159,7 +159,7 @@ export const MODE_CONFIG: Record<string, ModeConfig> = {
   },
   chat: {
     intent: "security_fix_v2",
-    chatOnly: true,
+    chatOnly: false,
     view: "preview",
     viewPrefix: "The user is currently viewing the preview.",
     useEncoder: false,
