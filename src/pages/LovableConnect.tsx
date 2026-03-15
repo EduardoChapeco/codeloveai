@@ -443,7 +443,7 @@ export default function LovableConnect() {
             {/* 4. Aviso de segurança */}
             <div className="rd-card bg-accent/30 flex items-start gap-3 border-none">
               <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <p className="lv-caption text-xs leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Seu token é armazenado de forma segura no servidor e <strong className="text-foreground">nunca</strong> é exposto no navegador após salvo.
               </p>
             </div>
