@@ -356,7 +356,7 @@ export default function LovableConnect() {
                   {ssoStatus === "error" && <X className="h-5 w-5 text-destructive" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="lv-body-strong text-sm">
+                  <p className="text-sm font-semibold text-foreground">
                     {ssoStatus === "waiting" && "Aguardando extensão..."}
                     {ssoStatus === "connecting" && "Conectando..."}
                     {ssoStatus === "success" && "✅ Extensão conectada com sucesso!"}
