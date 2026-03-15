@@ -408,7 +408,7 @@ export default function MarketplaceOnboarding() {
         )}
 
         {/* CDC and legal notice */}
-        <div className="mt-8 clf-liquid-glass rounded-2xl p-6">
+        <div className="mt-8 rd-card rounded-2xl p-6">
           <h3 className="text-xs font-bold mb-3 flex items-center gap-2">
             <Shield className="h-4 w-4 text-muted-foreground" /> Avisos Legais e Regras CDC
           </h3>

@@ -43,8 +43,8 @@ export default function AffiliateLanding() {
               <span className="font-bold text-sm text-foreground">Starble</span>
             </Link>
             <div className="flex items-center gap-4">
-              <Link to="/login" className="lv-btn-ghost h-9 px-3 text-xs">Entrar</Link>
-              <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta grátis</Link>
+              <Link to="/login" className="gl ghost h-9 px-3 text-xs">Entrar</Link>
+              <Link to="/register" className="gl primary h-9 px-4 text-xs">Criar conta grátis</Link>
             </div>
           </div>
         </nav>
@@ -54,18 +54,18 @@ export default function AffiliateLanding() {
       <section className={`${!user ? "pt-32" : "pt-12"} pb-24 px-6 text-center relative overflow-hidden`}>
         <div className="relative max-w-4xl mx-auto">
           <span className="chip chip-orange mb-6">Programa de Afiliados</span>
-          <h1 className="lv-heading-xl mb-6">
+          <h1 className="text-4xl lg:text-5xl font-black text-foreground leading-tight mb-6" style={{ letterSpacing: "-0.04em" }}>
             Indique. Ganhe. Escale.
           </h1>
-          <p className="lv-body-lg text-base max-w-2xl mx-auto mb-4">
+          <p className="text-base text-muted-foreground max-w-2xl mx-auto mb-4">
             Transforme sua audiência em renda recorrente. Até <strong className="text-foreground">30% de comissão</strong> em cada cliente que você indicar — todo mês, enquanto ele for assinante.
           </p>
-          <p className="lv-caption mb-10">Sem custo de entrada. Sem taxa de adesão. Apenas resultados.</p>
+          <p className="text-xs text-muted-foreground mb-10">Sem custo de entrada. Sem taxa de adesão. Apenas resultados.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/register" className="lv-btn-primary lv-btn-lg">
+            <Link to="/register" className="gl primary h-11 px-5 inline-flex items-center gap-2">
               Quero ser afiliado <ArrowRight className="h-5 w-5" />
             </Link>
-            <Link to="/login" className="lv-btn-secondary lv-btn-lg">
+            <Link to="/login" className="gl ghost h-11 px-5 inline-flex items-center gap-2">
               Já tenho conta
             </Link>
           </div>
@@ -82,8 +82,8 @@ export default function AffiliateLanding() {
             { value: "30d", label: "janela de rastreamento" },
           ].map((s, i) => (
             <div key={i}>
-              <div className="lv-stat text-3xl">{s.value}</div>
-              <p className="lv-caption mt-1">{s.label}</p>
+              <div className="text-3xl font-extrabold text-foreground" style={{ letterSpacing: "-0.03em" }}>{s.value}</div>
+              <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
             </div>
           ))}
         </div>
@@ -92,13 +92,13 @@ export default function AffiliateLanding() {
       {/* Benefits */}
       <section className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
-          <h2 className="lv-heading-lg text-center mb-14">Por que afiliados <span className="text-primary">escolhem o Starble</span></h2>
+          <h2 className="text-[28px] font-extrabold text-foreground text-center mb-14" style={{ letterSpacing: "-0.03em" }}>Por que afiliados <span className="text-primary">escolhem o Starble</span></h2>
           <div className="grid md:grid-cols-2 gap-6">
             {benefits.map((b, i) => (
-              <div key={i} className="lv-card">
+              <div key={i} className="rd-card">
                 <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-4">{b.icon}</div>
-                <h3 className="lv-heading-sm mb-2">{b.title}</h3>
-                <p className="lv-body">{b.desc}</p>
+                <h3 className="text-[15px] font-bold text-foreground mb-2">{b.title}</h3>
+                <p className="text-sm text-muted-foreground">{b.desc}</p>
               </div>
             ))}
           </div>
@@ -108,14 +108,14 @@ export default function AffiliateLanding() {
       {/* Tiers */}
       <section className="py-24 px-6 border-y border-border/50">
         <div className="max-w-4xl mx-auto">
-          <h2 className="lv-heading-lg text-center mb-4">Estrutura de Comissões</h2>
-          <p className="lv-body text-center mb-14">Evolua automaticamente conforme suas indicações crescem</p>
+          <h2 className="text-[28px] font-extrabold text-foreground text-center mb-4" style={{ letterSpacing: "-0.03em" }}>Estrutura de Comissões</h2>
+          <p className="text-sm text-muted-foreground text-center mb-14">Evolua automaticamente conforme suas indicações crescem</p>
           <div className="grid md:grid-cols-3 gap-6">
             {tiers.map((t, i) => (
-              <div key={i} className={`lv-card text-center ${i === 2 ? "ring-2 ring-primary/30" : ""}`}>
+              <div key={i} className={`rd-card text-center ${i === 2 ? "ring-2 ring-primary/30" : ""}`}>
                 <div className={`text-xs font-bold tracking-widest uppercase mb-4 bg-gradient-to-r ${t.color} bg-clip-text text-transparent`}>{t.name}</div>
-                <div className="lv-stat text-5xl mb-2">{t.commission}</div>
-                <p className="lv-caption">{t.req}</p>
+                <div className="text-5xl font-extrabold text-foreground mb-2" style={{ letterSpacing: "-0.03em" }}>{t.commission}</div>
+                <p className="text-xs text-muted-foreground">{t.req}</p>
                 {"extra" in t && t.extra && <p className="text-xs text-primary mt-2 font-medium">{t.extra}</p>}
                 {i === 2 && <div className="mt-4 inline-flex items-center gap-1 text-xs text-primary font-semibold"><Star className="h-3 w-3 fill-current" /> Mais popular</div>}
               </div>
@@ -127,7 +127,7 @@ export default function AffiliateLanding() {
       {/* How it works */}
       <section className="py-24 px-6">
         <div className="max-w-4xl mx-auto">
-          <h2 className="lv-heading-lg text-center mb-14">Como funciona em <span className="text-primary">3 passos</span></h2>
+          <h2 className="text-[28px] font-extrabold text-foreground text-center mb-14" style={{ letterSpacing: "-0.03em" }}>Como funciona em <span className="text-primary">3 passos</span></h2>
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { step: "1", title: "Crie sua conta", desc: "Acesse /register, crie sua conta gratuita e ative o programa de afiliados no dashboard." },
@@ -136,8 +136,8 @@ export default function AffiliateLanding() {
             ].map((s, i) => (
               <div key={i} className="text-center">
                 <div className="h-14 w-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-primary text-2xl font-black mx-auto mb-4">{s.step}</div>
-                <h3 className="lv-heading-sm mb-2">{s.title}</h3>
-                <p className="lv-body">{s.desc}</p>
+                <h3 className="text-[15px] font-bold text-foreground mb-2">{s.title}</h3>
+                <p className="text-sm text-muted-foreground">{s.desc}</p>
               </div>
             ))}
           </div>
@@ -150,23 +150,23 @@ export default function AffiliateLanding() {
           <div className="flex justify-center gap-1 mb-4">{[...Array(5)].map((_, i) => <Star key={i} className="h-5 w-5 text-primary fill-primary" />)}</div>
           <p className="text-xl text-muted-foreground italic mb-4">"Em 3 meses como afiliado Starble, gerei mais de R$4.200 em recorrência. O painel é transparente e os pagamentos sempre no prazo."</p>
           <p className="text-sm font-semibold text-foreground">Lucas Andrade</p>
-          <p className="lv-caption">Creator Digital · 28k seguidores</p>
+          <p className="text-xs text-muted-foreground">Creator Digital · 28k seguidores</p>
         </div>
       </section>
 
       {/* FAQ */}
       <section className="py-24 px-6">
         <div className="max-w-2xl mx-auto">
-          <h2 className="lv-heading-lg text-center mb-14">Perguntas Frequentes</h2>
+          <h2 className="text-[28px] font-extrabold text-foreground text-center mb-14" style={{ letterSpacing: "-0.03em" }}>Perguntas Frequentes</h2>
           <div className="space-y-3">
             {faqs.map((faq, i) => (
               <div key={i} onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                className="lv-card-sm cursor-pointer">
+                className="rd-card cursor-pointer">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="lv-body-strong">{faq.q}</span>
+                  <span className="text-sm font-semibold text-foreground">{faq.q}</span>
                   <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${openFaq === i ? "rotate-180" : ""}`} />
                 </div>
-                {openFaq === i && <p className="lv-body mt-3 animate-fade-in">{faq.a}</p>}
+                {openFaq === i && <p className="text-sm text-muted-foreground mt-3 animate-fade-in">{faq.a}</p>}
               </div>
             ))}
           </div>
@@ -176,21 +176,21 @@ export default function AffiliateLanding() {
       {/* Final CTA */}
       <section className="py-24 px-6 text-center">
         <div className="max-w-xl mx-auto">
-          <h2 className="lv-heading-xl mb-4">Comece a ganhar hoje</h2>
-          <p className="lv-body-lg mb-8">Sem risco. Sem custo. Apenas resultados reais todo mês.</p>
-          <Link to="/register" className="lv-btn-primary lv-btn-lg inline-flex items-center gap-2">
+          <h2 className="text-4xl lg:text-5xl font-black text-foreground leading-tight mb-4" style={{ letterSpacing: "-0.04em" }}>Comece a ganhar hoje</h2>
+          <p className="text-base text-muted-foreground mb-8">Sem risco. Sem custo. Apenas resultados reais todo mês.</p>
+          <Link to="/register" className="gl primary h-11 px-5 inline-flex items-center gap-2">
             Criar conta e ser afiliado <ArrowRight className="h-5 w-5" />
           </Link>
-          <p className="lv-caption mt-4"><Lock className="h-3 w-3 inline mr-1" />Dados protegidos. LGPD compliant.</p>
+          <p className="text-xs text-muted-foreground mt-4"><Lock className="h-3 w-3 inline mr-1" />Dados protegidos. LGPD compliant.</p>
         </div>
       </section>
 
       <footer className="border-t border-border/50 py-8 px-6 text-center">
-        <p className="lv-caption">© 2026 Starble. Programa de Afiliados.</p>
+        <p className="text-xs text-muted-foreground">© 2026 Starble. Programa de Afiliados.</p>
         <div className="flex justify-center gap-6 mt-3">
-          <Link to="/termos" className="lv-caption hover:text-foreground transition-colors">Termos de Uso</Link>
-          <Link to="/faq" className="lv-caption hover:text-foreground transition-colors">FAQ</Link>
-          <Link to="/whitelabel" className="lv-caption hover:text-foreground transition-colors">White Label</Link>
+          <Link to="/termos" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Termos de Uso</Link>
+          <Link to="/faq" className="text-xs text-muted-foreground hover:text-foreground transition-colors">FAQ</Link>
+          <Link to="/whitelabel" className="text-xs text-muted-foreground hover:text-foreground transition-colors">White Label</Link>
         </div>
       </footer>
     </div>
