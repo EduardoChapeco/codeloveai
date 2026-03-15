@@ -451,7 +451,7 @@ export default function Profile() {
           )}
           {profile.social_github && (
             <a href={`https://github.com/${profile.social_github}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 lv-caption hover:text-foreground">
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <Github className="h-3 w-3" /> {profile.social_github}
             </a>
           )}
