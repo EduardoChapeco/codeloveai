@@ -445,7 +445,7 @@ export default function Profile() {
         <div className="flex gap-4 mb-8 flex-wrap">
           {profile.website && (
             <a href={profile.website} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 lv-caption hover:text-foreground">
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <Globe className="h-3 w-3" /> {profile.website.replace(/^https?:\/\//, "")}
             </a>
           )}
