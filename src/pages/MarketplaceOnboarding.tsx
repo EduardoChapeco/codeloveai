@@ -395,7 +395,7 @@ export default function MarketplaceOnboarding() {
 
         {/* Invoice info for seller */}
         {isSeller && onboarding.status === "confirmed" && (
-          <div className="clf-liquid-glass rounded-2xl p-6 mt-6 bg-green-500/5 border-green-500/30">
+          <div className="rd-card rounded-2xl p-6 mt-6 bg-green-500/5 border-green-500/30">
             <div className="flex items-center gap-3 mb-3">
               <FileText className="h-5 w-5 text-green-500" />
               <h3 className="text-sm font-bold text-green-600">Pagamento Confirmado</h3>
