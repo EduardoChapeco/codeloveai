@@ -385,7 +385,7 @@ export default function LovableConnect() {
                     <code className="flex-1 text-xs bg-muted/50 rounded-lg px-3 py-2 truncate font-mono">
                       {clfToken.substring(0, 20)}...
                     </code>
-                    <button onClick={copyToken} className="lv-btn-secondary h-9 px-3 flex items-center gap-1.5 shrink-0">
+                    <button onClick={copyToken} className="gl ghost h-9 px-3 flex items-center gap-1.5 shrink-0">
                       <Copy className="h-3.5 w-3.5" />
                       Copiar
                     </button>
