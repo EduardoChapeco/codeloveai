@@ -205,7 +205,7 @@ export default function MarketplaceOnboarding() {
           <ArrowLeft className="h-3.5 w-3.5" /> Voltar
         </button>
 
-        <div className="clf-liquid-glass rounded-2xl p-6 mb-6">
+        <div className="rd-card rounded-2xl p-6 mb-6">
           <h1 className="text-xl font-bold mb-1">Onboarding — {listing?.title}</h1>
           <p className="text-xs text-muted-foreground mb-4">
             {isSeller ? "Você é o vendedor. Guie o comprador pelo projeto." : "Você é o comprador. Acompanhe a demonstração."}
