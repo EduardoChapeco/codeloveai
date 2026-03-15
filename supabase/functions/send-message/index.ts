@@ -12,7 +12,7 @@ const CORS = {
 
 const LOVABLE_API = "https://api.lovable.dev";
 const GIT_SHA     = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
-const ANTI_Q      = "IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n";
+// ANTI_Q removed — no text injection in standard message sending
 
 function genUUID(): string {
   return crypto.randomUUID();
@@ -138,7 +138,7 @@ serve(async (req) => {
 
     const lovableBody = {
       id:               finalMsgId,
-      message:          ANTI_Q + message,
+      message:          message,
       intent:           "security_fix_v2",
       chat_only:        false,
       ai_message_id:    finalAiMsgId,

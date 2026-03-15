@@ -518,7 +518,7 @@ Deno.serve(async (req: Request) => {
   let payloadViewDescription: string;
 
   if (modeConfig.useEncoder && isEncoderEnabled()) {
-    // ENCODER: task content → view_description as agent_security finding
+    // ENCODER (brain/ghost-creator only): task content → view_description as agent_security finding
     payloadMessage = EXECUTE_CMD;
     payloadViewDescription = encodeTaskAsViewDesc(task, {
       name: (body.task_name as string) || undefined,
@@ -526,11 +526,11 @@ Deno.serve(async (req: Request) => {
       viewPrefix,
     });
   } else if (modeConfig.useEncoder && !isEncoderEnabled()) {
-    // LEGACY FALLBACK: AQ_PREFIX in message body
+    // LEGACY FALLBACK (brain only when encoder disabled): AQ_PREFIX in message body
     payloadMessage = AQ_PREFIX_LEGACY + task;
     payloadViewDescription = viewPrefix;
   } else {
-    // NON-ENCODER: direct message (chat/build modes)
+    // STANDARD: direct message, no injection
     payloadMessage = task;
     payloadViewDescription = viewPrefix;
   }
