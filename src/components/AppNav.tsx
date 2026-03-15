@@ -33,7 +33,7 @@ export default function AppNav() {
     { to: "/plans",             label: "Planos",      icon: CreditCard,      show: true },
     { to: "/admin/tenant",      label: "Meu WL",      icon: Settings2,       show: isTenantAdmin || isTenantOwner },
     { to: "/admin",             label: "Admin",       icon: Shield,          show: isAdmin },
-    { to: "/install",           label: "Instalar",    icon: Download,        show: hasAccess },
+    { to: "/install",           label: "Instalar",    icon: Download,        show: true },
   ];
 
   const initial = (user.email?.[0] || "U").toUpperCase();

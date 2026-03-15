@@ -211,7 +211,7 @@ export default function StarbleSidebar() {
           {!collapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="sb-user-name">{userName}</div>
-              <div className="sb-user-plan">{hasAccess ? "Plano Ativo" : "Plano Gratuito"}</div>
+              <div className="sb-user-plan">Free Master</div>
             </div>
           )}
           <button
