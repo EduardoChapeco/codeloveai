@@ -391,7 +391,7 @@ export default function LovableConnect() {
                     </button>
                   </div>
                   <div className="flex items-center justify-between items-end">
-                    <p className="lv-caption text-xs">
+                    <p className="text-xs text-muted-foreground">
                       Expira em: <span className="text-foreground">{clfExpiresAt ? new Date(clfExpiresAt).toLocaleDateString("pt-BR") : "—"}</span>
                     </p>
                   </div>
