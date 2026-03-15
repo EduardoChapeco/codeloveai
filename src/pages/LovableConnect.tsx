@@ -453,7 +453,7 @@ export default function LovableConnect() {
               <button
                 onClick={handleDisconnect}
                 disabled={disconnecting}
-                className="lv-btn-secondary w-full h-11 flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10 border-destructive/20"
+                className="gl ghost w-full h-11 flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10 border-destructive/20"
               >
                 {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
                 Desconectar conta
