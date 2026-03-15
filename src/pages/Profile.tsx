@@ -562,7 +562,7 @@ export default function Profile() {
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[350px]">
             {chatMessages.length === 0 && (
-              <p className="lv-caption text-center py-8">
+              <p className="text-xs text-muted-foreground text-center py-8">
                 Envie uma mensagem para iniciar a conversa.
               </p>
             )}
