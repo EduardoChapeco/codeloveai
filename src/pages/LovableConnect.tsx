@@ -398,7 +398,7 @@ export default function LovableConnect() {
                   <button
                     onClick={generateClfToken}
                     disabled={generatingClf}
-                    className="lv-btn-secondary w-full h-10 flex items-center justify-center gap-2 text-sm border-dashed"
+                    className="gl ghost w-full h-10 flex items-center justify-center gap-2 text-sm border-dashed"
                   >
                     {generatingClf ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                     Gerar novo token
