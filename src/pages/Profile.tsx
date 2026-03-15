@@ -553,8 +553,8 @@ export default function Profile() {
         <div className="fixed bottom-6 right-6 z-30 w-[360px] max-h-[500px] rd-card rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
             <div>
-              <p className="lv-caption font-medium">Mensagem</p>
-              <p className="lv-caption">{profile.display_name}</p>
+              <p className="text-xs text-muted-foreground font-medium">Mensagem</p>
+              <p className="text-xs text-muted-foreground">{profile.display_name}</p>
             </div>
             <button onClick={() => setChatOpen(false)} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
               <X className="h-4 w-4" />
