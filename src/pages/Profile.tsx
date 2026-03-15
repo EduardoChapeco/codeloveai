@@ -441,7 +441,7 @@ export default function Profile() {
         )}
 
         {/* Bio & socials */}
-        {profile.bio && <p className="lv-body mb-4">{profile.bio}</p>}
+        {profile.bio && <p className="text-sm text-muted-foreground mb-4">{profile.bio}</p>}
         <div className="flex gap-4 mb-8 flex-wrap">
           {profile.website && (
             <a href={profile.website} target="_blank" rel="noopener noreferrer"
