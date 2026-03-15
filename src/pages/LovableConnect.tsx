@@ -344,7 +344,7 @@ export default function LovableConnect() {
 
             {/* SSO Bridge Status */}
             {ssoStatus !== "idle" && (
-              <div className={`lv-card flex items-center gap-4 ${
+              <div className={`rd-card flex items-center gap-4 ${
                 ssoStatus === "success" ? "border-green-500/30 bg-green-500/5" :
                 ssoStatus === "error" ? "border-destructive/30 bg-destructive/5" :
                 "border-primary/30 bg-primary/5"
