@@ -463,7 +463,7 @@ export default function Profile() {
           )}
           {profile.social_linkedin && (
             <a href={`https://linkedin.com/in/${profile.social_linkedin}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 lv-caption hover:text-foreground">
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <Linkedin className="h-3 w-3" /> {profile.social_linkedin}
             </a>
           )}
