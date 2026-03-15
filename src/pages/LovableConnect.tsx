@@ -425,8 +425,8 @@ export default function LovableConnect() {
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
                   <FolderOpen className="h-5 w-5 text-primary" />
                 </div>
-                <p className="lv-body-strong text-sm">Meus Projetos</p>
-                <p className="lv-caption text-xs">Gerenciar e fazer deploys</p>
+                <p className="text-sm font-semibold text-foreground">Meus Projetos</p>
+                <p className="text-xs text-muted-foreground">Gerenciar e fazer deploys</p>
               </button>
               <button
                 onClick={() => navigate("/lovable/preview")}
