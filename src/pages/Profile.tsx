@@ -584,9 +584,9 @@ export default function Profile() {
             <input value={newMessage} onChange={e => setNewMessage(e.target.value)}
               onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChatMessage()}
               placeholder="Digite..."
-              className="lv-input flex-1 h-9 text-xs" />
+              className="tb-search flex-1 h-9 text-xs" />
             <button onClick={sendChatMessage} disabled={sendingMessage || !newMessage.trim()}
-              className="lv-btn-primary h-9 w-9 rounded-xl flex items-center justify-center">
+              className="gl primary h-9 w-9 rounded-xl flex items-center justify-center">
               <Send className="h-4 w-4" />
             </button>
           </div>
