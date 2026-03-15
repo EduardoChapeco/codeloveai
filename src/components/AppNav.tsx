@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useTenant } from "@/contexts/TenantContext";
-import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
+
 import {
   Shield, Users, MessageCircle, LayoutDashboard,
   Download, Bot, Link2, FolderOpen, CreditCard, Settings2,
@@ -14,7 +14,7 @@ export default function AppNav() {
   const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
   const { tenant, isTenantAdmin, isTenantOwner } = useTenant();
-  const { hasAccess } = useHasActiveAccess();
+  
   const brandName = tenant?.name || "OrbIOS AI";
   const location = useLocation();
 
@@ -33,7 +33,7 @@ export default function AppNav() {
     { to: "/plans",             label: "Planos",      icon: CreditCard,      show: true },
     { to: "/admin/tenant",      label: "Meu WL",      icon: Settings2,       show: isTenantAdmin || isTenantOwner },
     { to: "/admin",             label: "Admin",       icon: Shield,          show: isAdmin },
-    { to: "/install",           label: "Instalar",    icon: Download,        show: hasAccess },
+    { to: "/install",           label: "Instalar",    icon: Download,        show: true },
   ];
 
   const initial = (user.email?.[0] || "U").toUpperCase();

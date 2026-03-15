@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
-import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
+
 import {
   Brain, FolderOpen, Star,
   ShoppingBag, BarChart3, CreditCard, Users,
@@ -44,7 +44,7 @@ export default function StarbleSidebar() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const { tenant, isTenantAdmin } = useTenant();
-  const { hasAccess } = useHasActiveAccess();
+  
   const location = useLocation();
   const navigate = useNavigate();
   const brandName = tenant?.name || "OrbIOS";
@@ -205,23 +205,13 @@ export default function StarbleSidebar() {
 
       {/* Footer */}
       <div className="sb-footer">
-        {!hasAccess && !collapsed && (
-          <div className="sb-upgrade" onClick={() => navigate("/plans")}>
-            <div className="su-label">
-              <Sparkles size={11} style={{ display: "inline", marginRight: 4 }} />
-              Upgrade para Pro
-            </div>
-            <div className="su-desc">Acesse OrbIOS Brain e recursos avançados</div>
-            <button className="gl sm primary" style={{ width: "100%" }}>Ver planos</button>
-          </div>
-        )}
 
         <div className="sb-user" onClick={() => navigate(`/profile/${user.id}`)}>
           <div className="sb-avatar">{initial}</div>
           {!collapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="sb-user-name">{userName}</div>
-              <div className="sb-user-plan">{hasAccess ? "Plano Ativo" : "Plano Gratuito"}</div>
+              <div className="sb-user-plan">Free Master</div>
             </div>
           )}
           <button
