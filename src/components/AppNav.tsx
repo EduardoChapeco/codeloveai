@@ -14,7 +14,7 @@ export default function AppNav() {
   const { isAffiliate } = useIsAffiliate();
   const { toggleChat, isChatOpen } = useChatContext();
   const { tenant, isTenantAdmin, isTenantOwner } = useTenant();
-  const { hasAccess } = useHasActiveAccess();
+  
   const brandName = tenant?.name || "OrbIOS AI";
   const location = useLocation();
 
