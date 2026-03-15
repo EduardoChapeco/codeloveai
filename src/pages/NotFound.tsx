@@ -13,10 +13,10 @@ const NotFound = () => {
     <div className="flex min-h-screen items-center justify-center relative">
       <MeshBackground />
       <div className="text-center animate-fade-in">
-        <p className="lv-stat text-7xl mb-4">404</p>
-        <h1 className="lv-heading-lg mb-2">Página não encontrada</h1>
-        <p className="lv-body mb-8">A página que você procura não existe ou foi movida.</p>
-        <Link to="/" className="lv-btn-primary">
+        <p className="text-7xl font-extrabold text-foreground mb-4" style={{ letterSpacing: "-0.03em" }}>404</p>
+        <h1 className="text-[28px] font-extrabold text-foreground mb-2" style={{ letterSpacing: "-0.03em" }}>Página não encontrada</h1>
+        <p className="text-sm text-muted-foreground mb-8">A página que você procura não existe ou foi movida.</p>
+        <Link to="/" className="gl primary">
           Voltar ao início
         </Link>
       </div>

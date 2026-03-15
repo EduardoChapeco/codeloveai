@@ -205,7 +205,7 @@ export default function MarketplaceOnboarding() {
           <ArrowLeft className="h-3.5 w-3.5" /> Voltar
         </button>
 
-        <div className="clf-liquid-glass rounded-2xl p-6 mb-6">
+        <div className="rd-card rounded-2xl p-6 mb-6">
           <h1 className="text-xl font-bold mb-1">Onboarding — {listing?.title}</h1>
           <p className="text-xs text-muted-foreground mb-4">
             {isSeller ? "Você é o vendedor. Guie o comprador pelo projeto." : "Você é o comprador. Acompanhe a demonstração."}
@@ -272,7 +272,7 @@ export default function MarketplaceOnboarding() {
 
           {/* Buyer email for seller */}
           {isSeller && purchase && (
-            <div className="clf-liquid-glass rounded-xl p-4 mb-6 flex items-center justify-between">
+            <div className="rd-card rounded-xl p-4 mb-6 flex items-center justify-between">
               <div>
                 <p className="text-[11px] text-muted-foreground">Email do comprador (para adicionar como Viewer):</p>
                 <p className="text-sm font-mono font-bold">{purchase.buyer_id}</p>
@@ -296,7 +296,7 @@ export default function MarketplaceOnboarding() {
               ((step.actor === "seller" && isSeller) || (step.actor === "buyer" && isBuyer));
 
             return (
-              <div key={step.number} className={`clf-liquid-glass rounded-2xl p-5 transition-all ${
+              <div key={step.number} className={`rd-card rounded-2xl p-5 transition-all ${
                 isCompleted ? "border-green-500/30 bg-green-500/5" :
                 isCurrent ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20" :
                 "opacity-50"
@@ -395,7 +395,7 @@ export default function MarketplaceOnboarding() {
 
         {/* Invoice info for seller */}
         {isSeller && onboarding.status === "confirmed" && (
-          <div className="clf-liquid-glass rounded-2xl p-6 mt-6 bg-green-500/5 border-green-500/30">
+          <div className="rd-card rounded-2xl p-6 mt-6 bg-green-500/5 border-green-500/30">
             <div className="flex items-center gap-3 mb-3">
               <FileText className="h-5 w-5 text-green-500" />
               <h3 className="text-sm font-bold text-green-600">Pagamento Confirmado</h3>
@@ -408,7 +408,7 @@ export default function MarketplaceOnboarding() {
         )}
 
         {/* CDC and legal notice */}
-        <div className="mt-8 clf-liquid-glass rounded-2xl p-6">
+        <div className="mt-8 rd-card rounded-2xl p-6">
           <h3 className="text-xs font-bold mb-3 flex items-center gap-2">
             <Shield className="h-4 w-4 text-muted-foreground" /> Avisos Legais e Regras CDC
           </h3>
