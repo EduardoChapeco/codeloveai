@@ -16,12 +16,12 @@ const benefits = [
 
 const plans = [
   {
-    name: "Grátis",
+    name: "Free Master",
     price: "R$0",
-    period: "",
-    badge: "Comece agora",
-    features: ["10 mensagens/dia", "1 projeto", "Sem cartão de crédito", "Suporte comunidade"],
-    cta: "Começar Grátis",
+    period: "/30 dias",
+    badge: "30 dias grátis",
+    features: ["Mensagens ilimitadas", "Todos os recursos", "Sem cartão de crédito", "Suporte comunidade"],
+    cta: "Começar Grátis — 30 dias",
     href: "/register",
     highlight: false,
   },
