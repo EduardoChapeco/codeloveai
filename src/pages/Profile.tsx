@@ -550,7 +550,7 @@ export default function Profile() {
 
       {/* Chat panel for DM */}
       {chatOpen && !isOwner && user && (
-        <div className="fixed bottom-6 right-6 z-30 w-[360px] max-h-[500px] lv-glass rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed bottom-6 right-6 z-30 w-[360px] max-h-[500px] rd-card rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
             <div>
               <p className="lv-caption font-medium">Mensagem</p>
