@@ -44,7 +44,7 @@ export default function StarbleSidebar() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
   const { tenant, isTenantAdmin } = useTenant();
-  const { hasAccess } = useHasActiveAccess();
+  
   const location = useLocation();
   const navigate = useNavigate();
   const brandName = tenant?.name || "OrbIOS";
