@@ -408,7 +408,7 @@ export default function LovableConnect() {
                 <button
                   onClick={generateClfToken}
                   disabled={generatingClf}
-                  className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
+                  className="gl primary w-full h-11 flex items-center justify-center gap-2"
                 >
                   {generatingClf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
                   Gerar Token CLF1
