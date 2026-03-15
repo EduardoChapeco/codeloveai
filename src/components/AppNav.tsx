@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useTenant } from "@/contexts/TenantContext";
-import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
+
 import {
   Shield, Users, MessageCircle, LayoutDashboard,
   Download, Bot, Link2, FolderOpen, CreditCard, Settings2,
