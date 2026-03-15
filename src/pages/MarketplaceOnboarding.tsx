@@ -296,7 +296,7 @@ export default function MarketplaceOnboarding() {
               ((step.actor === "seller" && isSeller) || (step.actor === "buyer" && isBuyer));
 
             return (
-              <div key={step.number} className={`clf-liquid-glass rounded-2xl p-5 transition-all ${
+              <div key={step.number} className={`rd-card rounded-2xl p-5 transition-all ${
                 isCompleted ? "border-green-500/30 bg-green-500/5" :
                 isCurrent ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20" :
                 "opacity-50"
