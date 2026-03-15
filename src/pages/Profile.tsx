@@ -457,7 +457,7 @@ export default function Profile() {
           )}
           {profile.social_twitter && (
             <a href={`https://twitter.com/${profile.social_twitter}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 lv-caption hover:text-foreground">
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <Twitter className="h-3 w-3" /> {profile.social_twitter}
             </a>
           )}
