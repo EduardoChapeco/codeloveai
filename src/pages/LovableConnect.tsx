@@ -435,8 +435,8 @@ export default function LovableConnect() {
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
                   <Eye className="h-5 w-5 text-primary" />
                 </div>
-                <p className="lv-body-strong text-sm">Preview</p>
-                <p className="lv-caption text-xs">Visualizar projetos ao vivo</p>
+                <p className="text-sm font-semibold text-foreground">Preview</p>
+                <p className="text-xs text-muted-foreground">Visualizar projetos ao vivo</p>
               </button>
             </div>
 
