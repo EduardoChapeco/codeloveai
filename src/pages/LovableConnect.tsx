@@ -430,7 +430,7 @@ export default function LovableConnect() {
               </button>
               <button
                 onClick={() => navigate("/lovable/preview")}
-                className="lv-card flex flex-col items-center text-center hover:bg-accent/50 transition-colors cursor-pointer p-4"
+                className="rd-card flex flex-col items-center text-center hover:bg-accent/50 transition-colors cursor-pointer p-4"
               >
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
                   <Eye className="h-5 w-5 text-primary" />
