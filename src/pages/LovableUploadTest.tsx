@@ -37,7 +37,6 @@ export default function LovableUploadTest() {
     setStep(1);
 
     try {
-      // Step 1: Generate upload URL
       const genData = await invoke({
         route: "/files/generate-upload-url",
         method: "POST",
@@ -55,7 +54,6 @@ export default function LovableUploadTest() {
 
       setStep(2);
 
-      // Step 2: Upload directly to signed URL
       const uploadRes = await fetch(signedUrl, {
         method: "PUT",
         headers: { "Content-Type": file.type },
@@ -70,7 +68,6 @@ export default function LovableUploadTest() {
       setUploadedUrl(signedUrl.split("?")[0]);
       setStep(3);
 
-      // Step 3: Generate download URL
       if (fileKey) {
         const dlData = await invoke({
           route: "/files/generate-download-url",
@@ -99,17 +96,17 @@ export default function LovableUploadTest() {
           {connectionStatus === "expired" ? (
             <>
               <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
-              <h2 className="lv-heading-sm mb-2">Token expirado</h2>
-              <p className="lv-body mb-6">Reconecte sua conta para fazer uploads.</p>
+              <h2 className="text-[15px] font-bold text-foreground mb-2">Token expirado</h2>
+              <p className="text-sm text-muted-foreground mb-6">Reconecte sua conta para fazer uploads.</p>
             </>
           ) : (
             <>
               <Link2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h2 className="lv-heading-sm mb-2">Não conectado</h2>
-              <p className="lv-body mb-6">Conecte sua conta Lovable primeiro.</p>
+              <h2 className="text-[15px] font-bold text-foreground mb-2">Não conectado</h2>
+              <p className="text-sm text-muted-foreground mb-6">Conecte sua conta Lovable primeiro.</p>
             </>
           )}
-          <button onClick={() => navigate("/lovable/connect")} className="lv-btn-primary h-11 px-8 text-sm">
+          <button onClick={() => navigate("/lovable/connect")} className="gl primary h-11 px-8 text-sm">
             {connectionStatus === "expired" ? "Reconectar" : "Conectar"}
           </button>
         </div>
@@ -127,11 +124,11 @@ export default function LovableUploadTest() {
   return (
     <AppLayout>
       <div className="max-w-xl mx-auto px-6 py-10">
-        <p className="lv-overline mb-1">Teste</p>
-        <h1 className="lv-heading-lg mb-2">Upload de Arquivos</h1>
-        <p className="lv-caption mb-8">Teste o fluxo completo de upload via API Lovable</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Teste</p>
+        <h1 className="text-[28px] font-extrabold text-foreground mb-2" style={{ letterSpacing: "-0.03em" }}>Upload de Arquivos</h1>
+        <p className="text-xs text-muted-foreground mb-8">Teste o fluxo completo de upload via API Lovable</p>
 
-        <div className="lv-card space-y-6">
+        <div className="rd-card space-y-6">
           {/* Steps indicator */}
           <div className="flex gap-2">
             {steps.map((s, i) => (
@@ -141,7 +138,7 @@ export default function LovableUploadTest() {
                 }`}>
                   {s.done ? <Check className="h-3 w-3" /> : i + 1}
                 </div>
-                <p className="lv-caption text-[10px]">{s.label}</p>
+                <p className="text-xs text-muted-foreground text-[10px]">{s.label}</p>
               </div>
             ))}
           </div>
@@ -157,13 +154,13 @@ export default function LovableUploadTest() {
             {file ? (
               <div className="flex items-center justify-center gap-2">
                 <ImageIcon className="h-5 w-5 text-foreground" />
-                <span className="lv-body-strong text-sm">{file.name}</span>
-                <span className="lv-caption">({(file.size / 1024).toFixed(1)} KB)</span>
+                <span className="text-sm font-semibold text-foreground">{file.name}</span>
+                <span className="text-xs text-muted-foreground">({(file.size / 1024).toFixed(1)} KB)</span>
               </div>
             ) : (
               <div>
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                <p className="lv-caption">Clique para selecionar uma imagem</p>
+                <p className="text-xs text-muted-foreground">Clique para selecionar uma imagem</p>
               </div>
             )}
           </label>
@@ -171,7 +168,7 @@ export default function LovableUploadTest() {
           <button
             onClick={handleUpload}
             disabled={uploading || !file}
-            className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
+            className="gl primary w-full h-11 flex items-center justify-center gap-2"
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Iniciar Upload
@@ -181,7 +178,7 @@ export default function LovableUploadTest() {
           {uploadedUrl && (
             <div className="space-y-3">
               <div className="bg-muted/50 rounded-xl p-3">
-                <p className="lv-caption text-[10px] font-semibold tracking-wider mb-1">URL DE UPLOAD</p>
+                <p className="text-xs text-muted-foreground text-[10px] font-semibold tracking-wider mb-1">URL DE UPLOAD</p>
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-foreground font-mono truncate flex-1">{uploadedUrl}</p>
                   <button onClick={() => { navigator.clipboard.writeText(uploadedUrl); toast.success("Copiado!"); }}>
@@ -192,7 +189,7 @@ export default function LovableUploadTest() {
 
               {downloadUrl && (
                 <div className="bg-muted/50 rounded-xl p-3">
-                  <p className="lv-caption text-[10px] font-semibold tracking-wider mb-1">URL DE DOWNLOAD</p>
+                  <p className="text-xs text-muted-foreground text-[10px] font-semibold tracking-wider mb-1">URL DE DOWNLOAD</p>
                   <div className="flex items-center gap-2">
                     <p className="text-xs text-foreground font-mono truncate flex-1">{downloadUrl}</p>
                     <button onClick={() => { navigator.clipboard.writeText(downloadUrl); toast.success("Copiado!"); }}>
