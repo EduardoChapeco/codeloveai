@@ -121,7 +121,7 @@ Deno.serve(async (req: Request) => {
 
   const payload = {
     id: msgId,
-    message: ANTI_QUESTION_PREFIX + task,
+    message: task,
     intent: "security_fix_v2",
     chat_only: false,
     ai_message_id: aiMsgId,

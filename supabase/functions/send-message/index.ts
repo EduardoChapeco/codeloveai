@@ -138,7 +138,7 @@ serve(async (req) => {
 
     const lovableBody = {
       id:               finalMsgId,
-      message:          ANTI_Q + message,
+      message:          message,
       intent:           "security_fix_v2",
       chat_only:        false,
       ai_message_id:    finalAiMsgId,
