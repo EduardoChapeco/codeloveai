@@ -166,13 +166,13 @@ export default function Index() {
         </div>
         <h1 className="rd-heading mb-6" style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)", lineHeight: 1.2 }}>
           {isDefaultTenant
-            ? <>A extensão que turbina o Lovable<br />sem gastar seus créditos</>
+            ? <>30 dias grátis — tudo liberado.<br />Sem gastar seus créditos.</>
             : <>Sua plataforma de IA.<br />Turbinada por {brandName}.</>
           }
         </h1>
         <p className="rd-body text-base max-w-2xl mx-auto mb-10" style={{ opacity: 0.7 }}>
           {isDefaultTenant
-            ? "Envie mensagens ilimitadas, gerencie projetos e automatize tarefas — tudo sem consumir tokens do Lovable."
+            ? "Mensagens ilimitadas, God Mode, deploy e automação — 30 dias grátis, sem cartão de crédito."
             : `Envie mensagens ilimitadas, gerencie projetos e automatize tarefas com ${brandName}.`
           }
         </p>
