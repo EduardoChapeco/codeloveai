@@ -272,7 +272,7 @@ export default function MarketplaceOnboarding() {
 
           {/* Buyer email for seller */}
           {isSeller && purchase && (
-            <div className="clf-liquid-glass rounded-xl p-4 mb-6 flex items-center justify-between">
+            <div className="rd-card rounded-xl p-4 mb-6 flex items-center justify-between">
               <div>
                 <p className="text-[11px] text-muted-foreground">Email do comprador (para adicionar como Viewer):</p>
                 <p className="text-sm font-mono font-bold">{purchase.buyer_id}</p>
