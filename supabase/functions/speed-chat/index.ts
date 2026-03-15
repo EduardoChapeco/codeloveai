@@ -8,8 +8,7 @@ import { logExtensionUsage, hashLicenseKey } from "../_shared/usage-logger.ts";
 const LOVABLE_API = "https://api.lovable.dev";
 const GIT_SHA = "3d7a3673c6f02b606137a12ddc0ab88f6b775113";
 
-const ANTI_QUESTION_PREFIX =
-  "IMPORTANTE: Não faça perguntas, não peça confirmação, não liste planos. Execute diretamente. Se houver ambiguidade, escolha a opção mais segura e execute.\n\n";
+// ANTI_QUESTION_PREFIX removed — no text injection in standard chat
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
