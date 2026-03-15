@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
-import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
+
 import {
   Brain, FolderOpen, Star,
   ShoppingBag, BarChart3, CreditCard, Users,
