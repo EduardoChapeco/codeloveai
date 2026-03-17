@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useIsAdmin, useIsAffiliate } from "@/hooks/useAuth";
-import { useTenant } from "@/contexts/TenantContext";
 import { useHasActiveAccess } from "@/hooks/useHasActiveAccess";
+import { useTenant } from "@/contexts/TenantContext";
+
 import {
   Brain, FolderOpen, Star,
   ShoppingBag, BarChart3, CreditCard, Users,
@@ -43,8 +44,9 @@ export default function StarbleSidebar() {
   const { user, signOut } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { isAffiliate } = useIsAffiliate();
-  const { tenant, isTenantAdmin } = useTenant();
   const { hasAccess } = useHasActiveAccess();
+  const { tenant, isTenantAdmin } = useTenant();
+  
   const location = useLocation();
   const navigate = useNavigate();
   const brandName = tenant?.name || "Engios";
@@ -221,7 +223,7 @@ export default function StarbleSidebar() {
           {!collapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="sb-user-name">{userName}</div>
-              <div className="sb-user-plan">{hasAccess ? "Plano Ativo" : "Plano Gratuito"}</div>
+              <div className="sb-user-plan">Free Master</div>
             </div>
           )}
           <button

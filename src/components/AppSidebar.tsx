@@ -641,18 +641,18 @@ export default function AppSidebar() {
             </SidebarMenuItem>
           )}
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isActive("/home")} tooltip="Home">
-              <NavLink to="/home">
-                <LayoutDashboard className="h-4 w-4" />
-                <span>Painel</span>
-              </NavLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={isActive("/assistente")} tooltip="Assistente">
               <NavLink to="/assistente">
                 <Bot className="h-4 w-4" />
                 <span>Assistente</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/home")} tooltip="Home">
+              <NavLink to="/home">
+                <LayoutDashboard className="h-4 w-4" />
+                <span>Painel</span>
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>

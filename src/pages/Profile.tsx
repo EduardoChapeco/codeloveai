@@ -441,29 +441,29 @@ export default function Profile() {
         )}
 
         {/* Bio & socials */}
-        {profile.bio && <p className="lv-body mb-4">{profile.bio}</p>}
+        {profile.bio && <p className="text-sm text-muted-foreground mb-4">{profile.bio}</p>}
         <div className="flex gap-4 mb-8 flex-wrap">
           {profile.website && (
             <a href={profile.website} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 lv-caption hover:text-foreground">
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <Globe className="h-3 w-3" /> {profile.website.replace(/^https?:\/\//, "")}
             </a>
           )}
           {profile.social_github && (
             <a href={`https://github.com/${profile.social_github}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 lv-caption hover:text-foreground">
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <Github className="h-3 w-3" /> {profile.social_github}
             </a>
           )}
           {profile.social_twitter && (
             <a href={`https://twitter.com/${profile.social_twitter}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 lv-caption hover:text-foreground">
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <Twitter className="h-3 w-3" /> {profile.social_twitter}
             </a>
           )}
           {profile.social_linkedin && (
             <a href={`https://linkedin.com/in/${profile.social_linkedin}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 lv-caption hover:text-foreground">
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <Linkedin className="h-3 w-3" /> {profile.social_linkedin}
             </a>
           )}
@@ -550,11 +550,11 @@ export default function Profile() {
 
       {/* Chat panel for DM */}
       {chatOpen && !isOwner && user && (
-        <div className="fixed bottom-6 right-6 z-30 w-[360px] max-h-[500px] lv-glass rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed bottom-6 right-6 z-30 w-[360px] max-h-[500px] rd-card rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
             <div>
-              <p className="lv-caption font-medium">Mensagem</p>
-              <p className="lv-caption">{profile.display_name}</p>
+              <p className="text-xs text-muted-foreground font-medium">Mensagem</p>
+              <p className="text-xs text-muted-foreground">{profile.display_name}</p>
             </div>
             <button onClick={() => setChatOpen(false)} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
               <X className="h-4 w-4" />
@@ -562,7 +562,7 @@ export default function Profile() {
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[350px]">
             {chatMessages.length === 0 && (
-              <p className="lv-caption text-center py-8">
+              <p className="text-xs text-muted-foreground text-center py-8">
                 Envie uma mensagem para iniciar a conversa.
               </p>
             )}
@@ -584,9 +584,9 @@ export default function Profile() {
             <input value={newMessage} onChange={e => setNewMessage(e.target.value)}
               onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChatMessage()}
               placeholder="Digite..."
-              className="lv-input flex-1 h-9 text-xs" />
+              className="tb-search flex-1 h-9 text-xs" />
             <button onClick={sendChatMessage} disabled={sendingMessage || !newMessage.trim()}
-              className="lv-btn-primary h-9 w-9 rounded-xl flex items-center justify-center">
+              className="gl primary h-9 w-9 rounded-xl flex items-center justify-center">
               <Send className="h-4 w-4" />
             </button>
           </div>

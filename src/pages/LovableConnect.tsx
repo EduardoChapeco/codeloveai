@@ -344,7 +344,7 @@ export default function LovableConnect() {
 
             {/* SSO Bridge Status */}
             {ssoStatus !== "idle" && (
-              <div className={`lv-card flex items-center gap-4 ${
+              <div className={`rd-card flex items-center gap-4 ${
                 ssoStatus === "success" ? "border-green-500/30 bg-green-500/5" :
                 ssoStatus === "error" ? "border-destructive/30 bg-destructive/5" :
                 "border-primary/30 bg-primary/5"
@@ -356,13 +356,13 @@ export default function LovableConnect() {
                   {ssoStatus === "error" && <X className="h-5 w-5 text-destructive" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="lv-body-strong text-sm">
+                  <p className="text-sm font-semibold text-foreground">
                     {ssoStatus === "waiting" && "Aguardando extensão..."}
                     {ssoStatus === "connecting" && "Conectando..."}
                     {ssoStatus === "success" && "✅ Extensão conectada com sucesso!"}
                     {ssoStatus === "error" && "❌ Erro ao conectar extensão"}
                   </p>
-                  <p className="lv-caption text-xs">
+                  <p className="text-xs text-muted-foreground">
                     {ssoStatus === "waiting" && "Recebendo token da extensão Chrome"}
                     {ssoStatus === "connecting" && "Buscando licença CLF1..."}
                     {ssoStatus === "success" && "Token CLF1 enviado para a extensão"}
@@ -385,20 +385,20 @@ export default function LovableConnect() {
                     <code className="flex-1 text-xs bg-muted/50 rounded-lg px-3 py-2 truncate font-mono">
                       {clfToken.substring(0, 20)}...
                     </code>
-                    <button onClick={copyToken} className="lv-btn-secondary h-9 px-3 flex items-center gap-1.5 shrink-0">
+                    <button onClick={copyToken} className="gl ghost h-9 px-3 flex items-center gap-1.5 shrink-0">
                       <Copy className="h-3.5 w-3.5" />
                       Copiar
                     </button>
                   </div>
                   <div className="flex items-center justify-between items-end">
-                    <p className="lv-caption text-xs">
+                    <p className="text-xs text-muted-foreground">
                       Expira em: <span className="text-foreground">{clfExpiresAt ? new Date(clfExpiresAt).toLocaleDateString("pt-BR") : "—"}</span>
                     </p>
                   </div>
                   <button
                     onClick={generateClfToken}
                     disabled={generatingClf}
-                    className="lv-btn-secondary w-full h-10 flex items-center justify-center gap-2 text-sm border-dashed"
+                    className="gl ghost w-full h-10 flex items-center justify-center gap-2 text-sm border-dashed"
                   >
                     {generatingClf ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                     Gerar novo token
@@ -408,7 +408,7 @@ export default function LovableConnect() {
                 <button
                   onClick={generateClfToken}
                   disabled={generatingClf}
-                  className="lv-btn-primary w-full h-11 flex items-center justify-center gap-2"
+                  className="gl primary w-full h-11 flex items-center justify-center gap-2"
                 >
                   {generatingClf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
                   Gerar Token CLF1
@@ -420,30 +420,30 @@ export default function LovableConnect() {
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => navigate("/lovable/projects")}
-                className="lv-card flex flex-col items-center text-center hover:bg-accent/50 transition-colors cursor-pointer p-4"
+                className="rd-card flex flex-col items-center text-center hover:bg-accent/50 transition-colors cursor-pointer p-4"
               >
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
                   <FolderOpen className="h-5 w-5 text-primary" />
                 </div>
-                <p className="lv-body-strong text-sm">Meus Projetos</p>
-                <p className="lv-caption text-xs">Gerenciar e fazer deploys</p>
+                <p className="text-sm font-semibold text-foreground">Meus Projetos</p>
+                <p className="text-xs text-muted-foreground">Gerenciar e fazer deploys</p>
               </button>
               <button
                 onClick={() => navigate("/lovable/preview")}
-                className="lv-card flex flex-col items-center text-center hover:bg-accent/50 transition-colors cursor-pointer p-4"
+                className="rd-card flex flex-col items-center text-center hover:bg-accent/50 transition-colors cursor-pointer p-4"
               >
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
                   <Eye className="h-5 w-5 text-primary" />
                 </div>
-                <p className="lv-body-strong text-sm">Preview</p>
-                <p className="lv-caption text-xs">Visualizar projetos ao vivo</p>
+                <p className="text-sm font-semibold text-foreground">Preview</p>
+                <p className="text-xs text-muted-foreground">Visualizar projetos ao vivo</p>
               </button>
             </div>
 
             {/* 4. Aviso de segurança */}
-            <div className="lv-card-sm bg-accent/30 flex items-start gap-3 border-none">
+            <div className="rd-card bg-accent/30 flex items-start gap-3 border-none">
               <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <p className="lv-caption text-xs leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Seu token é armazenado de forma segura no servidor e <strong className="text-foreground">nunca</strong> é exposto no navegador após salvo.
               </p>
             </div>
@@ -453,7 +453,7 @@ export default function LovableConnect() {
               <button
                 onClick={handleDisconnect}
                 disabled={disconnecting}
-                className="lv-btn-secondary w-full h-11 flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10 border-destructive/20"
+                className="gl ghost w-full h-11 flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10 border-destructive/20"
               >
                 {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
                 Desconectar conta

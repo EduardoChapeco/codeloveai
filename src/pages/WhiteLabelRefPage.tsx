@@ -85,9 +85,7 @@ export default function WhiteLabelRefPage() {
       if (error) throw error;
 
       if (data?.pix_code) {
-        // PIX flow - could navigate to a PIX display page
         toast.success("PIX gerado! Copie o código para pagar.");
-        // For now, redirect to dashboard with PIX info
         navigate(`/dashboard?wl_payment=pending`);
       } else if (data?.init_point) {
         window.location.href = data.init_point;
@@ -120,9 +118,9 @@ export default function WhiteLabelRefPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="lv-heading-lg mb-4">Link inválido</p>
-          <p className="lv-body mb-6">Este link de referência não é válido ou expirou.</p>
-          <Link to="/" className="lv-btn-primary h-10 px-6">
+          <p className="text-[28px] font-extrabold text-foreground mb-4" style={{ letterSpacing: "-0.03em" }}>Link inválido</p>
+          <p className="text-sm text-muted-foreground mb-6">Este link de referência não é válido ou expirou.</p>
+          <Link to="/" className="gl primary h-10 px-6">
             Voltar ao início
           </Link>
         </div>
@@ -135,7 +133,7 @@ export default function WhiteLabelRefPage() {
       <MeshBackground />
       {/* Nav */}
       <nav className="sticky top-0 z-20 px-6 py-3">
-        <div className="lv-glass rounded-2xl px-5 py-2.5 flex items-center justify-between">
+        <div className="rd-card rounded-2xl px-5 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-primary" />
             <span className="text-base font-semibold tracking-tight text-foreground">
@@ -143,19 +141,19 @@ export default function WhiteLabelRefPage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/login" className="lv-btn-secondary h-9 px-4 text-xs">Entrar</Link>
-            <Link to="/register" className="lv-btn-primary h-9 px-4 text-xs">Criar conta</Link>
+            <Link to="/login" className="gl ghost h-9 px-4 text-xs">Entrar</Link>
+            <Link to="/register" className="gl primary h-9 px-4 text-xs">Criar conta</Link>
           </div>
         </div>
       </nav>
 
       {/* Hero */}
       <section className="px-6 py-24 max-w-4xl mx-auto text-center">
-        <p className="lv-overline mb-4">Indicado por {brandName}</p>
-        <h1 className="lv-heading-xl mb-6">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-4">Indicado por {brandName}</p>
+        <h1 className="text-4xl lg:text-5xl font-black text-foreground leading-tight mb-6" style={{ letterSpacing: "-0.04em" }}>
           Tenha sua própria plataforma White Label
         </h1>
-        <p className="lv-body text-base max-w-2xl mx-auto mb-10">
+        <p className="text-sm text-muted-foreground text-base max-w-2xl mx-auto mb-10">
           Crie sua plataforma personalizada, venda para seus clientes e ganhe receita recorrente.
           Sem precisar de infraestrutura técnica.
         </p>
@@ -165,13 +163,13 @@ export default function WhiteLabelRefPage() {
       <section className="px-6 pb-20 max-w-5xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {benefits.map((b) => (
-            <div key={b.title} className="lv-card-sm flex flex-col items-start gap-4">
+            <div key={b.title} className="rd-card flex flex-col items-start gap-4">
               <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
                 <b.icon className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h3 className="lv-heading-sm mb-2">{b.title}</h3>
-                <p className="lv-body">{b.desc}</p>
+                <h3 className="text-[15px] font-bold text-foreground mb-2">{b.title}</h3>
+                <p className="text-sm text-muted-foreground">{b.desc}</p>
               </div>
             </div>
           ))}
@@ -180,15 +178,15 @@ export default function WhiteLabelRefPage() {
 
       {/* Plans */}
       <section className="px-6 pb-24 max-w-5xl mx-auto">
-        <p className="lv-overline text-center mb-3">Escolha seu plano</p>
-        <h2 className="lv-heading-lg text-center mb-6">Planos White Label</h2>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center mb-3">Escolha seu plano</p>
+        <h2 className="text-[28px] font-extrabold text-foreground text-center mb-6" style={{ letterSpacing: "-0.03em" }}>Planos White Label</h2>
 
         {/* Period toggle */}
         <div className="flex items-center justify-center gap-2 mb-12">
           <button
             onClick={() => setSelectedPeriod("monthly")}
             className={`h-9 px-4 text-xs rounded-lg transition-colors ${
-              selectedPeriod === "monthly" ? "lv-btn-primary" : "lv-btn-secondary"
+              selectedPeriod === "monthly" ? "gl primary" : "gl ghost"
             }`}
           >
             Mensal
@@ -196,7 +194,7 @@ export default function WhiteLabelRefPage() {
           <button
             onClick={() => setSelectedPeriod("yearly")}
             className={`h-9 px-4 text-xs rounded-lg transition-colors ${
-              selectedPeriod === "yearly" ? "lv-btn-primary" : "lv-btn-secondary"
+              selectedPeriod === "yearly" ? "gl primary" : "gl ghost"
             }`}
           >
             Anual
@@ -204,7 +202,7 @@ export default function WhiteLabelRefPage() {
         </div>
 
         {plans.length === 0 ? (
-          <p className="lv-body text-center py-12">Nenhum plano disponível no momento.</p>
+          <p className="text-sm text-muted-foreground text-center py-12">Nenhum plano disponível no momento.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {plans.map((plan, idx) => {
@@ -217,35 +215,35 @@ export default function WhiteLabelRefPage() {
               return (
                 <div
                   key={plan.id}
-                  className={`lv-card-interactive flex flex-col justify-between ${
-                    isPopular ? "lv-card-active ring-2 ring-primary/20" : ""
+                  className={`rd-card interactive flex flex-col justify-between ${
+                    isPopular ? "ring-2 ring-primary/20 border-primary/30" : ""
                   }`}
                 >
                   <div>
                     {isPopular && (
-                      <span className="lv-badge lv-badge-primary mb-4 inline-block">
+                      <span className="chip ch-blue mb-4 inline-block">
                         Recomendado
                       </span>
                     )}
-                    <p className="lv-heading-sm mb-2">{plan.name}</p>
+                    <p className="text-[15px] font-bold text-foreground mb-2">{plan.name}</p>
                     {plan.description && (
-                      <p className="lv-body mb-4">{plan.description}</p>
+                      <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
                     )}
 
                     <div className="mb-4">
-                      <p className="lv-stat text-3xl">{formatCents(price)}</p>
-                      <p className="lv-caption">
+                      <p className="text-3xl font-extrabold text-foreground" style={{ letterSpacing: "-0.03em" }}>{formatCents(price)}</p>
+                      <p className="text-xs text-muted-foreground">
                         {selectedPeriod === "yearly" ? "/ano" : "/mês"}
                       </p>
                     </div>
 
                     {setupPrice > 0 && (
-                      <p className="lv-caption mb-4">
+                      <p className="text-xs text-muted-foreground mb-4">
                         + Setup: {formatCents(setupPrice)} (uma vez)
                       </p>
                     )}
                     {plan.setup_is_free && (
-                      <p className="lv-caption text-primary mb-4">
+                      <p className="text-xs text-primary mb-4">
                         Setup gratuito
                       </p>
                     )}
@@ -258,7 +256,7 @@ export default function WhiteLabelRefPage() {
                         "Sistema de afiliados",
                         "Suporte técnico",
                       ].map((f) => (
-                        <li key={f} className="flex items-center gap-2 lv-body">
+                        <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Check className="h-4 w-4 text-primary shrink-0" /> {f}
                         </li>
                       ))}
@@ -269,7 +267,7 @@ export default function WhiteLabelRefPage() {
                     onClick={() => handlePurchase(plan.id)}
                     disabled={processingPlan === plan.id}
                     className={`w-full h-10 text-sm ${
-                      isPopular ? "lv-btn-primary" : "lv-btn-secondary"
+                      isPopular ? "gl primary" : "gl ghost"
                     } flex items-center justify-center gap-2`}
                   >
                     {processingPlan === plan.id ? (
@@ -289,7 +287,7 @@ export default function WhiteLabelRefPage() {
 
       {/* FAQ */}
       <section className="px-6 pb-24 max-w-3xl mx-auto">
-        <h2 className="lv-heading-lg text-center mb-10">Perguntas Frequentes</h2>
+        <h2 className="text-[28px] font-extrabold text-foreground text-center mb-10" style={{ letterSpacing: "-0.03em" }}>Perguntas Frequentes</h2>
         <div className="space-y-4">
           {[
             {
@@ -309,16 +307,16 @@ export default function WhiteLabelRefPage() {
               a: "Sim, sem multas ou taxas de cancelamento. Seu White Label ficará ativo até o fim do período pago.",
             },
           ].map((item) => (
-            <div key={item.q} className="lv-card">
-              <p className="lv-body-strong mb-2">{item.q}</p>
-              <p className="lv-body">{item.a}</p>
+            <div key={item.q} className="rd-card">
+              <p className="text-sm font-semibold text-foreground mb-2">{item.q}</p>
+              <p className="text-sm text-muted-foreground">{item.a}</p>
             </div>
           ))}
         </div>
       </section>
 
       <footer className="border-t border-border/60 px-6 py-6 text-center">
-        <p className="lv-caption">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
+        <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} {brandName} — Todos os direitos reservados</p>
       </footer>
     </div>
   );

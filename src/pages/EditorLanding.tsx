@@ -27,7 +27,7 @@ export default function EditorLanding() {
       <div className="min-h-screen p-6 md:p-12 max-w-5xl mx-auto space-y-16">
         {/* Hero */}
         <div className="text-center space-y-6 pt-8">
-          <div className="inline-flex items-center gap-2 clf-liquid-glass px-5 py-2.5 rounded-full">
+          <div className="chip inline-flex items-center gap-2 px-5 py-2.5">
             <Sparkles className="h-4 w-4 text-primary" />
             <span className="text-xs font-semibold text-primary">Novo recurso</span>
           </div>
@@ -40,8 +40,8 @@ export default function EditorLanding() {
           </p>
           <button
             onClick={() => navigate(user ? "/lovable/projects" : "/login")}
-            className="h-14 px-8 rounded-2xl bg-primary text-primary-foreground text-base font-semibold
-              hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 inline-flex items-center gap-3
+            className="gl primary h-14 px-8 rounded-2xl text-base font-semibold
+              hover:scale-105 active:scale-95 inline-flex items-center gap-3
               shadow-lg shadow-primary/20"
           >
             {user ? "Ir para Projetos" : "Começar Grátis"}
@@ -52,7 +52,7 @@ export default function EditorLanding() {
         {/* Features */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {features.map(f => (
-            <div key={f.title} className="clf-liquid-glass p-6 flex items-start gap-4">
+            <div key={f.title} className="rd-card p-6 flex items-start gap-4">
               <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
                 <f.icon className="h-5 w-5 text-primary" />
               </div>
@@ -71,7 +71,7 @@ export default function EditorLanding() {
             {plans.map(p => (
               <div
                 key={p.name}
-                className={`clf-liquid-glass p-5 text-center space-y-3 transition-transform hover:scale-[1.03] ${
+                className={`rd-card p-5 text-center space-y-3 transition-transform hover:scale-[1.03] ${
                   p.highlight ? "ring-2 ring-primary/30" : ""
                 }`}
               >
@@ -92,7 +92,7 @@ export default function EditorLanding() {
         </div>
 
         {/* CTA final */}
-        <div className="clf-liquid-glass p-8 text-center space-y-4">
+        <div className="rd-card p-8 text-center space-y-4">
           <Crown className="h-8 w-8 text-primary mx-auto" />
           <h3 className="text-xl font-bold text-foreground">Pronto para editar?</h3>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
@@ -100,8 +100,8 @@ export default function EditorLanding() {
           </p>
           <button
             onClick={() => navigate(user ? "/lovable/projects" : "/register")}
-            className="h-12 px-6 rounded-2xl bg-primary text-primary-foreground font-semibold
-              hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 inline-flex items-center gap-2"
+            className="gl primary h-12 px-6 rounded-2xl font-semibold
+              hover:scale-105 active:scale-95 inline-flex items-center gap-2"
           >
             Começar agora <ArrowRight className="h-4 w-4" />
           </button>
