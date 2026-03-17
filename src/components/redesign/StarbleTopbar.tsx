@@ -55,7 +55,7 @@ export default function StarbleTopbar() {
 
   const title = Object.entries(pageTitles).find(
     ([path]) => location.pathname === path || location.pathname.startsWith(path + "/")
-  )?.[1] || "OrbIOS";
+  )?.[1] || "Engios";
 
   const filtered = searchQuery.trim()
     ? SEARCH_ITEMS.filter((i) => i.label.toLowerCase().includes(searchQuery.toLowerCase()))

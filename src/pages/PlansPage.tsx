@@ -16,7 +16,7 @@ const billingCycleLabels: Record<string, string> = { daily: "/dia", weekly: "/se
 
 export default function PlansPage() {
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "OrbIOS";
+  const brandName = tenant?.name || "Engios";
   useSEO({ title: "Planos e Preços", description: `Conheça os planos do ${brandName} e escolha o melhor para você.` });
   const navigate = useNavigate();
   const [plans, setPlans] = useState<Plan[]>([]);

@@ -34,7 +34,7 @@ O Starble opera atualmente com um design system chamado **Liquid Glass Dark**, c
 | Aspecto | Estado Atual |
 |---------|-------------|
 | **Base cromática** | Fundo preto (#060606–#111111), texto branco (#f2f2f2) |
-| **Superfícies** | Glassmorphism pesado — `backdrop-filter: blur(30px) saturate(200%)` |
+| **Superfícies** | Glassmorphism pesado — `backdrop-filter: blur(30px) engiosate(200%)` |
 | **Bordas** | `rgba(255,255,255,0.07–0.16)` — bordas de alfa branco |
 | **Botões (.gl)** | Glass buttons com gradientes, shimmer animation, box-shadow multi-layer |
 | **Cards (.rd-card)** | Fundo `var(--bg-2)` (#111111), borda `var(--b1)`, border-radius 16px |
@@ -510,8 +510,8 @@ Todos os componentes em `src/components/ui/` devem herdar os novos tokens automa
   gap: 10px;
   padding: 0 24px;
   background: rgba(255,255,255,0.8);
-  backdrop-filter: blur(12px) saturate(150%);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) engiosate(150%);
+  -webkit-backdrop-filter: blur(12px) engiosate(150%);
   border-bottom: 1px solid transparent;
   transition: border-color 200ms;
 }

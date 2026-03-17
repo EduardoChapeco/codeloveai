@@ -46,7 +46,7 @@ export default function ExtensionDetail() {
   const { tenant } = useTenant();
   const navigate = useNavigate();
   const { hasAccessTo, loading: accessLoading } = useExtensionAccess();
-  const brandName = tenant?.name || "OrbIOS";
+  const brandName = tenant?.name || "Engios";
 
   const [ext, setExt] = useState<Extension | null>(null);
   const [plans, setPlans] = useState<LinkedPlan[]>([]);
@@ -111,7 +111,7 @@ export default function ExtensionDetail() {
     if (!user) { navigate("/login"); return; }
     if (!ext) return;
     if (ext.tier === "white_label_only") {
-      toast.error("OrbIOS Labs é exclusivo para proprietários de White Label.");
+      toast.error("Engios Labs é exclusivo para proprietários de White Label.");
       return;
     }
     if (!userHasAccess) {

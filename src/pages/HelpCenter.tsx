@@ -16,14 +16,14 @@ const categories = [
 ];
 
 const articles = [
-  { slug: "primeiros-passos", title: "Primeiros Passos com o OrbIOS", category: "getting_started", summary: "Como instalar a extensão, conectar sua conta e começar a usar." },
+  { slug: "primeiros-passos", title: "Primeiros Passos com o Engios", category: "getting_started", summary: "Como instalar a extensão, conectar sua conta e começar a usar." },
   { slug: "extensao-chrome", title: "Usando a Extensão Chrome", category: "extension", summary: "Funcionalidades, atalhos e configurações da extensão." },
   { slug: "planos-limites", title: "Planos e Limites de Uso", category: "plans", summary: "Entenda os limites de cada plano e como fazer upgrade." },
-  { slug: "seguranca-boas-praticas", title: "Segurança e Boas Práticas", category: "security", summary: "Como manter seus projetos seguros com o OrbIOS." },
+  { slug: "seguranca-boas-praticas", title: "Segurança e Boas Práticas", category: "security", summary: "Como manter seus projetos seguros com o Engios." },
   { slug: "white-label-guia", title: "White Label — Guia para Operadores", category: "white_label", summary: "Como configurar e gerenciar sua plataforma White Label." },
-  { slug: "brain-lab-intro", title: "O que é o OrbIOS Brain?", category: "brain_lab", summary: "Entenda o que é o Brain Lab, seus recursos e como funciona." },
+  { slug: "brain-lab-intro", title: "O que é o Engios Brain?", category: "brain_lab", summary: "Entenda o que é o Brain Lab, seus recursos e como funciona." },
   { slug: "orchestrator-intro", title: "Como funciona o Orchestrator Engine?", category: "orchestrator", summary: "Compreenda o motor autônomo de criação de projetos." },
-  { slug: "labs-acesso", title: "OrbIOS Labs — Acesso e Restrições", category: "brain_lab", summary: "Saiba quem pode acessar Labs e como funciona a exclusividade para White Label." },
+  { slug: "labs-acesso", title: "Engios Labs — Acesso e Restrições", category: "brain_lab", summary: "Saiba quem pode acessar Labs e como funciona a exclusividade para White Label." },
   { slug: "backups-recomendacoes", title: "Backups e Boas Práticas de Projeto", category: "security", summary: "Por que e como manter backups do seu Supabase e código-fonte." },
   { slug: "integracao-github", title: "Conectando seu Projeto ao GitHub", category: "getting_started", summary: "Passo-a-passo para sincronizar seus projetos com o GitHub." },
   { slug: "supabase-externo", title: "Usando Supabase Externo", category: "getting_started", summary: "Por que recomendamos Supabase próprio e como configurar." },
@@ -33,7 +33,7 @@ const articles = [
 ];
 
 export default function HelpCenter() {
-  useSEO({ title: "Central de Ajuda — OrbIOS", description: "Encontre respostas para suas dúvidas sobre o OrbIOS." });
+  useSEO({ title: "Central de Ajuda — Engios", description: "Encontre respostas para suas dúvidas sobre o Engios." });
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
@@ -54,7 +54,7 @@ export default function HelpCenter() {
             <BookOpen style={{ width: 32, height: 32 }} />
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em", color: "var(--text-primary)", marginBottom: 6 }}>Central de Ajuda</h1>
-          <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 400, margin: "0 auto" }}>Artigos, guias e respostas para tudo sobre o OrbIOS.</p>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 400, margin: "0 auto" }}>Artigos, guias e respostas para tudo sobre o Engios.</p>
         </div>
 
         {/* Search */}

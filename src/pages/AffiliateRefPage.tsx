@@ -108,7 +108,7 @@ export default function AffiliateRefPage() {
     }
   };
 
-  const brandName = affiliate?.display_name || tenant?.name || "OrbIOS";
+  const brandName = affiliate?.display_name || tenant?.name || "Engios";
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">

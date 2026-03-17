@@ -395,8 +395,8 @@ export default function TenantAdmin({ embedded }: { embedded?: boolean } = {}) {
       className={`relative rounded-2xl border border-white/[0.06] overflow-hidden ${className}`}
       style={{
         background: "var(--liquid-glass-bg)",
-        backdropFilter: "blur(40px) saturate(180%)",
-        WebkitBackdropFilter: "blur(40px) saturate(180%)",
+        backdropFilter: "blur(40px) engiosate(180%)",
+        WebkitBackdropFilter: "blur(40px) engiosate(180%)",
         boxShadow: "var(--clf-shadow-glass), var(--light-specular)",
       }}
       {...props}

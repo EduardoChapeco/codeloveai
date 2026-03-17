@@ -10,7 +10,7 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "OrbIOS";
+  const brandName = tenant?.name || "Engios";
 
   useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.substring(1));

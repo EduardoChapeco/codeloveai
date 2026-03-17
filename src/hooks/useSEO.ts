@@ -8,7 +8,7 @@ interface SEOProps {
 
 export function useSEO({ title, description }: SEOProps) {
   const { tenant } = useTenant();
-  const suffix = tenant?.name || "OrbIOS";
+  const suffix = tenant?.name || "Engios";
 
   useEffect(() => {
     document.title = title === suffix ? title : `${title} — ${suffix}`;

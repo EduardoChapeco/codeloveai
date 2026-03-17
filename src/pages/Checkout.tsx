@@ -72,7 +72,7 @@ const billingCycleLabels: Record<string, string> = {
 export default function Checkout() {
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "OrbIOS";
+  const brandName = tenant?.name || "Engios";
   useSEO({ title: "Checkout", description: `Escolha seu plano ${brandName} e comece a usar envios ilimitados.` });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

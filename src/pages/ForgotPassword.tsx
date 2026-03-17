@@ -8,7 +8,7 @@ import MeshBackground from "@/components/MeshBackground";
 
 export default function ForgotPassword() {
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "OrbIOS";
+  const brandName = tenant?.name || "Engios";
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   useSEO({ title: "Esqueci a senha" });

@@ -1,8 +1,8 @@
 ﻿{
   "manifest_version": 3,
-  "name": "OrbIOS",
+  "name": "Engios",
   "version": "1.0.0",
-  "description": "Extensão OrbIOS para Lovable — Painel lateral, chat e gestão de projetos.",
+  "description": "Extensão Engios para Lovable — Painel lateral, chat e gestão de projetos.",
   "permissions": ["storage", "activeTab", "webRequest"],
   "host_permissions": ["https://*.lovable.app/*", "https://*.lovableproject.com/*", "https://*.lovable.dev/*", "https://lovable.dev/*"],
   "background": {
@@ -17,7 +17,7 @@
     }
   ],
   "action": {
-    "default_title": "OrbIOS"
+    "default_title": "Engios"
   },
   "icons": {}
 }

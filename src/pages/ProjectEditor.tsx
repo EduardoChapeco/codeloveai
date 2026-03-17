@@ -45,16 +45,16 @@ const brainModes: { id: BrainType; label: string; icon: typeof Sparkles }[] = [
 /* ── Liquid Glass inline style helper ── */
 const glassCard = {
   background: "var(--liquid-glass-bg, rgba(255,255,255,0.04))",
-  backdropFilter: "blur(40px) saturate(200%)",
-  WebkitBackdropFilter: "blur(40px) saturate(200%)",
+  backdropFilter: "blur(40px) engiosate(200%)",
+  WebkitBackdropFilter: "blur(40px) engiosate(200%)",
   border: "0.5px solid var(--clf-border)",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 12px rgba(0,0,0,0.08)",
 } as const;
 
 const glassNav = {
   background: "var(--liquid-glass-bg, rgba(255,255,255,0.04))",
-  backdropFilter: "blur(40px) saturate(220%)",
-  WebkitBackdropFilter: "blur(40px) saturate(220%)",
+  backdropFilter: "blur(40px) engiosate(220%)",
+  WebkitBackdropFilter: "blur(40px) engiosate(220%)",
   borderBottom: "0.5px solid var(--clf-border)",
 } as const;
 

@@ -92,7 +92,7 @@ const GlassCard = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
       ref={ref}
       onClick={onClick}
       className={`rounded-2xl border border-white/[0.06] ${onClick ? "cursor-pointer hover:border-white/[0.12] hover:bg-white/[0.03]" : ""} transition-all ${className}`}
-      style={{ background: "rgba(255,255,255,0.02)", backdropFilter: "blur(40px) saturate(180%)" }}
+      style={{ background: "rgba(255,255,255,0.02)", backdropFilter: "blur(40px) engiosate(180%)" }}
       {...props}
     >
       {children}
@@ -1026,7 +1026,7 @@ export default function CrmPanel({ tenantId, userId }: CrmPanelProps) {
         <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setSelectedContact(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <div className="relative w-full max-w-lg animate-slide-in-right" onClick={e => e.stopPropagation()}
-            style={{ background: "rgba(10,10,15,0.95)", backdropFilter: "blur(40px) saturate(200%)", borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
+            style={{ background: "rgba(10,10,15,0.95)", backdropFilter: "blur(40px) engiosate(200%)", borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
             <div className="h-full overflow-y-auto p-6 space-y-6">
               {/* Close */}
               <button onClick={() => setSelectedContact(null)}

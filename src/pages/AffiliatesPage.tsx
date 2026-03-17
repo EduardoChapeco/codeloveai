@@ -39,7 +39,7 @@ const faqs = [
 export default function AffiliatesPage() {
   const { user, loading: authLoading } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "OrbIOS";
+  const brandName = tenant?.name || "Engios";
   useSEO({ title: "Programa de Afiliados", description: `Ganhe 30% de comissão indicando ${brandName}.` });
   const navigate = useNavigate();
   const [enrolling, setEnrolling] = useState(false);

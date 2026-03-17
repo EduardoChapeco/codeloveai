@@ -64,7 +64,7 @@ export default function Profile() {
   const { userId } = useParams<{ userId: string }>();
   const { user, loading: authLoading, signOut } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "OrbIOS";
+  const brandName = tenant?.name || "Engios";
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);

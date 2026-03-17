@@ -207,7 +207,7 @@ const Sidebar = React.forwardRef<
         <div
           data-sidebar="sidebar"
           className="flex h-full w-full flex-col bg-sidebar/70 group-data-[variant=floating]:rounded-3xl group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border/40"
-          style={{ backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)' }}
+          style={{ backdropFilter: 'blur(24px) engiosate(180%)', WebkitBackdropFilter: 'blur(24px) engiosate(180%)' }}
         >
           {children}
         </div>

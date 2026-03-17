@@ -17,7 +17,7 @@ export default function Install() {
   const [installing, setInstalling] = useState(false);
   const { user } = useAuth();
   const { tenant } = useTenant();
-  const brandName = tenant?.name || "OrbIOS";
+  const brandName = tenant?.name || "Engios";
 
   useEffect(() => {
     const handler = (e: Event) => {

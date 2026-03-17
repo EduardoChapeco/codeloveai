@@ -251,7 +251,7 @@ export default function ExtensionsManagementTab() {
         </div>
         <div>
           <label className="lv-caption block mb-1">Nome</label>
-          <input className="lv-input w-full" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="OrbIOS" />
+          <input className="lv-input w-full" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Engios" />
         </div>
         <div>
           <label className="lv-caption block mb-1">Ícone (Lucide)</label>

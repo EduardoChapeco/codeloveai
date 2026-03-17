@@ -30,8 +30,8 @@ export default function EditorUsageBar({ messagesUsed, messagesLimit, plan, perc
         className="rounded-2xl p-3 space-y-2.5"
         style={{
           background: "var(--liquid-glass-bg, rgba(255,255,255,0.04))",
-          backdropFilter: "blur(20px) saturate(180%)",
-          WebkitBackdropFilter: "blur(20px) saturate(180%)",
+          backdropFilter: "blur(20px) engiosate(180%)",
+          WebkitBackdropFilter: "blur(20px) engiosate(180%)",
           border: "0.5px solid var(--clf-border)",
         }}
       >
@@ -78,8 +78,8 @@ export default function EditorUsageBar({ messagesUsed, messagesLimit, plan, perc
           className="w-full rounded-2xl p-3.5 flex items-center gap-3 hover:scale-[1.02] transition-all active:scale-[0.98]"
           style={{
             background: "var(--liquid-glass-bg, rgba(255,255,255,0.04))",
-            backdropFilter: "blur(20px) saturate(180%)",
-            WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            backdropFilter: "blur(20px) engiosate(180%)",
+            WebkitBackdropFilter: "blur(20px) engiosate(180%)",
             border: "0.5px solid var(--clf-border)",
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
           }}

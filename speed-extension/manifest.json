@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "OrbIOS",
-  "short_name": "OrbIOS",
+  "name": "Engios",
+  "short_name": "Engios",
   "version": "1.0.0",
-  "description": "OrbIOS — AI chat para Lovable.dev",
+  "description": "Engios — AI chat para Lovable.dev",
   "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
   "action": {
     "default_icon": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
-    "default_title": "OrbIOS"
+    "default_title": "Engios"
   },
   "side_panel": { "default_path": "panel.html" },
   "background": { "service_worker": "background.js" },

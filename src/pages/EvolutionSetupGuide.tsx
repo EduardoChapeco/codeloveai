@@ -18,7 +18,7 @@ function Step({ number, title, children, isActive, isComplete, onClick }: {
   return (
     <div className={`rounded-2xl border transition-all ${
       isActive ? "border-primary/30 bg-primary/[0.03]" : isComplete ? "border-emerald-500/20 bg-emerald-500/[0.02]" : "border-white/[0.06] bg-white/[0.02]"
-    }`} style={{ backdropFilter: "blur(40px) saturate(180%)" }}>
+    }`} style={{ backdropFilter: "blur(40px) engiosate(180%)" }}>
       <button onClick={onClick} className="w-full flex items-center gap-4 p-5 text-left">
         <div className={`h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 font-black text-sm ${
           isComplete ? "bg-emerald-500/20 text-emerald-400" : isActive ? "bg-primary/20 text-primary" : "bg-white/[0.06] text-muted-foreground"
@@ -503,7 +503,7 @@ export default function EvolutionSetupGuide() {
 
           {/* Disclaimer */}
           <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/[0.04] p-5 flex gap-4 items-start"
-            style={{ backdropFilter: "blur(40px) saturate(180%)" }}>
+            style={{ backdropFilter: "blur(40px) engiosate(180%)" }}>
             <Lightbulb className="h-5 w-5 text-primary shrink-0 mt-0.5" />
             <div className="text-sm text-foreground/80 space-y-1">
               <p className="font-bold text-foreground">Tutorial interativo</p>
