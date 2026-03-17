@@ -1,0 +1,84 @@
+﻿commit 00479262773fbd61454a459c00597c1935a57fd1
+Merge: 2b4c49a 503b864
+Author: Eduardo <eduardo@engios.com>
+Date:   Tue Mar 17 11:38:30 2026 -0300
+
+    Merge origin/main into main preserving Engios branding
+
+commit 2b4c49a5204926c5d8873ce65dac7c875e5586cb
+Author: Eduardo <eduardo@engios.com>
+Date:   Tue Mar 17 04:08:32 2026 -0300
+
+    chore: sync modifications
+
+M	extension/manifest.json
+M	extensions/speed/manifest.json
+M	extensions/speed/panel.html
+M	extensions/speed/popup.html
+M	prdstarble.md
+M	speed-extension/manifest.json
+M	src/components/AppNav.tsx
+M	src/components/AppSidebar.tsx
+M	src/components/admin/CrmPanel.tsx
+M	src/components/admin/ExtensionsManagementTab.tsx
+M	src/components/chat/ChatMessages.tsx
+M	src/components/editor/EditorStatusCard.tsx
+M	src/components/editor/EditorUsageBar.tsx
+M	src/components/redesign/StarbleSidebar.tsx
+M	src/components/redesign/StarbleTopbar.tsx
+M	src/components/ui/dialog.tsx
+M	src/components/ui/sidebar.tsx
+M	src/hooks/useSEO.ts
+M	src/index.css
+M	src/lib/tenant-themes.ts
+M	src/pages/AffiliateRefPage.tsx
+M	src/pages/AffiliatesPage.tsx
+M	src/pages/Checkout.tsx
+M	src/pages/EvolutionSetupGuide.tsx
+M	src/pages/ExtensionDetail.tsx
+M	src/pages/ForgotPassword.tsx
+M	src/pages/FreePlan.tsx
+M	src/pages/HelpCenter.tsx
+M	src/pages/Install.tsx
+M	src/pages/Login.tsx
+M	src/pages/PartnersLanding.tsx
+M	src/pages/PlansPage.tsx
+M	src/pages/Profile.tsx
+M	src/pages/ProjectEditor.tsx
+M	src/pages/Register.tsx
+M	src/pages/ResetPassword.tsx
+M	src/pages/TenantAdmin.tsx
+M	src/pages/VenusPage.tsx
+M	src/pages/public/WhiteLabelLanding.tsx
+M	src/styles/redesign.css
+
+commit 503b86471a89434d9f7c232b3d9715336be0acdc
+Merge: a7c86c0 b3eb1b7
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Sun Mar 15 15:45:36 2026 +0000
+
+    Add bulk-notify edge function
+    
+    Implements a new edge function to renew all licenses, fetch user profiles with emails, and send update emails via Resend. Includes a full HTML email template and CORS handling, plus backend logic to refresh token_valid_until by +30 days and set status to active.
+    
+    X-Lovable-Edit-ID: edt-cb26c84b-7180-4afa-818a-81aba2f7da78
+    Co-authored-by: EduardoChapeco <36956811+EduardoChapeco@users.noreply.github.com>
+
+commit b3eb1b792832573feb8fa19fea4a9fcdab5cd71f
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Sun Mar 15 15:45:19 2026 +0000
+
+    Add bulk-notify edge fn
+    
+    Co-authored-by: EduardoChapeco <36956811+EduardoChapeco@users.noreply.github.com>
+
+M	src/components/AppNav.tsx
+M	src/components/redesign/StarbleSidebar.tsx
+
+commit c83463c5fd8da961187e3681fdd6e41468866072
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Sun Mar 15 15:45:18 2026 +0000
+
+    Preceding changes
+
+M	src/components/redesign/StarbleSidebar.tsx
